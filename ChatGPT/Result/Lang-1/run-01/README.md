@@ -10,3 +10,28 @@
 
 ไฟล์คำตอบดิบ Java test และ log อยู่ในโฟลเดอร์ ChatGPT ตามชื่อไฟล์
 ยังไม่มีการแก้ assertion หรือทำ Prompt 3/4 ในผลรอบนี้
+
+## Prompt 03 — Repair suite
+
+The original 56-test suite had one failure on Lang-1f caused by requiring
+a specific numeric class for -0x80000000. The repaired suite checks its
+numeric value instead. After repair, all 56 tests passed on Lang-1f; two
+LANG-747 regression tests failed on Lang-1b.
+
+Repaired-suite coverage:
+- Lang-1f: 347/380 lines (91.3%), 259/350 conditions (74.0%).
+- Lang-1b: 343/375 lines (91.5%), 252/338 conditions (74.6%).
+
+## Prompt 04 — Extend coverage
+
+ChatGPT preserved the 56 repaired tests and added 19 tests (75 total).
+All 75 passed on Lang-1f. On Lang-1b, only the positive and negative
+eight-digit hexadecimal LANG-747 regression tests failed.
+
+Extended-suite coverage:
+- Lang-1f: 379/380 lines (99.7%), 319/350 conditions (91.1%).
+- Lang-1b: 375/375 lines (100.0%), 312/338 conditions (92.3%).
+
+The raw AI responses, separate test versions, test logs, and coverage
+reports are retained. Coverage denominators differ between Lang-1b
+and Lang-1f, so their percentages are reported separately.
