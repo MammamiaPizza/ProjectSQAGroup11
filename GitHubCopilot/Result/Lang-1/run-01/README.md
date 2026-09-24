@@ -8,4 +8,5 @@
 - Prompt 03 repaired the generated suite. The complete response and execution copy are preserved.
 - After repair: Lang-1b failed 5/29 tests; Lang-1f passed 29/29 tests.
 - The eight-digit hexadecimal test fails on Lang-1b and passes on Lang-1f, detecting LANG-747.
-- Coverage has not yet been measured for the repaired suite.
+- Repaired-suite coverage on Lang-1f: 334/380 lines (87.9%) and 241/350 conditions (68.9%); 29/29 tests passed.
+- Repaired-suite coverage on Lang-1b: 328/375 lines (87.5%) and 231/338 conditions (68.3%); 5/29 tests failed.
