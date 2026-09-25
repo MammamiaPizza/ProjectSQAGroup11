@@ -6,23 +6,23 @@
 
 ```text
 SQA-Test-Generation-Benchmark/
-├── NSGA-II/
+├── Algorithm1_NSGAII/
 │   ├── Code/                 โค้ดตัวสร้าง test
 │   ├── Configuration/        seed, budget, objective และค่าที่ใช้รัน
 │   ├── Result_Round1/        ผลทดลองซ้ำรอบที่ 1
 │   ├── Result_Round2/        ผลทดลองซ้ำรอบที่ 2
 │   └── Test/                 JUnit tests ที่สร้างขึ้น
-├── SymbolicExecution/
+├── Algorithm2_SymbolicExecution/
 │   ├── Code/
 │   ├── Configuration/
 │   ├── Result_Round1/
 │   ├── Result_Round2/
 │   └── Test/
-├── ChatGPT/
+├── AI1_ChatGPT/
 │   ├── Prompt/               ข้อความที่ส่งจริงและข้อมูลบริบท
 │   ├── Result/               คำตอบดิบและผลการรัน
 │   └── TestCode/             JUnit tests ที่ได้
-├── GitHubCopilot/
+├── AI2_GitHubCopilot/
 │   ├── Prompt/
 │   ├── Result/
 │   └── TestCode/
@@ -38,7 +38,7 @@ SQA-Test-Generation-Benchmark/
 1. ติดตั้ง Defects4J และตรวจ Java version ให้ตรงกับคู่มือของเวอร์ชันที่ใช้
 2. ทดลอง checkout, compile และ test กรณีนำร่อง `Lang-1b`/`Lang-1f`
 3. ตรวจ target class และ JUnit/build context จริง แล้วเพิ่มรายการที่ใช้ใน `Experiment/cases.csv`; กรอก `Experiment/context-template.md` ก่อนส่ง Prompt
-4. ใช้ Prompt `01`–`04` ใน `ChatGPT/Prompt/` และ `GitHubCopilot/Prompt/` ตามลำดับเดียวกัน (รายละเอียดอยู่ใน README ของแต่ละโฟลเดอร์) และพัฒนาตัวสร้าง test ทั้งสองวิธี
+4. ใช้ Prompt `01`–`04` ใน `AI1_ChatGPT/Prompt/` และ `AI2_GitHubCopilot/Prompt/` ตามลำดับเดียวกัน (รายละเอียดอยู่ใน README ของแต่ละโฟลเดอร์) และพัฒนาตัวสร้าง test ทั้งสองวิธี
 5. เก็บ test ที่สร้างจริง, prompt/output ดิบ, configuration, log, coverage และผล buggy/fixed ทุก run
 6. สรุปผลจากการวัดจริงใน `Experiment/summary.csv` แล้วจัดทำรายงานกับ demo
 
@@ -54,4 +54,4 @@ SQA-Test-Generation-Benchmark/
 | 673380271-3 | นายธนภูมิ แทนทุมมา |
 | 673380510-1 | นางสาวจิรัชญา เป้าจันทึก |
 
-สถานะ: เตรียมโครงสร้าง แบบบันทึกผล และ Prompt 4 ชุดจากรายงานรอบแรกแล้ว; มีโค้ด NSGA-II สำหรับนำร่อง Lang-1 ใน `NSGA-II/Code/` ซึ่งใช้ fitness แบบตัวแทน ยังไม่ใช่ coverage ที่วัดจริง และยังไม่ได้รัน JUnit ที่สร้างจากตัวนี้กับ Defects4J
+สถานะ: ทดลองนำร่อง Defects4J Lang-1 แล้วทั้ง AI สองตัว และ NSGA-II ที่วัด fitness จาก coverage จริง; ตัวสร้าง symbolic แบบจำกัดเส้นทาง hex ตรวจพบ LANG-747 โดยเก็บข้อจำกัดของ Symflower แยกใน diagnostics งานยังต้องขยายกรณีทดลองและสรุปผลตามขอบเขตที่กำหนด
