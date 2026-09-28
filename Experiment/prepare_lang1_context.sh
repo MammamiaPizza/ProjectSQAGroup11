@@ -72,11 +72,11 @@ values = {
     '[PROJECT_CONTEXT]': project_context.rstrip(),
 }
 for number, name in [('01', '01_analyze_context.txt'), ('02', '02_generate_suite.txt')]:
-    rendered = (root / 'ChatGPT' / 'Prompt' / name).read_text()
+    rendered = (root / 'AI1_ChatGPT' / 'Prompt' / name).read_text()
     for key, value in values.items():
         rendered = rendered.replace(key, value)
     assert not any(key in rendered for key in values), f'Missing placeholder in {name}'
-    for tool in ('ChatGPT', 'GitHubCopilot'):
+    for tool in ('AI1_ChatGPT', 'AI2_GitHubCopilot'):
         directory = root / tool / 'Prompt' / 'Lang-1' / 'run-01'
         directory.mkdir(parents=True, exist_ok=True)
         (directory / name).write_text(rendered)
