@@ -1,0 +1,421 @@
+You are a software testing specialist.
+Analyze the supplied Java production class and project context before generating tests.
+Identify:
+1. The public methods that should be tested.
+2. The input types and valid input ranges.
+3. The conditions and reachable branches.
+4. The normal, boundary, invalid, null, and exceptional cases.
+5. The required constructors, dependencies, and external objects.
+6. The JUnit version and build tool used by the project.
+7. The specification, API contract, bug report, or existing tests that can be used as a test oracle.
+8. The behaviors related to the supplied bug report that should be tested.
+9. Any missing context required to generate compilable and meaningful tests.
+
+Requirements:
+1. Do not generate the JUnit Test Class yet.
+2. Do not modify the production source code.
+3. Do not assume that the current implementation is correct.
+4. Analyze only the Source Version and Project Context supplied in this prompt.
+5. Do not use or request another program version unless it is explicitly permitted by the experimental
+protocol.
+6. Do not invent methods, constructors, fields, dependencies, or expected behavior.
+7. Report clearly if the supplied information is insufficient to determine a reliable expected result.
+Project ID:
+Cli
+Bug ID:
+1
+Source Version:
+Buggy (Cli-1b)
+Target Class:
+org.apache.commons.cli.CommandLine
+JUnit Version:
+JUnit 3.8.1
+Build Tool:
+Ant (Defects4J)
+Behavioral specification, API documentation, or bug report:
+Apache Commons CLI issue CLI-13 is described as "CommandLine.getOptionValue() behaves contrary to docs" in the Apache Commons CLI release notes. Source: https://github.com/apache/commons-cli/blob/master/RELEASE-NOTES.txt . The Javadoc in the supplied buggy CommandLine.java says getOptionValue(String) returns the argument value if an option is set and has an argument; otherwise null. Use the supplied Javadoc for the other overloads. Do not infer behavior from the buggy method body.
+Production source code:
+/**
+ * Copyright 1999-2001,2004 The Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.cli;
+
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+
+/** 
+ * <p>Represents list of arguments parsed against
+ * a {@link Options} descriptor.<p>
+ *
+ * <p>It allows querying of a boolean {@link #hasOption(String opt)},
+ * in addition to retrieving the {@link #getOptionValue(String opt)}
+ * for options requiring arguments.</p>
+ *
+ * <p>Additionally, any left-over or unrecognized arguments,
+ * are available for further processing.</p>
+ *
+ * @author bob mcwhirter (bob @ werken.com)
+ * @author <a href="mailto:jstrachan@apache.org">James Strachan</a>
+ * @author John Keyes (john at integralsource.com)
+ */
+public class CommandLine {
+
+    /** the unrecognised options/arguments */
+    private List args = new LinkedList();
+
+    /** the processed options */
+    private Map options = new HashMap();
+    private Map names = new HashMap();
+
+    /** Map of unique options for ease to get complete list of options */
+//    private Set allOptions = new HashSet();
+    private Map hashcodeMap = new HashMap();
+
+    /**
+     * Creates a command line.
+     */
+    CommandLine()
+    {
+        // nothing to do
+    }
+
+    /** 
+     * Query to see if an option has been set.
+     *
+     * @param opt Short name of the option
+     * @return true if set, false if not
+     */
+    public boolean hasOption(String opt)
+    {
+        return options.containsKey(opt);
+    }
+
+    /** 
+     * Query to see if an option has been set.
+     *
+     * @param opt character name of the option
+     * @return true if set, false if not
+     */
+    public boolean hasOption(char opt)
+    {
+        return hasOption(String.valueOf(opt));
+    }
+
+    /**
+     * Return the <code>Object</code> type of this <code>Option</code>.
+     *
+     * @param opt the name of the option
+     * @return the type of this <code>Option</code>
+     */
+    public Object getOptionObject(String opt)
+    {
+        String res = getOptionValue(opt);
+
+        if (!options.containsKey(opt))
+        {
+            return null;
+        }
+
+        Object type = ((Option) options.get(opt)).getType();
+
+        return (res == null)        ? null : TypeHandler.createValue(res, type);
+    }
+
+    /**
+     * Return the <code>Object</code> type of this <code>Option</code>.
+     *
+     * @param opt the name of the option
+     * @return the type of opt
+     */
+    public Object getOptionObject(char opt)
+    {
+        return getOptionObject(String.valueOf(opt));
+    }
+
+    /** 
+     * Retrieve the argument, if any, of this option.
+     *
+     * @param opt the name of the option
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String getOptionValue(String opt)
+    {
+        String[] values = getOptionValues(opt);
+
+        return (values == null) ? null : values[0];
+    }
+
+    /** 
+     * Retrieve the argument, if any, of this option.
+     *
+     * @param opt the character name of the option
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String getOptionValue(char opt)
+    {
+        return getOptionValue(String.valueOf(opt));
+    }
+
+    /** 
+     * Retrieves the array of values, if any, of an option.
+     *
+     * @param opt string name of the option
+     * @return Values of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String[] getOptionValues(String opt)
+    {
+        opt = Util.stripLeadingHyphens(opt);
+
+        String key = opt;
+        if (names.containsKey(opt))
+        {
+            key = (String) names.get(opt);
+        }
+        if (options.containsKey(key))
+        {
+            return ((Option) options.get(key)).getValues();
+        }
+
+        return null;
+        }
+
+    /**
+     * <p>Retrieves the option object given the long or short option as a String</p>
+     * @param opt short or long name of the option
+     * @return Canonicalized option
+     */
+
+
+    /** 
+     * Retrieves the array of values, if any, of an option.
+     *
+     * @param opt character name of the option
+     * @return Values of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String[] getOptionValues(char opt)
+    {
+        return getOptionValues(String.valueOf(opt));
+    }
+
+    /** 
+     * Retrieve the argument, if any, of an option.
+     *
+     * @param opt name of the option
+     * @param defaultValue is the default value to be returned if the option 
+     * is not specified
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise <code>defaultValue</code>.
+     */
+    public String getOptionValue(String opt, String defaultValue)
+    {
+        String answer = getOptionValue(opt);
+
+        return (answer != null) ? answer : defaultValue;
+    }
+
+    /** 
+     * Retrieve the argument, if any, of an option.
+     *
+     * @param opt character name of the option
+     * @param defaultValue is the default value to be returned if the option 
+     * is not specified
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise <code>defaultValue</code>.
+     */
+    public String getOptionValue(char opt, String defaultValue)
+    {
+        return getOptionValue(String.valueOf(opt), defaultValue);
+    }
+
+    /** 
+     * Retrieve any left-over non-recognized options and arguments
+     *
+     * @return remaining items passed in but not parsed as an array
+     */
+    public String[] getArgs()
+    {
+        String[] answer = new String[args.size()];
+
+        args.toArray(answer);
+
+        return answer;
+    }
+
+    /** 
+     * Retrieve any left-over non-recognized options and arguments
+     *
+     * @return remaining items passed in but not parsed as a <code>List</code>.
+     */
+    public List getArgList()
+    {
+        return args;
+    }
+
+    /** 
+     * jkeyes
+     * - commented out until it is implemented properly
+     * <p>Dump state, suitable for debugging.</p>
+     *
+     * @return Stringified form of this object
+     */
+
+    /*
+    public String toString() {
+        StringBuffer buf = new StringBuffer();
+            
+        buf.append("[ CommandLine: [ options: ");
+        buf.append(options.toString());
+        buf.append(" ] [ args: ");
+        buf.append(args.toString());
+        buf.append(" ] ]");
+            
+        return buf.toString();
+    }
+    */
+
+    /**
+     * Add left-over unrecognized option/argument.
+     *
+     * @param arg the unrecognised option/argument.
+     */
+    void addArg(String arg)
+    {
+        args.add(arg);
+    }
+
+    /**
+     * Add an option to the command line.  The values of 
+     * the option are stored.
+     *
+     * @param opt the processed option
+     */
+    void addOption(Option opt)
+    {
+        hashcodeMap.put(new Integer(opt.hashCode()), opt);
+        String key = opt.getKey();
+        if (key == null)
+        {
+            key = opt.getLongOpt();
+        }
+        else
+        {
+            names.put(opt.getLongOpt(), key);
+        }
+        options.put(key, opt);
+    }
+
+    /**
+     * Returns an iterator over the Option members of CommandLine.
+     *
+     * @return an <code>Iterator</code> over the processed {@link Option} 
+     * members of this {@link CommandLine}
+     */
+    public Iterator iterator()
+    {
+        return hashcodeMap.values().iterator();
+    }
+
+    /**
+     * Returns an array of the processed {@link Option}s.
+     *
+     * @return an array of the processed {@link Option}s.
+     */
+    public Option[] getOptions()
+    {
+        Collection processed = options.values();
+
+        // reinitialise array
+        Option[] optionsArray = new Option[processed.size()];
+
+        // return the array
+        return (Option[]) processed.toArray(optionsArray);
+    }
+}
+Related classes and project context:
+Production package: org.apache.commons.cli. Target: CommandLine; its constructor is package-private, so construct it through public parsing APIs when needed. Defects4J Cli-1b; Java version in the attached java-version.txt; JUnit 3.8.1; Ant. Use JUnit 3-compatible TestCase methods and test method names starting with test. The attached javap listing contains public signatures from the buggy checkout for the related parser and option classes; source implementations for those classes are not supplied. Original project tests, fixed source, and generated tests from other methods are not supplied.
+
+Related public signatures from the buggy checkout:
+Compiled from "Options.java"
+public class org.apache.commons.cli.Options {
+  public org.apache.commons.cli.Options();
+  public org.apache.commons.cli.Options addOptionGroup(org.apache.commons.cli.OptionGroup);
+  public org.apache.commons.cli.Options addOption(java.lang.String, boolean, java.lang.String);
+  public org.apache.commons.cli.Options addOption(java.lang.String, java.lang.String, boolean, java.lang.String);
+  public org.apache.commons.cli.Options addOption(org.apache.commons.cli.Option);
+  public java.util.Collection getOptions();
+  public java.util.List getRequiredOptions();
+  public org.apache.commons.cli.Option getOption(java.lang.String);
+  public boolean hasOption(java.lang.String);
+  public org.apache.commons.cli.OptionGroup getOptionGroup(org.apache.commons.cli.Option);
+  public java.lang.String toString();
+}
+Compiled from "Option.java"
+public class org.apache.commons.cli.Option {
+  public static final int UNINITIALIZED;
+  public static final int UNLIMITED_VALUES;
+  public org.apache.commons.cli.Option(java.lang.String, java.lang.String) throws java.lang.IllegalArgumentException;
+  public org.apache.commons.cli.Option(java.lang.String, boolean, java.lang.String) throws java.lang.IllegalArgumentException;
+  public org.apache.commons.cli.Option(java.lang.String, java.lang.String, boolean, java.lang.String) throws java.lang.IllegalArgumentException;
+  public int getId();
+  public java.lang.String getOpt();
+  public java.lang.Object getType();
+  public void setType(java.lang.Object);
+  public java.lang.String getLongOpt();
+  public void setLongOpt(java.lang.String);
+  public void setOptionalArg(boolean);
+  public boolean hasOptionalArg();
+  public boolean hasLongOpt();
+  public boolean hasArg();
+  public java.lang.String getDescription();
+  public void setDescription(java.lang.String);
+  public boolean isRequired();
+  public void setRequired(boolean);
+  public void setArgName(java.lang.String);
+  public java.lang.String getArgName();
+  public boolean hasArgName();
+  public boolean hasArgs();
+  public void setArgs(int);
+  public void setValueSeparator(char);
+  public char getValueSeparator();
+  public boolean hasValueSeparator();
+  public int getArgs();
+  public java.lang.String getValue();
+  public java.lang.String getValue(int) throws java.lang.IndexOutOfBoundsException;
+  public java.lang.String getValue(java.lang.String);
+  public java.lang.String[] getValues();
+  public java.util.List getValuesList();
+  public java.lang.String toString();
+  public boolean equals(java.lang.Object);
+  public int hashCode();
+}
+Compiled from "PosixParser.java"
+public class org.apache.commons.cli.PosixParser extends org.apache.commons.cli.Parser {
+  public org.apache.commons.cli.PosixParser();
+}
+Compiled from "CommandLineParser.java"
+public interface org.apache.commons.cli.CommandLineParser {
+  public abstract org.apache.commons.cli.CommandLine parse(org.apache.commons.cli.Options, java.lang.String[]) throws org.apache.commons.cli.ParseException;
+  public abstract org.apache.commons.cli.CommandLine parse(org.apache.commons.cli.Options, java.lang.String[], java.util.Properties) throws org.apache.commons.cli.ParseException;
+  public abstract org.apache.commons.cli.CommandLine parse(org.apache.commons.cli.Options, java.lang.String[], boolean) throws org.apache.commons.cli.ParseException;
+  public abstract org.apache.commons.cli.CommandLine parse(org.apache.commons.cli.Options, java.lang.String[], java.util.Properties, boolean) throws org.apache.commons.cli.ParseException;
+}
