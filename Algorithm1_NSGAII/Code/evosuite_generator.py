@@ -5,14 +5,18 @@
 run_all_defects4j.py เรียกไฟล์นี้ผ่าน --generator โดยแทน placeholder เองตามคำสั่งนี้:
 
   --generator "python evosuite_generator.py --buggy {buggy} --fixed {fixed}
-               --out {out} --classes {classes} --seed {seed}
+               --out {out} --classes {classes} --seed {seed} --tests-out {tests_dir}
                --evosuite-jar /path/to/evosuite-*.jar"
+
+ถ้าระบุ --tests-out ไฟล์ .java ทั้งหมดจะถูก *ย้าย* (หลังห่อ tests.tar.bz2 แล้ว) ไปไว้ที่นั่น
+เพื่อให้ใน {out} เหลือแต่ log กับ archive ไม่มี source ของ test ปนอยู่กับ evidence
 
 หมายเหตุสำคัญ: สคริปต์นี้อ่าน *เฉพาะ* {buggy} เท่านั้น ไม่แตะ {fixed} เลย
 (ตรงตาม protocol ข้อ 3 ของกลุ่ม ที่ห้ามตัวสร้าง test เห็น fixed source)
 พารามิเตอร์ --fixed รับไว้เฉยๆ เพื่อให้ placeholder ของ driver ใช้ชุดเดียวกันได้
 """
 import argparse
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -29,7 +33,7 @@ def d4j_export(prop, ws, timeout):
 
 
 def generate_one_class(java_bin, tools_jar, evosuite_jar, classpath, klass, work_dir,
-                        seed, algorithm, budget, timeout, log_dir):
+                        seed, algorithm, budget, criterion, timeout, log_dir):
     """รัน EvoSuite กับ 1 คลาส คืน True ถ้าสำเร็จ (มีไฟล์ test ออกมาจริง)"""
     cmd = [java_bin]
     if tools_jar:
@@ -48,6 +52,12 @@ def generate_one_class(java_bin, tools_jar, evosuite_jar, classpath, klass, work
         "-Dtest_format=JUNIT4",
         "-Dassertions=true",
     ]
+    if criterion:
+        # ถ้าไม่ระบุ ปล่อยให้ EvoSuite ใช้ default ของมันเอง
+        # (ยืนยันจาก statistics.csv ว่า default คือ LINE:BRANCH:EXCEPTION:WEAKMUTATION:
+        #  OUTPUT:METHOD:METHODNOEXCEPTION:CBRANCH อยู่แล้ว)
+        cmd.append("-criterion")
+        cmd.append(criterion)
     log = log_dir / ("%s.log" % klass)
     try:
         p = run(cmd, timeout)
@@ -62,15 +72,39 @@ def generate_one_class(java_bin, tools_jar, evosuite_jar, classpath, klass, work
     return ok and test_file.exists()
 
 
+def move_tests(tests_root, dst):
+    """ย้าย .java ที่ EvoSuite สร้างไปเก็บแยกจาก log โดยคง package path เดิมไว้
+
+    ต้องเรียกหลังห่อ tests.tar.bz2 แล้ว เพราะ archive ยังต้องอ่านไฟล์จาก tests_root อยู่
+    """
+    dst.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    for src in sorted(tests_root.rglob("*.java")):
+        target = dst / src.relative_to(tests_root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(target))
+        moved += 1
+    return moved
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--buggy", required=True, help="path ของ checkout เวอร์ชัน buggy (เห็นได้อย่างเดียว)")
     ap.add_argument("--fixed", help="ไม่ใช้ในสคริปต์นี้ รับไว้เผื่อ placeholder ของ driver ส่งมาด้วย")
     ap.add_argument("--out", required=True, help="โฟลเดอร์ที่ driver รอผล (จะเขียน tests.tar.bz2 ที่นี่)")
+    ap.add_argument("--tests-out",
+                    help="โฟลเดอร์ปลายทางของ JUnit test ที่สร้างได้ (driver ส่งมาทาง placeholder "
+                         "{tests_dir}) ไม่ระบุ = ปล่อยให้ .java อยู่ใน evosuite-work เหมือนเดิม")
     ap.add_argument("--classes", required=True, help="รายชื่อคลาสเป้าหมาย คั่นด้วย , (มาจาก classes.modified)")
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--algorithm", default="NSGAII")
     ap.add_argument("--budget", type=int, default=60, help="วินาทีต่อคลาส")
+    ap.add_argument("--criterion", default=None,
+                     help="เป้าหมายที่ EvoSuite ค้นหา คั่นด้วย ':' เช่น "
+                          "LINE:BRANCH:WEAKMUTATION:STRONGMUTATION ไม่ระบุ = ใช้ default ของ EvoSuite เอง "
+                          "(ยืนยันแล้วว่า default คือ LINE:BRANCH:EXCEPTION:WEAKMUTATION:OUTPUT:METHOD:"
+                          "METHODNOEXCEPTION:CBRANCH) เพิ่ม STRONGMUTATION ถ้าอยากให้ค้นหาแบบใกล้เคียง "
+                          "'ความต่างเล็กๆ ในพฤติกรรม' ซึ่งใกล้เคียงนิยามของบั๊กมากกว่า criterion อื่น")
     ap.add_argument("--evosuite-jar", required=True)
     ap.add_argument("--java-bin", default="/usr/lib/jvm/java-8-openjdk-amd64/bin/java",
                      help="EvoSuite ต้อง Java 8 (มี tools.jar) ไม่ใช่ java เริ่มต้นของระบบที่ Defects4J ใช้ (Java 11)")
@@ -104,7 +138,7 @@ def main():
     succeeded = []
     for klass in classes:
         ok = generate_one_class(args.java_bin, args.tools_jar, args.evosuite_jar, classpath, klass,
-                                 work_dir, args.seed, args.algorithm, args.budget,
+                                 work_dir, args.seed, args.algorithm, args.budget, args.criterion,
                                  args.per_class_timeout, log_dir)
         print(("  ok  " if ok else "  fail"), klass)
         if ok:
@@ -118,6 +152,10 @@ def main():
     archive = out / "tests.tar.bz2"
     with tarfile.open(archive, "w:bz2") as tar:
         tar.add(tests_root, arcname=".")
+
+    if args.tests_out:
+        moved = move_tests(tests_root, Path(args.tests_out))
+        print("ย้าย JUnit test %d ไฟล์ -> %s" % (moved, args.tests_out))
 
     print("สร้าง test สำเร็จ %d/%d คลาส -> %s" % (len(succeeded), len(classes), archive))
     return 0

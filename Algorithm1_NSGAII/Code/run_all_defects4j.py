@@ -18,7 +18,11 @@
   python run_all_defects4j.py --projects Lang --bugs 1-3 --method nsga2 \
       --generator "python Algorithm1_NSGAII/Code/my_gen.py --buggy {buggy} --fixed {fixed} --out {out}"
 
-placeholder ใน --generator: {pid} {bid} {buggy} {fixed} {out} {classes} {seed}
+placeholder ใน --generator: {pid} {bid} {buggy} {fixed} {out} {classes} {seed} {tests_dir}
+
+โครงสร้างโฟลเดอร์ผลลัพธ์ (แยก log กับ test ออกจากกันเด็ดขาด)
+  log/evidence : <out-root>/project-<pid>/<pid>-<bid>/round<run-id>/
+  JUnit test   : <tests-root>/round<run-id>/project-<pid>/<pid>-<bid>/
 """
 import argparse
 import csv
@@ -78,7 +82,10 @@ def clear_reports(ws):
 def process_bug(args, pid, bid, row):
     ws_root = Path(args.workspace).expanduser()
     buggy, fixed = ws_root / f"{pid}-{bid}b", ws_root / f"{pid}-{bid}f"
-    out = Path(args.out_root).expanduser() / f"{pid}-{bid}" / f"run-{args.run_id}"
+    out = (Path(args.out_root).expanduser()
+           / f"project-{pid}" / f"{pid}-{bid}" / f"round{args.run_id}")
+    tests_dir = (Path(args.tests_root).expanduser()
+                 / f"round{args.run_id}" / f"project-{pid}" / f"{pid}-{bid}")
     out.mkdir(parents=True, exist_ok=True)
     row["raw_evidence_path"] = str(out)
     try:
@@ -115,7 +122,8 @@ def process_bug(args, pid, bid, row):
 
         # ---- สร้าง test จาก buggy เท่านั้น ----
         cmd = args.generator.format(pid=pid, bid=bid, buggy=buggy, fixed=fixed, out=out,
-                                    classes=",".join(target_classes), seed=args.seed)
+                                    classes=",".join(target_classes), seed=args.seed,
+                                    tests_dir=tests_dir)
         # shlex ไม่ขยาย "~" ให้ ถ้าไม่ขยายตรงนี้ subprocess จะมองไม่เห็นไฟล์และ
         # ทำให้ทุกบั๊กกลายเป็น generation_failed ทั้งที่ generator ทำงานได้
         argv = [os.path.expanduser(t) for t in shlex.split(cmd)]
@@ -160,8 +168,15 @@ def process_bug(args, pid, bid, row):
 
         if "error" in (row["fixed_result"], row["buggy_result"]):
             row["fault_detected"], row["status"] = "n/a", "not_evaluable"
-        else:
+        elif args.detect_direction == "fail_buggy_pass_fixed":
+            # ทิศทางเดิม: เหมาะกับ generator ที่เขียน assertion จากพฤติกรรม "ที่ถูกต้อง" เอง
+            # (เช่น AI ที่เดา expected value เอง ไม่ได้จดจากการรันจริง)
             row["fault_detected"] = row["buggy_result"] == "fail" and row["fixed_result"] == "pass"
+            row["status"] = "ok"
+        else:  # pass_buggy_fail_fixed
+            # ทิศทางสำหรับ EvoSuite/Randoop: assertion จดพฤติกรรมจริงของเวอร์ชันที่ใช้ generate (buggy)
+            # ดังนั้น suite จะ "pass" บน buggy เสมอโดยปริยาย ตรวจพบบั๊ก = ไปรันบน fixed แล้ว fail แทน
+            row["fault_detected"] = row["buggy_result"] == "pass" and row["fixed_result"] == "fail"
             row["status"] = "ok"
     finally:
         if not args.keep:
@@ -183,10 +198,20 @@ def main():
     ap.add_argument("--limit", type=int, help="ทำแค่ N บั๊กแรก (ไว้ทดสอบ)")
     ap.add_argument("--generator", help="คำสั่งสร้าง test (ดู placeholder ด้านบน)")
     ap.add_argument("--method", default="baseline", help="ชื่อวิธี เช่น nsga2 / copilot")
+    ap.add_argument("--detect-direction", choices=["fail_buggy_pass_fixed", "pass_buggy_fail_fixed"],
+                     default="fail_buggy_pass_fixed",
+                     help="วิธีตัดสินว่า 'ตรวจพบบั๊ก': fail_buggy_pass_fixed (ค่าเริ่มต้น, "
+                          "เหมาะกับ AI ที่เดา expected value เอง) หรือ pass_buggy_fail_fixed "
+                          "(เหมาะกับ EvoSuite/Randoop ที่ generate จาก buggy แล้วจด assertion จากมันเอง "
+                          "ใช้ตัวนี้กับ --method nsga2 หรือ generator ที่สร้างจาก buggy)")
     ap.add_argument("--run-id", default="01")
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--workspace", default="~/sqa-workspaces", help="ที่ checkout ชั่วคราว (นอก git)")
     ap.add_argument("--out-root", default="results", help="โฟลเดอร์เก็บหลักฐานต่อบั๊ก")
+    ap.add_argument("--tests-root", default="TestGenerate/test",
+                    help="โฟลเดอร์รากของ JUnit test ที่สร้างได้ แยกจาก log โดยสิ้นเชิง "
+                         "(โครงจริง: <tests-root>/round<run-id>/project-<pid>/<pid>-<bid>/ "
+                         "ส่งให้ generator ผ่าน placeholder {tests_dir})")
     ap.add_argument("--results", default="results/summary_auto.csv")
     ap.add_argument("--timeout", type=int, default=1800, help="วินาทีต่อคำสั่ง defects4j")
     ap.add_argument("--gen-timeout", type=int, default=3600, help="วินาทีต่อการ generate 1 บั๊ก")
