@@ -1,0 +1,76 @@
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Iterator;
+import java.util.Map;
+
+import org.junit.Test;
+
+public class CSVParserNoHeaderMapRegressionTest {
+
+    @Test
+    public void getHeaderMapWithoutConfiguredHeadersIsEmptyBeforeAndAfterReadingRecords() throws Exception {
+        final CSVParser parser = CSVParser.parse("a,b\nc,d\n", CSVFormat.DEFAULT);
+        try {
+            final Map<String, Integer> initialHeaderMap = parser.getHeaderMap();
+            assertNotNull(initialHeaderMap);
+            assertTrue(initialHeaderMap.isEmpty());
+
+            final Iterator<CSVRecord> iterator = parser.iterator();
+            assertTrue(iterator.hasNext());
+            final CSVRecord firstRecord = iterator.next();
+            assertEquals("a", firstRecord.get(0));
+            assertEquals("b", firstRecord.get(1));
+
+            assertTrue(iterator.hasNext());
+            final CSVRecord secondRecord = iterator.next();
+            assertEquals("c", secondRecord.get(0));
+            assertEquals("d", secondRecord.get(1));
+            assertFalse(iterator.hasNext());
+
+            final Map<String, Integer> finalHeaderMap = parser.getHeaderMap();
+            assertNotNull(finalHeaderMap);
+            assertTrue(finalHeaderMap.isEmpty());
+        } finally {
+            parser.close();
+        }
+    }
+
+    @Test
+    public void getHeaderMapWithoutConfiguredHeadersIsEmptyForEmptyInput() throws Exception {
+        final CSVParser parser = CSVParser.parse("", CSVFormat.DEFAULT);
+        try {
+            final Map<String, Integer> headerMap = parser.getHeaderMap();
+
+            assertNotNull(headerMap);
+            assertTrue(headerMap.isEmpty());
+            assertFalse(parser.iterator().hasNext());
+        } finally {
+            parser.close();
+        }
+    }
+
+    @Test
+    public void automaticallyReadHeadersAreExposedAndNotReturnedAsDataRecords() throws Exception {
+        final CSVParser parser = CSVParser.parse("name,age\nAlice,30\n", CSVFormat.DEFAULT.withHeader());
+        try {
+            final Map<String, Integer> headerMap = parser.getHeaderMap();
+            assertEquals(2, headerMap.size());
+            assertEquals(Integer.valueOf(0), headerMap.get("name"));
+            assertEquals(Integer.valueOf(1), headerMap.get("age"));
+
+            final Iterator<CSVRecord> iterator = parser.iterator();
+            assertTrue(iterator.hasNext());
+            final CSVRecord record = iterator.next();
+            assertEquals("Alice", record.get("name"));
+            assertEquals("30", record.get("age"));
+            assertFalse(iterator.hasNext());
+        } finally {
+            parser.close();
+        }
+    }
+}
