@@ -1,34 +1,51 @@
 # Experiment Results
 
-โฟลเดอร์นี้รวบรวมผลสรุปและข้อมูลที่ใช้สำหรับวิเคราะห์ผลการทดลองของโครงการ
+โฟลเดอร์นี้เป็นจุดรวมสำหรับอ่านผลการทดลองและเตรียมข้อมูลสำหรับเปรียบเทียบทั้ง 4 วิธี
 
-ผลดิบและหลักฐานของแต่ละวิธียังคงอยู่ในโฟลเดอร์ของวิธีนั้นโดยตรง
+ผลดิบ หลักฐาน และ test code ของแต่ละวิธีจะยังคงอยู่ในโฟลเดอร์ของวิธีนั้นโดยตรง
 
 ## ผลการทดลองแต่ละวิธี
 
-| วิธี | ผลการทดลอง |
-|---|---|
-| NSGA-II | [Algorithm1_NSGAII](../Algorithm1_NSGAII/) |
-| Symbolic Execution | [Algorithm2_SymbolicExecution](../Algorithm2_SymbolicExecution/) |
-| ChatGPT | [ChatGPT Results](../AI1_ChatGPT/Result/) |
-| GitHub Copilot | [GitHub Copilot Results](../AI2_GitHubCopilot/Result/) |
+| วิธี | ผลและหลักฐาน | ผลสรุปสำหรับอ่าน |
+|---|---|---|
+| NSGA-II | [NSGA-II Results](../Algorithm1_NSGAII/) | [NSGA-II Summary](summaries/nsga2_summary.md) |
+| Symbolic Execution | [Symbolic Results](../Algorithm2_SymbolicExecution/) | [Symbolic Summary](summaries/symbolic_summary.md) |
+| ChatGPT | [ChatGPT Results](../AI1_ChatGPT/Result/) | [AI Summary](summaries/ai_summary.md) |
+| GitHub Copilot | [Copilot Results](../AI2_GitHubCopilot/Result/) | [AI Summary](summaries/ai_summary.md) |
 
-สำหรับ NSGA-II มีผลสรุปที่สร้างไว้ใน  
-[summary_nsga2.csv](../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
+## ข้อมูลสำหรับวิเคราะห์
 
-## ผลสรุป
+ไฟล์ใน [data](data/) เป็นข้อมูลที่จัดไว้สำหรับนำไปคำนวณ วิเคราะห์ หรือสร้างตารางเปรียบเทียบต่อ ไม่ใช่เอกสารสรุปสำหรับอ่านโดยตรง
 
-ผลสรุปของ ChatGPT และ GitHub Copilot:
+ปัจจุบันมีข้อมูล AI:
+
+- [AI Case Results](data/ai_case_results.csv) — ผลราย case ของ ChatGPT และ GitHub Copilot
+- [AI Summary JSON](data/ai_summary.json) — ค่าสรุป AI ในรูปแบบ machine-readable
+
+ข้อมูล NSGA-II ราย case ปัจจุบันยังอยู่ที่:
+
+- [NSGA-II Round 1 Data](../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
+
+ข้อมูลของแต่ละวิธีจะยังอ้างอิงจาก source ของวิธีนั้นจนกว่าจะกำหนดชุดผลสุดท้ายที่ใช้ในการเปรียบเทียบ
+
+## ผลสรุปสำหรับอ่าน
+
+ไฟล์ใน [summaries](summaries/) เป็นผลที่สรุปจากข้อมูลราย case เพื่อให้สามารถอ่านและนำไปใช้ในรายงานได้
 
 - [AI Experiment Summary](summaries/ai_summary.md)
-- [AI Case Results](data/ai_case_results.csv)
-- [AI Summary JSON](data/ai_summary.json)
+- [NSGA-II Summary](summaries/nsga2_summary.md)
+- [Symbolic Execution Summary](summaries/symbolic_summary.md)
 
-ผลเหล่านี้เป็นผลสรุปของวิธี AI ส่วนผลของ NSGA-II และ Symbolic Execution ยังคงอ้างอิงจากโฟลเดอร์ของแต่ละวิธี
+NSGA-II และ Symbolic Execution มี template เตรียมไว้แล้ว สามารถกรอกผล final ของแต่ละวิธีได้โดยไม่ต้องเปลี่ยนโครงสร้าง repository เพิ่ม
 
-เมื่อผลของทั้ง 4 วิธีอยู่ในรูปแบบที่เปรียบเทียบกันได้ จะจัดทำผลเปรียบเทียบรวมเพิ่มเติมในโฟลเดอร์นี้
+## เปรียบเทียบทั้ง 4 วิธี
 
-## สถานะ Benchmark
+เมื่อผลของทุกวิธีใช้ขอบเขตและตัวชี้วัดที่เปรียบเทียบกันได้ จะรวมผลไว้ที่:
 
-ดูสถานะและข้อมูลที่เกี่ยวข้องได้ที่  
+[Final Method Comparison](summaries/final_comparison.md)
+
+## Benchmark Status
+
+สถานะว่าผลของแต่ละวิธีพร้อมถึงขั้นไหนอยู่ที่:
+
 [Benchmark Status](benchmark_status.md)
