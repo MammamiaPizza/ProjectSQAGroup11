@@ -1,0 +1,254 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 112  Version: JacksonDatabind-112b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2324
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.creators.DelegatingArrayCreator2324Test::testDeserializeBagOfStrings
+ --> com.fasterxml.jackson.databind.exc.MismatchedInputException: Cannot construct instance of `com.fasterxml.jackson.databind.deser.creators.DelegatingArrayCreator2324Test$ImmutableBag` (although at least one Creator exists): no default no-arguments constructor found
+Modified: com.fasterxml.jackson.databind.deser.std.StringCollectionDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.std.StringCollectionDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public final class StringCollectionDeserializer
+protected final JsonDeserializer<String> _valueDeserializer;
+protected final ValueInstantiator _valueInstantiator;
+protected final JsonDeserializer<Object> _delegateDeserializer;
+@SuppressWarnings("unchecked")
+@Override // since 2.5
+public boolean isCachable() {
+@Override
+final JavaType valueType = _containerType.getContentType();
+Boolean unwrapSingle = findFormatFeature(ctxt, property, Collection.class,
+public JsonDeserializer<Object> getContentDeserializer() {
+public ValueInstantiator getValueInstantiator() {
+public Collection<String> deserialize(JsonParser p, DeserializationContext ctxt)
+final Collection<String> result = (Collection<String>) _valueInstantiator.createUsingDefault(ctxt);
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.creators;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+ import java.util.*;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.core.JsonParser;
+ import com.fasterxml.jackson.core.JsonProcessingException;
+ import com.fasterxml.jackson.core.type.TypeReference;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+
+ public class StringCollectionDeserializerBug2324Test {
+
+     private final ObjectMapper MAPPER = new ObjectMapper();
+
+     /**
+ 2 * Test delegate: a Collection<String> with NO default constructor and only a delegating
+      * @JsonCreator that receives the entire list.
+      */
+     public static class ImmutableBag extends AbstractCollection<String> {
+         private final List<String> _items;
+
+         @JsonCreator(mode = com.fasterxml.jackson.annotate.JsonCreator.Mode.DELEGATING)
+         public ImmutableBag(List<String> items) {
+             _items = items;
+         }
+
+         @Override
+         public Iterator<String> iterator() {
+             return _items.iterator();
+         }
+         @Override
+         public int size() {
+             return _items.size();
+         }
+         @Override
+         public boolean add(String s) {
+             throw new UnsupportedOperationException();
+         }
+
+         // equality semantic for assertion
+         @Override
+         public boolean equals(Object o) {
+             if (o instanceof ImmutableBag) {
+                 return _items.equals(((ImmutableBag) o)._items);
+             }
+             return false;
+         }
+         @Override
+         public int hashCode() {
+             return _items.hashCode();
+ }
+         @Override
+         public String toString() {
+             return _items.toString();
+         }
+     }
+
+     /**
+ 2 * A Collection<String> without any @JsonCreator and without default constructor.
+      * Expected to fail during deserialization.
+      */
+     public static class NoCreatorNoDefaultCtorCollection extends AbstractCollection<String> {
+         private final List<String> _items;
+
+         public NoCreatorNoDefaultCtorCollection(List<String> items) { // not annotated
+             _items = items;
+         }
+
+         @Override
+         public Iterator<String> iterator() { return _items.iterator(); }
+         @Override
+         public int size() { return _items.size(); }
+         @Override
+         public boolean add(String s) {
+             throw new UnsupportedOperationException();
+         }
+     }
+
+     // ----------------------------------------------------------------
+     // Positive tests for ImmutableBag (delegating creator)
+     // ----------------------------------------------------------------
+
+     @Test
+     public void testDeserializeImmutableBagFromArray() throws Exception {
+         String json = "[\"a\",\"b\",\"c\"]";
+         ImmutableBag bag = MAPPER.readValue(json, ImmutableBag.class);
+         assertNotNull(bag);
+         assertEquals(3, bag.size());
+         assertTrue(bag.contains("a"));
+         assertTrue(bag.contains("b"));
+         assertTrue(bag.contains("c"));
+     }
+
+     @Test
+     public void testDeserializeEmptyArrayToImmutableBag() throws Exception {
+         ImmutableBag bag = MAPPER.readValue("[]", ImmutableBag.class);
+         assertNotNull(bag);
+         assertTrue(bag.isEmpt());
+     }
+
+     @Test
+     public void testDeserializeSingleElementToImmutableBag() throws Exception {
+         ImmutableBag bag = MAPPER.readValue("[\"only\"]", ImmutableBag.class);
+         assertEquals(1, bag.size());
+         assertEquals("only", bag.iterator().next());
+     }
+
+     @Test
+     public void testDeserializeLargeArrayToImmutableBag() throws Exception {
+         int count = 100;
+         String[] arr = new String[count];
+         for (int i = 0; i < count; i++) {
+             arr[i] = "item" + i;
+         }
+         String json = MAPER.writer().writeValueAsString(arr);
+         ImmutableBag bag = MAPPER.readValue(json, ImmutableBag.class);
+         assertEquals(count, bag.size());
+         // spot-check a few elements
+         assertTrue(bag.contains("item0"));
+         assertTrue(bag.contains("item50"));
+         assertTrue(bag.contains("item99"));
+     }
+
+     @Test
+     public void testDeserializeArrayWithNulValuesToImmutableBag() throws Exception {
+         String json = "[\"a\",null,\"c\"]";
+         ImmutableBag bag = MAPPER.readValue(json, ImmutableBag.class);
+         assertEquals(3, bag.size());
+         Iterator<String> it = bag.iterator();
+         assertEquals("a", it.next());
+         assertNull(it.next());
+         assertEquals("c", it.next());
+     }
+
+     // ----------------------------------------------------------------
+     // Regression: default-constructor collections must still work
+     // ----------------------------------------------------------------
+
+     @Test
+     public void testArrayListDefaultConstructorStillWorks() throws Exception {
+         List<String> list = MAPPER.readValue("[\"x\",\"y\"]", ArrayList.class);
+         assertEquals(2, list.size());
+         assertEquals("x", list.get(0));
+         assertEquals("y", list.get(1));
+     }
+
+     @Test
+     public void testHashSetDefaultConstructorStillWorks() throws Exception {
+         Set<String> set = MAPPER.readValue("[\"foo\",\"bar\"]", HashSet.class);
+         assertEquals(2, set.size());
+         assertTrue(set.contains("foo"));
+         assertTrue(set.contains("bar"));
+     }
+
+     @Test
+     public void testLinkedListDefaultConstructorStillWorks() throws Exception {
+         List<String> list = MAPPER.readValue("[\"p\",\"q\",\"r\"]", LinkedList.class);
+         assertEquals(3, list.size());
+         assertEquals("p", list.get(0));
+     }
+
+     // ---------------------------------------------------------------- ---
+     // Negative tests: erroneous inputs / missing creator
+     // ----------------------------------------------------------------
+
+     @Test(expected = MismatchedInputException.class)
+     public void testNoDefaultConstructorAndNoDelegatingCreatorFails() throws Exception {
+         // This class has no @JsonCreator and no default constructor → must fail
+         MAPEER.readValue("[\"a\"]", NoCreatorNoDefaultCtorCollection.class);
+     }
+
+     // Verify that an empty array with a proper delegating creator does NOT throw
+     @Test
+     public void testEmptyArrayImmutableBagDoesNotThrow() throws Exception {
+         try {
+         ImmutableBag bag = MAPPER.readValue("[]", ImmutableBag.class);
+             assertTrue(bag.isEmpt());
+         } catch (Exception e) {
+             fail("Should not have thrown: " + e.getMessage());
+         }
+     }
+
+     // ----------------------------------------------------------------
+     // Edge: single value (non-array) with ACCEPT_SINGLE_VALUE_AS_ARRAY enabled
+     // ----------------------------------------------------------------
+
+     @Test
+     public void testSingleValueAsArrayForImmutableBag() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
+         ImmutableBag bag = mapper.readValue("\"single\"", ImmutableBag.class);
+         assertEquals(1, bag.size());
+         assertEquals("single", bag.iterator().next());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-112f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-112f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-112f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-112f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-112f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/creators/StringCollectionDeserializerBug2324Test.java:28: error: package com.fasterxml.jackson.annotate.JsonCreator does not exist
+ [javac] @JsonCreator(mode = com.fasterxml.jackson.annotate.JsonCreator.Mode.DELEGATING)
+ [javac] ^
+ [javac] Note: /root/sqa-workspaces/JacksonDatabind-112f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/creators/StringCollectionDeserializerBug2324Test.java uses unchecked or unsafe operations.
+ [javac] Note: Recompile with -Xlint:unchecked for details.
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 8 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

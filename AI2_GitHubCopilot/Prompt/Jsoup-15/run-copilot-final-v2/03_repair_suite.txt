@@ -1,0 +1,161 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 15  Version: Jsoup-15b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 104
+Trigger failures:
+- org.jsoup.parser.ParserTest::handlesDataOnlyTags
+ --> junit.framework.AssertionFailedError: expected:<Hello []There> but was:<Hello ['); i++; ]There>
+Modified: org.jsoup.parser.TreeBuilderState
+
+Available API/signatures:
+[org.jsoup.parser.TreeBuilderState | java]
+package org.jsoup.parser;
+enum TreeBuilderState {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+private boolean exitTableBody(Token t, TreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(TreeBuilder tb) {
+private static String nullString = String.valueOf(0x0000);
+abstract boolean process(Token t, TreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static void handleRcData(Token.StartTag startTag, TreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, TreeBuilder tb) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+/**
+
+ - Tests for data-only tag handling in TreeBuilderState (script, style, title, etc.).
+ - Focuses on the bug where raw text/RCDATA tags inject extraneous characters.
+  */
+ public class TreeBuilderStateTest {
+  @Test
+  public void handlesDataOnlyTags() {
+  Document doc = Jsoup.parse("<script>Hello There</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("Hello There", script.html());
+  }
+  @Test
+  public void scriptTagWithNormalText() {
+  Document doc = Jsoup.parse("<script>console.log('test');</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("console.log('test');", script.html());
+  }
+  @Test
+  public void styleTagWithNormalText() {
+  Document doc = Jsoup.parse("<style>body { color: red; }</style>");
+  Element style = doc.select("style").first();
+  assertNotNull(style);
+  assertEquals("body { color: red; }", style.html());
+  }
+  @Test
+  public void titleTagWithNormalText() {
+  Document doc = Jsoup.parse("<title>Hello There</title>");
+  Element title = doc.select("title").first();
+  assertNotNull(title);
+  assertEquals("Hello There", title.html());
+  }
+  @Test
+  public void scriptTagWithAngleBrackets() {
+  Document doc = Jsoup.parse("<script>if (a < b && c > d) {}</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("if (a < b && c > d) {}", script.html());
+  }
+  @Test
+  public void scriptTagWithHtmlEntities() {
+  Document doc = Jsoup.parse("<script>& < > "</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("& < > "", script.html());
+  }
+  @Test
+  public void scriptTagWithNestedEndScript() {
+  Document doc = Jsoup.parse("<script>var s = "</script>";</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("var s = "", script.html());
+  }
+  @Test
+  public void emptyScriptTag() {
+  Document doc = Jsoup.parse("<script></script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("", script.html());
+  }
+  @Test
+  public void emptyStyleTag() {
+  Document doc = Jsoup.parse("<style></style>");
+  Element style = doc.select("style").first();
+  assertNotNull(style);
+  assertEquals("", style.html());
+  }
+  @Test
+  public void multipleAdjacentDataTags() {
+  Document doc = Jsoup.parse("<script>first</script><style>second</style>");
+  Element script = doc.select("script").first();
+  Element style = doc.select("style").first();
+  assertNotNull(script);
+  assertNotNull(style);
+  assertEquals("first", script.html());
+  assertEquals("second", style.html());
+  }
+  @Test
+  public void scriptTagWithWhitespaceOnly() {
+  Document doc = Jsoup.parse("<script>   </script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("   ", script.html());
+  }
+  @Test
+  public void longScriptContent() {
+  StringBuilder sb = new StringBuilder(1000);
+  for (int i = 0; i < 1000; i++) sb.append('a');
+  String content = sb.toString();
+  Document doc = Jsoup.parse("<script>" + content + "</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals(content, script.html());
+  }
+  @Test
+  public void scriptTagWithAttributes() {
+  Document doc = Jsoup.parse("<script type="text/javascript">data</script>");
+  Element script = doc.select("script").first();
+  assertNotNull(script);
+  assertEquals("data", script.html());
+  assertEquals("text/javascript", script.attr("type"));
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-15f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-15f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-15f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-15f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-15f-copilot/.test_suite/org/jsoup/parser/TreeBuilderStateTest.java:53: error: illegal start of expression
+ [javac] Document doc = Jsoup.parse("<script>& < > "</script>");
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

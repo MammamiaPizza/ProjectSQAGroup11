@@ -1,0 +1,169 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 75  Version: Jsoup-75b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 985
+Trigger failures:
+- org.jsoup.nodes.ElementTest::booleanAttributeOutput
+ --> junit.framework.AssertionFailedError: expected:<...mg src="foo" noshade[] nohref async autofo...> but was:<...mg src="foo" noshade[=""] nohref async autofo...>
+Modified: org.jsoup.nodes.Attributes
+
+Available API/signatures:
+[org.jsoup.nodes.Attributes | java]
+package org.jsoup.nodes;
+public class Attributes implements Iterable<Attribute>, Cloneable {
+protected static final String dataPrefix = "data-";
+private void checkCapacity(int minNewSize) {
+private static String[] copyOf(String[] orig, int size) {
+private int indexOfKeyIgnoreCase(String key) {
+static String checkNotNull(String val) {
+@param key the (case-sensitive) attribute key
+@return the attribute value if set; or empty string if not set (or a boolean attribute).
+@see #hasKey(String)
+public String get(String key) {
+public String getIgnoreCase(String key) {
+private void add(String key, String value) {
+public Attributes put(String key, String value) {
+public Attributes put(String key, boolean value) {
+@param attribute attribute with case sensitive key
+@return these attributes, for chaining
+public Attributes put(Attribute attribute) {
+private void remove(int index) {
+@param key attribute key to remove
+public void remove(String key) {
+public void removeIgnoreCase(String key) {
+@param key case-sensitive key to check for
+@return true if key exists, false otherwise
+public boolean hasKey(String key) {
+@param key key to check for
+public boolean hasKeyIgnoreCase(String key) {
+@return size
+public int size() {
+@param incoming attributes to add to these attributes.
+public void addAll(Attributes incoming) {
+public Iterator<Attribute> iterator() {
+@Override
+public boolean hasNext() {
+public Attribute next() {
+final Attribute attr = new Attribute(keys[i], vals[i], Attributes.this);
+public void remove() {
+@return an view of the attributes as an unmodifialbe List.
+public List<Attribute> asList() {
+new BooleanAttribute
+...[truncated deterministically]...
+s cannot be constructed.
+public String html() {
+final void html(final Appendable accum, final Document.OutputSettings out) throws IOException {
+public String toString() {
+public boolean equals(Object o) {
+public int hashCode() {
+public Attributes clone() {
+public void normalize() {
+private static class Dataset extends AbstractMap<String, String> {
+private Dataset(Attributes attributes) {
+public Set<Entry<String, String>> entrySet() {
+public String put(String key, String value) {
+private class EntrySet extends AbstractSet<Map.Entry<String, String>> {
+public Iterator<Map.Entry<String, String>> iterator() {
+private class DatasetIterator implements Iterator<Map.Entry<String, String>> {
+private Iterator<Attribute> attrIter = attributes.iterator();
+public Entry<String, String> next() {
+private static String dataKey(String key) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class AttributesBug75Test {
+    @Test
+    public void serializesEmptyBooleanAttributesWithoutEmptyValue() {
+        Attributes attributes = new Attributes();
+        attributes.put("noshade", "");
+        attributes.put("nohref", "");
+        attributes.put("async", "");
+        attributes.put("autofocus", "");
+
+        assertEquals(" noshade nohref async autofocus", attributes.html());
+    }
+
+    @Test
+    public void serializesMixedValuedAndEmptyBooleanAttributes() {
+        Attributes attributes = new Attributes();
+        attributes.put("src", "foo");
+        attributes.put("noshade", "");
+        attributes.put("nohref", "");
+        attributes.put("async", "");
+
+        assertEquals(" src=\"foo\" noshade nohref async", attributes.html());
+    }
+
+    @Test
+    public void booleanPutAddsAndFalseRemovesAttribute() {
+        Attributes attributes = new Attributes();
+
+        attributes.put("checked", true);
+
+        assertTrue(attributes.hasKey("checked"));
+        assertEquals("", attributes.get("checked"));
+        assertEquals(" checked", attributes.html());
+
+        attributes.put("checked", false);
+
+        assertFalse(attributes.hasKey("checked"));
+        assertEquals(0, attributes.size());
+        assertEquals("", attributes.html());
+    }
+
+    @Test
+    public void retainsEmptyValueForNonBooleanAttribute() {
+        Attributes attributes = new Attributes();
+        attributes.put("data-state", "");
+
+        assertEquals(" data-state=\"\"", attributes.html());
+    }
+
+    @Test
+    public void xmlSyntaxKeepsExplicitEmptyValueForBooleanAttribute() throws IOException {
+        Attributes attributes = new Attributes();
+        attributes.put("async", "");
+
+        Document.OutputSettings outputSettings = new Document.OutputSettings();
+        outputSettings.syntax(Document.OutputSettings.Syntax.xml);
+        StringBuilder output = new StringBuilder();
+
+        attributes.html(output, outputSettings);
+
+        assertEquals(" async=\"\"", output.toString());
+    }
+
+    @Test
+    public void booleanPutIsVisibleThroughAttributeListAsEmptyValue() {
+        Attributes attributes = new Attributes();
+        attributes.put("async", true);
+
+        List<Attribute> attributesList = attributes.asList();
+
+        assertEquals(1, attributesList.size());
+        assertEquals("async", attributesList.get(0).getKey());
+        assertEquals("", attributesList.get(0).getValue());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.AttributesBug75Test::booleanPutIsVisibleThroughAttributeListAsEmptyValue
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.AttributesBug75Test::booleanPutIsVisibleThroughAttributeListAsEmptyValue

@@ -1,0 +1,133 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 84  Version: JacksonDatabind-84b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1647
+Trigger failures:
+- com.fasterxml.jackson.databind.type.TestTypeFactoryWithRecursiveTypes::testBasePropertiesIncludedWhenSerializingSubWhenSubTypeLoadedAfterBaseType
+ --> junit.framework.ComparisonFailure: expected:<{"[base":1,"]sub":2}> but was:<{"[]sub":2}>
+Modified: com.fasterxml.jackson.databind.type.ResolvedRecursiveType
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.ResolvedRecursiveType | java]
+package com.fasterxml.jackson.databind.type;
+public class ResolvedRecursiveType extends TypeBase
+protected JavaType _referencedType;
+public ResolvedRecursiveType(Class<?> erasedType, TypeBindings bindings) {
+public void setReference(JavaType ref)
+public JavaType getSelfReferencedType() { return _referencedType; }
+@Override
+public StringBuilder getGenericSignature(StringBuilder sb) {
+public StringBuilder getErasedSignature(StringBuilder sb) {
+public JavaType withContentType(JavaType contentType) {
+public JavaType withTypeHandler(Object h) {
+public JavaType withContentTypeHandler(Object h) {
+public JavaType withValueHandler(Object h) {
+public JavaType withContentValueHandler(Object h) {
+public JavaType withStaticTyping() {
+@Deprecated // since 2.7
+protected JavaType _narrow(Class<?> subclass) {
+public boolean isContainerType() {
+public String toString() {
+public boolean equals(Object o) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+import java.util.List;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+public class ResolvedRecursiveTypeBug84Test
+{
+    static class Base<T extends Base<T>> {
+        public int base = 1;
+    }
+
+    static class Sub extends Base<Sub> {
+        public int sub = 2;
+    }
+
+    @Test
+    public void serializesInheritedPropertiesWhenBaseTypeWasResolvedFirst() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+
+        mapper.getTypeFactory().constructType(Base.class);
+
+        assertEquals("{\"base\":1,\"sub\":2}", mapper.writeValueAsString(new Sub()));
+    }
+
+    @Test
+    public void setReferenceMakesReferencedTypeAvailable()
+    {
+        JavaType reference = TypeFactory.defaultInstance().constructType(String.class);
+        ResolvedRecursiveType recursive = new ResolvedRecursiveType(String.class,
+                TypeBindings.emptyBindings());
+
+        recursive.setReference(reference);
+
+        assertSame(reference, recursive.getSelfReferencedType());
+        assertEquals(String.class, recursive.getSelfReferencedType().getRawClass());
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void setReferenceRejectsSecondReference()
+    {
+        ResolvedRecursiveType recursive = new ResolvedRecursiveType(String.class,
+                TypeBindings.emptyBindings());
+
+        recursive.setReference(TypeFactory.defaultInstance().constructType(String.class));
+        recursive.setReference(TypeFactory.defaultInstance().constructType(Integer.class));
+    }
+
+    @Test
+    public void typeTransformationsApplyToResolvedReference()
+    {
+        TypeFactory factory = TypeFactory.defaultInstance();
+        JavaType listType = factory.constructCollectionType(List.class, String.class);
+        JavaType integerType = factory.constructType(Integer.class);
+        ResolvedRecursiveType recursive = new ResolvedRecursiveType(List.class,
+                TypeBindings.emptyBindings());
+        Object typeHandler = new Object();
+        Object contentTypeHandler = new Object();
+        Object valueHandler = new Object();
+        Object contentValueHandler = new Object();
+
+        recursive.setReference(listType);
+
+        JavaType contentChanged = recursive.withContentType(integerType);
+        JavaType typeHandled = recursive.withTypeHandler(typeHandler);
+        JavaType contentTypeHandled = recursive.withContentTypeHandler(contentTypeHandler);
+        JavaType valueHandled = recursive.withValueHandler(valueHandler);
+        JavaType contentValueHandled = recursive.withContentValueHandler(contentValueHandler);
+        JavaType staticallyTyped = recursive.withStaticTyping();
+
+        assertEquals(Integer.class, contentChanged.getContentType().getRawClass());
+        assertSame(typeHandler, typeHandled.getTypeHandler());
+        assertSame(contentTypeHandler,
+                contentTypeHandled.getContentType().getTypeHandler());
+        assertSame(valueHandler, valueHandled.getValueHandler());
+        assertSame(contentValueHandler,
+                contentValueHandled.getContentType().getValueHandler());
+        assertTrue(staticallyTyped.useStaticType());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.type.ResolvedRecursiveTypeBug84Test::typeTransformationsApplyToResolvedReference
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.type.ResolvedRecursiveTypeBug84Test::typeTransformationsApplyToResolvedReference

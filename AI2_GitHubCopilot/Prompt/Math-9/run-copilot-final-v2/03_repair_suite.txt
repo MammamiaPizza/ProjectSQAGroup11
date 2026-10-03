@@ -1,0 +1,221 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 9  Version: Math-9b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-938
+Trigger failures:
+- org.apache.commons.math3.geometry.euclidean.threed.LineTest::testRevert
+ --> junit.framework.AssertionFailedError: arrays first differed at element [0]; expected:<0.028581782127907646> but was:<0.028581782243293483>
+Modified: org.apache.commons.math3.geometry.euclidean.threed.Line
+
+Available API/signatures:
+[org.apache.commons.math3.geometry.euclidean.threed.Line | java]
+package org.apache.commons.math3.geometry.euclidean.threed;
+/** The class represent lines in a three dimensional space.
+public class Line implements Embedding<Euclidean3D, Euclidean1D> {
+public Line(final Vector3D p1, final Vector3D p2) throws MathIllegalArgumentException {
+public Line(final Line line) {
+public void reset(final Vector3D p1, final Vector3D p2) throws MathIllegalArgumentException {
+final Vector3D delta = p2.subtract(p1);
+final double norm2 = delta.getNormSq();
+public Line revert() {
+final Line reverted = new Line(zero, zero.subtract(direction));
+public Vector3D getDirection() {
+public Vector3D getOrigin() {
+public double getAbscissa(final Vector3D point) {
+public Vector3D pointAt(final double abscissa) {
+public Vector1D toSubSpace(final Vector<Euclidean3D> point) {
+public Vector3D toSpace(final Vector<Euclidean1D> point) {
+public boolean isSimilarTo(final Line line) {
+final double angle = Vector3D.angle(direction, line.direction);
+public boolean contains(final Vector3D p) {
+public double distance(final Vector3D p) {
+final Vector3D d = p.subtract(zero);
+final Vector3D n = new Vector3D(1.0, d, -d.dotProduct(direction), direction);
+public double distance(final Line line) {
+final Vector3D normal = Vector3D.crossProduct(direction, line.direction);
+final double n = normal.getNorm();
+final double offset = line.zero.subtract(zero).dotProduct(normal) / n;
+public Vector3D closestPoint(final Line line) {
+final double cos = direction.dotProduct(line.direction);
+final Vector3D delta0 = line.zero.subtract(zero);
+final double a = delta0.dotProduct(direction);
+final double b = delta0.dotProduct(line.direction);
+public Vector3D intersection(final Line line) {
+final Vector3D closest = closestPoint(line);
+public SubLine wholeLine() {
+
+Generated JUnit Test:
+package org.apache.commons.math3.geometry.euclidean.threed;
+
+import org.apache.commons.math3.exception.MathIllegalArgumentException;
+import org.apache.commons.math3.util.FastMath;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+/**
+
+ - Tests for Line covering the MATH-938 bug where revert() introduces a
+ - floating-point drift in the origin of the reversed line.
+  */
+ public class LineTest {
+  private static final double EPS = 1e-12;
+  /**
+  - Component-wise assertion with tolerance.
+    */
+   private static void assertVectorEquals(Vector3D expected, Vector3D actual, double delta) {
+   assertNotNull(expected);
+   assertNotNull(actual);
+   assertEquals("X mismatch", expected.getX(), actual.getX(), delta);
+   assertEquals("Y mismatch", expected.getY(), actual.getY(), delta);
+   assertEquals("Z mismatch", expected.getZ(), actual.getZ(), delta);
+   }
+  @Test
+  public void testRevertOriginSame() {
+      // After revert the origin must be identical to the original line's origin.
+      Line line = new Line(new Vector3D(1, 2, 3), new Vector3D(4, 5, 6));
+      Line reverted = line.revert();
+      assertEquals("Reverted origin should equal original origin",
+              0.0, line.getOrigin().distance(reverted.getOrigin()), EPS);
+  }
+  @Test
+  public void testRevertDirectionNegated() {
+      // Reversed direction must be the negative of the original direction.
+      Line line = new Line(new Vector3D(2, 0, 1), new Vector3D(2, 5, 1));
+      Line reverted = line.revert();
+      Vector3D expected = line.getDirection().negate();
+      assertVectorEquals(expected, reverted.getDirection(), EPS);
+  }
+  @Test
+  public void testRevertTwiceYieldsOriginal() {
+      // revert(revert(line)) yields a line that contains the same points.
+      Line line = new Line(new Vector3D(-2, 3, 1), new Vector3D(1, -1, 0));
+      Line twiceReverted = line.revert().revert();
+      assertTrue("Double reverted line should be similar to original",
+              twiceReverted.isSimilarT(line));
+      assertEquals(0.0, line.getOrigin().distance(twiceReverted.getOrigin()), EPS);
+  }
+  @Test
+  public void testAbscissaSignFlip() {
+      // Abscissa of any point must change sign after revert.
+      Line line = new Line(new Vector3D(1, 1, 0), new Vector3D(1, 4, 0));
+      Line reverted = line.revert();
+      Vector3D point = new Vector3D(2, 0, 5);
+      double aOrig = line.getAbscissa(point);
+      double aRev  = reverted.getAbscissa(point);
+      assertEquals("Abscissa should flip sign", 0.0, aOrig + aRev, EPS);
+  }
+  @Test
+  public void testContainsInvariant() {
+      // A point on the line belongs to both the original and the reverted line.
+      Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+      Line reverted = line.revert();
+      Vector3D p = new Vector3D(0.5, 0, 0);
+      assertTrue("Original line must contain the point", line.contains(p));
+      assertTrue("Reverted line must contain the point", reverted.contains(p));
+  }
+  @Test
+  public void testDistanceInvariant() {
+      // Distance to any point is unchanged after revert.
+      Line line = new Line(new Vector3D(-3, 1, 2), new Vector3D(1, -2, 2));
+      Line reverted = line.revert();
+      Vector3D p = new Vector3D(7, 8, 9);
+      double d1 = line.distance(p);
+      double d2 = reverted.distance(p);
+      assertEquals("Distance to a point must be invariant under revert", d1, d2, EPS);
+  }
+  @Test(expected = MathIllegalArgumentException.class)
+  public void testConstructorWithIdenticalPointsThrows() {
+      // Two equal points must cause an exception.
+      new Line(Vector3D.ZERO, Vector3D.ZERO);
+  }
+  @Test
+  public void testRevertAfterCopyConstructor() {
+      // revert of a deep-copied line behaves identically to revert of the original.
+      Line original = new Line(new Vector3D(1, 0, 0), new Vector3D(1, 1, 0));
+      Line copy = new Line(original);
+      Line revOrig = original.revert();
+      Line revCopy = copy.revert();
+      assertVectorEquals(revOrig.getOrigin(), revCopy.getOrigin(), EPS);
+      assertVectorEquals(revOrig.getDirection(), revCopy.getDirection(), EPS);
+  }
+  @Test
+  public void testRevertedDirectionIsUnit() {
+      // Reverted direction must be a unit vector.
+      Line line = new Line(new Vector3D(3, 1, 2), new Vector3D(3, 1, 8));
+      Line reverted = line.revert();
+      assertEquals("Reverted direction must have norm 1",
+              1.0, reverted.getDirection().getNorm(), EPS);
+  }
+  @Test
+  public void testPointAtAbscissaReverted() {
+      // pointAt(abscissa) on the reverted line equals pointAt(-abscissa) on the original.
+      Line line = new Line(new Vector3D(2, 0, 0), new Vector3D(2, 3, 0));
+      Line reverted = line.revert();
+      double absc = 2.5;
+      Vector3D pOriginal = line.pointAt(absc);
+      Vector3D pReverted = reverted.pointAt(-absc);
+      assertEquals("Points must coincide",
+              0.0, pOriginal.distance(pReverted), EPS);
+  }
+  @Test
+  public void testRevertWithSmallDirection() {
+      // A line with a very short direction vector still yields a unit reversed direction.
+      Vector3D p1 = new Vector3D(1, 1, 0);
+      Vector3D p2 = new Vector3D(1 + 1e-8, 1 + 1e-8, 0);
+      Line line = new Line(p1, p2);
+      Line reverted = line.revert();
+      assertEquals("Direction must be unit", 1.0, reverted.getDirection().getNorm(), 1e-10);
+      double dot = line.getDirection().dotProduct(reverted.getDirection());
+      assertEquals("Directions must be opposite", -1.0, dot, 1e-10);
+  }
+  @Test
+  public void testOriginIsClosestPointToOrigin() {
+      // getOrigin() must return the point on the line closest to Vector3D.ZERO.
+      Line line = new Line(new Vector3D(1, 2, 3), new Vector3D(4, 5, 6));
+      double distLineToOrigin = line.distance(Vector3D.ZERO);
+      double distToZeroPoint   = line.getOrigin().getNorm(); // distance from (0,0,0) to zero
+      assertEquals("Distance from origin to line should equal |zero|",
+              distToZeroPoint, distLineToOrigin, 1e-12);
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-9f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-9f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-9f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 3.1-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-9f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-9f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-9f-copilot/target/test-classes
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/optimization/linear/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/exception/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/analysis/integration/gauss/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/stat/descriptive/moment/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/geometry/partitioning/utilities/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/exception/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/optim/nonlinear/vector/jacobian/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/complex/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-9f-copilot/target/classes/org/apache/commons/math3/random/package-info.class
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-9f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-9f-copilot/.test_suite/org/apache/commons/math3/geometry/euclidean/threed/LineTest.java:48: error: cannot find symbol
+ [javac] twiceReverted.isSimilarT(line));
+ [javac] ^
+ [javac] symbol: method isSimilarT(Line)
+ [javac] location: variable twiceReverted of type Line
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.

@@ -1,0 +1,157 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 54  Version: JacksonDatabind-54b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1256
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestJDKAtomicTypes::testEmpty1256
+ --> junit.framework.ComparisonFailure: expected:<{[]}> but was:<{["a":null]}>
+Modified: com.fasterxml.jackson.databind.ser.PropertyBuilder
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ser.PropertyBuilder | java]
+package com.fasterxml.jackson.databind.ser;
+public class PropertyBuilder
+final protected SerializationConfig _config;
+final protected BeanDescription _beanDesc;
+final protected JsonInclude.Value _defaultInclusion;
+final protected AnnotationIntrospector _annotationIntrospector;
+protected Object _defaultBean;
+public PropertyBuilder(SerializationConfig config, BeanDescription beanDesc)
+public Annotations getClassAnnotations() {
+@SuppressWarnings("deprecation")
+protected JavaType findSerializationType(Annotated a, boolean useStaticTyping, JavaType declaredType)
+throw new IllegalArgumentException("Illegal concrete-type annotation for method '"+a.getName()+"': class "+serClass.getName()+" not a super-type of (declared) class "+rawDeclared.getName());
+protected Object getDefaultBean()
+/* If we can fix access rights, we should; otherwise non-public
+protected Object getDefaultValue(JavaType type)
+if (cls == String.class) {
+protected Object _throwWrapped(Exception e, String propName, Object defaultBean)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.ser;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.BeanDescription;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationConfig;
+
+public class PropertyBuilderBug1256Test
+{
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    public static class AtomicReferenceBean1256 {
+        public AtomicReference<String> a = new AtomicReference<String>();
+
+        public AtomicReferenceBean1256() { }
+
+        public AtomicReferenceBean1256(String value) {
+            a = new AtomicReference<String>(value);
+        }
+    }
+
+    public static class DefaultConstructibleBean {
+        public String value = "default";
+    }
+
+    public static class NoDefaultConstructorBean {
+        public NoDefaultConstructorBean(String value) { }
+    }
+
+    private static class ExposedPropertyBuilder extends PropertyBuilder {
+        public ExposedPropertyBuilder(SerializationConfig config, BeanDescription beanDesc) {
+            super(config, beanDesc);
+        }
+
+        public Object defaultValue(JavaType type) {
+            return getDefaultValue(type);
+        }
+
+        public Object defaultBean() {
+            return getDefaultBean();
+        }
+    }
+
+    private ExposedPropertyBuilder propertyBuilderFor(ObjectMapper mapper, Class<?> type) {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JavaType javaType = mapper.constructType(type);
+        return new ExposedPropertyBuilder(config, config.introspect(javaType));
+    }
+
+    @Test
+    public void emptyAtomicReferenceIsSuppressedAsNonDefault() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        assertEquals("{}", mapper.writeValueAsString(new AtomicReferenceBean1256()));
+    }
+
+    @Test
+    public void nonEmptyAtomicReferenceIsSerializedAsNonDefaultValue() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        assertEquals("{\"a\":\"value\"}",
+                mapper.writeValueAsString(new AtomicReferenceBean1256("value")));
+    }
+
+    @Test
+    public void defaultValueUsesEmptyMarkerForReferenceAndContainerTypes() {
+        ObjectMapper mapper = new ObjectMapper();
+        ExposedPropertyBuilder builder = propertyBuilderFor(mapper, AtomicReferenceBean1256.class);
+
+        assertSame(JsonInclude.Include.NON_EMPTY,
+                builder.defaultValue(mapper.constructType(AtomicReference.class)));
+        assertSame(JsonInclude.Include.NON_EMPTY,
+                builder.defaultValue(mapper.constructType(ArrayList.class)));
+    }
+
+    @Test
+    public void defaultValueHandlesStringPrimitiveAndOrdinaryObjectTypes() {
+        ObjectMapper mapper = new ObjectMapper();
+        ExposedPropertyBuilder builder = propertyBuilderFor(mapper, AtomicReferenceBean1256.class);
+
+        assertEquals("", builder.defaultValue(mapper.constructType(String.class)));
+        assertEquals(Integer.valueOf(0), builder.defaultValue(mapper.constructType(Integer.TYPE)));
+        assertNull(builder.defaultValue(mapper.constructType(Object.class)));
+    }
+
+    @Test
+    public void defaultBeanIsInstantiatedAndCachedWhenAvailable() {
+        ObjectMapper mapper = new ObjectMapper();
+        ExposedPropertyBuilder builder = propertyBuilderFor(mapper, DefaultConstructibleBean.class);
+
+        Object first = builder.defaultBean();
+        Object second = builder.defaultBean();
+
+        assertTrue(first instanceof DefaultConstructibleBean);
+        assertSame(first, second);
+    }
+
+    @Test
+    public void defaultBeanIsNullWhenNoDefaultConstructorExists() {
+        ObjectMapper mapper = new ObjectMapper();
+        ExposedPropertyBuilder builder = propertyBuilderFor(mapper, NoDefaultConstructorBean.class);
+
+        assertNull(builder.defaultBean());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.ser.PropertyBuilderBug1256Test::emptyAtomicReferenceIsSuppressedAsNonDefault
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.ser.PropertyBuilderBug1256Test::emptyAtomicReferenceIsSuppressedAsNonDefault

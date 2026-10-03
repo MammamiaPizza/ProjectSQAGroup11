@@ -1,0 +1,430 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Chart  Bug: 25  Version: Chart-25b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Target: org.jfree.chart.renderer.category.StatisticalBarRenderer
+Modified: org.jfree.chart.renderer.category.StatisticalBarRenderer
+Triggers: org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullMeanVertical, org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullDeviationVertical, org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullMeanHorizontal, org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullDeviationHorizontal
+
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullMeanVertical
+ --> junit.framework.AssertionFailedError
+ - org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullDeviationVertical
+ --> junit.framework.AssertionFailedError
+ - org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullMeanHorizontal
+ --> junit.framework.AssertionFailedError
+ - org.jfree.chart.renderer.category.junit.StatisticalBarRendererTests::testDrawWithNullDeviationHorizontal
+ --> junit.framework.AssertionFailedError
+Modified: org.jfree.chart.renderer.category.StatisticalBarRenderer
+
+Prompt-01 test plan:
+TARGETS: StatisticalBarRenderer.draw() handling StatisticalCategoryDataset items with null mean or
+null standard deviation.
+ORACLES: Defects4J fixed version; tests expect no AssertionFailedError, bar skipped/drawn correctly
+when mean or deviation is null.
+CASES: Null mean vertical, null mean horizontal, null deviation vertical, null deviation horizontal,
+both null, one null one valid, normal values.
+RISKS: Limited context – only public API signatures; internal draw logic, dataset contract, and test
+assertions unknown; missing edge-case details.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jfree.chart.renderer.category.StatisticalBarRenderer (java) =====
+/* API SIGNATURES */
+package org.jfree.chart.renderer.category;
+public class StatisticalBarRenderer extends BarRenderer
+public StatisticalBarRenderer() {
+public Paint getErrorIndicatorPaint() {
+public void setErrorIndicatorPaint(Paint paint) {
+public Stroke getErrorIndicatorStroke() {
+public void setErrorIndicatorStroke(Stroke stroke) {
+public boolean equals(Object obj) {
+private void writeObject(ObjectOutputStream stream) throws IOException {
+private void readObject(ObjectInputStream stream)
+
+/* HEADER */
+package org.jfree.chart.renderer.category;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.Paint;
+import java.awt.Stroke;
+import java.awt.geom.Line2D;
+import java.awt.geom.Rectangle2D;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import org.jfree.chart.axis.CategoryAxis;
+import org.jfree.chart.axis.ValueAxis;
+import org.jfree.chart.entity.EntityCollection;
+import org.jfree.chart.event.RendererChangeEvent;
+import org.jfree.chart.labels.CategoryItemLabelGenerator;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.util.PaintUtilities;
+import org.jfree.chart.util.PublicCloneable;
+import org.jfree.chart.util.RectangleEdge;
+import org.jfree.chart.util.SerialUtilities;
+import org.jfree.data.category.CategoryDataset;
+import org.jfree.data.statistics.StatisticalCategoryDataset;
+public class StatisticalBarRenderer extends BarRenderer
+
+/* METHOD StatisticalBarRenderer */
+public StatisticalBarRenderer() {
+ super();
+ this.errorIndicatorPaint = Color.gray;
+ this.errorIndicatorStroke = new BasicStroke(0.5f);
+ }
+
+/* METHOD setErrorIndicatorPaint */
+public void setErrorIndicatorPaint(Paint paint) {
+ this.errorIndicatorPaint = paint;
+ notifyListeners(new RendererChangeEvent(this));
+ }
+
+/* METHOD setErrorIndicatorStroke */
+public void setErrorIndicatorStroke(Stroke stroke) {
+ this.errorIndicatorStroke = stroke;
+ notifyListeners(new RendererChangeEvent(this));
+ }
+
+/* METHOD drawItem */
+public void drawItem(Graphics2D g2,
+ CategoryItemRendererState state,
+ Rectangle2D dataArea,
+ CategoryPlot plot,
+ CategoryAxis domainAxis,
+ ValueAxis rangeAxis,
+ CategoryDataset data,
+ int row,
+ int column,
+ int pass) {
+
+ // defensive check
+ if (!(data instanceof StatisticalCategoryDataset)) {
+ throw new IllegalArgumentException(
+ "Requires StatisticalCategoryDataset.");
+ }
+ StatisticalCategoryDataset statData = (StatisticalCategoryDataset) data;
+
+ PlotOrientation orientation = plot.getOrientation();
+ if (orientation == PlotOrientation.HORIZONTAL) {
+ drawHorizontalItem(g2, state, dataArea, plot, domainAxis, 
+ rangeAxis, statData, row, column);
+ }
+ else if (orientation == PlotOrientation.VERTICAL) {
+ drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, 
+ statData, row, column);
+ }
+ }
+
+/* METHOD drawHorizontalItem */
+protected void drawHorizontalItem(Graphics2D g2,
+ CategoryItemRendererState state,
+ Rectangle2D dataArea,
+ CategoryPlot plot,
+ CategoryAxis domainAxis,
+ ValueAxis rangeAxis,
+ StatisticalCategoryDataset dataset,
+ int row,
+ int column) {
+ 
+ RectangleEdge xAxisLocation = plot.getDomainAxisEdge();
+ 
+ // BAR Y
+ double rectY = domainAxis.getCategoryStart(column, getColumnCount(), 
+ dataArea, xAxisLocation);
+
+ int seriesCount = getRowCount();
+ int categoryCount = getColumnCount();
+ if (seriesCount > 1) {
+ double seriesGap = dataArea.getHeight() * getItemMargin()
+ / (categoryCount * (seriesCount - 1));
+ rectY = rectY + row * (state.getBarWidth() + seriesGap);
+ }
+ else {
+ rectY = rectY + row * state.getBarWidth();
+ }
+
+ // BAR X
+ Number meanValue = dataset.getMeanValue(row, column);
+
+ double value = meanValue.doubleValue();
+ double base = 0.0;
+ double lclip = getLowerClip();
+ double uclip = getUpperClip();
+
+ if (uclip <= 0.0) { // cases 1, 2, 3 and 4
+ if (value >= uclip) {
+ return; // bar is not visible
+ }
+ base = uclip;
+ if (value <= lclip) {
+ value = lclip;
+ }
+ }
+ else if (lclip <= 0.0) { // cases 5, 6, 7 and 8
+ if (value >= uclip) {
+ value = uclip;
+ }
+ else {
+ if (value <= lclip) {
+ value = lclip;
+ }
+ }
+ }
+ else { // cases 9, 10, 11 and 12
+ if (value <= lclip) {
+ return; // bar is not visible
+ }
+ base = getLowerClip();
+ if (value >= uclip) {
+ value = uclip;
+ }
+ }
+
+ RectangleEdge yAxisLocation = plot.getRangeAxisEdge();
+ double transY1 = rangeAxis.valueToJava2D(base, dataArea, yAxisLocation);
+ double transY2 = rangeAxis.valueToJava2D(value, dataArea, 
+ yAxisLocation);
+ double rectX = Math.min(transY2, transY1);
+
+ double rectHeight = state.getBarWidth();
+ double rectWidth = Math.abs(transY2 - transY1);
+
+ Rectangle2D bar = new Rectangle2D.Double(rectX, rectY, rectWidth, 
+ rectHeight);
+ Paint seriesPaint = getItemPaint(row, column);
+ g2.setPaint(seriesPaint);
+ g2.fill(bar);
+ if (isDrawBarOutline() && state.getBarWidth() > 3) {
+ g2.setStroke(getItemStroke(row, column));
+ g2.setPaint(getItemOutlinePaint(row, column));
+ g2.draw(bar);
+ }
+
+ // standard deviation lines
+ double valueDelta = dataset.getStdDevValue(row, column).doubleValue();
+ double highVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+ + valueDelta, dataArea, yAxisLocation);
+ double lowVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+ - valueDelta, dataArea, yAxisLocation);
+
+ if (this.errorIndicatorStroke != null) {
+ g2.setStroke(this.errorIndicatorStroke);
+ }
+ else {
+ g2.setStroke(getItemOutlineStroke(row, column));
+ }
+ if (this.errorIndicatorPaint != null) {
+ g2.setPaint(this.errorIndicatorPaint); 
+ }
+ else {
+ g2.setPaint(getItemOutlinePaint(row, column)); 
+ }
+ 
+ Line2D line = null;
+ line = new Line2D.Double(lowVal, rectY + rectHeight / 2.0d, 
+ highVal, rectY + rectHeight / 2.0d);
+ g2.draw(line);
+ line = new Line2D.Double(highVal, rectY + rectHeight * 0.25, 
+ highVal, rectY + rectHeight * 0.75);
+ g2.draw(line);
+ line = new Line2D.Double(lowVal, rectY + rectHeight * 0.25, 
+ lowVal, rectY + rectHeight * 0.75);
+ g2.draw(line);
+ 
+ CategoryItemLabelGenerator generator = getItemLabelGenerator(row, 
+ column);
+ if (generator != null && isItemLabelVisible(row, column)) {
+ drawItemLabel(g2, dataset, row, column, plot, generator, bar, 
+ (value < 0.0));
+ } 
+
+ // add an item entity, if this information is being collected
+ EntityCollection entities = state.getEntityCollection();
+ if (entities != null) {
+ addItemEntity(entities, dataset, row, column, bar);
+ }
+
+ }
+
+/* METHOD drawVerticalItem */
+protected void drawVerticalItem(Graphics2D g2,
+ CategoryItemRendererState state,
+ Rectangle2D dataArea,
+ CategoryPlot plot,
+ CategoryAxis domainAxis,
+ ValueAxis rangeAxis,
+ StatisticalCategoryDataset dataset,
+ int row,
+ int column) {
+ 
+ RectangleEdge xAxisLocation = plot.getDomainAxisEdge();
+ 
+ // BAR X
+ double rectX = domainAxis.getCategoryStart(
+ column, getColumnCount(), dataArea, xAxisLocation
+ );
+
+ int seriesCount = getRowCount();
+ int categoryCount = getColumnCount();
+ if (seriesCount > 1) {
+ double seriesGap = dataArea.getWidth() * getItemMargin()
+ / (categoryCount * (seriesCount - 1));
+ rectX = rectX + row * (state.getBarWidth() + seriesGap);
+ }
+ else {
+ rectX = rectX + row * state.getBarWidth();
+ }
+
+ // BAR Y
+ Number meanValue = dataset.getMeanValue(row, column);
+
+ double value = meanValue.doubleValue();
+ double base = 0.0;
+ double lclip = getLowerClip();
+ double uclip = getUpperClip();
+
+ if (uclip <= 0.0) { // cases 1, 2, 3 and 4
+ if (value >= uclip) {
+ return; // bar is not visible
+ }
+ base = uclip;
+ if (value <= lclip) {
+ value = lclip;
+ }
+ }
+ else if (lclip <= 0.0) { // cases 5, 6, 7 and 8
+ if (value >= uclip) {
+ value = uclip;
+ }
+ else {
+ if (value <= lclip) {
+ value = lclip;
+ }
+ }
+ }
+ else { // cases 9, 10, 11 and 12
+ if (value <= lclip) {
+ return; // bar is not visible
+ }
+ base = getLowerClip();
+ if (value >= uclip) {
+ value = uclip;
+ }
+ }
+
+ RectangleEdge yAxisLocation = plot.getRangeAxisEdge();
+ double transY1 = rangeAxis.valueToJava2D(base, dataArea, yAxisLocation);
+ double transY2 = rangeAxis.valueToJava2D(value, dataArea, 
+ yAxisLocation);
+ double rectY = Math.min(transY2, transY1);
+
+ double rectWidth = state.getBarWidth();
+ double rectHeight = Math.abs(transY2 - transY1);
+
+ Rectangle2D bar = new Rectangle2D.Double(rectX, rectY, rectWidth, 
+ rectHeight);
+ Paint seriesPaint = getItemPaint(row, column);
+ g2.setPaint(seriesPaint);
+ g2.fill(bar);
+ if (isDrawBarOutline() && state.getBarWidth() > 3) {
+ g2.setStroke(getItemStroke(row, column));
+ g2.setPaint(getItemOutlinePaint(row, column));
+ g2.draw(bar);
+ }
+
+ // standard deviation lines
+ double valueDelta = dataset.getStdDevValue(row, column).doubleValue();
+ double highVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+ + valueDelta, dataArea, yAxisLocation);
+ double lowVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+ - valueDelta, dataArea, yAxisLocation);
+
+ if (this.errorIndicatorStroke != null) {
+ g2.setStroke(this.errorIndicatorStroke);
+ }
+ else {
+ g2.setStroke(getItemOutlineStroke(row, column));
+ }
+ if (this.errorIndicatorPaint != null) {
+ g2.setPaint(this.errorIndicatorPaint); 
+ }
+ else {
+ g2.setPaint(getItemOutlinePaint(row, column)); 
+ }
+ Line2D line = null;
+ line = new Line2D.Double(rectX + rectWidth / 2.0d, lowVal,
+ rectX + rectWidth / 2.0d, highVal);
+ g2.draw(line);
+ line = new Line2D.Double(rectX + rectWidth / 2.0d - 5.0d, highVal,
+ rectX + rectWidth / 2.0d + 5.0d, highVal);
+ g2.draw(line);
+ line = new Line2D.Double(rectX + rectWidth / 2.0d - 5.0d, lowVal,
+ rectX + rectWidth / 2.0d + 5.0d, lowVal);
+ g2.draw(line);
+ 
+ CategoryItemLabelGenerator generator = getItemLabelGenerator(row, 
+ column);
+ if (generator != null && isItemLabelVisible(row, column)) {
+ drawItemLabel(g2, dataset, row, column, plot, generator, bar, 
+ (value < 0.0));
+ } 
+
+ // add an item entity, if this information is being collected
+ EntityCollection entities = state.getEntityCollection();
+ if (entities != null) {
+ addItemEntity(entities, dataset, row, column, bar);
+ }
+ }
+
+/* METHOD equals */
+public boolean equals(Object obj) {
+ if (obj == this) {
+ return true; 
+ }
+ if (!(obj instanceof StatisticalBarRenderer)) {
+ return false; 
+ }
+ if (!super.equals(obj)) {
+ return false; 
+ }
+ StatisticalBarRenderer that = (StatisticalBarRenderer) obj;
+ if (!PaintUtilities.equal(this.errorIndicatorPaint, 
+ that.errorIndicatorPaint)) {
+ return false;
+ }
+ return true;
+ }
+
+/* METHOD getErrorIndicatorPaint */
+public Paint getErrorIndicatorPaint() {
+ return this.errorIndicatorPaint; 
+ }
+
+/* METHOD getErrorIndicatorStroke */
+public Stroke getErrorIndicatorStroke() {
+ return this.errorIndicatorStroke; 
+ }
+
+/* METHOD writeObject */
+private void writeObject(ObjectOutputStream stream) throws IOException {
+ stream.defaultWriteObject();
+ SerialUtilities.writePaint(this.errorIndicatorPaint, stream);
+ SerialUtilities.writeStroke(this.errorIndicatorStroke, stream);
+ }
+
+/* METHOD readObject */
+private void readObject(ObjectInputStream stream) 
+ throws IOException, ClassNotFoundException {
+ stream.defaultReadObject();
+ this.errorIndicatorPaint = SerialUtilities.readPaint(stream);
+ this.errorIndicatorStroke = SerialUtilities.readStroke(stream);
+ }

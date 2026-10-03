@@ -1,0 +1,486 @@
+The current JUnit Test Suite compiles and runs successfully, but some reachable statements, branches,
+methods, or fault-related behaviors are not adequately tested.
+Analyze the production source code, current Test Suite, behavioral specification, bug report, Project Context,
+and coverage report.
+
+Requirements:
+1. Identify the reachable statements, conditions, branches, and methods that are not covered.
+2. Identify the behaviors related to the supplied bug report, API contract, or specification that are not
+adequately tested.
+3. Add only meaningful Test Cases that increase statement coverage, branch coverage, method coverage, or
+fault-detection capability.
+4. Prioritize uncovered code related to the supplied bug report or behavioral specification.
+5. Add Test Cases that could distinguish the incorrect behavior described in the bug report from the expected
+behavior.
+6. Include normal, boundary, invalid, null, and exceptional cases when relevant to the uncovered code.
+7. Do not duplicate the behavior of existing Test Cases.
+8. Do not modify the production source code.
+9. Use the JUnit version and build tool configured in the project.
+10. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+11. Do not invent APIs, dependencies, or expected behavior.
+12. Derive expected results only from the supplied specification, API documentation, bug report, public
+contract, permitted existing tests, and Project Context.
+13. Analyze only the Source Version and Project Context supplied in this prompt.
+14. Preserve all valid existing Test Cases.
+15. Keep all Test Cases independent and free from execution-order dependencies.
+16. Return the complete updated Java Test Class.
+17. After the Test Class, explain which uncovered statement, condition, branch, method, or fault-related
+behavior each new Test Case targets.
+Project ID:
+JacksonXml
+Bug ID:
+4
+Source Version:
+JacksonXml-4b
+JUnit Version:
+junit-4.12.jar
+Build Tool:
+Maven
+Target Class:
+com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: JacksonXml
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: JacksonXml
+       Program: jackson-dataformat-xml
+    Build file: /root/defects4j/framework/projects/JacksonXml/JacksonXml.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/jackson-dataformat-xml.git
+     Commit db: /root/defects4j/framework/projects/JacksonXml/active-bugs.csv
+Number of bugs: 6
+--------------------------------------------------------------------------------
+
+Summary for Bug: JacksonXml-4
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+2c5f6f4e0f7bbcfa566fbc91ee57baf8dd7a371a
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2016-11-14 22:34:17 -0800
+--------------------------------------------------------------------------------
+Bug report id:
+213
+--------------------------------------------------------------------------------
+Bug report url:
+https://github.com/FasterXML/jackson-dataformat-xml/issues/213
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - com.fasterxml.jackson.dataformat.xml.misc.RootNameTest::testDynamicRootName
+   --> junit.framework.ComparisonFailure: expected:<<[rudy]/>> but was:<<[null]/>>
+--------------------------------------------------------------------------------
+List of modified sources:
+ - com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider =====
+package com.fasterxml.jackson.dataformat.xml.ser;
+
+import java.io.IOException;
+
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamException;
+
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.PropertyName;
+import com.fasterxml.jackson.databind.SerializationConfig;
+import com.fasterxml.jackson.databind.ser.SerializerFactory;
+import com.fasterxml.jackson.databind.ser.DefaultSerializerProvider;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+import com.fasterxml.jackson.dataformat.xml.util.StaxUtil;
+import com.fasterxml.jackson.dataformat.xml.util.TypeUtil;
+import com.fasterxml.jackson.dataformat.xml.util.XmlRootNameLookup;
+
+/**
+ * We need to override some parts of
+ * {@link com.fasterxml.jackson.databind.SerializerProvider}
+ * implementation to handle oddities of XML output, like "extra" root element.
+ */
+public class XmlSerializerProvider extends DefaultSerializerProvider
+{
+    // As of 2.7
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * If all we get to serialize is a null, there's no way to figure out
+     * expected root name; so let's just default to something like "&lt;null>"...
+     */
+    protected final static QName ROOT_NAME_FOR_NULL = new QName("null");
+
+    protected final XmlRootNameLookup _rootNameLookup;
+
+    public XmlSerializerProvider(XmlRootNameLookup rootNames)
+    {
+        super();
+        _rootNameLookup = rootNames;
+    }
+
+    public XmlSerializerProvider(XmlSerializerProvider src,
+            SerializationConfig config, SerializerFactory f)
+    {
+        super(src, config, f);
+        _rootNameLookup  = src._rootNameLookup;
+    }
+
+    /*
+    /**********************************************************************
+    /* Overridden methods
+    /**********************************************************************
+     */
+
+    @Override
+    public DefaultSerializerProvider createInstance(SerializationConfig config,
+            SerializerFactory jsf) {
+        return new XmlSerializerProvider(this, config, jsf);
+    }
+
+    @SuppressWarnings("resource")
+    @Override
+    public void serializeValue(JsonGenerator gen, Object value) throws IOException
+    {
+        if (value == null) {
+            _serializeXmlNull(gen);
+            return;
+        }
+        final Class<?> cls = value.getClass();
+        final boolean asArray;
+        final ToXmlGenerator xgen = _asXmlGenerator(gen);
+        if (xgen == null) { // called by convertValue()
+            asArray = false;
+        } else {
+            QName rootName = _rootNameFromConfig();
+            if (rootName == null) {
+                rootName = _rootNameLookup.findRootName(cls, _config);
+            }
+            _initWithRootName(xgen, rootName);
+            asArray = TypeUtil.isIndexedType(cls);
+            if (asArray) {
+                _startRootArray(xgen, rootName);
+            }
+        }
+        
+        // From super-class implementation
+        final JsonSerializer<Object> ser = findTypedValueSerializer(cls, true, null);
+        try {
+            ser.serialize(value, gen, this);
+        } catch (IOException ioe) { // As per [JACKSON-99], pass IOException and subtypes as-is
+            throw ioe;
+        } catch (Exception e) { // but wrap RuntimeExceptions, to get path information
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = "[no message for "+e.getClass().getName()+"]";
+            }
+            throw JsonMappingException.from(gen, msg, e);
+        }
+        // end of super-class implementation
+
+        if (asArray) {
+            gen.writeEndObject();
+        }
+    }
+
+    @SuppressWarnings("resource")
+    @Override
+    public void serializeValue(JsonGenerator gen, Object value, JavaType rootType)
+        throws IOException
+    {
+        if (value == null) {
+            _serializeXmlNull(gen);
+            return;
+        }
+        final boolean asArray;
+        final ToXmlGenerator xgen = _asXmlGenerator(gen);
+        if (xgen == null) { // called by convertValue()
+            asArray = false;
+        } else {
+            QName rootName = _rootNameFromConfig();
+            if (rootName == null) {
+                rootName = _rootNameLookup.findRootName(rootType, _config);
+            }
+            _initWithRootName(xgen, rootName);
+            asArray = TypeUtil.isIndexedType(rootType);
+            if (asArray) {
+                _startRootArray(xgen, rootName);
+            }
+        }
+
+        final JsonSerializer<Object> ser = findTypedValueSerializer(rootType, true, null);
+        // From super-class implementation
+        try {
+            ser.serialize(value, gen, this);
+        } catch (IOException ioe) { // no wrapping for IO (and derived)
+            throw ioe;
+        } catch (Exception e) { // but others do need to be, to get path etc
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = "[no message for "+e.getClass().getName()+"]";
+            }
+            throw JsonMappingException.from(gen, msg, e);
+        }
+        // end of super-class implementation
+
+        if (asArray) {
+            gen.writeEndObject();
+        }
+    }
+    
+    // @since 2.1
+    @SuppressWarnings("resource")
+    @Override
+    public void serializeValue(JsonGenerator gen, Object value, JavaType rootType,
+            JsonSerializer<Object> ser) throws IOException
+    {
+        if (value == null) {
+            _serializeXmlNull(gen);
+            return;
+        }
+        final boolean asArray;
+        final ToXmlGenerator xgen = _asXmlGenerator(gen);
+        if (xgen == null) { // called by convertValue()
+            asArray = false;
+        } else {
+            QName rootName = _rootNameFromConfig();
+            if (rootName == null) {
+                rootName = _rootNameLookup.findRootName(rootType, _config);
+            }
+            _initWithRootName(xgen, rootName);
+            asArray = TypeUtil.isIndexedType(rootType);
+            if (asArray) {
+                _startRootArray(xgen, rootName);
+            }
+        }
+        if (ser == null) {
+            ser = findTypedValueSerializer(rootType, true, null);
+        }
+        // From super-class implementation
+        try {
+            ser.serialize(value, gen, this);
+        } catch (IOException ioe) { // no wrapping for IO (and derived)
+            throw ioe;
+        } catch (Exception e) { // but others do need to be, to get path etc
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = "[no message for "+e.getClass().getName()+"]";
+            }
+            throw JsonMappingException.from(gen, msg, e);
+        }
+        // end of super-class implementation
+        if (asArray) {
+            gen.writeEndObject();
+        }
+    }
+
+    protected void _serializeXmlNull(JsonGenerator jgen) throws IOException
+    {
+        // 14-Nov-2016, tatu: As per [dataformat-xml#213], we may have explicitly
+        //    configured root name...
+        if (jgen instanceof ToXmlGenerator) {
+            _initWithRootName((ToXmlGenerator) jgen, ROOT_NAME_FOR_NULL);
+        }
+        super.serializeValue(jgen, null);
+    }
+    
+    protected void _startRootArray(ToXmlGenerator xgen, QName rootName) throws IOException
+    {
+        xgen.writeStartObject();
+        // Could repeat root name, but what's the point? How to customize?
+        xgen.writeFieldName("item");
+    }    
+
+    protected void _initWithRootName(ToXmlGenerator xgen, QName rootName) throws IOException
+    {
+        /* 28-Nov-2012, tatu: We should only initialize the root
+         *  name if no name has been set, as per [dataformat-xml#42],
+         *  to allow for custom serializers to work.
+         */
+        if (!xgen.setNextNameIfMissing(rootName)) {
+            // however, if we are root, we... insist
+            if (xgen.inRoot()) {
+                xgen.setNextName(rootName);
+            }
+        }
+        xgen.initGenerator();
+        String ns = rootName.getNamespaceURI();
+        /* [dataformat-xml#26] If we just try writing root element with namespace,
+         * we will get an explicit prefix. But we'd rather use the default
+         * namespace, so let's try to force that.
+         */
+        if (ns != null && ns.length() > 0) {
+            try {
+                xgen.getStaxWriter().setDefaultNamespace(ns);
+            } catch (XMLStreamException e) {
+                StaxUtil.throwXmlAsIOException(e);
+            }
+        }
+    }
+
+    protected QName _rootNameFromConfig()
+    {
+        PropertyName name = _config.getFullRootName();
+        if (name == null) {
+            return null;
+        }
+        String ns = name.getNamespace();
+        if (ns == null || ns.isEmpty()) {
+            return new QName(name.getSimpleName());
+        }
+        return new QName(ns, name.getSimpleName());
+    }
+
+    protected ToXmlGenerator _asXmlGenerator(JsonGenerator gen)
+        throws JsonMappingException
+    {
+        // [Issue#71]: When converting, we actually get TokenBuffer, which is fine
+        if (!(gen instanceof ToXmlGenerator)) {
+            // but verify
+            if (!(gen instanceof TokenBuffer)) {
+                throw JsonMappingException.from(gen,
+                        "XmlMapper does not with generators of type other than ToXmlGenerator; got: "+gen.getClass().getName());
+            }
+            return null;
+        }
+        return (ToXmlGenerator) gen;
+    }    
+}
+
+Related classes and project context:
+Modified classes:
+- com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+
+Triggering tests:
+- com.fasterxml.jackson.dataformat.xml.misc.RootNameTest::testDynamicRootName
+Current JUnit Test Suite:
+package com.fasterxml.jackson.dataformat.xml.ser;
+
+import java.io.StringWriter;
+import java.util.Map;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ser.DefaultSerializerProvider;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class XmlSerializerProviderTest
+{
+    @JacksonXmlRootElement(localName = "person")
+    public static class Person
+    {
+        private final String name;
+
+        public Person(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
+
+    @Test
+    public void testNullValueUsesDefaultNullRootName() throws Exception
+    {
+        XmlMapper mapper = new XmlMapper();
+
+        String xml = mapper.writeValueAsString(null);
+
+        assertEquals("<null/>", xml);
+    }
+
+    @Test
+    public void testConfiguredRootNameIsUsedForNullValue() throws Exception
+    {
+        XmlMapper mapper = new XmlMapper();
+
+        String xml = mapper.writer()
+                .withRootName("rudy")
+                .writeValueAsString(null);
+
+        assertEquals("<rudy/>", xml);
+    }
+
+    @Test
+    public void testConfiguredRootNameIsUsedForTypedNullValue() throws Exception
+    {
+        XmlMapper mapper = new XmlMapper();
+
+        String xml = mapper.writerFor(String.class)
+                .withRootName("typedNull")
+                .writeValueAsString(null);
+
+        assertEquals("<typedNull/>", xml);
+    }
+
+    @Test
+    public void testAnnotatedRootNameIsUsedForNonNullValue() throws Exception
+    {
+        XmlMapper mapper = new XmlMapper();
+
+        String xml = mapper.writeValueAsString(new Person("Ada"));
+
+        assertEquals("<person><name>Ada</name></person>", xml);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testConvertValueUsesTokenBufferGenerator() throws Exception
+    {
+        XmlMapper mapper = new XmlMapper();
+
+        Map<String, Object> converted = mapper.convertValue(new Person("Ada"), Map.class);
+
+        assertEquals("Ada", converted.get("name"));
+        assertEquals(1, converted.size());
+    }
+
+    @Test
+    public void testNonXmlAndNonTokenBufferGeneratorIsRejected() throws Exception
+    {
+        XmlMapper mapper = new XmlMapper();
+        XmlSerializerProvider prototype =
+                (XmlSerializerProvider) mapper.getSerializerProvider();
+        DefaultSerializerProvider provider = prototype.createInstance(
+                mapper.getSerializationConfig(), mapper.getSerializerFactory());
+
+        assertTrue(provider instanceof XmlSerializerProvider);
+        assertNotSame(prototype, provider);
+
+        StringWriter output = new StringWriter();
+        JsonGenerator generator = new JsonFactory().createGenerator(output);
+        try {
+            ((XmlSerializerProvider) provider).serializeValue(generator, "value");
+            fail("Expected JsonMappingException for a non-XML generator");
+        } catch (JsonMappingException e) {
+            assertTrue(e.getMessage().contains(
+                    "XmlMapper does not with generators of type other than ToXmlGenerator"));
+        } finally {
+            generator.close();
+        }
+    }
+}
+
+Coverage report from the actual coverage tool:
+Actual Defects4J coverage summary.csv:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+122,53,60,21
+
+Coverage XML uncovered-code summary:
+Class: com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+Uncovered lines: 229, 230, 241, 242, 243, 244, 258, 216, 218, 219, 85, 93, 94, 95, 96, 97, 98, 100, 105, 114, 115, 116, 119, 120, 121, 123, 124, 125, 127, 128, 129, 130, 134, 137, 138, 139, 140, 141, 142, 143, 145, 146, 149, 150, 152, 165, 166, 167, 169, 170, 171, 173, 174, 175, 176, 179, 180, 184, 185, 186, 187, 188, 189, 190, 192, 193, 195, 196, 198, 85, 93, 94, 95, 96, 97, 98, 100, 105, 114, 115, 116, 119, 120, 121, 123, 124, 125, 127, 128, 129, 130, 134, 137, 138, 139, 140, 141, 142, 143, 145, 146, 149, 150, 152, 165, 166, 167, 169, 170, 171, 173, 174, 175, 176, 179, 180, 184, 185, 186, 187, 188, 189, 190, 192, 193, 195, 196, 198, 216, 218, 219, 229, 230, 241, 242, 243, 244, 258
+Partially covered branch lines: 227 (50% (1/2)), 239 (50% (2/4)), 255 (25% (1/4)), 208 (50% (1/2)), 79 (50% (1/2)), 84 (50% (1/2)), 104 (50% (1/2)), 160 (50% (1/2)), 79 (50% (1/2)), 84 (50% (1/2)), 104 (50% (1/2)), 160 (50% (1/2)), 208 (50% (1/2)), 227 (50% (1/2)), 239 (50% (2/4)), 255 (25% (1/4))

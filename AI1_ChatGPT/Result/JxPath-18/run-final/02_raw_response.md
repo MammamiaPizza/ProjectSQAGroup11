@@ -1,0 +1,94 @@
+```java
+package org.apache.commons.jxpath.ri.axes;
+
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+
+/**
+ * Tests attribute-axis evaluation through the DOM model.
+ */
+public class AttributeContextTest extends TestCase {
+
+    private static final String PRICE_NAMESPACE = "urn:test:prices";
+
+    public void testAttributeNodeAxisReturnsAttributesOfNamespacedElements()
+            throws Exception {
+        JXPathContext context = createContext(
+                "<vendor xmlns:price='" + PRICE_NAMESPACE + "'>"
+                        + "<product><price:amount discount='10%'/></product>"
+                        + "<product><price:amount discount='20%'/></product>"
+                        + "</vendor>");
+
+        List values = collectValues(context.iterate(
+                "vendor/product/price:amount/attribute::node()"));
+
+        assertEquals(
+                Arrays.asList(new String[] { "10%", "20%" }),
+                values);
+    }
+
+    public void testNamedAttributeAxisReturnsMatchingAttributeValues()
+            throws Exception {
+        JXPathContext context = createContext(
+                "<vendor xmlns:price='" + PRICE_NAMESPACE + "'>"
+                        + "<product><price:amount discount='10%'/></product>"
+                        + "<product><price:amount discount='20%'/></product>"
+                        + "</vendor>");
+
+        List values = collectValues(context.iterate(
+                "vendor/product/price:amount/attribute::discount"));
+
+        assertEquals(
+                Arrays.asList(new String[] { "10%", "20%" }),
+                values);
+    }
+
+    public void testAttributeNodeAxisOnElementWithoutAttributesIsEmpty()
+            throws Exception {
+        JXPathContext context = createContext(
+                "<vendor xmlns:price='" + PRICE_NAMESPACE + "'>"
+                        + "<product><price:amount/></product>"
+                        + "</vendor>");
+
+        Iterator values = context.iterate(
+                "vendor/product/price:amount/attribute::node()");
+
+        assertFalse(values.hasNext());
+    }
+
+    private JXPathContext createContext(String xml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+
+        Document document = factory.newDocumentBuilder().parse(
+                new InputSource(new StringReader(xml)));
+
+        JXPathContext context = JXPathContext.newContext(document);
+        context.registerNamespace("price", PRICE_NAMESPACE);
+        return context;
+    }
+
+    private List collectValues(Iterator iterator) {
+        List values = new ArrayList();
+        while (iterator.hasNext()) {
+            values.add(iterator.next());
+        }
+        return values;
+    }
+}
+```
+
+- `testAttributeNodeAxisReturnsAttributesOfNamespacedElements` targets the reported JXPATH-115 failure. It verifies that `attribute::node()` returns attributes for namespaced DOM elements, rather than rejecting the node test and returning no results.
+- `testNamedAttributeAxisReturnsMatchingAttributeValues` covers the normal named-attribute path, where the axis uses a `NodeNameTest` and returns matching attribute values.
+- `testAttributeNodeAxisOnElementWithoutAttributesIsEmpty` covers the exhaustion/no-attribute case and verifies that evaluating the generic attribute axis on an element with no attributes safely produces an empty iterator.

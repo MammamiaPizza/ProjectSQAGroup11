@@ -1,0 +1,215 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 38  Version: JacksonDatabind-38b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1102
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testExplicitMapType
+ --> junit.framework.AssertionFailedError: expected:<class com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test$Point> but was:<class java.util.LinkedHashMap>
+ - com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testExplicitCollectionType
+ --> junit.framework.AssertionFailedError: expected:<class com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test$Point> but was:<class java.util.LinkedHashMap>
+ - com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testPOJOSubType
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "x" (class com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test$Point3D), not marked as ignorable (one known property: "z"])
+Modified: com.fasterxml.jackson.databind.type.CollectionType, com.fasterxml.jackson.databind.type.MapType, com.fasterxml.jackson.databind.type.SimpleType
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.CollectionType | java]
+package com.fasterxml.jackson.databind.type;
+public final class CollectionType
+protected CollectionType(TypeBase base, JavaType elemT) {
+@Deprecated // since 2.7
+public static CollectionType construct(Class<?> rawType, JavaType elemT) {
+@Override
+protected JavaType _narrow(Class<?> subclass) {
+public JavaType withContentType(JavaType contentType) {
+public CollectionType withTypeHandler(Object h) {
+public CollectionType withContentTypeHandler(Object h)
+public CollectionType withValueHandler(Object h) {
+public CollectionType withContentValueHandler(Object h) {
+public CollectionType withStaticTyping() {
+public String toString()
+return "[collection type; class "+_class.getName()+", contains "+_elementType+"]";
+
+[com.fasterxml.jackson.databind.type.MapType | java]
+package com.fasterxml.jackson.databind.type;
+public final class MapType extends MapLikeType
+protected MapType(TypeBase base, JavaType keyT, JavaType valueT) {
+@Deprecated // since 2.7
+public static MapType construct(Class<?> rawType, JavaType keyT, JavaType valueT)
+@Override
+protected JavaType _narrow(Class<?> subclass) {
+public MapType withTypeHandler(Object h) {
+public MapType withContentTypeHandler(Object h)
+public MapType withValueHandler(Object h) {
+public MapType withContentValueHandler(Object h) {
+public MapType withStaticTyping() {
+public JavaType withContentType(JavaType contentType) {
+public MapType withKeyType(JavaType keyType) {
+public MapType withKeyTypeHandler(Object h)
+public MapType withKeyValueHandler(Object h) {
+public String toString()
+return "[map type; class "+_class.getName()+", "+_keyType+" -> "+_value
+...[truncated deterministically]...
+p (class: "+cls.getName()+")");
+if (Collection.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Collection (class: "+cls.getName()+")");
+throw new IllegalArgumentException("Can not construct SimpleType for an array (class: "+cls.getName()+")");
+@Override
+protected JavaType _narrow(Class<?> subclass)
+public JavaType withContentType(JavaType co
+...[truncated deterministically]...
+pe withStaticTyping() {
+protected String buildCanonicalName()
+final int count = _bindings.size();
+public boolean isContainerType() { return false; }
+public StringBuilder getErasedSignature(StringBuilder sb) {
+public StringBuilder getGenericSignature(StringBuilder sb)
+public String toString()
+sb.append("[simple type, class ").append(buildCanonicalName()).append(']');
+public boolean equals(Object o)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+
+import org.junit.Test;
+
+/**
+
+ - Tests targeting the bug in deprecated construct methods of CollectionType, MapType, and
+SimpleType.
+  */
+ public class TypeConstructBug38Test {
+  private void assertRejects(Class<?> cls, String expectedMsg) {
+  try {
+      SimpleType.construct(cls);
+      fail("Expected IllegalArgumentException for " + cls);
+  } catch (IllegalArgumentException e) {
+      assertTrue("Message does not contain expected: " + e.getMessage(),
+              e.getMessage().contains(expectedMsg));
+  }
+  }
+  @Test
+  public void testSimpleTypeConstructRejectsContainerClasses() {
+  assertRejects(HashMap.class, "Can not construct SimpleType for a Map");
+  assertRejects(ArrayList.class, "Can not construct SimpleType for a Collection");
+  assertRejects(int[].class, "Can not construct SimpleType for an array");
+  }
+  @Test
+  public void testSimpleTypeConstructAcceptsValidClass() {
+  JavaType t = SimpleType.construct(String.class);
+  assertNotNull(t);
+  assertEquals(String.class, t.getRawClass());
+  }
+  @Test
+  public void testCollectionTypeConstructPreservesElementType() {
+  JavaType elemType = SimpleType.constructUnsafe(Integer.class);
+  CollectionType ct = CollectionType.construct(ArrayList.class, elemType);
+  assertNotNull("Content type must not be null", ct.getContentType());
+  assertEquals(Integer.class, ct.getContentType().getRawClass());
+  }
+  @Test
+  public void testCollectionTypeConstructNullElementType() {
+  CollectionType ct = CollectionType.construct(ArrayList.class, null);
+  assertNull(ct.getContentType());
+  }
+  @Test
+  public void testMapTypeConstructNullKeyType() {
+  JavaType valType = SimpleType.constructUnsafe(String.class);
+  MapType mt = MapType.construct(HashMap.class, null, valType);
+  assertNull(mt.getKeyType());
+  assertEquals(String.class, mt.getContentType().getRawClass());
+  }
+  @Test
+  public void testCollectionTypeWithStaticTyping() {
+  CollectionType ct = CollectionType.construct(
+          ArrayList.class, SimpleType.constructUnsafe(String.class));
+  CollectionType ct1 = ct.withStaticTyping();
+  assertNotSame(ct, ct1);
+  CollectionType ct2 = ct1.withStaticTyping();
+  assertSame(ct1, ct2);
+  }
+  @Test
+  public void testMapTypeWithStaticTyping() {
+  MapType mt = MapType.construct(
+          HashMap.class, SimpleType.constructUnsafe(String.class),
+          SimpleType.constructUnsafe(Integer.class));
+  MapType mt1 = mt.withStaticTyping();
+  assertNotSame(mt, mt1);
+  MapType mt2 = mt1.withStaticTyping();
+  assertSame(mt1, mt2);
+  }
+  @Test
+  public void testCollectionTypeSuperClassNotObject() {
+  CollectionType ct = CollectionType.construct(
+          ArrayList.class, SimpleType.constructUnsafe(String.class));
+  JavaType superType = ct.getSuperClass();
+  assertNotNull("Superclass should not be null", superType);
+  assertNotEquals("Superclass should not be Object",
+          Object.class, superType.getRawClass());
+  }
+  @Test
+  public void testMapTypeSuperClassNotObject() {
+  MapType mt = MapType.construct(
+          LinkedHashMap.class, SimpleType.constructUnsafe(String.class),
+          SimpleType.constructUnsafe(Integer.class));
+  JavaType superType = mt.getSuperClass();
+  assertNotNull("Superclass should not be null", superType);
+  assertNotEquals("Superclass should not be Object",
+          Object.class, superType.getRawClass());
+  }
+  @Test
+  public void testCollectionTypeNarrowSameClass() {
+  CollectionType ct = CollectionType.construct(
+          ArrayList.class, SimpleType.constructUnsafe(String.class));
+  JavaType narrowed = ct._narrow(ArrayList.class);
+  assertTrue(narrowed instanceof CollectionType);
+  assertEquals(ArrayList.class, narrowed.getRawClass());
+  }
+  @Test
+  public void testMapTypeNarrowSameClass() {
+  MapType mt = MapType.construct(
+          HashMap.class, SimpleType.constructUnsafe(String.class),
+          SimpleType.constructUnsafe(Integer.class));
+  JavaType narrowed = mt._narrow(HashMap.class);
+  assertTrue(narrowed instanceof MapType);
+  assertEquals(HashMap.class, narrowed.getRawClass());
+  }
+  @Test
+  public void testSimpleTypeNarrowSameClassReturnsSelf() {
+  SimpleType st = SimpleType.constructUnsafe(String.class);
+  JavaType narrowed = st._narrow(String.class);
+  assertSame(st, narrowed);
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-38f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-38f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-38f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-38f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-38f-copilot/.test_suite/com/fasterxml/jackson/databind/type/TypeConstructBug38Test.java:34: error: cannot find symbol
+ [javac] JavaType t = SimpleType.construct(String.class);
+ [javac] ^
+ [javac] symbol: class JavaType
+ [javac] location: class TypeConstructBug38Test
+ [javac] Note: /root/sqa-workspaces/JacksonDatabind-38f-copilot/.test_suite/com/fasterxml/jackson/databind/type/TypeConstructBug38Test.java uses or overrides a deprecated API.
+ [javac] Note: Recompile with -Xlint:deprecation for details.
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 37 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

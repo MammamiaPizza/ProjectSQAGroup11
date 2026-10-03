@@ -1,0 +1,169 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 29  Version: Lang-29b
+JUnit: junit-4.7.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-624
+Trigger failures:
+- org.apache.commons.lang3.SystemUtilsTest::testJavaVersionAsInt
+ --> junit.framework.AssertionFailedError: expected:<0> but was:<0.0>
+Modified: org.apache.commons.lang3.SystemUtils
+
+Available API/signatures:
+[org.apache.commons.lang3.SystemUtils | java]
+package org.apache.commons.lang3;
+public class SystemUtils {
+public static final String AWT_TOOLKIT = getSystemProperty("awt.toolkit");
+public static final String FILE_ENCODING = getSystemProperty("file.encoding");
+public static final String FILE_SEPARATOR = getSystemProperty("file.separator");
+public static final String JAVA_AWT_FONTS = getSystemProperty("java.awt.fonts");
+public static final String JAVA_AWT_GRAPHICSENV = getSystemProperty("java.awt.graphicsenv");
+public static final String JAVA_AWT_HEADLESS = getSystemProperty("java.awt.headless");
+public static final String JAVA_AWT_PRINTERJOB = getSystemProperty("java.awt.printerjob");
+public static final String JAVA_CLASS_PATH = getSystemProperty("java.class.path");
+public static final String JAVA_CLASS_VERSION = getSystemProperty("java.class.version");
+public static final String JAVA_COMPILER = getSystemProperty("java.compiler");
+public static final String JAVA_ENDORSED_DIRS = getSystemProperty("java.endorsed.dirs");
+public static final String JAVA_EXT_DIRS = getSystemProperty("java.ext.dirs");
+public static final String JAVA_HOME = getSystemProperty(JAVA_HOME_KEY);
+public static final String JAVA_IO_TMPDIR = getSystemProperty(JAVA_IO_TMPDIR_KEY);
+public static final String JAVA_LIBRARY_PATH = getSystemProperty("java.library.path");
+public static final String JAVA_RUNTIME_NAME = getSystemProperty("java.runtime.name");
+public static final String JAVA_RUNTIME_VERSION = getSystemProperty("java.runtime.version");
+public static final String JAVA_SPECIFICATION_NAME = getSystemProperty("java.specification.name");
+public static final String JAVA
+...[truncated deterministically]...
+le getUserDir() {
+public static File getUserHome() {
+public static boolean isJavaAwtHeadless() {
+public static boolean isJavaVersionAtLeast(float requiredVersion) {
+public static boolean isJavaVersionAtLeast(int requiredVersion) {
+static boolean isJavaVersionMatch(String version, String versionPrefix) {
+static boolean isOSMatch(String osName, String osVersion, String osNamePrefix, String osVersionPrefix) {
+static boolean isOSNameMatch(String osName, String osNamePrefix) {
+static float toJavaVersionFloat(String version) {
+static float toJavaVersionInt(String version) {
+static int[] toJavaVersionIntArray(String version) {
+private static int[] toJavaVersionIntArray(String version, int limit) {
+private static float toVersionFloat(int[] javaVersions) {
+private static int toVersionInt(int[] javaVersions) {
+public SystemUtils() {
+
+Generated JUnit Test:
+package org.apache.commons.lang3;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+public class SystemUtilsTest {
+
+ @Test
+ public void testToJavaVersionIntValid() {
+     // Cast to int because buggy method returns float; check computed integer value.
+     assertEquals(160, (int) SystemUtils.toJavaVersionInt("1.6.0_20"));
+     assertEquals(170, (int) SystemUtils.toJavaVersionInt("1.7.0"));
+     assertEquals(150, (int) SystemUtils.toJavaVersionInt("1.5"));
+     assertEquals(120, (int) SystemUtils.toJavaVersionInt("1.2"));
+     assertEquals(100, (int) SystemUtils.toJavaVersionInt("1.0"));
+     assertEquals(100, (int) SystemUtils.toJavaVersionInt("1.0.0"));
+     assertEquals(234, (int) SystemUtils.toJavaVersionInt("2.3.4"));
+     assertEquals(123, (int) SystemUtils.toJavaVersionInt("1.2.3.4")); // trimmed to first three
+parts
+ }
+
+ @Test
+ public void testToJavaVersionIntBoundary() {
+     assertEquals(0, (int) SystemUtils.toJavaVersionInt(null));
+     assertEquals(0, (int) SystemUtils.toJavaVersionInt(""));
+     assertEquals(0, (int) SystemUtils.toJavaVersionInt("Java"));
+ }
+
+ @Test
+ public void testToJavaVersionIntReturnTypeBug() {
+     // Bug LANG-624: method declares float, should be int.
+     Object result = SystemUtils.toJavaVersionInt("1.5");
+     assertFalse("toJavaVersionInt should return int, not float", result instanceof Float);
+ }
+
+ @Test
+ public void testToJavaVersionIntNullEqualsZero() {
+     // Autoboxing causes Float(0.0) vs Integer(0) to be unequal in buggy version.
+     assertEquals(Integer.valueOf(0), SystemUtils.toJavaVersionInt(null));
+ }
+
+ @Test
+ public void testToJavaVersionFloatValid() {
+     assertEquals(1.6f, SystemUtils.toJavaVersionFloat("1.6.0_20"), 0.001f);
+     assertEquals(1.7f, SystemUtils.toJavaVersionFloat("1.7.0"), 0.001f);
+     assertEquals(1.5f, SystemUtils.toJavaVersionFloat("1.5"), 0.001f);
+ }
+
+ @Test
+ public void testToJavaVersionFloatNull() {
+     assertEquals(0.0f, SystemUtils.toJavaVersionFloat(null), 0.001f);
+ }
+
+ @Test
+ public void testToJavaVersionFloatInvalid() {
+     assertEquals(0.0f, SystemUtils.toJavaVersionFloat(""), 0.001f);
+     assertEquals(0.0f, SystemUtils.toJavaVersionFloat("NoVersionHere"), 0.001f);
+ }
+
+ @Test
+ public void testToJavaVersionIntArrayValid() {
+     assertArrayEquals(new int[]{1, 6, 0, 20}, SystemUtils.toJavaVersionIntArray("1.6.0_20"));
+     assertArrayEquals(new int[]{1, 7, 0}, SystemUtils.toJavaVersionIntArray("1.7.0"));
+     assertArrayEquals(new int[]{1, 5}, SystemUtils.toJavaVersionIntArray("1.5"));
+ }
+
+ @Test
+ public void testToJavaVersionIntArrayNull() {
+     assertArrayEquals(new int[0], SystemUtils.toJavaVersionIntArray(null));
+ }
+
+ @Test
+ public void testIsJavaVersionAtLeastInt() {
+     assertTrue(SystemUtils.isJavaVersionAtLeast(0));
+     assertTrue(SystemUtils.isJavaVersionAtLeast(1));
+     assertFalse(SystemUtils.isJavaVersionAtLeast(99999));
+ }
+
+ @Test
+ public void testIsJavaVersionAtLeastFloat() {
+     assertTrue(SystemUtils.isJavaVersionAtLeast(0.0f));
+     assertFalse(SystemUtils.isJavaVersionAtLeast(999.9f));
+ }
+
+ @Test
+ public void testIsJavaAwtHeadless() {
+     // Smoke test: method exists and returns a boolean.
+     boolean result = SystemUtils.isJavaAwtHeadless();
+     // No assertion on value; just ensure no exception.
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Lang-29f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Lang-29f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Lang-29f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] /root/sqa-workspaces/Lang-29f-copilot/src/main/java/org/apache/commons/lang3/Validate.java:128: warning: [deprecation] Double(double) in Double has been deprecated
+ [javac] throw new IllegalArgumentException(String.format(message, new Double(value)));
+ [javac] ^
+ [javac] /root/sqa-workspaces/Lang-29f-copilot/src/main/java/org/apache/commons/lang3/math/NumberUtils.java:41: warning: [deprecation] Long(long) in Long has been deprecated
+ [javac] public static final Long LONG_ZERO = new Long(0L);
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Lang-29f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Lang-29f-copilot/.test_suite/org/apache/commons/lang3/SystemUtilsTest.java:19: error: not a statement
+ [javac] parts
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

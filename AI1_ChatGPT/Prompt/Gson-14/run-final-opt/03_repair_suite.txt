@@ -1,0 +1,220 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY a valid unified diff against the supplied Generated JUnit Test (---/+++ and @@ hunks). No Markdown and no explanation. Do not return the whole file unless a unified diff is impossible. This is the single allowed repair round.
+
+Project: Gson  Bug: 14  Version: Gson-14b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1074
+Trigger failures:
+- com.google.gson.internal.bind.RecursiveTypesResolveTest::testDoubleSupertype
+ --> junit.framework.AssertionFailedError: expected:<? super java.lang.Number> but was:<? super ? super java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testIssue440WeakReference
+ --> java.lang.StackOverflowError
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testSubSupertype
+ --> junit.framework.AssertionFailedError: expected:<?> but was:<? extends ? super java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testDoubleSubtype
+ --> junit.framework.AssertionFailedError: expected:<? extends java.lang.Number> but was:<? extends ? extends java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testIssue603PrintStream
+ --> java.lang.StackOverflowError
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testSuperSubtype
+ --> junit.framework.AssertionFailedError: expected:<?> but was:<? super ? extends java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testRecursiveResolveSimple
+ --> java.lang.StackOverflowError
+Modified: com.google.gson.internal.$Gson$Types
+
+Available API/signatures:
+[com.google.gson.internal.$Gson$Types | java]
+package com.google.gson.internal;
+public final class $Gson$Types {
+private $Gson$Types() {
+public static GenericArrayType arrayOf(Type componentType) {
+public static WildcardType subtypeOf(Type bound) {
+public static WildcardType supertypeOf(Type bound) {
+return new WildcardTypeImpl(new Type[] { Object.class }, lowerBounds);
+public static Type canonicalize(Type type) {
+public static Class<?> getRawType(Type type) {
+return Object.class;
+static boolean equal(Object a, Object b) {
+public static boolean equals(Type a, Type b) {
+static int hashCodeOrZero(Object o) {
+public static String typeToString(Type type) {
+static Type getGenericSupertype(Type context, Class<?> rawType, Class<?> toResolve) {
+while (rawType != Object.class) {
+static Type getSupertype(Type context, Class<?> contextRawType, Class<?> supertype) {
+public static Type getArrayComponentType(Type array) {
+public static Type getCollectionElementType(Type context, Class<?> contextRawType) {
+Type collectionType = getSupertype(context, contextRawType, Collection.class);
+public static Type[] getMapKeyAndValueTypes(Type context, Class<?> contextRawType) {
+if (context == Properties.class) {
+return new Type[] { String.class, String.class }; // TODO: test subclasses of Properties!
+Type mapType = getSupertype(context, contextRawType, Map.class);
+return new Type[] { Object.class, Object.class };
+public static Type resolve(Type context, Class<?> contextRawType, Type toResolve) {
+static Type resolveTypeVariable(Type context, Class<?> contextRawType, TypeVariable<?> unknown) {
+private static int indexOf(Object[] array, Object toFind) {
+private stati
+...[truncated deterministically]...
+l(Type ownerType, Type rawType, Type... typeArguments) {
+public Type[] getActualTypeArguments() {
+public Type getRawType() {
+public Type getOwnerType() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+@Override public String toString() {
+private static final class GenericArrayTypeImpl implements GenericArrayType, Serializable {
+public GenericArrayTypeImpl(Type componentType) {
+public Type getGenericComponentType() {
+@Override public boolean equals(Object o) {
+private static final class WildcardTypeImpl implements WildcardType, Serializable {
+public WildcardTypeImpl(Type[] upperBounds, Type[] lowerBounds) {
+checkArgument(upperBounds[0] == Object.class);
+this.upperBound = Object.class;
+public Type[] getUpperBounds() {
+public Type[] getLowerBounds() {
+} else if (upperBound == Object.class) {
+
+Generated JUnit Test:
+package com.google.gson.internal;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.util.List;
+import org.junit.Test;
+
+public class GsonTypesResolveRegressionTest {
+
+  private static class Holder<T> {
+    List<? super T> lower;
+    List<? extends T> upper;
+  }
+
+  private static class Contexts {
+    Holder<Number> exactNumber;
+    Holder<? super Number> lowerNumber;
+    Holder<? extends Number> upperNumber;
+  }
+
+  private static class Recursive<T> {
+    Recursive<? super T> lowerSelf;
+    Recursive<? extends T> upperSelf;
+  }
+
+  @Test
+  public void resolvesTypeVariableToConcreteContextArgument() throws Exception {
+    TypeVariable<?> variable = Holder.class.getTypeParameters()[0];
+    Type context = Contexts.class.getDeclaredField("exactNumber").getGenericType();
+
+    Type resolved = $Gson$Types.resolve(context, Holder.class, variable);
+
+    assertTypeEquals(Number.class, resolved);
+  }
+
+  @Test
+  public void resolvesLowerWildcardWithoutDuplicatingLowerBound() throws Exception {
+    Type context = Contexts.class.getDeclaredField("lowerNumber").getGenericType();
+    Type wildcard = wildcardArgument("lower");
+
+    Type resolved = $Gson$Types.resolve(context, Holder.class, wildcard);
+
+    assertTypeEquals($Gson$Types.supertypeOf(Number.class), resolved);
+  }
+
+  @Test
+  public void resolvesUpperWildcardWithoutDuplicatingUpperBound() throws Exception {
+    Type context = Contexts.class.getDeclaredField("upperNumber").getGenericType();
+    Type wildcard = wildcardArgument("upper");
+
+    Type resolved = $Gson$Types.resolve(context, Holder.class, wildcard);
+
+    assertTypeEquals($Gson$Types.subtypeOf(Number.class), resolved);
+  }
+
+  @Test
+  public void resolvesUpperOfLowerWildcardToUnboundedWildcard() throws Exception {
+    Type context = Contexts.class.getDeclaredField("lowerNumber").getGenericType();
+    Type wildcard = wildcardArgument("upper");
+
+    Type resolved = $Gson$Types.resolve(context, Holder.class, wildcard);
+
+    assertTypeEquals($Gson$Types.subtypeOf(Object.class), resolved);
+  }
+
+  @Test
+  public void resolvesLowerOfUpperWildcardToUnboundedWildcard() throws Exception {
+    Type context = Contexts.class.getDeclaredField("upperNumber").getGenericType();
+    Type wildcard = wildcardArgument("lower");
+
+    Type resolved = $Gson$Types.resolve(context, Holder.class, wildcard);
+
+    assertTypeEquals($Gson$Types.subtypeOf(Object.class), resolved);
+  }
+
+  @Test
+  public void wildcardFactoriesNormalizeNestedWildcardBounds() {
+    Type unbounded = $Gson$Types.subtypeOf(Object.class);
+
+    assertTypeEquals(
+        $Gson$Types.supertypeOf(Number.class),
+        $Gson$Types.supertypeOf($Gson$Types.supertypeOf(Number.class)));
+    assertTypeEquals(
+        $Gson$Types.subtypeOf(Number.class),
+        $Gson$Types.subtypeOf($Gson$Types.subtypeOf(Number.class)));
+    assertTypeEquals(
+        unbounded,
+        $Gson$Types.subtypeOf($Gson$Types.supertypeOf(Number.class)));
+    assertTypeEquals(
+        unbounded,
+        $Gson$Types.supertypeOf($Gson$Types.subtypeOf(Number.class)));
+  }
+
+  @Test(timeout = 2000)
+  public void resolvesSelfReferentialLowerWildcardWithoutRecursionOverflow() throws Exception {
+    ParameterizedType context = (ParameterizedType)
+        Recursive.class.getDeclaredField("lowerSelf").getGenericType();
+    TypeVariable<?> variable = Recursive.class.getTypeParameters()[0];
+    Type expected = context.getActualTypeArguments()[0];
+
+    Type resolved = $Gson$Types.resolve(context, Recursive.class, variable);
+
+    assertNotNull(resolved);
+    assertTypeEquals(expected, resolved);
+  }
+
+  @Test(timeout = 2000)
+  public void resolvesSelfReferentialUpperWildcardWithoutRecursionOverflow() throws Exception {
+    ParameterizedType context = (ParameterizedType)
+        Recursive.class.getDeclaredField("upperSelf").getGenericType();
+    TypeVariable<?> variable = Recursive.class.getTypeParameters()[0];
+    Type expected = context.getActualTypeArguments()[0];
+
+    Type resolved = $Gson$Types.resolve(context, Recursive.class, variable);
+
+    assertNotNull(resolved);
+    assertTypeEquals(expected, resolved);
+  }
+
+  private static Type wildcardArgument(String fieldName) throws Exception {
+    ParameterizedType listType = (ParameterizedType)
+        Holder.class.getDeclaredField(fieldName).getGenericType();
+    return listType.getActualTypeArguments()[0];
+  }
+
+  private static void assertTypeEquals(Type expected, Type actual) {
+    assertTrue(
+        "Expected <" + expected + "> but was <" + actual + ">",
+        $Gson$Types.equals(expected, actual));
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.google.gson.internal.GsonTypesResolveRegressionTest::resolvesSelfReferentialLowerWildcardWithoutRecursionOverflow
+ - com.google.gson.internal.GsonTypesResolveRegressionTest::resolvesSelfReferentialUpperWildcardWithoutRecursionOverflow
+
+Failing generated tests: com.google.gson.internal.GsonTypesResolveRegressionTest::resolvesSelfReferentialLowerWildcardWithoutRecursionOverflow, com.google.gson.internal.GsonTypesResolveRegressionTest::resolvesSelfReferentialUpperWildcardWithoutRecursionOverflow

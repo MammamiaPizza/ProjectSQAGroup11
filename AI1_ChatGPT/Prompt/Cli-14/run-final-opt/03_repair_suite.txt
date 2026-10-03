@@ -1,0 +1,161 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 14  Version: Cli-14b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-144
+Trigger failures:
+- org.apache.commons.cli2.bug.BugCLI144Test::testFileValidator
+ --> java.lang.ClassCastException: java.io.File cannot be cast to java.lang.String
+Modified: org.apache.commons.cli2.option.GroupImpl
+
+Available API/signatures:
+[org.apache.commons.cli2.option.GroupImpl | java]
+package org.apache.commons.cli2.option;
+public class GroupImpl
+final List newAnonymous = new ArrayList();
+final SortedMap newOptionMap = new TreeMap(ReverseStringComparator.getInstance());
+final Set newPrefixes = new HashSet();
+for (final Iterator i = options.iterator(); i.hasNext();) {
+final Option option = (Option) i.next();
+final Set triggers = option.getTriggers();
+final Map tailMap = optionMap.tailMap(arg);
+for (final Iterator iter = tailMap.values().iterator(); iter.hasNext();) {
+final Option option = (Option) iter.next();
+public Set getPrefixes() {
+public Set getTriggers() {
+final String arg = (String) arguments.next();
+final Option opt = (Option) optionMap.get(arg);
+final Collection values = optionMap.tailMap(arg).values();
+for (final Iterator i = anonymous.iterator(); i.hasNext();) {
+final Argument argument = (Argument) i.next();
+public void validate(final WriteableCommandLine commandLine)
+public String getPreferredName() {
+public String getDescription() {
+final Set helpSettingsCopy = new HashSet(helpSettings);
+final boolean arguments = helpSettingsCopy.contains(DisplaySetting.DISPLAY_GROUP_ARGUMENT);
+final boolean outer = helpSettingsCopy.contains(DisplaySetting.DISPLAY_GROUP_OUTER);
+for (final Iterator i = list.iterator(); i.hasNext();) {
+final List helpLines = new ArrayList();
+final HelpLine helpLine = new HelpLineImpl(this, depth);
+public List getOptions() {
+public List getAnonymous() {
+public Option findOption(final String trigger) {
+final Iterator i = getOptions().iterator();
+final Option found = option.findOption(trigger);
+public int getMinimum() {
+public int getMaximum() {
+public boolean isRequired() {
+public void defaults(final WriteableCommandLine commandLine) {
+class ReverseStringComparator implements Comparator {
+private static final Comparator instance = new ReverseStringComparator();
+private ReverseStringComparator() {
+public static final Comparator getInstance() {
+final String s1 = (String) o1;
+final String s2 = (String) o2;
+
+Generated JUnit Test:
+package org.apache.commons.cli2.option;
+
+import java.io.File;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.cli2.Argument;
+import org.apache.commons.cli2.CommandLine;
+import org.apache.commons.cli2.Group;
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.OptionException;
+import org.apache.commons.cli2.builder.ArgumentBuilder;
+import org.apache.commons.cli2.builder.DefaultOptionBuilder;
+import org.apache.commons.cli2.builder.GroupBuilder;
+import org.apache.commons.cli2.commandline.Parser;
+import org.apache.commons.cli2.validation.FileValidator;
+
+public class GroupImplCli144Test extends TestCase {
+
+    public void testFileValidatedAnonymousArgumentIsStoredAsFile() throws Exception {
+        final File file = File.createTempFile("cli144", ".tmp");
+        try {
+            final Argument argument = new ArgumentBuilder()
+                    .withName("file")
+                    .withValidator(FileValidator.getExistingFileInstance())
+                    .create();
+            final Group group = new GroupBuilder()
+                    .withOption(argument)
+                    .create();
+
+            final Parser parser = new Parser();
+            parser.setGroup(group);
+            final CommandLine commandLine =
+                    parser.parse(new String[] { file.getAbsolutePath() });
+
+            final Object value = commandLine.getValue(argument);
+            assertTrue(value instanceof File);
+            assertEquals(file, value);
+        } finally {
+            file.delete();
+        }
+    }
+
+    public void testAnonymousStringArgumentIsAcceptedAndStored() throws Exception {
+        final Argument argument = new ArgumentBuilder()
+                .withName("value")
+                .create();
+        final Group group = new GroupBuilder()
+                .withOption(argument)
+                .create();
+
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+        final CommandLine commandLine =
+                parser.parse(new String[] { "plain-value" });
+
+        assertEquals("plain-value", commandLine.getValue(argument));
+    }
+
+    public void testKnownOptionTriggerIsMatched() throws Exception {
+        final Option option = new DefaultOptionBuilder()
+                .withLongName("verbose")
+                .create();
+        final Group group = new GroupBuilder()
+                .withOption(option)
+                .create();
+
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+        final CommandLine commandLine =
+                parser.parse(new String[] { "--verbose" });
+
+        assertTrue(commandLine.hasOption(option));
+    }
+
+    public void testUnknownOptionIsNotConsumedAsAnonymousArgument() throws Exception {
+        final Argument argument = new ArgumentBuilder()
+                .withName("value")
+                .create();
+        final Group group = new GroupBuilder()
+                .withOption(argument)
+                .create();
+
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+
+        try {
+            parser.parse(new String[] { "--unknown" });
+            fail("An unrecognized option must not be accepted as an anonymous argument");
+        } catch (OptionException expected) {
+            assertNotNull(expected);
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.cli2.option.GroupImplCli144Test::testUnknownOptionIsNotConsumedAsAnonymousArgument
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.cli2.option.GroupImplCli144Test::testUnknownOptionIsNotConsumedAsAnonymousArgument

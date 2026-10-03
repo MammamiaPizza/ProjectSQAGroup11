@@ -1,0 +1,230 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 4  Version: Mockito-4b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 187
+Trigger failures:
+- org.mockito.exceptions.ReporterTest::can_use_print_mock_name_even_when_mock_bogus_default_answer_and_when_reporting_no_more_interaction_wanted_in_order
+ --> java.lang.Exception: Unexpected exception, expected<org.mockito.exceptions.verification.VerificationInOrderFailure> but was<java.lang.ClassCastException>
+ - org.mockito.exceptions.ReporterTest::can_use_print_mock_name_even_when_mock_bogus_default_answer_and_when_reporting_injection_failure
+ --> java.lang.Exception: Unexpected exception, expected<org.mockito.exceptions.base.MockitoException> but was<java.lang.NullPointerException>
+ - org.mockito.exceptions.ReporterTest::can_use_mock_name_even_when_mock_bogus_default_answer_and_when_reporting_no_more_interaction_wanted
+ --> java.lang.Exception: Unexpected exception, expected<org.mockito.exceptions.verification.NoInteractionsWanted> but was<java.lang.ClassCastException>
+ - org.mockitousage.bugs.ClassCastExOnVerifyZeroInteractionsTest::should_not_throw_a_ClassCastException
+ --> java.lang.Exception: Unexpected exception, expected<org.mockito.exceptions.verification.NoInteractionsWanted> but was<java.lang.ClassCastException>
+Modified: org.mockito.exceptions.Reporter
+
+Available API/signatures:
+[org.mockito.exceptions.Reporter | java]
+package org.mockito.exceptions;
+public class Reporter {
+public void checkedExceptionInvalid(Throwable t) {
+public void cannotStubWithNullThrowable() {
+public void unfinishedStubbing(Location location) {
+public void incorrectUseOfApi() {
+public void missingMethodInvocation() {
+"1. you stub either of: final/private/equals()/hashCode() methods.",
+public void unfinishedVerificationException(Location location) {
+"Also, this error might show up because you verify either of: final/private/equals()/hashCode() methods.",
+public void notAMockPassedToVerify(Class type) {
+public void nullPassedToVerify() {
+public void notAMockPassedToWhenMethod() {
+public void nullPassedToWhenMethod() {
+public void mocksHaveToBePassedToVerifyNoMoreInteractions() {
+public void notAMockPassedToVerifyNoMoreInteractions() {
+public void nullPassedToVerifyNoMoreInteractions() {
+public void notAMockPassedWhenCreatingInOrder() {
+public void nullPassedWhenCreatingInOrder() {
+public void mocksHaveToBePassedWhenCreatingInOrder() {
+public void inOrderRequiresFamiliarMock() {
+public void invalidUseOfMatchers(int expectedMatchersCount, List<LocalizedMatcher> recordedMatchers) {
+"For more info see javadoc for Matchers class.",
+public void incorrectUseOfAdditionalMatchers(String additionalMatcherName, int expectedSubMatchersCount, Collection<LocalizedMatcher> matcherStack) {
+public void stubPassedToVerify() {
+public void reportNoSubMatchersFound(String additionalMatcherName) {
+private Object locationsOf(Collection<LocalizedMatcher> matchers) {
+public void argumentsAreDifferent(String wanted, String actual, Location actualLocation) {
+public vo
+...[truncated deterministically]...
+c int invalidArgumentPositionRangeAtInvocationTime(InvocationOnMock invocation, boolean willReturnLastParameter, int argumentIndex) {
+private StringBuilder possibleArgumentTypesOf(InvocationOnMock invocation) {
+public void wrongTypeOfArgumentToReturn(InvocationOnMock invocation, String expectedType, Class actualType, int argumentIndex) {
+public void defaultAnswerDoesNotAcceptNullParameter() {
+public void serializableWontWorkForObjectsThatDontImplementSerializable(Class classToMock) {
+public void delegatedMethodHasWrongReturnType(Method mockMethod, Method delegateMethod, Object mock, Object delegate) {
+public void delegatedMethodDoesNotExistOnDelegate(Method mockMethod, Object mock, Object delegate) {
+public void usingConstructorWithFancySerializable(SerializableMode mode) {
+private MockName safelyGetMockName(Object mock) {
+
+Generated JUnit Test:
+package org.mockito.exceptions;
+
+ import static org.junit.Assert.*;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.when;
+
+ import java.lang.reflect.Field;
+ import java.lang.reflect.Method;
+ import java.util.Arrays;
+ import java.util.List;
+
+ import org.junit.Test;
+ import org.mockito.Mockito;
+ import org.mockito.exceptions.base.MockitoException;
+ import org.mockito.exceptions.verification.NoInteractionsWanted;
+ import org.mockito.exceptions.verification.VerificationInOrderFailure;
+ import org.mockito.invocation.Invocation;
+ import org.mockito.invocation.InvocationOnMock;
+ import org.mockito.stubbing.Answer;
+
+ /**
+  * Tests that demonstrate bug 187: Reporter methods must not throw
+  * ClassCastException or NullPointerException when a mock is created with a
+  * "bogus" default answer that breaks safelyGetMockName.
+  */
+ public class ReporterTest {
+
+     private static final String FIELD_NAME = "someField";
+     @SuppressWarnings("unused")
+     private String someField; // used for reflection
+
+     private final Reporter reporter = new Reporter();
+
+     /**
+      * A custom Answer that is not the internal Answers enum.
+      * This triggers a ClassCastException in MockUtil.getMockName()
+      * for the affected Mockito version (buggy).
+      */
+     private static final Answer<Object> BOGUS_ANSWER = new Answer<Object>() {
+         @Override
+         public Object answer(InvocationOnMock invocation) throws Throwable {
+             return null;
+         }
+     };
+
+     interface SomeInterface {
+         void doSomething();
+     }
+
+     private Object createBogusMock() {
+         return Mockito.mock(SomeInterface.class, BOGUS_ANSWER);
+     }
+
+     // ----- noMoreInteractionsWanted -----
+
+     @Test(expected = NoInteractionsWanted.class)
+     public void noMoreInteractionsWanted_shouldNotThrowClassCastException() {
+         Object mockObj = createBogusMock();
+         Invocation undesired = mock(Invocation.class);
+         when(undesired.getMock()).thenReturn(mockObj);
+         List<Invocation> all = Arrays.asList(undesired);
+         reporter.noMoreInteractionsWanted(undesired, all);
+     }
+
+     // ----- noMoreInteractionsWantedInOrder -----
+
+     @Test(expected = VerificationInOrderFailure.class)
+     public void noMoreInteractionsWantedInOrder_shouldNotThrowClassCastException() {
+         Object mockObj = createBogusMock();
+         Invocation wanted = mock(Invocation.class);
+         when(wanted.getMock()).thenReturn(mockObj);
+         Invocation previous = mock(Invocation.class);
+         when(previous.getMock()).thenReturn(mockObj);
+         reporter.noMoreInteractionsWantedInOrder(wanted, previous);
+     }
+
+     // ----- cannotInjectDependency -----
+
+     @Test(expected = MockitoException.class)
+     public void cannotInjectDependency_shouldNotThrowNullPointerException() throws Exception {
+         Field field = ReporterTest.class.getDeclaredField(FIELD_NAME);
+         Object matchingMock = createBogusMock();
+         Exception details = new RuntimeException("injection failure cause");
+         reporter.cannotInjectDependency(field, matchingMock, details);
+     }
+
+     // ----- delegatedMethodHasWrongReturnType -----
+
+     @Test(expected = MockitoException.class)
+     public void delegatedMethodHasWrongReturnType_shouldNotThrowClassCastException() throws
+Exception {
+         Object mockObj = createBogusMock();
+         Object delegate = new Object();
+         Method mockMethod = SomeInterface.class.getMethod("doSomething");
+         Method delegateMethod = Object.class.getMethod("toString");
+         reporter.delegatedMethodHasWrongReturnType(mockMethod, delegateMethod, mockObj, delegate);
+     }
+
+     // ----- invalidArgumentPositionRangeAtInvocationTime -----
+
+     @Test(expected = MockitoException.class)
+     public void invalidArgumentPositionRangeAtInvocationTime_shouldNotThrowClassCastException()
+throws Exception {
+         Object mockObj = createBogusMock();
+         InvocationOnMock invocationOnMock = mock(InvocationOnMock.class);
+         when(invocationOnMock.getMock()).thenReturn(mockObj);
+
+when(invocationOnMock.getMethod()).thenReturn(SomeInterface.class.getMethod("doSomething"));
+         reporter.invalidArgumentPositionRangeAtInvocationTime(invocationOnMock, false, 5);
+     }
+
+     // ----- message content on normal mock -----
+
+     @Test
+     public void exceptionMessageShouldContainMockNameWhenPossible() throws Exception {
+         Object normalMock = Mockito.mock(SomeInterface.class);
+         Invocation undesired = mock(Invocation.class);
+         when(undesired.getMock()).thenReturn(normalMock);
+         List<Invocation> all = Arrays.asList(undesired);
+         try {
+             reporter.noMoreInteractionsWanted(undesired, all);
+             fail("Expected NoInteractionsWanted");
+         } catch (NoInteractionsWanted e) {
+             assertNotNull(e.getMessage());
+             assertTrue(e.getMessage().contains("SomeInterface"));
+         }
+     }
+
+     // ----- message fallback on bogus mock -----
+
+     @Test
+     public void exceptionMessageShouldUseFallbackWhenMockNameUnavailable() throws Exception {
+         Object bogusMock = createBogusMock();
+         Field field = ReporterTest.class.getDeclaredField(FIELD_NAME);
+         Exception details = new RuntimeException("cause");
+         try {
+             reporter.cannotInjectDependency(field, bogusMock, details);
+             fail("Expected MockitoException");
+         } catch (MockitoException e) {
+             assertNotNull(e.getMessage());
+             // Even when mock name cannot be obtained the message must not be empty.
+             assertTrue(e.getMessage().length() > 0);
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Mockito-4f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Mockito-4f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Mockito-4f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [exec] 
+ [exec] Deprecated Gradle features were used in this build, making it incompatible with Gradle 5.0.
+ [exec] Use '--warning-mode all' to show the individual deprecation warnings.
+ [exec] See https://docs.gradle.org/4.9/userguide/command_line_interface.html#sec:command_line_warnings
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Mockito-4f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Mockito-4f-copilot/.test_suite/org/mockito/exceptions/ReporterTest.java:62: error: incompatible types: List<Invocation> cannot be converted to List<VerificationAwareInvocation>
+ [javac] reporter.noMoreInteractionsWanted(undesired, all);
+ [javac] ^
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 18 minutes 22 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,166 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 174  Version: Closure-174b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1103
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103a
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable a is in a goog.scope and is not an alias. at testcode line 1 : 30 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103b
+ --> java.lang.RuntimeException: INTERNAL COMPILER ERROR.
+ - com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103c
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable a is in a goog.scope and is not an alias. at testcode line 1 : 52 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.JsAst, com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.ScopedAliases
+
+Available API/signatures:
+[com.google.javascript.jscomp.JsAst | java]
+package com.google.javascript.jscomp;
+public class JsAst implements SourceAst {
+private static final Logger logger_ = Logger.getLogger(JsAst.class.getName());
+public JsAst(SourceFile sourceFile) {
+@Override
+public Node getAstRoot(AbstractCompiler compiler) {
+public void clearAst() {
+public InputId getInputId() {
+public SourceFile getSourceFile() {
+public void setSourceFile(SourceFile file) {
+private void parse(AbstractCompiler compiler) {
+
+[com.google.javascript.jscomp.NodeUtil | java]
+package com.google.javascript.jscomp;
+public final class NodeUtil {
+static final long MAX_POSITIVE_INTEGER_NUMBER = (long) Math.pow(2, 53);
+private NodeUtil() {}
+static TernaryValue getImpureBooleanValue(Node n) {
+static TernaryValue getPureBooleanValue(Node n) {
+static String getStringValue(Node n) {
+static String getStringValue(double value) {
+static String getArrayElementStringValue(Node n) {
+static String arrayToString(Node literal) {
+static Double getNumberValue(Node n) {
+static Double getStringNumberValue(String rawJsString) {
+static String trimJsWhiteSpace(String s) {
+public static TernaryValue isStrWhiteSpaceChar(int c) {
+static String getFunctionName(Node n) {
+public static String getNearestFunctionName(Node n) {
+static boolean isImmutableValue(Node n) {
+static boolean isSymmetric
+...[truncated deterministically]...
+ueName(@Nullable Node lValue) {
+static boolean isExpressionResultUsed(Node expr) {
+static boolean isExecutedExactlyOnce(Node n) {
+static Node booleanNode(boolean value) {
+static Node numberNode(double value, Node srcref) {
+static boolean isNaN(Node n) {
+public static Map<Node, Node> mapMainToC
+...[truncated deterministically]...
+() {
+public abstract void applyAlias();
+private class AliasedNode extends AliasUsage {
+public void applyAlias() {
+private class AliasedTypeNode extends AliasUsage {
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> al
+...[truncated deterministically]...
+formation> getSourceRegion(Node n) {
+private void findAliases(NodeTraversal t) {
+private void recordAlias(Var aliasVar) {
+private void findNamespaceShadows(NodeTraversal t) {
+private void renameNamespaceShadows(NodeTraversal t) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+
+public class ScopedAliasesIssue1103Test extends CompilerTestCase {
+
+  public ScopedAliasesIssue1103Test() {
+    super("");
+  }
+
+  @Override
+  protected CompilerPass getProcessor(Compiler compiler) {
+    return new ScopedAliases(compiler, null, null);
+  }
+
+  @Test
+  public void testAliasMayReferToLaterAliasDeclaration() {
+    test(
+        "goog.scope(function() {"
+            + "var a = b;"
+            + "var b = goog.b;"
+            + "a.c;"
+            + "});",
+        "goog.b.c;");
+  }
+
+  @Test
+  public void testAliasMayReferToLaterAliasInSameVarStatement() {
+    test(
+        "goog.scope(function() {"
+            + "var a = b, b = goog.b;"
+            + "a.c;"
+            + "});",
+        "goog.b.c;");
+  }
+
+  @Test
+  public void testAliasMayReferToEarlierAliasDeclaration() {
+    test(
+        "goog.scope(function() {"
+            + "var b = goog.b;"
+            + "var a = b;"
+            + "a.c;"
+            + "});",
+        "goog.b.c;");
+  }
+
+  @Test
+  public void testDirectAliasStillExpandsNormally() {
+    test(
+        "goog.scope(function() {"
+            + "var a = goog.b;"
+            + "a.c;"
+            + "});",
+        "goog.b.c;");
+  }
+
+  @Test
+  public void testNonAliasLocalIsStillRejected() {
+    testError(
+        "goog.scope(function() {"
+            + "var a = 1;"
+            + "a++;"
+            + "});",
+        ScopedAliases.GOOG_SCOPE_NON_ALIAS_LOCAL);
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-174f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-174f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-174f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-174f-ai/.test_suite/com/google/javascript/jscomp/ScopedAliasesIssue1103Test.java:5: error: cannot find symbol
+ [javac] public class ScopedAliasesIssue1103Test extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 14 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

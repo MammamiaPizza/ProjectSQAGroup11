@@ -1,0 +1,172 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 31  Version: Closure-31b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 703
+Trigger failures:
+- com.google.javascript.jscomp.CommandLineRunnerTest::testDependencySortingWhitespaceMode
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.Compiler
+
+Available API/signatures:
+[com.google.javascript.jscomp.Compiler | java]
+package com.google.javascript.jscomp;
+public class Compiler extends AbstractCompiler {
+private final Map<String, Node> injectedLibraries = Maps.newLinkedHashMap();
+private final StringBuilder debugLog = new StringBuilder();
+public PerformanceTracker tracker;
+public Compiler() {
+public Compiler(PrintStream stream) {
+public Compiler(ErrorManager errorManager) {
+public void setErrorManager(ErrorManager errorManager) {
+private MessageFormatter createMessageFormatter() {
+public void initOptions(CompilerOptions options) {
+private void initBasedOnOptions() {
+private void checkFirstModule(List<JSModule> modules) {
+static String createFillFileName(String moduleName) {
+private static void fillEmptyModules(List<JSModule> modules) {
+public void rebuildInputsFromModules() {
+private Result compile() {
+@Override
+public Result call() throws Exception {
+public void disableThreads() {
+private <T> T runInCompilerThread(final Callable<T> callable) {
+static <T> T runCallableWithLargeStack(final Callable<T> callable) {
+@SuppressWarnings("unchecked")
+public void run() {
+private void compileInternal() {
+public void parse() {
+public void setPassConfig(PassConfig passes) {
+public void check() {
+private void externExports() {
+protected CompilerPass createInternal(AbstractCompiler compiler) {
+private void maybeSanityCheck() {
+private void runSanityCheck() {
+private void runCustomPasses(CustomPassExecutionTime executionTime) {
+public Result getResult() {
+public JSError[] getMessages() {
+public JSError[] getErrors() {
+public JSError[] getWarnings() {
+public Node getRoot() {
+private int nextUniqueNameId() {
+@VisibleForTest
+...[truncated deterministically]...
+{
+public String getSourceLine(String sourceName, int lineNumber) {
+public Region getSourceRegion(String sourceName, int lineNumber) {
+public SourceMap getSourceMap() {
+public static void setLoggingLevel(Level level) {
+public String getAstDotGraph() throws IOException {
+public ErrorManager getErrorManager() {
+public Map<InputId, CompilerInput> getInputsById() {
+public static class IntermediateState implements Serializable {
+private IntermediateState() {}
+public IntermediateState getState() {
+public void setState(IntermediateState state) {
+public double getProgress() {
+public void replaceScript(JsAst ast) {
+public void addNewScript(JsAst ast) {
+private void processNewScript(JsAst ast, Node originalRoot) {
+private PassConfig getCleanupPassConfig() {
+private void removeSyntheticVarsInput() {
+Compiler.class.getResourceAsStream(
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import java.util.Arrays;
+import java.util.Collections;
+
+import com.google.javascript.jscomp.SourceFile;
+
+import junit.framework.TestCase;
+
+public class CompilerDependencySortingWhitespaceTest extends TestCase {
+
+  private CompilerOptions whitespaceOptionsWithDependencySorting() {
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.WHITESPACE_ONLY.setOptionsForCompilationLevel(options);
+    options.setDependencyOptions(
+        new DependencyOptions().setDependencySorting(true));
+    return options;
+  }
+
+  public void testDependencySortingWhitespaceModeOrdersRequiredInputFirst() {
+    Compiler compiler = new Compiler();
+    SourceFile consumer = SourceFile.fromCode(
+        "consumer.js",
+        "goog.provide('test.consumer');\n"
+            + "goog.require('test.base');\n"
+            + "var CONSUMER_MARKER = BASE_MARKER;\n");
+    SourceFile base = SourceFile.fromCode(
+        "base.js",
+        "goog.provide('test.base');\n"
+            + "var BASE_MARKER = 1;\n");
+
+    Result result = compiler.compile(
+        Collections.<SourceFile>emptyList(),
+        Arrays.asList(consumer, base),
+        whitespaceOptionsWithDependencySorting());
+
+    assertNotNull(result);
+    assertEquals(0, compiler.getErrors().length);
+
+    String[] sources = compiler.toSourceArray();
+    assertEquals(2, sources.length);
+    assertTrue(sources[0].indexOf("BASE_MARKER") >= 0);
+    assertTrue(sources[1].indexOf("CONSUMER_MARKER") >= 0);
+
+    String output = compiler.toSource();
+    int basePosition = output.indexOf("BASE_MARKER");
+    int consumerPosition = output.indexOf("CONSUMER_MARKER");
+    assertTrue(basePosition >= 0);
+    assertTrue(consumerPosition >= 0);
+    assertTrue(basePosition < consumerPosition);
+  }
+
+  public void testDependencySortingWhitespaceModeHandlesSingleProvidedInput() {
+    Compiler compiler = new Compiler();
+    SourceFile onlyInput = SourceFile.fromCode(
+        "only.js",
+        "goog.provide('test.only');\n"
+            + "var SINGLE_INPUT_MARKER = 7;\n");
+
+    Result result = compiler.compile(
+        Collections.<SourceFile>emptyList(),
+        Collections.singletonList(onlyInput),
+        whitespaceOptionsWithDependencySorting());
+
+    assertNotNull(result);
+    assertEquals(0, compiler.getErrors().length);
+    assertEquals(1, compiler.toSourceArray().length);
+    assertTrue(compiler.toSource().indexOf("SINGLE_INPUT_MARKER") >= 0);
+  }
+
+  public void testDependencySortingReportsMissingRequiredProvide() {
+    Compiler compiler = new Compiler();
+    SourceFile input = SourceFile.fromCode(
+        "missing.js",
+        "goog.provide('test.missingConsumer');\n"
+            + "goog.require('test.notProvided');\n"
+            + "var MISSING_DEPENDENCY_MARKER = 1;\n");
+
+    Result result = compiler.compile(
+        Collections.<SourceFile>emptyList(),
+        Collections.singletonList(input),
+        whitespaceOptionsWithDependencySorting());
+
+    assertNotNull(result);
+    assertTrue(compiler.getErrors().length > 0);
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.google.javascript.jscomp.CompilerDependencySortingWhitespaceTest::testDependencySortingWhitespaceModeOrdersRequiredInputFirst
+ - com.google.javascript.jscomp.CompilerDependencySortingWhitespaceTest::testDependencySortingReportsMissingRequiredProvide
+
+Failing generated tests: com.google.javascript.jscomp.CompilerDependencySortingWhitespaceTest::testDependencySortingReportsMissingRequiredProvide, com.google.javascript.jscomp.CompilerDependencySortingWhitespaceTest::testDependencySortingWhitespaceModeOrdersRequiredInputFirst

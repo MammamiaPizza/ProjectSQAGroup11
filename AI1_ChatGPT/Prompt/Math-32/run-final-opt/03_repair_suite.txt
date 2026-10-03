@@ -1,0 +1,156 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 32  Version: Math-32b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-780
+Trigger failures:
+- org.apache.commons.math3.geometry.euclidean.threed.PolyhedronsSetTest::testIssue780
+ --> java.lang.ClassCastException: org.apache.commons.math3.geometry.partitioning.BoundaryAttribute cannot be cast to java.lang.Boolean
+Modified: org.apache.commons.math3.geometry.euclidean.twod.PolygonsSet
+
+Available API/signatures:
+[org.apache.commons.math3.geometry.euclidean.twod.PolygonsSet | java]
+package org.apache.commons.math3.geometry.euclidean.twod;
+/** This class represents a 2D region: a set of polygons.
+public class PolygonsSet extends AbstractRegion<Euclidean2D, Euclidean1D> {
+public PolygonsSet() {
+public PolygonsSet(final BSPTree<Euclidean2D> tree) {
+public PolygonsSet(final Collection<SubHyperplane<Euclidean2D>> boundary) {
+final Vector2D minMin = new Vector2D(xMin, yMin);
+final Vector2D minMax = new Vector2D(xMin, yMax);
+final Vector2D maxMin = new Vector2D(xMax, yMin);
+final Vector2D maxMax = new Vector2D(xMax, yMax);
+@Override
+public PolygonsSet buildNew(final BSPTree<Euclidean2D> tree) {
+protected void computeGeometricalProperties() {
+final Vector2D[][] v = getVertices();
+final BSPTree<Euclidean2D> tree = getTree(false);
+for (final Vector2D point : loop) {
+public Vector2D[][] getVertices() {
+final SegmentsBuilder visitor = new SegmentsBuilder();
+final AVLTree<ComparableSegment> sorted = visitor.getSorted();
+final ArrayList<List<ComparableSegment>> loops = new ArrayList<List<ComparableSegment>>();
+final AVLTree<ComparableSegment>.Node node = sorted.getSmallest();
+final List<ComparableSegment> loop = followLoop(node, sorted);
+for (final List<ComparableSegment> loop : loops) {
+final Line line = loop.get(0).getLine();
+final Vector2D[] array = new Vector2D[loop.size() + 2];
+final Vector2D[] array = new Vector2D[loop.size()];
+final ArrayList<ComparableSegment> loop = new ArrayList<ComparableSegment>();
+final Vector2D globalStart = segment.getStart();
+final boolean open = segment.getStart() == null;
+final ComparableSegment lowerLeft = new ComparableSegme
+...[truncated deterministically]...
+c class SegmentsBuilder implements BSPTreeVisitor<Euclidean2D> {
+public SegmentsBuilder() {
+public Order visitOrder(final BSPTree<Euclidean2D> node) {
+public void visitInternalNode(final BSPTree<Euclidean2D> node) {
+@SuppressWarnings("unchecked")
+final BoundaryAttribute<Euclidean2D> attribute = (BoundaryAttribute<Euclidean2D>) node.getAttribute();
+public void visitLeafNode(final BSPTree<Euclidean2D> node) {
+private void addContribution(final SubHyperplane<Euclidean2D> sub, final boolean reversed) {
+final Line line = (Line) sub.getHyperplane();
+final List<Interval> intervals = ((IntervalsSet) absSub.getRemainingRegion()).asList();
+for (final Interval i : intervals) {
+final Vector2D start = Double.isInfinite(i.getLower()) ?
+final Vector2D end = Double.isInfinite(i.getUpper()) ?
+public AVLTree<ComparableSegment> getSorted() {
+
+Generated JUnit Test:
+package org.apache.commons.math3.geometry.euclidean.twod;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import org.apache.commons.math3.geometry.partitioning.BSPTree;
+import org.junit.Test;
+
+public class PolygonsSetMATH780Test {
+
+    @Test
+    public void testWholeSpaceTreeWithCutHasNoVerticesAndInfiniteSize() {
+        final Line line = new Line(new Vector2D(0, 0), new Vector2D(1, 0));
+        final BSPTree<Euclidean2D> tree =
+                new BSPTree<Euclidean2D>(line.wholeHyperplane(),
+                                         new BSPTree<Euclidean2D>(Boolean.TRUE),
+                                         new BSPTree<Euclidean2D>(Boolean.TRUE),
+                                         null);
+
+        final PolygonsSet set = new PolygonsSet(tree);
+
+        assertEquals(0, set.getVertices().length);
+        assertTrue(Double.isInfinite(set.getSize()));
+    }
+
+    @Test
+    public void testEmptySpaceTreeWithCutHasNoVerticesAndZeroSize() {
+        final Line line = new Line(new Vector2D(0, 0), new Vector2D(1, 0));
+        final BSPTree<Euclidean2D> tree =
+                new BSPTree<Euclidean2D>(line.wholeHyperplane(),
+                                         new BSPTree<Euclidean2D>(Boolean.FALSE),
+                                         new BSPTree<Euclidean2D>(Boolean.FALSE),
+                                         null);
+
+        final PolygonsSet set = new PolygonsSet(tree);
+
+        assertEquals(0, set.getVertices().length);
+        assertEquals(0.0, set.getSize(), 0.0);
+    }
+
+    @Test
+    public void testFiniteRectangleBuildsClosedVertexLoopAndArea() {
+        final PolygonsSet set = new PolygonsSet(-1, 2, -2, 2);
+
+        final Vector2D[][] vertices = set.getVertices();
+
+        assertEquals(1, vertices.length);
+        assertEquals(4, vertices[0].length);
+        assertTrue(contains(vertices[0], new Vector2D(-1, -2)));
+        assertTrue(contains(vertices[0], new Vector2D(-1, 2)));
+        assertTrue(contains(vertices[0], new Vector2D(2, -2)));
+        assertTrue(contains(vertices[0], new Vector2D(2, 2)));
+        assertEquals(12.0, set.getSize(), 1.0e-12);
+    }
+
+    @Test
+    public void testHalfPlaneProducesOpenBoundaryLoopAndInfiniteSize() {
+        final Line line = new Line(new Vector2D(0, 0), new Vector2D(1, 0));
+        final BSPTree<Euclidean2D> tree =
+                new BSPTree<Euclidean2D>(line.wholeHyperplane(),
+                                         new BSPTree<Euclidean2D>(Boolean.TRUE),
+                                         new BSPTree<Euclidean2D>(Boolean.FALSE),
+                                         null);
+
+        final PolygonsSet set = new PolygonsSet(tree);
+        final Vector2D[][] vertices = set.getVertices();
+
+        assertEquals(1, vertices.length);
+        assertEquals(3, vertices[0].length);
+        assertNull(vertices[0][0]);
+        assertFalse(vertices[0][1].isNaN());
+        assertFalse(vertices[0][2].isNaN());
+        assertTrue(Double.isInfinite(set.getSize()));
+    }
+
+    private boolean contains(final Vector2D[] points, final Vector2D expected) {
+        for (final Vector2D point : points) {
+            if (point != null && point.distance(expected) < 1.0e-12) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.math3.geometry.euclidean.twod.PolygonsSetMATH780Test::testWholeSpaceTreeWithCutHasNoVerticesAndInfiniteSize
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.math3.geometry.euclidean.twod.PolygonsSetMATH780Test::testWholeSpaceTreeWithCutHasNoVerticesAndInfiniteSize

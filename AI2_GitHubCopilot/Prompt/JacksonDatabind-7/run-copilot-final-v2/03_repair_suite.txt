@@ -1,0 +1,377 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 7  Version: JacksonDatabind-7b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 592
+Trigger failures:
+- com.fasterxml.jackson.databind.creators.TestCreatorsDelegating::testDelegateWithTokenBuffer
+ --> junit.framework.AssertionFailedError: Expected token START_OBJECT, current token FIELD_NAME
+Modified: com.fasterxml.jackson.databind.util.TokenBuffer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.util.TokenBuffer | java]
+package com.fasterxml.jackson.databind.util;
+public class TokenBuffer
+protected final static int DEFAULT_GENERATOR_FEATURES = JsonGenerator.Feature.collectDefaults();
+protected ObjectCodec _objectCodec;
+protected int _generatorFeatures;
+protected boolean _closed;
+protected boolean _hasNativeTypeIds;
+protected boolean _hasNativeObjectIds;
+protected boolean _mayHaveNativeIds;
+protected Segment _first;
+protected Segment _last;
+protected int _appendAt;
+protected Object _typeId;
+protected Object _objectId;
+protected boolean _hasNativeId = false;
+protected JsonWriteContext _writeContext;
+@Deprecated
+public TokenBuffer(ObjectCodec codec) {
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+public TokenBuffer(JsonParser jp)
+@Override
+public Version version() {
+public JsonParser asParser()
+public JsonParser asParser(ObjectCodec codec)
+public JsonParser asParser(JsonParser src)
+public JsonToken firstToken() {
+@SuppressWarnings("resource")
+public TokenBuffer append(TokenBuffer other)
+public void serialize(JsonGenerator jgen)
+public TokenBuffer deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException
+public String toString()
+private final void _appendNativeIds(StringBuilder sb)
+public JsonGenerator enable(Feature f) {
+public JsonGenerator disable(Feature f) {
+public boolean isEnabled(Feature f) {
+public int getFeatureMask() {
+public JsonGenerator setFeatureMask(int mask) {
+public JsonGenerator useDefaultPrettyPrinter() {
+public JsonGenerator setCodec(ObjectCodec oc) {
+public ObjectCodec getCodec() { return _objectCodec; }
+public final JsonWriteContext getOutputContext
+...[truncated deterministically]...
+Type(int index)
+public Object get(int index) {
+public Segment next() { return _next; }
+public boolean hasIds() {
+public Segment append(int index, JsonToken tokenType)
+public Segment append(int index, JsonToken tokenType, Object value)
+public Segment appendRaw(int index, int rawTokenType, Object value)
+private void set(int index, JsonToken tokenType)
+private void set(int index, JsonToken tokenType, Object value)
+private void set(int index, int rawTokenType, Object value)
+private void set(int index, int rawTokenType, Object value, Object objectId, Object typeId)
+private final void assignNativeIds(int index, Object objectId, Object typeId)
+public Object findObjectId(int index) {
+public Object findTypeId(int index) {
+private final int _typeIdIndex(int i) { return i+i; }
+private final int _objectIdIndex(int i) { return i+i+1; }
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.util;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.JsonParser;
+ import com.fasterxml.jackson.core.JsonToken;
+
+ public class TokenBufferTest {
+
+     @Test
+     public void testEmptyObject() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeEndObject();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testObjectWithOneField() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeFieldName("key");
+         tb.writeString("value");
+         tb.writeEndObject();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals("First token must be START_OBJECT", JsonToken.START_OBJECT, p.nextToken());
+         assertEquals("Second token must be FIELD_NAME", JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("key", p.getCurrentName());
+         assertEquals("Third token must be VALUE_STRING", JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("value", p.getText());
+         assertEquals("Fourth token must be END_OBJECT", JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testNestedObject() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeFieldName("outer");
+         tb.writeStartObject();
+         tb.writeFieldName("inner");
+         tb.writeNumber(42);
+         tb.writeEndObject();
+         tb.writeEndObject();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("outer", p.getCurrentName());
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("inner", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+         assertEquals(42, p.getIntValue());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testArrayInObject() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeFieldName("items");
+         tb.writeStartArray();
+         tb.writeString("a");
+         tb.writeNumber(1);
+         tb.writeEndArray();
+         tb.writeEndObject();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("items", p.getCurrentName());
+         assertEquals(JsonToken.START_ARRAY, p.nextToken());
+         assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("a", p.getText());
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+         assertEquals(1, p.getIntValue());
+         assertEquals(JsonToken.END_ARRAY, p.nextToken());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testBug592FieldNameWithoutStartObject() throws IOException {
+         // Bug #592: copyCurrentStructure called with parser at FIELD_NAME writes
+         // FIELD_NAME + VALUE tokens but omits START_OBJECT. asParser() must
+         // recognize this and yield START_OBJECT as the first token.
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeFieldName("delegatedField");
+         tb.writeString("delegatedValue");
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         JsonToken first = p.nextToken();
+         assertNotNull("First token should not be null", first);
+         assertEquals("Bug #592: first token after writeFieldName without START_OBJECT must be
+START_OBJECT",
+                 JsonToken.START_OBJECT, first);
+         p.close();
+     }
+
+     @Test
+     public void testBug592MultipleFieldsWithoutStartObject() throws IOException {
+         // Variant of bug #592: multiple field-name+value pairs written without
+         // explicit START_OBJECT. asParser() must yield START_OBJECT first,
+         // then all field/value pairs in order.
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeFieldName("x");
+         tb.writeNumber(1);
+         tb.writeFieldName("y");
+         tb.writeString("hello");
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals("Bug #592: first token must be START_OBJECT",
+                 JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("x", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+         assertEquals(1, p.getIntValue());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("y", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("hello", p.getText());
+         p.close();
+     }
+
+     @Test
+     public void testFirstToken() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeFieldName("a");
+         tb.writeNumber(1);
+         tb.writeEndObject();
+         tb.close();
+
+         assertEquals("firstToken() must return START_OBJECT",
+                 JsonToken.START_OBJECT, tb.firstToken());
+     }
+
+     @Test
+     public void testAppendTwoBuffers() throws IOException {
+         TokenBuffer tb1 = new TokenBuffer(null, false);
+         tb1.writeStartObject();
+         tb1.writeFieldName("a");
+         tb1.writeNumber(1);
+         tb1.writeEndObject();
+
+         TokenBuffer tb2 = new TokenBuffer(null, false);
+         tb2.writeStartObject();
+         tb2.writeFieldName("b");
+         tb2.writeString("val");
+         tb2.writeEndObject();
+
+         tb1.append(tb2);
+         tb1.close();
+
+         JsonParser p = tb1.asParser();
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("a", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+         assertEquals(1, p.getIntValue());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("b", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("val", p.getText());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testArrayTokens() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartArray();
+         tb.writeString("first");
+         tb.writeNumber(2);
+         tb.writeBoolean(true);
+         tb.writeNull();
+         tb.writeEndArray();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals(JsonToken.START_ARRAY, p.nextToken());
+         assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("first", p.getText());
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+         assertEquals(2, p.getIntValue());
+         assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
+         assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+         assertEquals(JsonToken.END_ARRAY, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testCloseState() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         assertFalse("Buffer should not be closed initially", tb.isClosed());
+         tb.close();
+         assertTrue("Buffer must be closed after close()", tb.isClosed());
+     }
+
+     @Test
+     public void testParserOnClosedBuffer() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeEndObject();
+         tb.close();
+
+         assertTrue(tb.isClosed());
+         JsonParser p = tb.asParser();
+         assertNotNull("asParser() must return a parser even on a closed buffer", p);
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+
+     @Test
+     public void testMultipleFieldsObject() throws IOException {
+         TokenBuffer tb = new TokenBuffer(null, false);
+         tb.writeStartObject();
+         tb.writeFieldName("name");
+         tb.writeString("test");
+         tb.writeFieldName("count");
+         tb.writeNumber(42);
+         tb.writeFieldName("active");
+         tb.writeBoolean(true);
+         tb.writeFieldName("ratio");
+         tb.writeNumber(3.14);
+         tb.writeEndObject();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertEquals(JsonToken.START_OBJECT, p.nextToken());
+
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("name", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("test", p.getText());
+
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("count", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+         assertEquals(42, p.getIntValue());
+
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("active", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
+
+         assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("ratio", p.getCurrentName());
+         assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+         assertEquals(3.14, p.getDoubleValue(), 0.001);
+
+         assertEquals(JsonToken.END_OBJECT, p.nextToken());
+         assertNull(p.nextToken());
+         p.close();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-7f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-7f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-7f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-7f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-7f-copilot/.test_suite/com/fasterxml/jackson/databind/util/TokenBufferTest.java:115: error: unclosed string literal
+ [javac] assertEquals("Bug #592: first token after writeFieldName without START_OBJECT must be
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 23 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

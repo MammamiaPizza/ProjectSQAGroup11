@@ -1,0 +1,463 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 65  Version: Closure-65b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CodeGenerator
+Modified: com.google.javascript.jscomp.CodeGenerator
+Triggers: com.google.javascript.jscomp.CodePrinterTest::testZero
+
+Bug/specification summary:
+Bug report: 486
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testZero
+ --> junit.framework.ComparisonFailure: expected:<var x="\0[00]"> but was:<var x="\0[]">
+Modified: com.google.javascript.jscomp.CodeGenerator
+
+Prompt-01 test plan:
+TARGETS: escapeToDoubleQuotedJsString (CodeGenerator)
+ORACLES: testZero expects null char -> "\000" (octal) not "\0"
+CASES: null-only, null+digit, null at start/end/mid, multiple nulls, borderline chars
+RISKS: other escape methods may need same fix; limited to supplied bug summary
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CodeGenerator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CodeGenerator {
+private final Map<String, String> ESCAPED_JS_STRINGS = Maps.newHashMap();
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+static String regexpEscape(String s, CharsetEncoder outputCharsetEncoder) {
+static String escapeToDoubleQuotedJsString(String s) {
+static String regexpEscape(String s) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+private Context clearContextForNoInOperator(Context context) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Charsets;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.NodeUtil.MatchNotFunction;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.util.Map;
+class CodeGenerator {
+
+/* METHOD CodeGenerator */
+CodeGenerator(
+ CodeConsumer consumer, Charset outputCharset) {
+ cc = consumer;
+ if (outputCharset == null || outputCharset == Charsets.US_ASCII) {
+ // If we want our default (pretending to be UTF-8, but escaping anything
+ // outside of straight ASCII), then don't use the encoder, but
+ // just special-case the code. This keeps the normal path through
+ // the code identical to how it's been for years.
+ this.outputCharsetEncoder = null;
+ } else {
+ this.outputCharsetEncoder = outputCharset.newEncoder();
+ }
+ }
+
+/* METHOD CodeGenerator */
+CodeGenerator(CodeConsumer consumer) {
+ this(consumer, null);
+ }
+
+/* METHOD tagAsStrict */
+public void tagAsStrict() {
+ add("'use strict';");
+ }
+
+/* METHOD identifierEscape */
+static String identifierEscape(String s) {
+ // First check if escaping is needed at all -- in most cases it isn't.
+ if (NodeUtil.isLatin(s)) {
+ return s;
+ }
+
+ // Now going through the string to escape non-latin characters if needed.
+ StringBuilder sb = new StringBuilder();
+ for (int i = 0; i < s.length(); i++) {
+ char c = s.charAt(i);
+ // Identifiers should always go to Latin1/ ASCII characters because
+ // different browser's rules for valid identifier characters are
+ // crazy.
+ if (c > 0x1F && c < 0x7F) {
+ sb.append(c);
+ } else {
+ appendHexJavaScriptRepresentation(sb, c);
+ }
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ StringBuilder sb, char c) {
+ try {
+ appendHexJavaScriptRepresentation(c, sb);
+ } catch (IOException ex) {
+ // StringBuilder does not throw IOException.
+ throw new RuntimeException(ex);
+ }
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ int codePoint, Appendable out)
+ throws IOException {
+ if (Character.isSupplementaryCodePoint(codePoint)) {
+ // Handle supplementary unicode values which are not representable in
+ // javascript. We deal with these by escaping them as two 4B sequences
+ // so that they will round-trip properly when sent from java to javascript
+ // and back.
+ char[] surrogates = Character.toChars(codePoint);
+ appendHexJavaScriptRepresentation(surrogates[0], out);
+ appendHexJavaScriptRepresentation(surrogates[1], out);
+ return;
+ }
+ out.append("\\u")
+ .append(HEX_CHARS[(codePoint >>> 12) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 8) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 4) & 0xf])
+ .append(HEX_CHARS[codePoint & 0xf]);
+ }
+
+/* METHOD getSimpleNumber */
+static double getSimpleNumber(String s) {
+ if (isSimpleNumber(s)) {
+ try {
+ long l = Long.parseLong(s);
+ if (l < NodeUtil.MAX_POSITIVE_INTEGER_NUMBER) {
+ return l;
+ }
+ } catch (NumberFormatException e) {
+ // The number was too long to parse. Fall through to NaN.
+ }
+ }
+ return Double.NaN;
+ }
+
+/* METHOD addArrayList */
+void addArrayList(Node firstInList) {
+ boolean lastWasEmpty = false;
+ for (Node n = firstInList; n != null; n = n.getNext()) {
+ if (n != firstInList) {
+ cc.listSeparator();
+ }
+ addExpr(n, 1);
+ lastWasEmpty = n.getType() == Token.EMPTY;
+ }
+
+ if (lastWasEmpty) {
+ cc.listSeparator();
+ }
+ }
+
+/* METHOD add */
+void add(Node n, Context context) {
+ if (!cc.continueProcessing()) {
+ return;
+ }
+
+ int type = n.getType();
+ String opstr = NodeUtil.opToStr(type);
+ int childCount = n.getChildCount();
+ Node first = n.getFirstChild();
+ Node last = n.getLastChild();
+
+ // Handle all binary operators
+ if (opstr != null && first != last) {
+ Preconditions.checkState(
+ childCount == 2,
+ "Bad binary operator \"%s\": expected 2 arguments but got %s",
+ opstr, childCount);
+ int p = NodeUtil.precedence(type);
+ addLeftExpr(first, p, context);
+ cc.addOp(opstr, true);
+
+ // For right-hand-side of operations, only pass context if it's
+ // the IN_FOR_INIT_CLAUSE one.
+ Context rhsContext = getContextForNoInOperator(context);
+
+ // Handle associativity.
+ // e.g. if the parse tree is a * (b * c),
+ // we can simply generate a * b * c.
+ if (last.getType() == type &&
+ NodeUtil.isAssociative(type)) {
+ addExpr(last, p, rhsContext);
+ } else if (NodeUtil.isAssignmentOp(n) && NodeUtil.isAssignmentOp(last)) {
+ // Assignments are the only right-associative binary operators
+ addExpr(last, p, rhsContext);
+ } else {
+ addExpr(last, p + 1, rhsContext);
+ }
+ return;
+ }
+
+ cc.startSourceMapping(n);
+
+ switch (type) {
+ case Token.TRY: {
+ Preconditions.checkState(first.getNext().getType() == Token.BLOCK &&
+ !first.getNext().hasMoreThanOneChild());
+ Preconditions.checkState(childCount >= 2 && childCount <= 3);
+
+ add("try");
+ add(first, Context.PRESERVE_BLOCK);
+
+ // second child contains the catch block, or nothing if there
+ // isn't a catch block
+ Node catchblock = first.getNext().getFirstChild();
+ if (catchblock != null) {
+ add(catchblock);
+ }
+
+ if (childCount == 3) {
+ add("finally");
+ add(last, Context.PRESERVE_BLOCK);
+ }
+ break;
+ }
+
+ case Token.CATCH:
+ Preconditions.checkState(childCount == 2);
+ add("catch(");
+ add(first);
+ add(")");
+ add(last, Context.PRESERVE_BLOCK);
+ break;
+
+ case Token.THROW:
+ Preconditions.checkState(childCount == 1);
+ add("throw");
+ add(first);
+
+ // Must have a ';' after a throw statement, otherwise safari can't
+ // parse this.
+ cc.endStatement(true);
+ break;
+
+ case Token.RETURN:
+ add("return");
+ if (childCount == 1) {
+ add(first);
+ } else {
+ Preconditions.checkState(childCount == 0);
+ }
+ cc.endStatement();
+ break;
+
+ case Token.VAR:
+ if (first != null) {
+ add("var ");
+ addList(first, false, getContextForNoInOperator(context));
+ }
+ break;
+
+ case Token.LABEL_NAME:
+ Preconditions.checkState(!n.getString().isEmpty());
+ addIdentifier(n.getString());
+ break;
+
+ case Token.NAME:
+ if (first == null || first.getType() == Token.EMPTY) {
+ addIdentifier(n.getString());
+ } else {
+ Preconditions.checkState(childCount == 1);
+ addIdentifier(n.getString());
+ cc.addOp("=", true);
+ if (first.getType() == Token.COMMA) {
+ addExpr(first, NodeUtil.precedence(Token.ASSIGN));
+ } else {
+ // Add expression, consider nearby code at lowest level of
+ // precedence.
+ addExpr(first, 0, getContextForNoInOperator(context));
+ }
+ }
+ break;
+
+ case Token.ARRAYLIT:
+ add("[");
+ addArrayList(first);
+ add("]");
+ break;
+
+ case Token.LP:
+ add("(");
+ addList(first);
+ add(")");
+ break;
+
+ case Token.COMMA:
+ Preconditions.checkState(childCount == 2);
+ addList(first, false, context);
+ break;
+
+ case Token.NUMBER:
+ Preconditions.checkState(childCount == 0);
+ cc.addNumber(n.getDouble());
+ break;
+
+ case Token.TYPEOF:
+ case Token.VOID:
+ case Token.NOT:
+ case Token.BITNOT:
+ case Token.POS: {
+ // All of these unary operators are right-associative
+ Preconditions.checkState(childCount == 1);
+ cc.addOp(NodeUtil.opToStrNoFail(type), false);
+ addExpr(first, NodeUtil.precedence(type));
+ break;
+ }
+
+ case Token.NEG: {
+ Preconditions.checkState(childCount == 1);
+
+ // It's important to our sanity checker that the code
+ // we print produces the same AST as the code we parse back.
+ // NEG is a weird case because Rhino parses "- -2" as "2".
+ if (n.getFirstChild().getType() == Token.NUMBER) {
+ cc.addNumber(-n.getFirstChild().getDouble());
+ } else {
+ cc.addOp(NodeUtil.opToStrNoFail(type), false);
+ addExpr(first, NodeUtil.precedence(type));
+ }
+
+ break;
+ }
+
+/* METHOD isSimpleNumber */
+static boolean isSimpleNumber(String s) {
+ int len = s.length();
+ for (int index = 0; index < len; index++) {
+ char c = s.charAt(index);
+ if (c < '0' || c > '9') {
+ return false;
+ }
+ }
+ return len > 0;
+ }
+
+/* METHOD isIndirectEval */
+private boolean isIndirectEval(Node n) {
+ return n.getType() == Token.NAME && "eval".equals(n.getString()) &&
+ !n.getBooleanProp(Node.DIRECT_EVAL);
+ }
+
+/* METHOD addList */
+void addList(Node firstInList) {
+ addList(firstInList, true, Context.OTHER);
+ }
+
+/* METHOD addList */
+void addList(Node firstInList, boolean isArrayOrFunctionArgument) {
+ addList(firstInList, isArrayOrFunctionArgument, Context.OTHER);
+ }
+
+/* METHOD addList */
+void addList(Node firstInList, boolean isArrayOrFunctionArgument,
+ Context lhsContext) {
+ for (Node n = firstInList; n != null; n = n.getNext()) {
+ boolean isFirst = n == firstInList;
+ if (isFirst) {
+ addLeftExpr(n, isArrayOrFunctionArgument ? 1 : 0, lhsContext);
+ } else {
+ cc.listSeparator();
+ addExpr(n, isArrayOrFunctionArgument ? 1 : 0);
+ }
+ }
+ }
+
+/* METHOD jsString */
+String jsString(String s) {
+ int singleq = 0, doubleq = 0;
+
+ // could count the quotes and pick the optimal quote character
+ for (int i = 0; i < s.length(); i++) {
+ switch (s.charAt(i)) {
+ case '"': doubleq++; break;
+ case '\'': singleq++; break;
+ }
+ }
+
+ String doublequote, singlequote;
+ char quote;
+ if (singleq < doubleq) {
+ // more double quotes so escape the single quotes
+ quote = '\'';
+ doublequote = "\"";
+ singlequote = "\\\'";
+ } else {
+ // more single quotes so escape the doubles
+ quote = '\"';
+ doublequote = "\\\"";
+ singlequote = "\'";
+ }
+
+ return strEscape(s, quote, doublequote, singlequote, "\\\\",
+ outputCharsetEncoder);
+ }
+
+/* METHOD regexpEscape */
+static String regexpEscape(String s, CharsetEncoder outputCharsetEncoder) {
+ return strEscape(s, '/', "\"", "'", "\\", outputCharsetEncoder);
+ }
+
+/* METHOD add */
+void add(String str) {
+ cc.add(str);
+ }
+
+/* METHOD addIdentifier */
+private void addIdentifier(String identifier) {
+ cc.addIdentifier(identifierEscape(identifier));
+ }
+
+/* METHOD add */
+void add(Node n) {
+ add(n, Context.OTHER);
+ }
+
+/* METHOD isOneExactlyFunctionOrDo */
+private boolean isOneExactlyFunctionOrDo(Node n) {
+ if (n.getType() == Token.LABEL) {
+ Node labeledStatement = n.getLastChild();
+ if (labeledStatement.getType() != Token.BLOCK) {
+ return isOneExactlyFunctionOrDo(labeledStatement);
+ } else {
+ // For labels with block children, we need to ensure that a
+ // labeled FUNCTION or DO isn't generated when extraneous BLOCKs
+ // are skipped.
+ if (getNonEmptyChildCount(n, 2) == 1) {
+ return isOneExactlyFunctionOrDo(getFirstNonEmptyChild(n));
+ } else {
+ // Either a empty statement or an block with more than one child,
+ // way it isn't a FUNCTION or DO.
+ return false;
+ }
+ }
+ }
+
+/* METHOD addLeftExpr */
+void addLeftExpr(Node n, int minPrecedence, Context context) {
+ addExpr(n, minPrecedence, context);
+ }

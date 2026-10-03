@@ -1,0 +1,107 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 49  Version: JacksonDatabind-49b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.impl.WritableObjectId
+Modified: com.fasterxml.jackson.databind.ser.impl.WritableObjectId
+Triggers: com.fasterxml.jackson.databind.objectid.AlwaysAsReferenceFirstTest::testIssue1255
+
+Bug/specification summary:
+Bug report: 1255
+Trigger failures:
+- com.fasterxml.jackson.databind.objectid.AlwaysAsReferenceFirstTest::testIssue1255
+ --> com.fasterxml.jackson.databind.deser.UnresolvedForwardReference: Unresolved forward references for: Object id [1] (for com.fasterxml.jackson.databind.objectid.AlwaysAsReferenceFirstTest$Bar) at [Source: {"bar1":1,"bar2":{"@id":2,"value":3}}; line: 1, column: 10].
+Modified: com.fasterxml.jackson.databind.ser.impl.WritableObjectId
+
+Prompt-01 test plan:
+TARGETS: writeAsId decides id/reference vs full object write using idWritten flag
+TARGETS: generateId creates id, sets idWritten=false initially
+ORACLES: Roundtrip deserialization must not throw UnresolvedForwardReference
+ORACLES: AlwaysAsReferenceFirst: first occurrence as id, then full object definition
+CASES: Normal: two objects with mutual reference; first serialized as id, then full
+CASES: Boundary: idWritten=true, writeAsId writes reference-only
+CASES: Boundary: idWritten=false, writeAsId writes full object and sets flag
+CASES: Error: writeAsId with null id (not generated) may NPE or misbehavior
+RISKS: Cannot see ObjectIdWriter.write or deserialization; limited to serialization class only
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ser.impl.WritableObjectId (java) =====
+package com.fasterxml.jackson.databind.ser.impl;
+
+import java.io.IOException;
+
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.SerializableString;
+
+import com.fasterxml.jackson.databind.SerializerProvider;
+
+/**
+ * Simple value container used to keep track of Object Ids during
+ * serialization.
+ */
+public final class WritableObjectId
+{
+ public final ObjectIdGenerator<?> generator;
+
+ public Object id;
+
+ /**
+ * Marker to denote whether Object Id value has been written as part of an Object,
+ * to be referencible. Remains false when forward-reference is written.
+ */
+ protected boolean idWritten = false;
+
+ public WritableObjectId(ObjectIdGenerator<?> generator) {
+ this.generator = generator;
+ }
+
+ public boolean writeAsId(JsonGenerator gen, SerializerProvider provider, ObjectIdWriter w) throws IOException
+ {
+ if ((id != null) && (idWritten || w.alwaysAsId)) {
+ // 03-Aug-2013, tatu: Prefer Native Object Ids if available
+ if (gen.canWriteObjectId()) {
+ gen.writeObjectRef(String.valueOf(id));
+ } else {
+ w.serializer.serialize(id, gen, provider);
+ }
+ return true;
+ }
+ return false;
+ }
+ 
+ public Object generateId(Object forPojo) {
+ // 04-Jun-2016, tatu: As per [databind#1255], need to consider possibility of
+ // id being generated for "alwaysAsId", but not being written as POJO; regardless,
+ // need to use existing id if there is one:
+ id = generator.generateId(forPojo);
+ return id;
+ }
+
+ /**
+ * Method called to output Object Id as specified.
+ */
+ public void writeAsField(JsonGenerator gen, SerializerProvider provider,
+ ObjectIdWriter w) throws IOException
+ {
+ idWritten = true;
+
+ // 03-Aug-2013, tatu: Prefer Native Object Ids if available
+ if (gen.canWriteObjectId()) {
+ // Need to assume String(ified) ids, for now... could add 'long' variant?
+ gen.writeObjectId(String.valueOf(id));
+ return;
+ }
+ 
+ SerializableString name = w.propertyName;
+ if (name != null) {
+ gen.writeFieldName(name);
+ w.serializer.serialize(id, gen, provider);
+ }
+ }
+}

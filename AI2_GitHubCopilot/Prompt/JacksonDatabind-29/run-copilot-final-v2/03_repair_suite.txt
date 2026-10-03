@@ -1,0 +1,308 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 29  Version: JacksonDatabind-29b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 942
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestExternalId::testExternalTypeIdWithNull
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not deserialize instance of com.fasterxml.jackson.databind.jsontype.TestExternalId$ValueBean out of VALUE_STRING token
+Modified: com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler | java]
+package com.fasterxml.jackson.databind.deser.impl;
+public class ExternalTypeHandler
+protected ExternalTypeHandler(ExternalTypeHandler h)
+public ExternalTypeHandler start() {
+@SuppressWarnings("resource")
+public Object complete(JsonParser p, DeserializationContext ctxt, Object bean)
+public static class Builder
+private final ArrayList<ExtTypedProperty> _properties = new ArrayList<ExtTypedProperty>();
+private final HashMap<String, Integer> _nameToPropertyIndex = new HashMap<String, Integer>();
+public void addExternal(SettableBeanProperty property, TypeDeserializer typeDeser)
+public ExternalTypeHandler build() {
+private final static class ExtTypedProperty
+public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser)
+public boolean hasTypePropertyName(String n) {
+public boolean hasDefaultType() {
+public String getDefaultTypeId() {
+public String getTypePropertyName() { return _typePropertyName; }
+public SettableBeanProperty getProperty() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.jsontype;
+
+ import static org.junit.Assert.*;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.annotation.JsonSubTypes;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ import com.fasterxml.jackson.annotation.JsonTypeName;
+ import com.fasterxml.jackson.core.JsonProcessingException;
+ import com.fasterxml.jackson.databind.DeserializationFeature;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+ import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+
+ /**
+  * JUnit tests exposing the bug in ExternalTypeHandler related to VALUE_NULL token handling
+  * for external type id properties. Tests cover the complete() method paths for null,
+  * missing, empty, and valid type id values.
+  */
+ public class ExternalTypeHandlerTest {
+
+     // -- Test beans with external type id polymorphism --
+
+     @JsonTypeInfo(
+             use = JsonTypeInfo.Id.NAME,
+             include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+             property = "type",
+             defaultImpl = DefaultItem.class
+     )
+     @JsonSubTypes({
+             @JsonSubTypes.Type(value = TextItem.class, name = "text"),
+             @JsonSubTypes.Type(value = NumberItem.class, name = "number")
+     })
+     public static class Item {
+         public String name;
+     }
+
+     @JsonTypeName("text")
+     public static class TextItem extends Item {
+         public String content;
+     }
+
+     @JsonTypeName("number")
+     public static class NumberItem extends Item {
+         public int value;
+     }
+
+     public static class DefaultItem extends Item {
+         public String info;
+     }
+
+     // -- Without defaultImpl --
+
+     @JsonTypeInfo(
+             use = JsonTypeInfo.Id.NAME,
+             include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+             property = "kind"
+     )
+     @JsonSubTypes({
+             @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+             @JsonSubTypes.Type(value = Cat.class, name = "cat")
+     })
+     public static class Pet {
+     }
+
+     @JsonTypeName("dog")
+     public static class Dog extends Pet {
+         public String breed;
+     }
+
+     @JsonTypeName("cat")
+     public static class Cat extends Pet {
+         public boolean indoor;
+     }
+
+     // -- Fields for testing property-based creator with external types --
+
+     @JsonTypeInfo(
+             use = JsonTypeInfo.Id.NAME,
+             include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+             property = "creatType",
+             defaultImpl = DefaultCreat.class
+     )
+     @JsonSubTypes({
+             @JsonSubTypes.Type(value = StdCreat.class, name = "std")
+     })
+     public static class CreatorBean {
+         private final int id;
+         private final String label;
+
+         public CreatorBean(int id, String label) {
+             this.id = id;
+             this.label = label;
+         }
+
+         public int getId() { return id; }
+         public String getLabel() { return label; }
+     }
+
+     public static class DefaultCreat extends CreatorBean {
+         public DefaultCreat() { super(0, ""); }
+     }
+
+     @JsonTypeName("std")
+     public static class StdCreat extends CreatorBean {
+         public StdCreat() { super(0, ""); }
+     }
+
+     private final ObjectMapper mapper = new ObjectMapper()
+             .configure(DeserializationFeature.FAIL_ON_UNKOWN_PROPERTIES, false);
+
+     // ------------------------------------------------------------------------
+     // 1. null type property with defaultImpl → should deserialize as default type
+     //    Buggy version treats JSON null as string "null", causing type resolution failure
+     // ------------------------------------------------------------------------
+     @Test
+     public void testNullTypeIdWithDefaultImpl() throws Exception {
+         String json = "{ \"type\": null, \"name\": \"x\", \"info\": \"default\" }";
+         Item item = mapper.readValue(json, Item.class);
+         assertNotNull(item);
+         assertTrue("Expected DefaultItem but got " + item.getClass().getSimpleName(),
+                 item instanceof DefaultItem);
+         DefaultItem d = (DefaultItem) item;
+         assertEquals("x", d.name);
+         assertEquals("default", d.info);
+     }
+
+     // ------------------------------------------------------------------------
+     // 2. null type property without defaultImpl → should fail with meaningful error
+     //    (buggy version fails with type resolution error on "null")
+     // ------------------------------------------------------------------------
+     @Test(expected = JsonProcessingException.class)
+     public void testNullTypeIdWithoutDefaultImpl() throws Exception {
+         String json = "{ \"kind\": null, \"breed\": \"poodle\" }";
+         mapper.readValue(json, Pet.class); // "null" is not a valid subtype id
+     }
+
+     // ------------------------------------------------------------------------
+     // 3. empty string type id with defaultImpl → should throw (empty string not a valid id)
+     // ------------------------------------------------------------------------
+     @Test(expected = JsonProcessingException.class)
+     public void testEmptyStringTypeId() throws Exception {
+         String json = "{ \"type\": \"\", \"name\": \"y\" }";
+         mapper.readValue(json, Item.class);
+     }
+
+     // ------------------------------------------------------------------------
+     // 4. missing type property with value present → use defaultImpl (if available)
+     // ------------------------------------------------------------------------
+     @Test
+     public void testMissingTypePropertyWithDefaultImpl() throws Exception {
+         String json = "{ \"name\": \"z\", \"info\": \"auto\" }";
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof DefaultItem);
+         DefaultItem d = (DefaultItem) item;
+         assertEquals("z", d.name);
+         assertEquals("auto", d.info);
+     }
+
+     // ------------------------------------------------------------------------
+     // 5. missing type property with value present but no defaultImpl → should fail
+     // ------------------------------------------------------------------------
+     @Test(expected = JsonProcessingException.class)
+     public void testMissingTypePropertyWithoutDefaultImpl() throws Exception {
+         String json = "{ \"breed\": \"beagle\" }";
+         mapper.readValue(json, Pet.class);
+     }
+
+     // ------------------------------------------------------------------------
+     // 6. valid string type id → normal deserialization
+     // ------------------------------------------------------------------------
+     @Test
+     public void testValidStringTypeId() throws Exception {
+         String json = "{ \"type\": \"text\", \"name\": \"hello\", \"content\": \"world\" }";
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof TextItem);
+         TextItem t = (TextItem) item;
+         assertEquals("hello", t.name);
+         assertEquals("world", t.content);
+     }
+
+     // ------------------------------------------------------------------------
+     // 7. numeric type id with defaultImpl → should resolve normally (via NAME)
+     // ------------------------------------------------------------------------
+     @Test
+     public void testNumericTypeId() throws Exception {
+         String json = "{ \"type\": \"number\", \"name\": \"n\", \"value\": 42 }";
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof NumberItem);
+         NumberItem n = (NumberItem) item;
+         assertEquals("n", n.name);
+         assertEquals(42, n.value);
+     }
+
+     // ------------------------------------------------------------------------
+     // 8. missing value property with type present → should throw (missing property for
+     //    external type id)
+     // ------------------------------------------------------------------------
+     @Test(expected = JsonProcessingException.class)
+     public void testMissingValueProperty() throws Exception {
+         String json = "{ \"type\": \"text\", \"name\": \"incomplete\" }"; // "content" missing
+         mapper.readValue(json, TextItem.class); // Will throw because "content" is missing,
+         // but the exception may occur during deserialization.
+         // We expect any JsonProcessingException.
+     }
+
+     // ------------------------------------------------------------------------
+     // 9. both type and value properties missing → should skip property entirely
+     //    (f all other fields can be set, result is defaultImpl)
+     // ------------------------------------------------------------------------
+     @Test
+     public void testMissingBothTypeAndValue() throws Exception {
+         String json = "{ }";
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof DefaultItem);
+     }
+
+     // ------------------------------------------------------------------------
+     // 10. null type property with value missing but defaultImpl → should skip
+     //     (buggy: typeId set to "null", but property missing may trigger different path)
+     // ------------------------------------------------------------------------
+     @Test
+     public void testNullTypeWithMissingValueAndDefaultImpl() throws Exception {
+         String json = "{ \"type\": null }"; // name missing, info missing
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof DefaultItem);
+     }
+
+     // ------------------------------------------------------------------------
+     // 11. valid id with extra unknown property → should ignore unknown and succeed
+     // ------------------------------------------------------------------------
+     @Test
+     public void testExtraUnknownPropertyIgnored() throws Exception {
+         String json = "{ \"type\": \"number\", \"name\": \"n2\", \"value\": 99, \"extra\": true }";
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof NumberItem);
+         assertEquals(99, ((NumberItem) item).value);
+     }
+
+     // ------------------------------------------------------------------------
+     // 12. type property appears after value property → still works
+     //      (order independence)
+     // ------------------------------------------------------------------------
+     @Test
+     public void testTypeAfterValueProperty() throws Exception {
+         String json = "{ \"name\": \"late\", \"content\": \"text\", \"type\": \"text\" }";
+         Item item = mapper.readValue(json, Item.class);
+         assertTrue(item instanceof TextItem);
+         assertEquals("text", ((TextItem) item).content);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-29f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-29f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-29f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-29f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-29f-copilot/.test_suite/com/fasterxml/jackson/databind/jsontype/ExternalTypeHandlerTest.java:13: error: cannot find symbol
+ [javac] import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+ [javac] ^
+ [javac] symbol: class InvalidTypeIdException
+ [javac] location: package com.fasterxml.jackson.databind.exc
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 3 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

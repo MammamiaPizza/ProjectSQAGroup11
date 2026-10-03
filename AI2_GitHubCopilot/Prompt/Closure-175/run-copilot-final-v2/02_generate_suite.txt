@@ -1,0 +1,433 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 175  Version: Closure-175b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.FunctionInjector
+Modified: com.google.javascript.jscomp.FunctionInjector
+Triggers: com.google.javascript.jscomp.FunctionInjectorTest::testIssue1101a, com.google.javascript.jscomp.FunctionInjectorTest::testIssue1101b, com.google.javascript.jscomp.InlineFunctionsTest::testCostBasedInlining10, com.google.javascript.jscomp.InlineFunctionsTest::testIssue1101, com.google.javascript.jscomp.InlineFunctionsTest::testInlineMutableArgsReferencedOnce
+
+Bug/specification summary:
+Bug report: 1101
+Trigger failures:
+- com.google.javascript.jscomp.FunctionInjectorTest::testIssue1101a
+ --> junit.framework.AssertionFailedError: expected:<NO> but was:<YES>
+ - com.google.javascript.jscomp.FunctionInjectorTest::testIssue1101b
+ --> junit.framework.AssertionFailedError: expected:<NO> but was:<YES>
+ - com.google.javascript.jscomp.InlineFunctionsTest::testCostBasedInlining10
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineFunctionsTest::testIssue1101
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineFunctionsTest::testInlineMutableArgsReferencedOnce
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.FunctionInjector
+
+Prompt-01 test plan:
+TARGETS: FunctionInjector inline decision path: classifyCallSite/CallSiteType, Reference.apply,
+CanInlineResult.
+ORACLES: testIssue1101a/b expect NO (reject) where bug returns YES; InlineFunctions tests check
+unchanged/stable output.
+CASES: mutable parameter reassigned/aliased then referenced once vs multiple; call-site type
+variants a/b; named vs direct function.
+CASES: cost threshold behavior from testCostBasedInlining10; setKnownConstants effects on estimates.
+RISKS: Exact mutation/reinsertion conditions absent from prompt; rely only on supplied trigger
+names, not extra APIs.
+RISKS: canInline/inline signatures not listed; expected values beyond YES/NO for I1101/Cost/Mutable
+tests are not specified.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.FunctionInjector (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class FunctionInjector {
+private Set<String> knownConstants = Sets.newHashSet();
+enum InliningMode {
+static class Reference {
+final String fnRecursionName = fnNode.getFirstChild().getString();
+@Override
+public boolean apply(Node n) {
+private boolean isSupportedCallType(Node callNode) {
+private Node inlineReturnValue(Node callNode, Node fnNode) {
+private enum CallSiteType {
+public void prepare(FunctionInjector injector, Node callNode) {
+public abstract void prepare(FunctionInjector injector, Node callNode);
+private CallSiteType classifyCallSite(Node callNode) {
+private ExpressionDecomposer getDecomposer() {
+enum CanInlineResult {
+private static int estimateCallCost(Node fnNode, boolean referencesThis) {
+public void setKnownConstants(Set<String> knownConstants) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.base.Supplier;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.ExpressionDecomposer.DecompositionType;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+class FunctionInjector {
+ enum InliningMode {
+
+/* METHOD FunctionInjector */
+public FunctionInjector(
+ AbstractCompiler compiler,
+ Supplier<String> safeNameIdSupplier,
+ boolean allowDecomposition,
+ boolean assumeStrictThis,
+ boolean assumeMinimumCapture) {
+ Preconditions.checkNotNull(compiler);
+ Preconditions.checkNotNull(safeNameIdSupplier);
+ this.compiler = compiler;
+ this.safeNameIdSupplier = safeNameIdSupplier;
+ this.allowDecomposition = allowDecomposition;
+ this.assumeStrictThis = assumeStrictThis;
+ this.assumeMinimumCapture = assumeMinimumCapture;
+ }
+
+/* METHOD EXPRESSION */
+EXPRESSION() {
+ @Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ injector.getDecomposer().moveExpression(callNode);
+
+ // Reclassify after move
+ CallSiteType callSiteType = injector.classifyCallSite(callNode);
+ Preconditions.checkState(this != callSiteType);
+ callSiteType.prepare(injector, callNode);
+ }
+ }
+
+/* METHOD prepare */
+@Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ injector.getDecomposer().moveExpression(callNode);
+
+ // Reclassify after move
+ CallSiteType callSiteType = injector.classifyCallSite(callNode);
+ Preconditions.checkState(this != callSiteType);
+ callSiteType.prepare(injector, callNode);
+ }
+
+/* METHOD DECOMPOSABLE_EXPRESSION */
+DECOMPOSABLE_EXPRESSION() {
+ @Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ injector.getDecomposer().maybeExposeExpression(callNode);
+
+ // Reclassify after decomposition
+ CallSiteType callSiteType = injector.classifyCallSite(callNode);
+ Preconditions.checkState(this != callSiteType);
+ callSiteType.prepare(injector, callNode);
+ }
+ }
+
+/* METHOD prepare */
+@Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ injector.getDecomposer().maybeExposeExpression(callNode);
+
+ // Reclassify after decomposition
+ CallSiteType callSiteType = injector.classifyCallSite(callNode);
+ Preconditions.checkState(this != callSiteType);
+ callSiteType.prepare(injector, callNode);
+ }
+
+/* METHOD UNSUPPORTED */
+UNSUPPORTED() {
+ @Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ throw new IllegalStateException("unexpected");
+ }
+ }
+
+/* METHOD prepare */
+@Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ throw new IllegalStateException("unexpected");
+ }
+
+/* METHOD SIMPLE_CALL */
+SIMPLE_CALL() {
+ @Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ // Nothing to do.
+ }
+ }
+
+/* METHOD prepare */
+@Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ // Nothing to do.
+ }
+
+/* METHOD SIMPLE_ASSIGNMENT */
+SIMPLE_ASSIGNMENT() {
+ @Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ // Nothing to do.
+ }
+ }
+
+/* METHOD prepare */
+@Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ // Nothing to do.
+ }
+
+/* METHOD VAR_DECL_SIMPLE_ASSIGNMENT */
+VAR_DECL_SIMPLE_ASSIGNMENT() {
+ @Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ // Nothing to do.
+ }
+ }
+
+/* METHOD prepare */
+@Override
+ public void prepare(FunctionInjector injector, Node callNode) {
+ // Nothing to do.
+ }
+
+/* METHOD canInlineReferenceDirectly */
+private CanInlineResult canInlineReferenceDirectly(
+ Node callNode, Node fnNode) {
+ if (!isDirectCallNodeReplacementPossible(fnNode)) {
+ return CanInlineResult.NO;
+ }
+
+ Node block = fnNode.getLastChild();
+ // CALL NODE: [ NAME, ARG1, ARG2, ... ]
+ Node cArg = callNode.getFirstChild().getNext();
+
+ // Functions called via 'call' and 'apply' have a this-object as
+ // the first parameter, but this is not part of the called function's
+ // parameter list.
+ if (!callNode.getFirstChild().isName()) {
+ if (NodeUtil.isFunctionObjectCall(callNode)) {
+ // TODO(johnlenz): Support replace this with a value.
+ if (cArg == null || !cArg.isThis()) {
+ return CanInlineResult.NO;
+ }
+ cArg = cArg.getNext();
+ } else {
+ // ".apply" call should be filtered before this.
+ Preconditions.checkState(!NodeUtil.isFunctionObjectApply(callNode));
+ }
+ }
+
+ Node fnParam = NodeUtil.getFunctionParameters(fnNode).getFirstChild();
+ while (cArg != null || fnParam != null) {
+ if (fnParam != null) {
+ if (cArg != null) {
+ if (NodeUtil.mayEffectMutableState(cArg, compiler)
+ && NodeUtil.getNameReferenceCount(
+ block, fnParam.getString()) > 1) {
+ return CanInlineResult.NO;
+ }
+ }
+ fnParam = fnParam.getNext();
+ }
+ // Limit the inlining
+ if (cArg != null) {
+ if (NodeUtil.mayHaveSideEffects(cArg, compiler)) {
+ return CanInlineResult.NO;
+ }
+ cArg = cArg.getNext();
+ }
+ }
+
+ return CanInlineResult.YES;
+ }
+
+ /**
+ * Determine if inlining the function is likely to reduce the code size.
+ * @param namesToAlias
+ */
+ boolean inliningLowersCost(
+ JSModule fnModule, Node fnNode, Collection<? extends Reference> refs,
+ Set<String> namesToAlias, boolean isRemovable, boolean referencesThis) {
+ int referenceCount = refs.size();
+ if (referenceCount == 0) {
+ return true;
+ }
+
+ int referencesUsingBlockInlining = 0;
+
+ boolean checkModules = isRemovable && fnModule != null;
+ JSModuleGraph moduleGraph = compiler.getModuleGraph();
+
+ for (Reference ref : refs) {
+ if (ref.mode == InliningMode.BLOCK) {
+ referencesUsingBlockInlining++;
+ }
+
+ // Check if any of the references cross the module boundaries.
+ if (checkModules && ref.module != null) {
+ if (ref.module != fnModule &&
+ !moduleGraph.dependsOn(ref.module, fnModule)) {
+ // Calculate the cost as if the function were non-removable,
+ // if it still lowers the cost inline it.
+ isRemovable = false;
+ checkModules = false; // no need to check additional modules.
+ }
+ }
+ }
+
+ int referencesUsingDirectInlining = referenceCount -
+ referencesUsingBlockInlining;
+
+ // Don't bother calculating the cost of function for simple functions where
+ // possible.
+ // However, when inlining a complex function, even a single reference may be
+ // larger than the original function if there are many returns (resulting
+ // in additional assignments) or many parameters that need to be aliased
+ // so use the cost estimating.
+ if (referenceCount == 1 && isRemovable &&
+ referencesUsingDirectInlining == 1) {
+ return true;
+ }
+
+ int callCost = estimateCallCost(fnNode, referencesThis);
+ int overallCallCost = callCost * referenceCount;
+
+ int costDeltaDirect = inlineCostDelta(
+ fnNode, namesToAlias, InliningMode.DIRECT);
+ int costDeltaBlock = inlineCostDelta(
+ fnNode, namesToAlias, InliningMode.BLOCK);
+
+ return doesLowerCost(fnNode, overallCallCost,
+ referencesUsingDirectInlining, costDeltaDirect,
+ referencesUsingBlockInlining, costDeltaBlock,
+ isRemovable);
+ }
+
+/* METHOD inlineCostDelta */
+private static int inlineCo
+...[truncated deterministically]...
+unt = NodeUtil.getFunctionParameters(fnNode).getChildCount();
+ int commaCount = (paramCount > 1) ? paramCount - 1 : 0;
+ int costDeltaFunctionOverhead = 15 + commaCount +
+ (paramCount * InlineCostEstimator.ESTIMATED_IDENTIFIER_COST);
+
+ Node block = fnNode.getLastChild();
+ if (!block.hasChildren()) {
+ // Assume the inline cost is zero for empty functions.
+ return -costDeltaFunctionOverhead;
+ }
+
+ if (mode == InliningMode.DIRECT) {
+ // The part of the function that is inlined using direct inlining:
+ // "return " (7)
+ return -(costDeltaFunctionOverhead + 7);
+ } else {
+ int aliasCount = namesToAlias.size();
+
+ // Originally, we estimated purely base on the function code size, relying
+ // on later optimizations. But that did not produce good results, so here
+ // we try to estimate the something closer to the actual inlined coded.
+
+ // NOTE 1: Result overhead is only if there is an assignment, but
+ // getting that information would require some refactoring.
+ // NOTE 2: The aliasing overhead is currently an under-estimate,
+ // as some parameters are aliased because of the parameters used.
+ // Perhaps we should just assume all parameters will be aliased?
+ final int inlineBlockOverhead = 4; // "X:{}"
+ final int perReturnOverhead = 2; // "return" --> "break X"
+ final int perReturnResultOverhead = 3; // "XX="
+ final int perAliasOverhead = 3; // "XX="
+
+ // TODO(johnlenz): Counting the number of returns is relatively expensive
+ // this information should be determined during the traversal and
+ // cached.
+ int returnCount = NodeUtil.getNodeTypeReferenceCount(
+ block, Token.RETURN, new NodeUtil.MatchShallowStatement());
+ int resultCount = (returnCount > 0) ? returnCount - 1 : 0;
+ int baseOverhead = (returnCount > 0) ? inlineBlockOverhead : 0;
+
+ int overhead = baseOverhead
+ + returnCount * perReturnOverhead
+ + resultCount * perReturnResultOverhead
+ + aliasCount * perAliasOverhead;
+
+ return (overhead - costDeltaFunctionOverhead);
+ }
+ }
+
+/* METHOD apply */
+@Override
+ public boolean apply(Node n) {
+ if (n.isName()) {
+ return n.getString().equals("eval")
+ || (!fnName.isEmpty()
+ && n.getString().equals(fnName))
+ || (!fnRecursionName.isEmpty()
+ && n.getString().equals(fnRecursionName));
+ }
+ return false;
+ }
+
+/* METHOD apply */
+@Override
+ public boolean apply(Node n) {
+ if (n.isName()) {
+ return n.getString().equals("eval");
+ }
+ if (!assumeMinimumCapture && n.isFunction()) {
+ return n != fnNode;
+ }
+ return false;
+ }
+
+/* METHOD setKnownConstants */
+public void setKnownConstants(Set<String> knownConstants) {
+ // This is only expected to be set once. The same set should be used
+ // when evaluating call-sites and inlining calls.
+ Preconditions.checkState(this.knownConstants.isEmpty());
+ this.knownConstants = knownConstants;
+ }
+
+/* METHOD doesFunctionMeetMinimumRequirements */
+boolean doesFunctionMeetMinimumRequirements(
+ final String fnName, Node fnNode) {
+ Node block = NodeUtil.getFunctionBody(fnNode);
+
+ // Basic restrictions on functions that can be inlined:
+ // 0) The function is inlinable by convention
+ // 1) It contains a reference to itself.
+ // 2) It uses its parameters indirectly using "arguments" (it isn't
+ // handled yet.
+ // 3) It references "eval". Inline a function containing eval can have
+ // large performance implications.
+
+ if (!compiler.getCodingConvention().isInlinableFunction(fnNode)) {
+ return false;
+ }
+
+ final String fnRecursionName = fnNode.getFirstChild().getString();
+ Preconditions.checkState(fnRecursionName != null);
+
+ // If the function references "arguments" directly in the function
+ boolean referencesArguments =
+...[truncated deterministically]...
+for 'apply'
+ if (referencesThis && !NodeUtil.isFunctionObjectCall(callNode)) {
+ // TODO(johnlenz): Allow 'this' references to be replaced with a
+ // global 'this' object.
+ return CanInlineResult.NO;
+ }
+
+ if (mode == InliningMode.DIRECT) {
+ return canInlineReferenceDirectly(callNode, fnNode);
+ } else {
+ return canInlineReferenceAsStatementBlock(
+ t, callNode, fnNode, needAliases);
+ }
+ }

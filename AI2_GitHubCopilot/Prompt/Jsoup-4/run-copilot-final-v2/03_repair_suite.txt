@@ -1,0 +1,111 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 4  Version: Jsoup-4b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 31
+Trigger failures:
+- org.jsoup.nodes.EntitiesTest::escape
+ --> junit.framework.AssertionFailedError: expected:<...ello &amp;&lt;&gt; &[A]ring; &aring; &#960;...> but was:<...ello &amp;&lt;&gt; &[a]ring; &aring; &#960;...>
+ - org.jsoup.nodes.EntitiesTest::caseSensitive
+ --> junit.framework.AssertionFailedError: expected:<&[U]uml; &uuml; &amp; &a...> but was:<&[u]uml; &uuml; &amp; &a...>
+Modified: org.jsoup.nodes.Entities
+
+Available API/signatures:
+[org.jsoup.nodes.Entities | java]
+package org.jsoup.nodes;
+public class Entities {
+public enum EscapeMode {
+private static final Pattern unescapePattern = Pattern.compile("&(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]+);?");
+static String escape(String string, Document.OutputSettings out) {
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+static String unescape(String string) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+ import java.nio.charset.Charset;
+ import java.nio.charset.CharsetEncoder;
+
+ public class EntitiesTest {
+
+     private static final CharsetEncoder UTF8_ENCODER = Charset.forName("UTF-8").newEncoder();
+
+     @Test
+     public void escapeStandardNamedEntities() {
+         assertEquals("&amp;", Entities.escape("&", UTF8_ENCODER, Entities.EscapeMode.base));
+         assertEquals("&lt;",  Entities.escape("<", UTF8_ENCODER, Entities.EscapeMode.base));
+         assertEquals("&gt;",  Entities.escape(">", UTF8_ENCODER, Entities.EscapeMode.base));
+         assertEquals("&quot;", Entities.escape("\"", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeAringUppercase() {
+         assertEquals("&Aring;", Entities.escape("Å", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeUumlUppercase() {
+         assertEquals("&Uuml;", Entities.escape("Ü", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeAringLowercase() {
+         assertEquals("&aring;", Entities.escape("å", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeUumlLowercase() {
+         assertEquals("&uuml;", Entities.escape("ü", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeExtendedLatin() {
+         assertEquals("&AElig;", Entities.escape("Æ", UTF8_ENCODER, Entities.EscapeMode.base));
+         assertEquals("&aelig;", Entities.escape("æ", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeNumericFallback() {
+         assertEquals("&#960;", Entities.escape("π", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeEmptyStringUnchanged() {
+         assertEquals("", Entities.escape("", UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeAllAsciiUnchanged() {
+         String ascii = "Hello, World!";
+         assertEquals(ascii, Entities.escape(ascii, UTF8_ENCODER, Entities.EscapeMode.base));
+     }
+
+     @Test
+     public void escapeWithOutputSettings() {
+         Document doc = new Document("");
+         doc.outputSettings().escapeMode(Entities.EscapeMode.base);
+         assertEquals("&Aring;", Entities.escape("Å", doc.outputSettings()));
+         assertEquals("&aring;", Entities.escape("å", doc.outputSettings()));
+     }
+
+     @Test
+     public void unescapeCaseInsensitive() {
+         assertEquals("Å", Entities.unescape("&Aring;"));
+         assertEquals("Å", Entities.unescape("&aring;"));
+         assertEquals("Ü", Entities.unescape("&Uuml;"));
+         assertEquals("Ü", Entities.unescape("&uuml;"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.nodes.EntitiesTest::escapeNumericFallback
+ - org.jsoup.nodes.EntitiesTest::unescapeCaseInsensitive
+
+Failing generated tests: org.jsoup.nodes.EntitiesTest::escapeNumericFallback, org.jsoup.nodes.EntitiesTest::unescapeCaseInsensitive

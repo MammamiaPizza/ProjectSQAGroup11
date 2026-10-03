@@ -1,0 +1,335 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Gson  Bug: 9  Version: Gson-9b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: com.google.gson.internal.bind.JsonTreeWriter, com.google.gson.internal.bind.TypeAdapters, com.google.gson.stream.JsonWriter
+Modified: com.google.gson.internal.bind.JsonTreeWriter, com.google.gson.internal.bind.TypeAdapters, com.google.gson.stream.JsonWriter
+Triggers: com.google.gson.stream.JsonWriterTest::testBoxedBooleans
+
+Bug/specification summary:
+Bug report: 836
+Trigger failures:
+- com.google.gson.stream.JsonWriterTest::testBoxedBooleans
+ --> java.lang.NullPointerException
+Modified: com.google.gson.internal.bind.JsonTreeWriter, com.google.gson.internal.bind.TypeAdapters, com.google.gson.stream.JsonWriter
+
+Prompt-01 test plan:
+TARGETS: JsonWriter.value(Boolean) and TypeAdapters.BOOLEAN.write; JsonTreeWriter.value(boolean).
+TARGETS: Overload resolution among value(boolean/long/double/Number) for boxed/null arguments.
+ORACLES: JsonWriterTest.testBoxedBooleans expects JSON tokens true, false, and null for null
+Boolean.
+ORACLES: JSON/string output must be "null" when a boxed Boolean is null; no NPE.
+CASES: value(Boolean.TRUE) -> true; value(Boolean.FALSE) -> false.
+CASES: value((Boolean)null) and TypeAdapters.BOOLEAN.write(null) -> null with no exception.
+CASES: Null Boolean after beginArray/name vs top-level value; null Number vs primitive overloads.
+RISKS: API list truncates value(Boolean) and test body; behavior inferred from issue 836 NPE.
+RISKS: JsonTreeWriter and TypeAdapters edits may change adapter path separately from direct
+JsonWriter use.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.gson.internal.bind.JsonTreeWriter (java) =====
+/* API SIGNATURES */
+package com.google.gson.internal.bind;
+public final class JsonTreeWriter extends JsonWriter {
+private static final Writer UNWRITABLE_WRITER = new Writer() {
+@Override public void write(char[] buffer, int offset, int counter) {
+@Override public void flush() throws IOException {
+@Override public void close() throws IOException {
+private static final JsonPrimitive SENTINEL_CLOSED = new JsonPrimitive("closed");
+private final List<JsonElement> stack = new ArrayList<JsonElement>();
+public JsonTreeWriter() {
+public JsonElement get() {
+private JsonElement peek() {
+private void put(JsonElement value) {
+@Override public JsonWriter beginArray() throws IOException {
+@Override public JsonWriter endArray() throws IOException {
+@Override public JsonWriter beginObject() throws IOException {
+@Override public JsonWriter endObject() throws IOException {
+@Override public JsonWriter name(String name) throws IOException {
+@Override public JsonWriter value(String value) throws IOException {
+@Override public JsonWriter nullValue() throws IOException {
+@Override public JsonWriter value(boolean value) throws IOException {
+@Override public JsonWriter value(double value) throws IOException {
+@Override public JsonWriter value(long value) throws IOException {
+@Override public JsonWriter value(Number value) throws IOException {
+
+/* HEADER */
+package com.google.gson.internal.bind;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.List;
+
+/* METHOD JsonTreeWriter */
+public JsonTreeWriter() {
+ super(UNWRITABLE_WRITER);
+ }
+
+/* METHOD get */
+public JsonElement get() {
+ if (!stack.isEmpty()) {
+ throw new IllegalStateException("Expected one JSON element but was " + stack);
+ }
+ return product;
+ }
+
+/* METHOD peek */
+private JsonElement peek() {
+ return stack.get(stack.size() - 1);
+ }
+
+/* METHOD put */
+private void put(JsonElement value) {
+ if (pendingName != null) {
+ if (!value.isJsonNull() || getSerializeNulls()) {
+ JsonObject object = (JsonObject) peek();
+ object.add(pendingName, value);
+ }
+ pendingName = null;
+ } else if (stack.isEmpty()) {
+ product = value;
+ } else {
+ JsonElement element = peek();
+ if (element instanceof JsonArray) {
+ ((JsonArray) element).add(value);
+ } else {
+ throw new IllegalStateException();
+ }
+ }
+ }
+
+===== com.google.gson.internal.bind.TypeAdapters (java) =====
+/* API SIGNATURES */
+package com.google.gson.internal.bind;
+public final class TypeAdapters {
+private TypeAdapters() {
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Class> CLASS = new TypeAdapter<Class>() {
+@Override
+public void write(JsonWriter out, Class value) throws IOException {
+public Class read(JsonReader in) throws IOException {
+public static final TypeAdapterFactory CLASS_FACTORY = newFactory(Class.class, CLASS);
+public static final TypeAdapter<BitSet> BIT_SET = new TypeAdapter<BitSet>() {
+@Override public BitSet read(JsonReader in) throws IOException {
+@Override public void write(JsonWriter out, BitSet src) throws IOException {
+public static final TypeAdapterFactory BIT_SET_FACTORY = newFactory(BitSet.class, BIT_SET);
+public static final TypeAdapter<Boolean> BOOLEAN = new TypeAdapter<Boolean>() {
+public Boolean read(JsonReader in) throws IOException {
+public void write(J
+...[truncated deterministically]...
+rawtypes", "unchecked"})
+if (!Enum.class.isAssignableFrom(rawType) || rawType == Enum.class) {
+@Override public String toString() {
+@SuppressWarnings("unchecked")
+@Override public <T2> TypeAdapter<T2> create(Gson gson, TypeToken<T2> typeToken) {
+final Class<? super T2> requestedType = typeToken.getRawType();
+@Override public void write(JsonWriter out, T1 value) throws IOException {
+@Override public T1 read(JsonReader in) throws IOException {
+
+/* HEADER */
+package com.google.gson.internal.bind;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Calendar;
+import java.util.Currency;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.annotations.SerializedName;
+import com.google.gson.internal.LazilyParsedNumber;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+
+/* METHOD TypeAdapters */
+private TypeAdapters() {
+ throw new UnsupportedOperationException();
+ }
+
+/* METHOD write */
+@Override
+ public void write(JsonWriter out, Class value) throws IOException {
+ if (value == null) {
+ out.nullValue();
+ } else {
+ throw new UnsupportedOperationException("Attempted to serialize java.lang.Class: "
+ + value.getName() + ". Forgot to register a type adapter?");
+ }
+ }
+
+/* METHOD read */
+@Override
+ public Boolean read(JsonReader in) throws IOException {
+ if (in.peek() == JsonToken.NULL) {
+ in.nextNull();
+ return null;
+ } else if (in.peek() == JsonToken.STRING) {
+ // support strings for compatibility with GSON 1.7
+ return Boolean.parseBoolean(in.nextString());
+ }
+ return in.nextBoolean();
+ }
+
+/* METHOD write */
+@Override
+ public void write(JsonWriter out, Number value) throws IOException {
+ out.value(value);
+ }
+
+===== com.google.gson.stream.JsonWriter (java) =====
+/* API SIGNATURES */
+package com.google.gson.stream;
+public class JsonWriter implements Closeable, Flushable {
+public JsonWriter(Writer out) {
+public final void setIndent(String indent) {
+public final void setLenient(boolean lenient) {
+public boolean isLenient() {
+public final void setHtmlSafe(boolean htmlSafe) {
+public final boolean isHtmlSafe() {
+public final void setSerializeNulls(boolean serializeNulls) {
+public final boolean getSerializeNulls() {
+public JsonWriter beginArray() throws IOException {
+public JsonWriter endArray() throws IOException {
+public JsonWriter beginObject() throws IOException {
+public JsonWriter endObject() throws IOException {
+private JsonWriter open(int empty, String openBracket) throws IOException {
+private JsonWriter close(int empty, int nonempty, String closeBracket)
+private void push(int newTop) {
+private int peek() {
+private void replaceTop(int topOfStack) {
+publi
+...[truncated deterministically]...
+throws IOException {
+public JsonWriter value(long value) throws IOException {
+public JsonWriter value(Number value) throws IOException {
+public void flush() throws IOException {
+public void close() throws IOException {
+private void string(String value) throws IOException {
+private void newline() throws IOException {
+private void beforeName() throws IOException {
+@SuppressWarnings("fallthrough")
+private void beforeValue() throws IOException {
+
+/* HEADER */
+package com.google.gson.stream;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.io.Writer;
+import static com.google.gson.stream.JsonScope.DANGLING_NAME;
+import static com.google.gson.stream.JsonScope.EMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.EMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.EMPTY_OBJECT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.NONEMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_OBJECT;
+
+/* METHOD JsonWriter */
+public JsonWriter(Writer out) {
+ if (out == null) {
+ throw new NullPointerException("out == null");
+ }
+ this.out = out;
+ }
+
+/* METHOD name */
+public JsonWriter name(String name) throws IOException {
+ if (name == null) {
+ throw new NullPointerException("name == null");
+ }
+ if (deferredName != null) {
+ throw new IllegalStateException();
+ }
+ if (stackSize == 0) {
+ throw new IllegalStateException("JsonWriter is closed.");
+ }
+ deferredName = name;
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(Number value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+
+ writeDeferredName();
+ String string = value.toString();
+ if (!lenient
+ && (string.equals("-Infinity") || string.equals("Infinity") || string.equals("NaN"))) {
+ throw new IllegalArgumentException("Numeric values must be finite, but was " + value);
+ }
+ beforeValue();
+ out.append(string);
+ return this;
+ }
+
+/* METHOD beginArray */
+public JsonWriter beginArray() throws IOException {
+ writeDeferredName();
+ return open(EMPTY_ARRAY, "[");
+ }
+
+/* METHOD endArray */
+public JsonWriter endArray() throws IOException {
+ return close(EMPTY_ARRAY, NONEMPTY_ARRAY, "]");
+ }
+
+/* METHOD beginObject */
+public JsonWriter beginObject() throws IOException {
+ writeDeferredName();
+ return open(EMPTY_OBJECT, "{");
+ }
+
+/* METHOD endObject */
+public JsonWriter endObject() throws IOException {
+ return close(EMPTY_OBJECT, NONEMPTY_OBJECT, "}");
+ }
+
+/* METHOD value */
+public JsonWriter value(String value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+ writeDeferredName();
+ beforeValue();
+ string(value);
+ return this;
+ }

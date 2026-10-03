@@ -1,0 +1,207 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 39  Version: JacksonDatabind-39b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1108
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestPolymorphicWithDefaultImpl::testUnknownTypeIDRecovery
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "location" (class com.fasterxml.jackson.databind.jsontype.TestPolymorphicWithDefaultImpl$CallRecord), not marked as ignorable (4 known properties: "version", "item", "item2", "application"])
+Modified: com.fasterxml.jackson.databind.deser.std.NullifyingDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.std.NullifyingDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+public class NullifyingDeserializer
+public final static NullifyingDeserializer instance = new NullifyingDeserializer();
+public NullifyingDeserializer() { super(Object.class); }
+@Override
+public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.std;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+
+ import org.junit.Before;
+ import org.junit.Test;
+ import org.junit.runner.RunWith;
+ import org.mockito.Mock;
+ import org.mockito.Mockito;
+ import org.mockito.MockitoAnnotations;
+
+ import com.fasterxml.jackson.core.*;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+
+ /**
+  * Tests for {@link NullifyingDeserializer}, targeting the bug where
+  * {@code deserialize} fails to advance the parser beyond the current
+  * value for non-container tokens, leading to
+  * {@link UnrecognizedPropertyException} in polymorphic default
+  * implementations.
+  */
+ @RunWith(org.powermock.modules.junit4.PowerMockRunner.class)
+ public class NullifyingDeserializerTest {
+
+     private NullifyingDeserializer deserializer;
+
+     @Mock
+     private DeserializationContext ctxt;
+
+     @Before
+     public void setUp() {
+         MockitoAnnotations.initMocks(this);
+         deserializer = NullifyingDeserializer.instance;
+     }
+
+     // -- deserialize --------------------------------------------------------
+
+     @Test
+     public void testDeserializeEmptyObject() throws IOException {
+         JsonParser p = parser("{}");
+         p.nextToken(); // START_OBJECT
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         // after skipChildren from START_OBJECT, parser must be past END_OBJECT
+         assertNull(p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeSimpleObject() throws IOException {
+         JsonParser p = parser("{\"a\":1,\"b\":\"two\"}");
+         p.nextToken(); // START_OBJECT
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertNull(p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeNestedObject() throws IOException {
+         JsonParser p = parser("{\"x\":{\"y\":{\"z\":true}}}");
+         p.nextToken(); // START_OBJECT
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertNull(p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeEmptyArray() throws IOException {
+         JsonParser p = parser("[]");
+         p.nextToken(); // START_ARRAY
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertNull(p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeMixedArray() throws IOException {
+         JsonParser p = parser("[1, \"two\", true, null, {\"inner\":3}, [4]]");
+         p.nextToken(); // START_ARRAY
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertNull(p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeAtFieldName() throws IOException {
+         // parser positioned at a field name; skipChildren only skips the field's value
+         JsonParser p = parser("{\"field\":\"value\"}");
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME "field"
+         assertEquals(JsonToken.FIELD_NAME, p.currentToken());
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         // after skipping the string value, parser is on END_OBJECT
+         assertEquals(JsonToken.END_OBJECT, p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeAtFieldNameWithObjectValue() throws IOException {
+         JsonParser p = parser("{\"field\":{\"inner\":true}}");
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME "field"
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         // after skipping the object value, parser is on END_OBJECT of the outer object
+         assertEquals(JsonToken.END_OBJECT, p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeScalarString() throws IOException {
+         JsonParser p = parser("\"hello\"");
+         p.nextToken(); // VALUE_STRING
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         // buggy: skipChildren does nothing for scalar tokens, so parser stays put
+         assertEquals(JsonToken.VALUE_STRING, p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeScalarNumber() throws IOException {
+         JsonParser p = parser("42");
+         p.nextToken(); // VALUE_NUMBER_INT
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertEquals(JsonToken.VALUE_NUMBER_INT, p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeScalarBoolean() throws IOException {
+         JsonParser p = parser("true");
+         p.nextToken(); // VALUE_TRUE
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertEquals(JsonToken.VALUE_TRUE, p.currentToken());
+     }
+
+     @Test
+     public void testDeserializeScalarNull() throws IOException {
+         JsonParser p = parser("null");
+         p.nextToken(); // VALUE_NULL
+         Object result = deserializer.deserialize(p, ctxt);
+         assertNull(result);
+         assertEquals(JsonToken.VALUE_NULL, p.currentToken());
+     }
+
+     // -- deserializeWithType -------------------------------------------------
+
+     @Test
+     public void testDeserializeWithTypeObject() throws IOException {
+         TypeDeserializer typeDeser = Mockito.mock(TypeDeserializer.class);
+         JsonParser p = parser("{}");
+         p.nextToken(); // START_OBJECT
+         deserializer.deserializeWithType(p, ctxt, typeDeser);
+         // must delegate to typeDeserializer.deserializeTypedFromAny
+         Mockito.verify(typeDeser).deserializeTypedFromAny(p, ctxt);
+     }
+
+     // helper
+     private JsonParser parser(String json) throws IOException {
+         return new JsonFactory().createParser(json);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-39f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-39f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-39f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-39f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-39f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/std/NullifyingDeserializerTest.java:48: error: cannot find symbol
+ [javac] assertNull(p.currentToken());
+ [javac] ^
+ [javac] symbol: method currentToken()
+ [javac] location: variable p of type JsonParser
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 21 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

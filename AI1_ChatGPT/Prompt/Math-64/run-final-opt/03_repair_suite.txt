@@ -1,0 +1,173 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 64  Version: Math-64b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-405
+Trigger failures:
+- org.apache.commons.math.optimization.general.MinpackTest::testMinpackJennrichSampson
+ --> junit.framework.AssertionFailedError: expected:<0.2578199266368004> but was:<0.2578330049004441>
+ - org.apache.commons.math.optimization.general.MinpackTest::testMinpackFreudensteinRoth
+ --> junit.framework.AssertionFailedError: expected:<11.41300466147456> but was:<11.4121122022341>
+Modified: org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizer
+
+Available API/signatures:
+[org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizer | java]
+package org.apache.commons.math.optimization.general;
+public class LevenbergMarquardtOptimizer extends AbstractLeastSquaresOptimizer {
+public LevenbergMarquardtOptimizer() {
+public void setInitialStepBoundFactor(double initialStepBoundFactor) {
+public void setCostRelativeTolerance(double costRelativeTolerance) {
+public void setParRelativeTolerance(double parRelativeTolerance) {
+public void setOrthoTolerance(double orthoTolerance) {
+public void setQRRankingThreshold(final double threshold) {
+@Override
+protected VectorialPointValuePair doOptimize()
+private void qrDecomposition() throws OptimizationException {
+private void qTy(double[] y) {
+
+Generated JUnit Test:
+package org.apache.commons.math.optimization.general;
+
+import static org.junit.Assert.assertEquals;
+
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.analysis.MultivariateMatrixFunction;
+import org.apache.commons.math.analysis.MultivariateVectorialFunction;
+import org.apache.commons.math.optimization.VectorialPointValuePair;
+import org.junit.Test;
+
+public class LevenbergMarquardtOptimizerRegressionTest {
+
+    @Test
+    public void testJennrichSampsonConvergesToExpectedCost() throws Exception {
+        MultivariateVectorialFunction function = new MultivariateVectorialFunction() {
+            public double[] value(double[] point) throws FunctionEvaluationException {
+                double[] value = new double[10];
+                for (int i = 1; i <= 10; ++i) {
+                    value[i - 1] = 2.0 + 2.0 * i
+                            - Math.exp(i * point[0])
+                            - Math.exp(i * point[1]);
+                }
+                return value;
+            }
+        };
+
+        MultivariateMatrixFunction jacobian = new MultivariateMatrixFunction() {
+            public double[][] value(double[] point) throws FunctionEvaluationException {
+                double[][] value = new double[10][2];
+                for (int i = 1; i <= 10; ++i) {
+                    value[i - 1][0] = -i * Math.exp(i * point[0]);
+                    value[i - 1][1] = -i * Math.exp(i * point[1]);
+                }
+                return value;
+            }
+        };
+
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+        optimizer.optimize(function, jacobian, new double[10], unitWeights(10),
+                           new double[] { 0.3, 0.4 });
+
+        assertEquals(0.2578199266368004, optimizer.getCost(), 1.0e-8);
+    }
+
+    @Test
+    public void testFreudensteinRothConvergesToExpectedLocalMinimum() throws Exception {
+        MultivariateVectorialFunction function = new MultivariateVectorialFunction() {
+            public double[] value(double[] point) throws FunctionEvaluationException {
+                double x = point[0];
+                double y = point[1];
+                return new double[] {
+                    -13.0 + x + ((5.0 - y) * y - 2.0) * y,
+                    -29.0 + x + ((1.0 + y) * y - 14.0) * y
+                };
+            }
+        };
+
+        MultivariateMatrixFunction jacobian = new MultivariateMatrixFunction() {
+            public double[][] value(double[] point) throws FunctionEvaluationException {
+                double y = point[1];
+                return new double[][] {
+                    { 1.0, 10.0 * y - 3.0 * y * y - 2.0 },
+                    { 1.0, 3.0 * y * y + 2.0 * y - 14.0 }
+                };
+            }
+        };
+
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+        VectorialPointValuePair result =
+                optimizer.optimize(function, jacobian, new double[] { 0.0, 0.0 },
+                                   new double[] { 1.0, 1.0 },
+                                   new double[] { 0.5, -2.0 });
+
+        assertEquals(11.41300466147456, result.getPoint()[0], 1.0e-8);
+    }
+
+    @Test
+    public void testExactLinearLeastSquaresProblemFindsZeroResidualSolution() throws Exception {
+        MultivariateVectorialFunction function = new MultivariateVectorialFunction() {
+            public double[] value(double[] point) throws FunctionEvaluationException {
+                return new double[] {
+                    point[0] + point[1] - 3.0,
+                    2.0 * point[0] - point[1]
+                };
+            }
+        };
+
+        MultivariateMatrixFunction jacobian = new MultivariateMatrixFunction() {
+            public double[][] value(double[] point) throws FunctionEvaluationException {
+                return new double[][] {
+                    { 1.0, 1.0 },
+                    { 2.0, -1.0 }
+                };
+            }
+        };
+
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+        VectorialPointValuePair result =
+                optimizer.optimize(function, jacobian, new double[] { 0.0, 0.0 },
+                                   new double[] { 1.0, 1.0 },
+                                   new double[] { 0.0, 0.0 });
+
+        assertEquals(1.0, result.getPoint()[0], 1.0e-12);
+        assertEquals(2.0, result.getPoint()[1], 1.0e-12);
+        assertEquals(0.0, optimizer.getCost(), 1.0e-12);
+    }
+
+    private static double[] unitWeights(int size) {
+        double[] weights = new double[size];
+        for (int i = 0; i < size; ++i) {
+            weights[i] = 1.0;
+        }
+        return weights;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-64f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-64f-ai -Dd4j.test.dir=/root/sqa-workspaces/Math-64f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 2.2-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-64f-ai/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-64f-ai/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-64f-ai/target/test-classes
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-64f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-64f-ai/.test_suite/org/apache/commons/math/optimization/general/LevenbergMarquardtOptimizerRegressionTest.java:39: error: method optimize in class AbstractLeastSquaresOptimizer cannot be applied to given types;
+ [javac] optimizer.optimize(function, jacobian, new double[10], unitWeights(10),
+ [javac] ^
+ [javac] required: DifferentiableMultivariateVectorialFunction,double[],double[],double[]
+ [javac] found: MultivariateVectorialFunction,MultivariateMatrixFunction,double[],double[],double[]
+ [javac] reason: actual and formal argument lists differ in length
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,266 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 23  Version: JacksonDatabind-23b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.std.NumberSerializers
+Modified: com.fasterxml.jackson.databind.ser.std.NumberSerializers
+Triggers: com.fasterxml.jackson.databind.ser.TestJsonSerialize2::testEmptyInclusionScalars
+
+Bug/specification summary:
+Bug report: 849
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.TestJsonSerialize2::testEmptyInclusionScalars
+ --> junit.framework.ComparisonFailure: expected:<{[]}> but was:<{["value":0]}>
+Modified: com.fasterxml.jackson.databind.ser.std.NumberSerializers
+
+Prompt-01 test plan:
+TARGETS: NumberSerializers scalar serializers; empty-value behavior used by JsonInclude inclusion.
+ORACLES: Trigger expects a bean/object with zero scalar omitted to serialize as `{}`.
+CASES: Integer zero with NON_EMPTY/empty inclusion; verify nonzero integer remains included.
+CASES: Cover registered wrappers: Long, Byte, Short, Float, Double zero versus nonzero inclusion.
+ORACLES: Serialized JSON output from ObjectMapper and trigger's `{}` versus `{"value":0}` expectation.
+RISKS: Signatures omit isEmpty behavior and inclusion configuration details; derive only from trigger context.
+RISKS: Do not infer schema/visitor expectations or direct serializer error behavior from provided context.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ser.std.NumberSerializers (java) =====
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.io.IOException;
+import java.lang.reflect.Type;
+import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+import com.fasterxml.jackson.databind.introspect.AnnotatedMember;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonIntegerFormatVisitor;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonNumberFormatVisitor;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.ser.ContextualSerializer;
+
+/**
+ * Container class for serializers used for handling standard JDK-provided types.
+ */
+@SuppressWarnings("serial")
+public class NumberSerializers
+{
+ protected NumberSerializers() { }
+
+ public static void addAll(Map<String, JsonSerializer<?>> allDeserializers)
+ {
+ final JsonSerializer<?> intS = new IntegerSerializer();
+ allDeserializers.put(Integer.class.getName(), intS);
+ allDeserializers.put(Integer.TYPE.getName(), intS);
+ allDeserializers.put(Long.class.getName(), LongSerializer.instance);
+ allDeserializers.put(Long.TYPE.getName(), LongSerializer.instance);
+ allDeserializers.put(Byte.class.getName(), IntLikeSerializer.instance);
+ allDeserializers.put(Byte.TYPE.getName(), IntLikeSerializer.instance);
+ allDeserializers.put(Short.class.getName(), ShortSerializer.instance);
+ allDeserializers.put(Short.TYPE.getName(), ShortSerializer.instance);
+
+ // Numbers, limited length floating point
+ allDeserializers.put(Float.class.getName(), FloatSerializer.instance);
+ allDeserializers.put(Float.TYPE.getName(), FloatSerializer.instance);
+ allDeserializers.put(Double.class.getName(), DoubleSerializer.instance);
+ allDeserializers.put(Double.TYPE.getName(), DoubleSerializer.instance);
+ }
+
+ /*
+ /**********************************************************
+ /* Shared base class
+ /**********************************************************
+ */
+
+ protected abstract static class Base<T> extends StdScalarSerializer<T>
+ implements ContextualSerializer
+ {
+
+ protected final JsonParser.NumberType _numberType;
+ protected final String _schemaType;
+ protected final boolean _isInt;
+
+ protected Base(Class<?> cls, JsonParser.NumberType numberType, String schemaType) {
+ super(cls, false);
+ _numberType = numberType;
+ _schemaType = schemaType;
+ _isInt = (numberType == JsonParser.NumberType.INT)
+ || (numberType == JsonParser.NumberType.LONG)
+ || (numberType == JsonParser.NumberType.BIG_INTEGER)
+ ;
+ }
+
+ @Override
+ public JsonNode getSchema(SerializerProvider provider, Type typeHint) {
+ return createSchemaNode(_schemaType, true);
+ }
+
+ @Override
+ public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) throws JsonMappingException
+ {
+ if (_isInt) {
+ JsonIntegerFormatVisitor v2 = visitor.expectIntegerFormat(typeHint);
+ if (v2 != null) {
+ v2.numberType(_numberType);
+ }
+ } else {
+ JsonNumberFormatVisitor v2 = visitor.expectNumberFormat(typeHint);
+ if (v2 != null) {
+ v2.numberType(_numberType);
+ }
+ }
+ }
+
+ @Override
+ public JsonSerializer<?> createContextual(SerializerProvider prov,
+ BeanProperty property) throws JsonMappingException
+ {
+ if (property != null) {
+ AnnotatedMember m = property.getMember();
+ if (m != null) {
+ JsonFormat.Value format = prov.getAnnotationIntrospector().findFormat(m);
+ if (format != null) {
+ switch (format.getShape()) {
+ case STRING:
+ return ToStringSerializer.instance;
+ default:
+ }
+ }
+ }
+ }
+ return this;
+ }
+ }
+ 
+ /*
+ /**********************************************************
+ /* Concrete serializers, numerics
+ /**********************************************************
+ */
+
+ @JacksonStdImpl
+ public final static class ShortSerializer extends Base<Short>
+ {
+ final static ShortSerializer instance = new ShortSerializer();
+
+ public ShortSerializer() { super(Short.class, JsonParser.NumberType.INT, "number"); }
+
+ @Override
+ public void serialize(Short value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+ gen.writeNumber(value.shortValue());
+ }
+ }
+
+ /**
+ * This is the special serializer for regular {@link java.lang.Integer}s
+ * (and primitive ints)
+ *<p>
+ * Since this is one of "native" types, no type information is ever
+ * included on serialization (unlike for most scalar types)
+ *<p>
+ * NOTE: as of 2.6, generic signature changed to Object, to avoid generation
+ * of bridge methods.
+ */
+ @JacksonStdImpl
+ public final static class IntegerSerializer extends Base<Object>
+ {
+ public IntegerSerializer() { super(Integer.class, JsonParser.NumberType.INT ,"integer"); }
+ 
+ @Override
+ public void serialize(Object value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+ gen.writeNumber(((Integer) value).intValue());
+ }
+ 
+ // IMPORTANT: copied from `NonTypedScalarSerializerBase`
+ @Override
+ public void serializeWithType(Object value, JsonGenerator gen,
+ SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+ // no type info, just regular serialization
+ serialize(value, gen, provider); 
+ }
+
+ }
+
+ /**
+ * Similar to {@link IntegerSerializer}, but will not cast to Integer:
+ * instead, cast is to {@link java.lang.Number}, and conversion is
+ * by calling {@link java.lang.Number#intValue}.
+ */
+ @JacksonStdImpl
+ public final static class IntLikeSerializer extends Base<Number>
+ {
+ final static IntLikeSerializer instance = new IntLikeSerializer();
+
+ public IntLikeSerializer() {
+ super(Number.class, JsonParser.NumberType.INT, "integer");
+ }
+
+ @Override
+ public void serialize(Number value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+ gen.writeNumber(value.intValue());
+ }
+ }
+
+ @JacksonStdImpl
+ public final static class LongSerializer extends Base<Object>
+ {
+
+ final static LongSerializer instance = new LongSerializer();
+ 
+ public LongSerializer() { super(Long.class, JsonParser.NumberType.LONG, "number"); }
+
+ @Override
+ public void serialize(Object value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+ gen.writeNumber(((Long) value).longValue());
+ }
+ }
+
+ @JacksonStdImpl
+ public final static class FloatSerializer extends Base<Object>
+ {
+
+ final static FloatSerializer instance = new FloatSerializer();
+
+ public FloatSerializer() { super(Float.class, JsonParser.NumberType.FLOAT, "number"); }
+
+ @Override
+ public void serialize(Object value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+ gen.writeNumber(((Float) value).floatValue());
+ }
+ }
+
+ /**
+ * This is the special serializer for regular {@link java.lang.Double}s
+ * (and primitive doubles)
+ *<p>
+ * Since this is one of "native" types, no type information is ever
+ * included on serialization (unlike for most scalar types as of 1.5)
+ */
+ @JacksonStdImpl
+ public final static class DoubleSerializer extends Base<Object>
+ {
+
+ final static DoubleSerializer instance = new DoubleSerializer();
+ 
+ public DoubleSerializer() { super(Double.class, JsonParser.NumberType.DOUBLE, "number"); }
+
+ @Override
+ public void serialize(Object value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+ gen.writeNumber(((Double) value).doubleValue());
+ }
+
+ // IMPORTANT: copied from `NonTypedScalarSerializerBase`
+ @Override
+ public void serializeWithType(Object value, JsonGenerator gen,
+ SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+ // no type info, just regular serialization
+ serialize(value, gen, provider); 
+ }
+ }
+}

@@ -1,0 +1,407 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Codec  Bug: 2  Version: Codec-2b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.codec.binary.Base64
+Modified: org.apache.commons.codec.binary.Base64
+Triggers: org.apache.commons.codec.binary.Base64InputStreamTest::testBase64EmptyInputStream, org.apache.commons.codec.binary.Base64OutputStreamTest::testBase64EmptyOutputStream
+
+Bug/specification summary:
+Bug report: CODEC-77
+Trigger failures:
+- org.apache.commons.codec.binary.Base64InputStreamTest::testBase64EmptyInputStream
+ --> junit.framework.AssertionFailedError: EOF expected:<-1> but was:<13>
+ - org.apache.commons.codec.binary.Base64OutputStreamTest::testBase64EmptyOutputStream
+ --> junit.framework.AssertionFailedError: Streaming base64 encode
+Modified: org.apache.commons.codec.binary.Base64
+
+Prompt-01 test plan:
+TARGETS: encode(byte[]) with empty input; decode(byte[]) with empty input; static
+encodeBase64(byte[],boolean) with empty array
+TARGETS: Constructor with lineLength>0 and empty input to ensure no line separator is emitted
+ORACLES: encode(empty) must return empty byte[] per CODEC-77; the fix removes spurious newline on
+zero-length input
+ORACLES: decode(empty) must return empty byte[]; streaming encoder must not prepend line separator
+for empty input
+CASES: encode(new byte[0]) with default Base64; decode(new byte[0]) with default Base64
+CASES: encode(new byte[0]) with chunked lineLength=76; encode(new byte[0]) with urlSafe=true and
+lineLength=0
+CASES: encodeBase64(new byte[0], true); encodeBase64(new byte[0], false); decodeBase64(new byte[0])
+CASES: encode(new byte[0]) after constructing with custom lineSeparator (e.g., CRLF) to verify no
+added separator
+RISKS: Cannot test stream wrapping; bug may also affect decode of empty stream; test isolation
+relies on Base64 alone
+RISKS: Must verify that internal resizeBuf does not produce spurious bytes for zero-length input;
+line-length defaults may differ
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.codec.binary.Base64 (java) =====
+/* API SIGNATURES */
+package org.apache.commons.codec.binary;
+public class Base64 implements BinaryEncoder, BinaryDecoder {
+public Base64() {
+public Base64(boolean urlSafe) {
+public Base64(int lineLength) {
+public Base64(int lineLength, byte[] lineSeparator) {
+public Base64(int lineLength, byte[] lineSeparator, boolean urlSafe) {
+public boolean isUrlSafe() {
+private void resizeBuf() {
+public static boolean isBase64(byte octet) {
+public static boolean isArrayByteBase64(byte[] arrayOctet) {
+private static boolean containsBase64Byte(byte[] arrayOctet) {
+public static byte[] encodeBase64(byte[] binaryData) {
+public static byte[] encodeBase64URLSafe(byte[] binaryData) {
+public static byte[] encodeBase64Chunked(byte[] binaryData) {
+public Object decode(Object pObject) throws DecoderException {
+public byte[] decode(byte[] pArray) {
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked) {
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked, boolean urlSafe) {
+public static byte[] decodeBase64(byte[] base64Data) {
+static byte[] discardWhitespace(byte[] data) {
+private static boolean isWhiteSpace(byte byteToCheck) {
+static byte[] discardNonBase64(byte[] data) {
+public Object encode(Object pObject) throws EncoderException {
+public byte[] encode(byte[] pArray) {
+public static BigInteger decodeInteger(byte[] pArray) {
+public static byte[] encodeInteger(BigInteger bigInt) {
+static byte[] toIntegerBytes(BigInteger bigInt) {
+
+/* HEADER */
+package org.apache.commons.codec.binary;
+import org.apache.commons.codec.BinaryDecoder;
+import org.apache.commons.codec.BinaryEncoder;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.EncoderException;
+import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
+public class Base64 implements BinaryEncoder, BinaryDecoder {
+
+/* METHOD Base64 */
+public Base64(int lineLength, byte[] lineSeparator, boolean urlSafe) {
+ this.lineLength = lineLength;
+ this.lineSeparator = new byte[lineSeparator.length];
+ System.arraycopy(lineSeparator, 0, this.lineSeparator, 0, lineSeparator.length);
+ if (lineLength > 0) {
+ this.encodeSize = 4 + lineSeparator.length;
+ } else {
+ this.encodeSize = 4;
+ }
+ this.decodeSize = this.encodeSize - 1;
+ if (containsBase64Byte(lineSeparator)) {
+ String sep;
+ try {
+ sep = new String(lineSeparator, "UTF-8");
+ } catch (UnsupportedEncodingException uee) {
+ sep = new String(lineSeparator);
+ }
+ throw new IllegalArgumentException("lineSeperator must not contain base64 characters: [" + sep + "]");
+ }
+ this.encodeTable = urlSafe ? URL_SAFE_ENCODE_TABLE : STANDARD_ENCODE_TABLE;
+ }
+
+/* METHOD encode */
+public Object encode(Object pObject) throws EncoderException {
+ if (!(pObject instanceof byte[])) {
+ throw new EncoderException("Parameter supplied to Base64 encode is not a byte[]");
+ }
+ return encode((byte[]) pObject);
+ }
+
+/* METHOD encode */
+public byte[] encode(byte[] pArray) {
+ return encodeBase64(pArray, false, isUrlSafe());
+ }
+
+/* METHOD Base64 */
+public Base64(boolean urlSafe) {
+ this(CHUNK_SIZE, CHUNK_SEPARATOR, urlSafe);
+ }
+
+/* METHOD Base64 */
+public Base64() {
+ this(false);
+ }
+
+/* METHOD Base64 */
+public Base64(int lineLength) {
+ this(lineLength, CHUNK_SEPARATOR);
+ }
+
+/* METHOD Base64 */
+public Base64(int lineLength, byte[] lineSeparator) {
+ this(lineLength, lineSeparator, false);
+ }
+
+/* METHOD encode */
+void encode(byte[] in, int inPos, int inAvail) {
+ if (eof) {
+ return;
+ }
+ // inAvail < 0 is how we're informed of EOF in the underlying data we're
+ // encoding.
+ if (inAvail < 0) {
+ eof = true;
+ if (buf == null || buf.length - pos < encodeSize) {
+ resizeBuf();
+ }
+ switch (modulus) {
+ case 1:
+ buf[pos++] = encodeTable[(x >> 2) & MASK_6BITS];
+ buf[pos++] = encodeTable[(x << 4) & MASK_6BITS];
+ // URL-SAFE skips the padding to further reduce size.
+ if (encodeTable == STANDARD_ENCODE_TABLE) {
+ buf[pos++] = PAD;
+ buf[pos++] = PAD;
+ }
+ break;
+
+ case 2:
+ buf[pos++] = encodeTable[(x >> 10) & MASK_6BITS];
+ buf[pos++] = encodeTable[(x >> 4) & MASK_6BITS];
+ buf[pos++] = encodeTable[(x << 2) & MASK_6BITS];
+ // URL-SAFE skips the padding to further reduce size.
+ if (encodeTable == STANDARD_ENCODE_TABLE) {
+ buf[pos++] = PAD;
+ }
+ break;
+ }
+ if (lineLength > 0) {
+ System.arraycopy(lineSeparator, 0, buf, pos, lineSeparator.length);
+ pos += lineSeparator.length;
+ }
+ } else {
+ for (int i = 0; i < inAvail; i++) {
+ if (buf == null || buf.length - pos < encodeSize) {
+ resizeBuf();
+ }
+ modulus = (++modulus) % 3;
+ int b = in[inPos++];
+ if (b < 0) { b += 256; }
+ x = (x << 8) + b;
+ if (0 == modulus) {
+ buf[pos++] = encodeTable[(x >> 18) & MASK_6BITS];
+ buf[pos++] = encodeTable[(x >> 12) & MASK_6BITS];
+ buf[pos++] = encodeTable[(x >> 6) & MASK_6BITS];
+ buf[pos++] = encodeTable[x & MASK_6BITS];
+ currentLinePos += 4;
+ if (lineLength > 0 && lineLength <= currentLinePos) {
+ System.arraycopy(lineSeparator, 0, buf, pos, lineSeparator.length);
+ pos += lineSeparator.length;
+ currentLinePos = 0;
+ }
+ }
+ }
+ }
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked, boolean urlSafe) {
+ if (binaryData == null || binaryData.length == 0) {
+ return binaryData;
+ }
+ Base64 b64 = isChunked ? new Base64(urlSafe) : new Base64(0, CHUNK_SEPARATOR, urlSafe);
+ long len = (binaryData.length * 4) / 3;
+ long mod = len % 4;
+ if (mod != 0) {
+ len += 4 - mod;
+ }
+ if (isChunked) {
+ len += (1 + (len / CHUNK_SIZE)) * CHUNK_SEPARATOR.length;
+ }
+ if (len > Integer.MAX_VALUE) {
+ throw new IllegalArgumentException(
+ "Input array too big, output array would be bigger than Integer.MAX_VALUE=" + Integer.MAX_VALUE);
+ }
+ byte[] buf = new byte[(int) len];
+ b64.setInitialBuffer(buf, 0, buf.length);
+ b64.encode(binaryData, 0, binaryData.length);
+ b64.encode(binaryData, 0, -1); // Notify encoder of EOF.
+ // Encoder might have resized, even though it was unnecessary.
+ if (b64.buf != buf) {
+ b64.readResults(buf, 0, buf.length);
+ }
+ // In URL-SAFE mode we skip the padding characters, so sometimes our
+ // final length is a bit smaller.
+ if (urlSafe && b64.pos < buf.length) {
+ byte[] smallerBuf = new byte[b64.pos];
+ System.arraycopy(buf, 0, smallerBuf, 0, b64.pos);
+ buf = smallerBuf;
+ }
+ return buf;
+ }
+
+/* METHOD encodeBase64URLSafe */
+public static byte[] encodeBase64URLSafe(byte[] binaryData) {
+ return encodeBase64(binaryData, false, true);
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData) {
+ return encodeBase64(binaryData, false);
+ }
+
+/* METHOD encodeBase64Chunked */
+public static byte[] encodeBase64Chunked(byte[] binaryData) {
+ return encodeBase64(binaryData, true);
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked) {
+ return encodeBase64(binaryData, isChunked, false);
+ }
+
+/* METHOD decode */
+public Object decode(Object pObject) throws DecoderException {
+ if (!(pObject instanceof byte[])) {
+ throw new DecoderException("Parameter supplied to Base64 decode is not a byte[]");
+ }
+ return decode((byte[]) pObject);
+ }
+
+/* METHOD encodeInteger */
+public static byte[] encodeInteger(BigInteger bigInt) {
+ if(bigInt == null) {
+ throw new NullPointerException("encodeInteger called with null parameter");
+ }
+ return encodeBase64(toIntegerBytes(bigInt), false);
+ }
+
+/* METHOD isUrlSafe */
+public boolean isUrlSafe() {
+ return this.encodeTable == URL_SAFE_ENCODE_TABLE;
+ }
+
+/* METHOD isBase64 */
+public static boolean isBase64(byte octet) {
+ return octet == PAD || (octet >= 0 && octet < DECODE_TABLE.length && DECODE_TABLE[octet] != -1);
+ }
+
+/* METHOD isArrayByteBase64 */
+public static boolean isArrayByteBase64(byte[] arrayOctet) {
+ for (int i = 0; i < arrayOctet.length; i++) {
+ if (!isBase64(arrayOctet[i]) && !isWhiteSpace(arrayOctet[i])) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+/* METHOD decode */
+public byte[] decode(byte[] pArray) {
+ return decodeBase64(pArray);
+ }
+
+/* METHOD decodeInteger */
+public static BigInteger decodeInteger(byte[] pArray) {
+ return new BigInteger(1, decodeBase64(pArray));
+ }
+
+/* METHOD containsBase64Byte */
+private static boolean containsBase64Byte(byte[] arrayOctet) {
+ for (int i = 0; i < arrayOctet.length; i++) {
+ if (isBase64(arrayOctet[i])) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+/* METHOD discardNonBase64 */
+static byte[] discardNonBase64(byte[] data) {
+ byte groomedData[] = new byte[data.length];
+ int bytesCopied = 0;
+ for (int i = 0; i < data.length; i++) {
+ if (isBase64(data[i])) {
+ groomedData[bytesCopied++] = data[i];
+ }
+ }
+ byte packedData[] = new byte[bytesCopied];
+ System.arraycopy(groomedData, 0, packedData, 0, bytesCopied);
+ return packedData;
+ }
+
+/* METHOD toIntegerBytes */
+static byte[] toIntegerBytes(BigInteger bigInt) {
+ int bitlen = bigInt.bitLength();
+ // round bitlen
+ bitlen = ((bitlen + 7) >> 3) << 3;
+ byte[] bigBytes = bigInt.toByteArray();
+
+ if(((bigInt.bitLength() % 8) != 0) &&
+ (((bigInt.bitLength() / 8) + 1) == (bitlen / 8))) {
+ return bigBytes;
+ }
+ // set up params for copying everything but sign bit
+ int startSrc = 0;
+ int len = bigBytes.length;
+
+ // if bigInt is exactly byte-aligned, just skip signbit in copy
+ if((bigInt.bitLength() % 8) == 0) {
+ startSrc = 1;
+ len--;
+ }
+ int startDst = bitlen / 8 - len; // to pad w/ nulls as per spec
+ byte[] resizedBytes = new byte[bitlen / 8];
+ System.arraycopy(bigBytes, startSrc, resizedBytes, startDst, len);
+ return resizedBytes;
+ }
+
+/* METHOD hasData */
+boolean hasData() {
+ return this.buf != null;
+ }
+
+/* METHOD avail */
+int avail() {
+ return buf != null ? pos - readPos : 0;
+ }
+
+/* METHOD resizeBuf */
+private void resizeBuf() {
+ if (buf == null) {
+ buf = new byte[8192];
+ pos = 0;
+ readPos = 0;
+ } else {
+ byte[] b = new byte[buf.length * 2];
+ System.arraycopy(buf, 0, b, 0, buf.length);
+ buf = b;
+ }
+ }
+
+/* METHOD discardWhitespace */
+static byte[] discardWhitespace(byte[] data) {
+ byte groomedData[] = new byte[data.length];
+ int bytesCopied = 0;
+ for (int i = 0; i < data.length; i++) {
+ switch (data[i]) {
+ case ' ' :
+ case '\n' :
+ case '\r' :
+ case '\t' :
+ break;
+ default :
+ groomedData[bytesCopied++] = data[i];
+ }
+ }
+ byte packedData[] = new byte[bytesCopied];
+ System.arraycopy(groomedData, 0, packedData, 0, bytesCopied);
+ return packedData;
+ }
+
+/* METHOD isWhiteSpace */
+private static boolean isWhiteSpace(byte byteToCheck) {
+ switch (byteToCheck) {
+ case ' ' :
+ case '\n' :
+ case '\r' :
+ case '\t' :
+ return true;
+ default :
+ return false;
+ }
+ }

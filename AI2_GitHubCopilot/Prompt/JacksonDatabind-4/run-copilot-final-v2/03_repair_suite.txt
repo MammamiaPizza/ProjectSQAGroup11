@@ -1,0 +1,190 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 4  Version: JacksonDatabind-4b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 506
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestCollectionDeserialization::testArrayIndexForExceptions
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+Modified: com.fasterxml.jackson.databind.deser.std.StringArrayDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.std.StringArrayDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public final class StringArrayDeserializer
+public final static StringArrayDeserializer instance = new StringArrayDeserializer();
+protected JsonDeserializer<String> _elementDeserializer;
+public StringArrayDeserializer() {
+super(String[].class);
+@SuppressWarnings("unchecked")
+protected StringArrayDeserializer(JsonDeserializer<?> deser) {
+@Override
+public String[] deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException
+final ObjectBuffer buffer = ctxt.leaseObjectBuffer();
+String[] result = buffer.completeAndClearBuffer(chunk, ix, String.class);
+protected final String[] _deserializeCustom(JsonParser jp, DeserializationContext ctxt) throws IOException
+public Object deserializeWithType(JsonParser jp, DeserializationContext ctxt, TypeDeserializer typeDeserializer) throws IOException {
+private final String[] handleNonArray(JsonParser jp, DeserializationContext ctxt) throws IOException
+public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property) throws JsonMappingException
+deser = ctxt.findContextualValueDeserializer(ctxt.constructType(String.class), property);
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.std;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+ import java.util.List;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.*;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.module.SimpleModule;
+
+ public class StringArrayDeserializerTest {
+
+     private int getArrayIndex(JsonMappingException e) {
+         List<JsonMappingException.Reference> path = e.getPath();
+         if (!path.isEmpty()) {
+             return path.get(0).getIndex();
+         }
+         return -1;
+     }
+
+     @Test
+     public void testArrayIndexForExceptions() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "[\"valid\", 123]";
+         try {
+             mapper.readValue(json, String[].class);
+             fail("Expected JsonMappingException");
+         } catch (JsonMappingException e) {
+             assertEquals("Second element index must be 1 (0-based)", 1, getArrayIndex(e));
+         }
+     }
+
+     @Test
+     public void testEmptyArray() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String[] result = mapper.readValue("[]", String[].class);
+         assertNotNull(result);
+         assertEquals(0, result.length);
+     }
+
+     @Test
+     public void testSingleValidString() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String[] result = mapper.readValue("[\"hello\"]", String[].class);
+         assertArrayEquals(new String[]{"hello"}, result);
+     }
+
+     @Test
+     public void testAllValidStrings() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String[] result = mapper.readValue("[\"a\",\"b\",\"c\"]", String[].class);
+         assertArrayEquals(new String[]{"a", "b", "c"}, result);
+     }
+
+     @Test
+     public void testNullElements() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String[] result = mapper.readValue("[\"a\",null,\"c\"]", String[].class);
+         assertArrayEquals(new String[]{"a", null, "c"}, result);
+     }
+
+     @Test
+     public void testFirstElementInvalidIndex() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "[123, \"valid\"]";
+         try {
+             mapper.readValue(json, String[].class);
+             fail("Expected JsonMappingException");
+         } catch (JsonMappingException e) {
+             assertEquals("First element index must be 0", 0, getArrayIndex(e));
+         }
+     }
+
+     @Test
+     public void testNonArraySingleValueAccepted() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY);
+         String[] result = mapper.readValue("\"hello\"", String[].class);
+         assertArrayEquals(new String[]{"hello"}, result);
+     }
+
+     @Test(expected = JsonMappingException.class)
+     public void testNonArraySingleValueNotAccepted() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.readValue("\"hello\"", String[].class);
+     }
+
+     @Test
+     public void testEmptyStringAsNullArray() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
+         String[] result = mapper.readValue("\"\"", String[].class);
+         assertNull(result);
+     }
+
+     @Test
+     public void testCustomElementDeserializerIndex() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         SimpleModule module = new SimpleModule("test", Version.unknownVersion());
+         module.addDeserializer(String.class, new JsonDeserializer<String>() {
+             @Override
+             public String deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+{
+                 if (p.getCurrentToken() == JsonToken.VALUE_STRING) return p.getText();
+                 if (p.getCurrentToken() == JsonToken.VALUE_NULL) return getNullValue();
+                 throw ctxt.mappingException(String.class, p.getCurrentToken());
+             }
+
+             @Override
+             public String getNullValue() {
+                 return null;
+             }
+         });
+         mapper.registerModule(module);
+         String json = "[\"valid\", 123]";
+         try {
+             mapper.readValue(json, String[].class);
+             fail("Expected exception");
+         } catch (JsonMappingException e) {
+             assertEquals("Custom deserializer must report index 1", 1, getArrayIndex(e));
+         }
+     }
+
+     @Test
+     public void testNonScalarTokenIndex() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "[\"valid\", {\"key\":\"value\"}]";
+         try {
+             mapper.readValue(json, String[].class);
+             fail("Expected exception");
+         } catch (JsonMappingException e) {
+             assertEquals("Non-scalar token at index 1 must be 1", 1, getArrayIndex(e));
+         }
+     }
+
+     @Test
+     public void testNormalLargeArray() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String[] result = mapper.readValue("[\"a\",\"b\",\"c\",\"d\",\"e\"]", String[].class);
+         assertEquals(5, result.length);
+         assertEquals("c", result[2]);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerTest::testArrayIndexForExceptions
+ - com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerTest::testFirstElementInvalidIndex
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerTest::testArrayIndexForExceptions, com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerTest::testFirstElementInvalidIndex

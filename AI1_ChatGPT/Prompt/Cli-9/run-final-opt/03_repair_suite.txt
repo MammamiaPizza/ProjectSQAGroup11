@@ -1,0 +1,155 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 9  Version: Cli-9b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: CLI-149
+Trigger failures:
+- org.apache.commons.cli.OptionsTest::testMissingOptionsException
+ --> junit.framework.ComparisonFailure: expected:<... required options: f[, ]x> but was:<... required options: f[]x>
+ - org.apache.commons.cli.ParseRequiredTest::testMissingRequiredOptions
+ --> junit.framework.ComparisonFailure: Incorrect exception message expected:<... required options: b[, ]c> but was:<... required options: b[]c>
+Modified: org.apache.commons.cli.Parser
+
+Available API/signatures:
+[org.apache.commons.cli.Parser | java]
+package org.apache.commons.cli;
+public abstract class Parser implements CommandLineParser {
+protected CommandLine cmd;
+protected void setOptions(final Options options) {
+protected Options getOptions() {
+protected List getRequiredOptions() {
+public CommandLine parse(Options options, String[] arguments)
+protected void processProperties(Properties properties)
+protected void checkRequiredOptions()
+public void processArgs(Option opt, ListIterator iter)
+protected void processOption(String arg, ListIterator iter)
+final Option opt = getOptions().getOption(arg);
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+import junit.framework.TestCase;
+
+public class ParserRequiredOptionsFormattingTest extends TestCase
+{
+    private Option requiredOption(String opt)
+    {
+        Option option = new Option(opt, false, "");
+        option.setRequired(true);
+        return option;
+    }
+
+    public void testMultipleMissingRequiredOptionsAreSeparatedByCommaAndSpace()
+        throws Exception
+    {
+        Options options = new Options();
+        options.addOption(requiredOption("f"));
+        options.addOption(requiredOption("x"));
+
+        try
+        {
+            new PosixParser().parse(options, new String[0]);
+            fail("Expected MissingOptionException");
+        }
+        catch (MissingOptionException e)
+        {
+            assertEquals("Missing required options: f, x", e.getMessage());
+        }
+    }
+
+    public void testMultipleMissingRequiredOptionsUseCommaAndSpaceForDifferentKeys()
+        throws Exception
+    {
+        Options options = new Options();
+        options.addOption(requiredOption("b"));
+        options.addOption(requiredOption("c"));
+
+        try
+        {
+            new PosixParser().parse(options, new String[0]);
+            fail("Expected MissingOptionException");
+        }
+        catch (MissingOptionException e)
+        {
+            assertEquals("Missing required options: b, c", e.getMessage());
+        }
+    }
+
+    public void testSingleMissingRequiredOptionKeepsSingularMessage()
+        throws Exception
+    {
+        Options options = new Options();
+        options.addOption(requiredOption("f"));
+
+        try
+        {
+            new PosixParser().parse(options, new String[0]);
+            fail("Expected MissingOptionException");
+        }
+        catch (MissingOptionException e)
+        {
+            assertEquals("Missing required option: f", e.getMessage());
+        }
+    }
+
+    public void testOnlyUnsatisfiedRequiredOptionsAppearInMessage()
+        throws Exception
+    {
+        Options options = new Options();
+        options.addOption(requiredOption("a"));
+        options.addOption(requiredOption("b"));
+        options.addOption(requiredOption("c"));
+
+        try
+        {
+            new PosixParser().parse(options, new String[] { "-b" });
+            fail("Expected MissingOptionException");
+        }
+        catch (MissingOptionException e)
+        {
+            assertEquals("Missing required options: a, c", e.getMessage());
+        }
+    }
+
+    public void testAllRequiredOptionsMayBeSupplied()
+        throws Exception
+    {
+        Options options = new Options();
+        options.addOption(requiredOption("f"));
+        options.addOption(requiredOption("x"));
+
+        CommandLine commandLine =
+            new PosixParser().parse(options, new String[] { "-f", "-x" });
+
+        assertTrue(commandLine.hasOption("f"));
+        assertTrue(commandLine.hasOption("x"));
+    }
+
+    public void testUnrecognizedOptionStillProducesParseException()
+        throws Exception
+    {
+        Options options = new Options();
+
+        try
+        {
+            new PosixParser().parse(options, new String[] { "-z" });
+            fail("Expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException e)
+        {
+            assertEquals("Unrecognized option: -z", e.getMessage());
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.cli.ParserRequiredOptionsFormattingTest::testUnrecognizedOptionStillProducesParseException
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.apache.commons.cli.ParserRequiredOptionsFormattingTest::testUnrecognizedOptionStillProducesParseException

@@ -1,0 +1,768 @@
+The previously generated JUnit Test Suite failed to compile or run.
+Analyze the production source code, generated test, Project Context, behavioral specification, and error
+output. Return a corrected complete Java Test Class.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Preserve all valid and meaningful Test Cases.
+4. Fix package, import, syntax, type, constructor, method-call, dependency, mock, and assertion errors.
+5. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+6. Do not invent missing APIs, dependencies, or expected behavior.
+7. Do not change an assertion only to make the test pass unless the supplied specification, API
+documentation, public contract, or bug report supports the change.
+8. Do not remove a Test Case merely to hide an error unless the scenario is impossible according to the
+supplied context.
+9. Do not modify the intended behavior being tested.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Keep the Test Cases independent and free from execution-order dependencies.
+12. Briefly explain the cause of each error and the correction made.
+13. Return the complete corrected Java Test Class.
+Project ID:
+JxPath
+Bug ID:
+3
+Source Version:
+JxPath-3b
+JUnit Version:
+junit-3.8.1.jar
+Build Tool:
+Ant
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: JxPath
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: JxPath
+       Program: commons-jxpath
+    Build file: /root/defects4j/framework/projects/JxPath/JxPath.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-jxpath.git
+     Commit db: /root/defects4j/framework/projects/JxPath/active-bugs.csv
+Number of bugs: 22
+--------------------------------------------------------------------------------
+
+Summary for Bug: JxPath-3
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+984778f3c264df5d608eb9697df2a268122ac66f
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2007-01-10 22:54:59 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+JXPATH-68
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/JXPATH-68
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.jxpath.ri.model.beans.BadlyImplementedFactoryTest::testBadFactoryImplementation
+   --> junit.framework.AssertionFailedError
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.jxpath.ri.model.beans.NullPropertyPointer
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.jxpath.ri.model.beans.NullPropertyPointer (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.model.beans;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.JXPathInvalidAccessException;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+/**
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public class NullPropertyPointer extends PropertyPointer {
+
+    private String propertyName = "*";
+    private boolean byNameAttribute = false;
+
+    /**
+     */
+    public NullPropertyPointer(NodePointer parent) {
+        super(parent);
+    }
+
+    public QName getName() {
+        return new QName(propertyName);
+    }
+
+    public void setPropertyIndex(int index) {
+    }
+
+    public int getLength() {
+        return 0;
+    }
+
+    public Object getBaseValue() {
+        return null;
+    }
+
+    public Object getImmediateNode() {
+        return null;
+    }
+
+    public boolean isLeaf() {
+        return true;
+    }    
+
+    public NodePointer getValuePointer() {
+        return new NullPointer(this,  new QName(getPropertyName()));
+    }
+
+    protected boolean isActualProperty() {
+        return false;
+    }
+
+    public boolean isActual() {
+        return false;
+    }
+
+    public boolean isContainer() {
+        return true;
+    }
+
+    public void setValue(Object value) {
+        if (parent == null || parent.isContainer()) {
+            throw new JXPathInvalidAccessException(
+                "Cannot set property "
+                    + asPath()
+                    + ", the target object is null");
+        }
+        else if (parent instanceof PropertyOwnerPointer &&
+                ((PropertyOwnerPointer) parent).
+                    isDynamicPropertyDeclarationSupported()){
+            // If the parent property owner can create
+            // a property automatically - let it do so
+            PropertyPointer propertyPointer =
+                ((PropertyOwnerPointer) parent).getPropertyPointer();
+            propertyPointer.setPropertyName(propertyName);
+            propertyPointer.setValue(value);
+        }
+        else {
+            throw new JXPathInvalidAccessException(
+                "Cannot set property "
+                    + asPath()
+                    + ", path does not match a changeable location");
+        }
+    }
+
+    public NodePointer createPath(JXPathContext context) {
+        NodePointer newParent = parent.createPath(context);
+        if (isAttribute()) {
+            return newParent.createAttribute(context, getName());
+        }
+        else {
+            // Consider these two use cases:
+            // 1. The parent pointer of NullPropertyPointer is 
+            //    a PropertyOwnerPointer other than NullPointer. When we call 
+            //    createPath on it, it most likely returns itself. We then
+            //    take a PropertyPointer from it and get the PropertyPointer
+            //    to expand the collection for the corresponding property.
+            //
+            // 2. The parent pointer of NullPropertyPointer is a NullPointer.
+            //    When we call createPath, it may return a PropertyOwnerPointer
+            //    or it may return anything else, like a DOMNodePointer.
+            //    In the former case we need to do exactly what we did in use 
+            //    case 1.  In the latter case, we simply request that the 
+            //    non-property pointer expand the collection by itself.
+            if (newParent instanceof PropertyOwnerPointer) {
+                PropertyOwnerPointer pop = (PropertyOwnerPointer) newParent;
+                newParent = pop.getPropertyPointer();
+            }
+            return newParent.createChild(context, getName(), getIndex());
+        }
+    }
+
+    public NodePointer createPath(JXPathContext context, Object value) {
+        NodePointer newParent = parent.createPath(context);
+        if (isAttribute()) {
+            NodePointer pointer = newParent.createAttribute(context, getName());
+            pointer.setValue(value);
+            return pointer;
+        }
+        else {
+            if (newParent instanceof PropertyOwnerPointer) {
+                PropertyOwnerPointer pop = (PropertyOwnerPointer) newParent;
+                newParent = pop.getPropertyPointer();
+            }
+            return newParent.createChild(context, getName(), index, value);
+        }
+    }
+    
+    public NodePointer createChild(
+            JXPathContext context,
+            QName name, 
+            int index)
+    {
+        return createPath(context).createChild(context, name, index);
+    }
+        
+    public NodePointer createChild(
+            JXPathContext context,
+            QName name, 
+            int index,
+            Object value) 
+    {
+        return createPath(context).createChild(context, name, index, value);
+    }
+
+    public String getPropertyName() {
+        return propertyName;
+    }
+
+    public void setPropertyName(String propertyName) {
+        this.propertyName = propertyName;
+    }
+
+    public void setNameAttributeValue(String attributeValue) {
+        this.propertyName = attributeValue;
+        byNameAttribute = true;
+    }
+
+    public boolean isCollection() {
+        return getIndex() != WHOLE_COLLECTION;
+    }
+
+    public int getPropertyCount() {
+        return 0;
+    }
+
+    public String[] getPropertyNames() {
+        return new String[0];
+    }
+
+    public String asPath() {
+        if (!byNameAttribute) {
+            return super.asPath();
+        }
+        else {
+            StringBuffer buffer = new StringBuffer();
+            buffer.append(getImmediateParentPointer().asPath());
+            buffer.append("[@name='");
+            buffer.append(escape(getPropertyName()));
+            buffer.append("']");
+            if (index != WHOLE_COLLECTION) {
+                buffer.append('[').append(index + 1).append(']');
+            }
+            return buffer.toString();
+        }
+    }
+
+    private String escape(String string) {
+        int index = string.indexOf('\'');
+        while (index != -1) {
+            string =
+                string.substring(0, index)
+                    + "&apos;"
+                    + string.substring(index + 1);
+            index = string.indexOf('\'');
+        }
+        index = string.indexOf('\"');
+        while (index != -1) {
+            string =
+                string.substring(0, index)
+                    + "&quot;"
+                    + string.substring(index + 1);
+            index = string.indexOf('\"');
+        }
+        return string;
+    }
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.jxpath.ri.model.beans.NullPropertyPointer
+
+Triggering tests:
+- org.apache.commons.jxpath.ri.model.beans.BadlyImplementedFactoryTest::testBadFactoryImplementation
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model.beans;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.AbstractFactory;
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.JXPathException;
+import org.apache.commons.jxpath.JXPathInvalidAccessException;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+/**
+ * Tests for {@link NullPropertyPointer}.
+ */
+public class NullPropertyPointerTest extends TestCase {
+
+    public void testDefaultPointerCharacteristicsAndPropertyName() {
+        JXPathContext context = JXPathContext.newContext(new Holder());
+        NullPropertyPointer pointer =
+                new NullPropertyPointer(context.getPointer("/"));
+
+        assertEquals("*", pointer.getPropertyName());
+        assertEquals("*", pointer.getName().getName());
+        assertEquals(0, pointer.getLength());
+        assertNull(pointer.getBaseValue());
+        assertNull(pointer.getImmediateNode());
+        assertTrue(pointer.isLeaf());
+        assertTrue(pointer.isContainer());
+        assertFalse(pointer.isActual());
+        assertFalse(pointer.isActualProperty());
+        assertEquals(0, pointer.getPropertyCount());
+        assertEquals(0, pointer.getPropertyNames().length);
+
+        pointer.setPropertyName("child");
+        pointer.setPropertyIndex(25);
+
+        assertEquals("child", pointer.getPropertyName());
+        assertEquals("child", pointer.getName().getName());
+        assertTrue(pointer.asPath().endsWith("child"));
+    }
+
+    public void testValuePointerIsNullPointerAndCollectionDependsOnIndex() {
+        JXPathContext context = JXPathContext.newContext(new Holder());
+        NullPropertyPointer pointer =
+                new NullPropertyPointer(context.getPointer("/"));
+
+        assertTrue(pointer.getValuePointer() instanceof NullPointer);
+        assertFalse(pointer.isCollection());
+
+        pointer.setIndex(0);
+
+        assertTrue(pointer.isCollection());
+    }
+
+    public void testSetValueWithNoParentRejectsNullTarget() {
+        NullPropertyPointer pointer = new NullPropertyPointer(null);
+        pointer.setPropertyName("missing");
+
+        try {
+            pointer.setValue("value");
+            fail("A property with no parent cannot be assigned");
+        }
+        catch (JXPathInvalidAccessException ex) {
+            assertTrue(ex.getMessage().indexOf("target object is null") >= 0);
+        }
+    }
+
+    public void testSetValueForUndeclaredBeanPropertyRejectsUnchangeableLocation() {
+        JXPathContext context = JXPathContext.newContext(new Holder());
+        NullPropertyPointer pointer =
+                new NullPropertyPointer(context.getPointer("/"));
+        pointer.setPropertyName("undeclared");
+
+        try {
+            pointer.setValue("value");
+            fail("An undeclared ordinary JavaBean property is not changeable");
+        }
+        catch (JXPathInvalidAccessException ex) {
+            assertTrue(
+                    ex.getMessage().indexOf(
+                            "path does not match a changeable location") >= 0);
+        }
+    }
+
+    public void testCreatePathWithValueCreatesAndAssignsBeanProperty() {
+        Holder holder = new Holder();
+        Child child = new Child();
+        JXPathContext context = JXPathContext.newContext(holder);
+        NullPropertyPointer pointer =
+                new NullPropertyPointer(context.getPointer("/"));
+        pointer.setPropertyName("child");
+
+        NodePointer created = pointer.createPath(context, child);
+
+        assertNotNull(created);
+        assertSame(child, holder.getChild());
+    }
+
+    public void testCreatePathUsesFactoryToCreateMissingProperty() {
+        Holder holder = new Holder();
+        JXPathContext context = JXPathContext.newContext(holder);
+        context.setFactory(new CreatingFactory());
+
+        NullPropertyPointer pointer =
+                new NullPropertyPointer(context.getPointer("/"));
+        pointer.setPropertyName("child");
+
+        NodePointer created = pointer.createPath(context);
+
+        assertNotNull(created);
+        assertNotNull(holder.getChild());
+    }
+
+    public void testCreatePathAndSetValueRejectsFactoryThatClaimsSuccessWithoutCreatingObject() {
+        Holder holder = new Holder();
+        JXPathContext context = JXPathContext.newContext(holder);
+        context.setFactory(new BadFactory());
+
+        try {
+            context.createPathAndSetValue("child/value", "created value");
+            fail("A factory that reports success must actually create the object");
+        }
+        catch (JXPathException ex) {
+            assertNotNull(ex.getMessage());
+        }
+
+        assertNull(holder.getChild());
+    }
+
+    public void testNameAttributePathEscapesQuotesAndIncludesIndex() {
+        JXPathContext context = JXPathContext.newContext(new Holder());
+        NodePointer parent = context.getPointer("/");
+        NullPropertyPointer pointer = new NullPropertyPointer(parent);
+
+        pointer.setNameAttributeValue("O'Reilly \"Media\"");
+        pointer.setIndex(1);
+
+        assertEquals(
+                parent.asPath()
+                    + "[@name='O&apos;Reilly &quot;Media&quot;'][2]",
+                pointer.asPath());
+    }
+
+    public void testCreateChildDelegatesToCreatedPropertyPath() {
+        Holder holder = new Holder();
+        JXPathContext context = JXPathContext.newContext(holder);
+        NullPropertyPointer pointer =
+                new NullPropertyPointer(context.getPointer("/"));
+        pointer.setPropertyName("child");
+
+        NodePointer created =
+                pointer.createChild(
+                        context,
+                        new QName("value"),
+                        0,
+                        "nested value");
+
+        assertNotNull(created);
+        assertNotNull(holder.getChild());
+        assertEquals("nested value", holder.getChild().getValue());
+    }
+
+    public static class Holder {
+        private Child child;
+
+        public Child getChild() {
+            return child;
+        }
+
+        public void setChild(Child child) {
+            this.child = child;
+        }
+    }
+
+    public static class Child {
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+    }
+
+    private static class CreatingFactory extends AbstractFactory {
+        public boolean createObject(
+                JXPathContext context,
+                Pointer pointer,
+                Object parent,
+                String name,
+                int index) {
+            if (parent instanceof Holder && "child".equals(name)) {
+                ((Holder) parent).setChild(new Child());
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Deliberately violates the AbstractFactory contract by returning true
+     * without installing an object into the parent.
+     */
+    private static class BadFactory extends AbstractFactory {
+        public boolean createObject(
+                JXPathContext context,
+                Pointer pointer,
+                Object parent,
+                String name,
+                int index) {
+            return true;
+        }
+    }
+}
+
+Compiler or Test Runner error:
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /root/sqa-workspaces/JxPath-3f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JxPath-3f-ai -Dd4j.test.dir=/root/sqa-workspaces/JxPath-3f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+
+get-deps:
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/xerces/xerces/1.2.3/xerces-1.2.3.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/xerces-1.2.3.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/servletapi/servletapi/2.2/servletapi-2.2.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/servletapi-2.2.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/junit/junit/3.8/junit-3.8.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/junit-3.8.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/ant/ant-optional/1.5.1/ant-optional-1.5.1.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/ant-optional-1.5.1.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/xml-apis/xml-apis/2.0.2/xml-apis-2.0.2.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/xml-apis-2.0.2.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/jdom/jdom/1.0/jdom-1.0.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/jdom-1.0.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/commons-beanutils/commons-beanutils/1.4/commons-beanutils-1.4.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/commons-beanutils-1.4.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/commons-logging/commons-logging/1.0.4/commons-logging-1.0.4.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/commons-logging-1.0.4.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/commons-collections/commons-collections/2.0/commons-collections-2.0.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/commons-collections-2.0.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/junit/junit/3.8.1/junit-3.8.1.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/junit-3.8.1.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/ant/ant/1.5/ant-1.5.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/ant-1.5.jar
+      [get] Getting: file:/root/defects4j/framework/projects/JxPath/lib/ant/ant-optional/1.5/ant-optional-1.5.jar
+      [get] To: /root/sqa-workspaces/JxPath-3f-ai/target/lib/ant-optional-1.5.jar
+
+compile:
+    [mkdir] Created dir: /root/sqa-workspaces/JxPath-3f-ai/target/classes
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/build.xml:36: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 163 source files to /root/sqa-workspaces/JxPath-3f-ai/target/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/JXPathContextFactory.java:106: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]             factoryImpl = (JXPathContextFactory) clazz.newInstance();
+    [javac]                                                       ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/JXPathIntrospector.java:162: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]                 return (JXPathBeanInfo) beanClass.newInstance();
+    [javac]                                                  ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/JXPathIntrospector.java:186: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]                 return cls.newInstance();
+    [javac]                           ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/JXPathIntrospector.java:195: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]         return cls.newInstance();
+    [javac]                   ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/xml/DocumentContainer.java:165: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]                 parser = (XMLParser) clazz.newInstance();                
+    [javac]                                           ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/JXPathContextReferenceImpl.java:728: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]             return cls.newInstance();
+    [javac]                       ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/Expression.java:42: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     protected static final Double ZERO = new Double(0);
+    [javac]                                          ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/Expression.java:43: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     protected static final Double ONE = new Double(1);
+    [javac]                                         ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/Expression.java:44: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     protected static final Double NOT_A_NUMBER = new Double(Double.NaN);
+    [javac]                                                  ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/InfoSetUtil.java:31: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     private static final Double ZERO = new Double(0);
+    [javac]                                        ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/InfoSetUtil.java:32: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     private static final Double ONE = new Double(1);
+    [javac]                                       ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/InfoSetUtil.java:33: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     private static final Double NOT_A_NUMBER = new Double(Double.NaN);
+    [javac]                                                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/InfoSetUtil.java:84: warning: [deprecation] Double(String) in Double has been deprecated
+    [javac]                 value = new Double((String) object);
+    [javac]                         ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:42: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]     private static final Double ZERO = new Double(0);
+    [javac]                                        ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:293: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(count);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:298: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]         return new Integer(context.getCurrentPosition());
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:325: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(count);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:522: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(s.length());
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:628: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]             return new Double(sum);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:637: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(Math.floor(v));
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:643: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(Math.ceil(v));
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreFunction.java:649: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(Math.round(v));
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreOperationAdd.java:39: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(s);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreOperationDivide.java:37: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(l / r);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreOperationMod.java:37: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(l % r);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreOperationMultiply.java:37: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(l * r);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreOperationNegate.java:36: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(-a);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/CoreOperationSubtract.java:37: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         return new Double(l - r);
+    [javac]                ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/ri/compiler/TreeCompiler.java:31: warning: [deprecation] Double(String) in Double has been deprecated
+    [javac]         return new Constant(new Double(value));
+    [javac]                             ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:313: warning: [deprecation] Character(char) in Character has been deprecated
+    [javac]             return new Character('\0');
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:316: warning: [deprecation] Byte(byte) in Byte has been deprecated
+    [javac]             return new Byte((byte) 0);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:319: warning: [deprecation] Short(short) in Short has been deprecated
+    [javac]             return new Short((short) 0);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:322: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]             return new Integer(0);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:325: warning: [deprecation] Long(long) in Long has been deprecated
+    [javac]             return new Long(0L);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:328: warning: [deprecation] Float(float) in Float has been deprecated
+    [javac]             return new Float(0.0f);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:331: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]             return new Double(0.0);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:341: warning: [deprecation] Character(char) in Character has been deprecated
+    [javac]             return new Character(((String) object).charAt(0));
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:344: warning: [deprecation] Byte(String) in Byte has been deprecated
+    [javac]             return new Byte((String) object);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:347: warning: [deprecation] Short(String) in Short has been deprecated
+    [javac]             return new Short((String) object);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:350: warning: [deprecation] Integer(String) in Integer has been deprecated
+    [javac]             return new Integer((String) object);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:353: warning: [deprecation] Long(String) in Long has been deprecated
+    [javac]             return new Long((String) object);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:356: warning: [deprecation] Float(String) in Float has been deprecated
+    [javac]             return new Float((String) object);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:359: warning: [deprecation] Double(String) in Double has been deprecated
+    [javac]             return new Double((String) object);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:366: warning: [deprecation] Byte(byte) in Byte has been deprecated
+    [javac]             return new Byte((byte) value);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:369: warning: [deprecation] Short(short) in Short has been deprecated
+    [javac]             return new Short((short) value);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:372: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]             return new Integer((int) value);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:375: warning: [deprecation] Long(long) in Long has been deprecated
+    [javac]             return new Long((long) value);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:378: warning: [deprecation] Float(float) in Float has been deprecated
+    [javac]             return new Float((float) value);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:381: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]             return new Double(value);
+    [javac]                    ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/BasicTypeConverter.java:406: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]                 return (Collection) type.newInstance();
+    [javac]                                         ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/ValueUtils.java:117: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]                 readMethod.invoke(object, new Object[] { new Integer(i)});
+    [javac]                                                          ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/ValueUtils.java:418: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]                         new Object[] { new Integer(index)});
+    [javac]                                        ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/ValueUtils.java:464: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]                             new Integer(index),
+    [javac]                             ^
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/src/java/org/apache/commons/jxpath/util/ValueUtils.java:512: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]                 handler = (DynamicPropertyHandler) clazz.newInstance();
+    [javac]                                                         ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] Note: Some input files use unchecked or unsafe operations.
+    [javac] Note: Recompile with -Xlint:unchecked for details.
+    [javac] 58 warnings
+     [copy] Copying 1 file to /root/sqa-workspaces/JxPath-3f-ai/target/test-classes
+
+compile.gen.tests:
+     [echo] classes.dir: /root/sqa-workspaces/JxPath-3f-ai/target/classes
+     [echo] build.home: /root/sqa-workspaces/JxPath-3f-ai/target/classes/..
+    [mkdir] Created dir: /root/sqa-workspaces/JxPath-3f-ai/.classes_testgen
+    [javac] /root/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /root/sqa-workspaces/JxPath-3f-ai/.classes_testgen
+    [javac] /root/sqa-workspaces/JxPath-3f-ai/.test_suite/org/apache/commons/jxpath/ri/model/beans/NullPropertyPointerTest.java:21: error: incompatible types: Pointer cannot be converted to NodePointer
+    [javac]                 new NullPropertyPointer(context.getPointer("/"));
+    [javac]                                                           ^
+    [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+    [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 23 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.
+
+
+Generated tests failing on fixed:
+(none listed; inspect log)

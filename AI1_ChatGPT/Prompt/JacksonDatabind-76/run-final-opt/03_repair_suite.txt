@@ -1,0 +1,254 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 76  Version: JacksonDatabind-76b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1573
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorSingleParameterAtBeginning
+ --> junit.framework.ComparisonFailure: expected:<John> but was:<null>
+ - com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorMultipleParametersAtBeginning
+ --> junit.framework.ComparisonFailure: expected:<John> but was:<null>
+ - com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorSingleParameterInMiddle
+ --> junit.framework.AssertionFailedError: expected:<30> but was:<0>
+ - com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorMultipleParametersInMiddle
+ --> junit.framework.AssertionFailedError: expected:<30> but was:<0>
+Modified: com.fasterxml.jackson.databind.deser.BuilderBasedDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BuilderBasedDeserializer | java]
+package com.fasterxml.jackson.databind.deser;
+public class BuilderBasedDeserializer
+protected final AnnotatedMethod _buildMethod;
+protected BuilderBasedDeserializer(BuilderBasedDeserializer src)
+protected BuilderBasedDeserializer(BuilderBasedDeserializer src, boolean ignoreAllUnknown)
+protected BuilderBasedDeserializer(BuilderBasedDeserializer src, NameTransformer unwrapper) {
+public BuilderBasedDeserializer(BuilderBasedDeserializer src, ObjectIdReader oir) {
+public BuilderBasedDeserializer(BuilderBasedDeserializer src, Set<String> ignorableProps) {
+public BuilderBasedDeserializer(BuilderBasedDeserializer src, BeanPropertyMap props) {
+@Override
+public JsonDeserializer<Object> unwrappingDeserializer(NameTransformer unwrapper)
+public BeanDeserializerBase withObjectIdReader(ObjectIdReader oir) {
+public BeanDeserializerBase withIgnorableProperties(Set<String> ignorableProps) {
+public BeanDeserializerBase withBeanProperties(BeanPropertyMap props) {
+protected BeanDeserializerBase asArrayDeserializer() {
+protected final Object finishBuild(DeserializationContext ctxt, Object builder)
+public final Object deserialize(JsonParser p, DeserializationContext ctxt)
+public Object deserializeFromObject(JsonParser p, DeserializationContext ctxt)
+@SuppressWarnings("resource")
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+protected Object deserializeWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
+
+public class BuilderBasedDeserializerBug76Test
+{
+    @Test
+    public void singleCreatorAtBeginningRetainsFollowingUnwrappedValues() throws Exception {
+        SingleCreatorValue value = new ObjectMapper().readValue(
+                "{\"id\":\"single\",\"name\":\"John\",\"age\":30}",
+                SingleCreatorValue.class);
+
+        assertEquals("single", value.id);
+        assertNotNull(value.details);
+        assertEquals("John", value.details.name);
+        assertEquals(30, value.details.age);
+    }
+
+    @Test
+    public void multipleCreatorsAtBeginningRetainFollowingUnwrappedValues() throws Exception {
+        MultipleCreatorValue value = new ObjectMapper().readValue(
+                "{\"id\":\"multiple\",\"kind\":\"person\",\"name\":\"John\",\"age\":30}",
+                MultipleCreatorValue.class);
+
+        assertEquals("multiple", value.id);
+        assertEquals("person", value.kind);
+        assertNotNull(value.details);
+        assertEquals("John", value.details.name);
+        assertEquals(30, value.details.age);
+    }
+
+    @Test
+    public void singleCreatorInMiddleRetainsUnwrappedValuesOnBothSides() throws Exception {
+        SingleCreatorValue value = new ObjectMapper().readValue(
+                "{\"name\":\"John\",\"id\":\"single\",\"age\":30}",
+                SingleCreatorValue.class);
+
+        assertEquals("single", value.id);
+        assertNotNull(value.details);
+        assertEquals("John", value.details.name);
+        assertEquals(30, value.details.age);
+    }
+
+    @Test
+    public void multipleCreatorsInMiddleRetainUnwrappedValuesOnBothSides() throws Exception {
+        MultipleCreatorValue value = new ObjectMapper().readValue(
+                "{\"name\":\"John\",\"id\":\"multiple\",\"kind\":\"person\",\"age\":30}",
+                MultipleCreatorValue.class);
+
+        assertEquals("multiple", value.id);
+        assertEquals("person", value.kind);
+        assertNotNull(value.details);
+        assertEquals("John", value.details.name);
+        assertEquals(30, value.details.age);
+    }
+
+    @Test
+    public void defaultBuilderAlsoAcceptsUnwrappedValues() throws Exception {
+        DefaultCreatorValue value = new ObjectMapper().readValue(
+                "{\"id\":\"default\",\"name\":\"Jane\",\"age\":31}",
+                DefaultCreatorValue.class);
+
+        assertEquals("default", value.id);
+        assertNotNull(value.details);
+        assertEquals("Jane", value.details.name);
+        assertEquals(31, value.details.age);
+    }
+
+    @Test
+    public void creatorOnlyInputLeavesOptionalUnwrappedPropertyUnset() throws Exception {
+        SingleCreatorValue value = new ObjectMapper().readValue(
+                "{\"id\":\"single\"}", SingleCreatorValue.class);
+
+        assertEquals("single", value.id);
+        assertNull(value.details);
+    }
+
+    public static class Details {
+        public String name;
+        public int age;
+
+        public Details() {
+        }
+    }
+
+    @JsonDeserialize(builder = SingleCreatorValue.Builder.class)
+    public static class SingleCreatorValue {
+        public final String id;
+        public final Details details;
+
+        private SingleCreatorValue(Builder builder) {
+            id = builder.id;
+            details = builder.details;
+        }
+
+        @JsonPOJOBuilder(withPrefix = "with")
+        public static class Builder {
+            private final String id;
+            private Details details;
+
+            @JsonCreator
+            public Builder(@JsonProperty("id") String id) {
+                this.id = id;
+            }
+
+            @JsonUnwrapped
+            public Builder withDetails(Details details) {
+                this.details = details;
+                return this;
+            }
+
+            public SingleCreatorValue build() {
+                return new SingleCreatorValue(this);
+            }
+        }
+    }
+
+    @JsonDeserialize(builder = MultipleCreatorValue.Builder.class)
+    public static class MultipleCreatorValue {
+        public final String id;
+        public final String kind;
+        public final Details details;
+
+        private MultipleCreatorValue(Builder builder) {
+            id = builder.id;
+            kind = builder.kind;
+            details = builder.details;
+        }
+
+        @JsonPOJOBuilder(withPrefix = "with")
+        public static class Builder {
+            private final String id;
+            private final String kind;
+            private Details details;
+
+            @JsonCreator
+            public Builder(@JsonProperty("id") String id,
+                    @JsonProperty("kind") String kind) {
+                this.id = id;
+                this.kind = kind;
+            }
+
+            @JsonUnwrapped
+            public Builder withDetails(Details details) {
+                this.details = details;
+                return this;
+            }
+
+            public MultipleCreatorValue build() {
+                return new MultipleCreatorValue(this);
+            }
+        }
+    }
+
+    @JsonDeserialize(builder = DefaultCreatorValue.Builder.class)
+    public static class DefaultCreatorValue {
+        public final String id;
+        public final Details details;
+
+        private DefaultCreatorValue(Builder builder) {
+            id = builder.id;
+            details = builder.details;
+        }
+
+        @JsonPOJOBuilder(withPrefix = "with")
+        public static class Builder {
+            private String id;
+            private Details details;
+
+            public Builder() {
+            }
+
+            public Builder withId(String id) {
+                this.id = id;
+                return this;
+            }
+
+            @JsonUnwrapped
+            public Builder withDetails(Details details) {
+                this.details = details;
+                return this;
+            }
+
+            public DefaultCreatorValue build() {
+                return new DefaultCreatorValue(this);
+            }
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.deser.BuilderBasedDeserializerBug76Test::creatorOnlyInputLeavesOptionalUnwrappedPropertyUnset
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.deser.BuilderBasedDeserializerBug76Test::creatorOnlyInputLeavesOptionalUnwrappedPropertyUnset

@@ -1,0 +1,180 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 135  Version: Closure-135b
+JUnit: junit4-core.jar  Build: Ant
+Bug/specification summary:
+Bug report: 59
+Trigger failures:
+- com.google.javascript.jscomp.DevirtualizePrototypeMethodsTest::testRewritePrototypeMethods2
+ --> junit.framework.AssertionFailedError: expected:<[FUNCTION a = function (this:a): ?, NAME JSCompiler_StaticMethods_foo$self = a, FUNCTION JSCompiler_StaticMethods_foo = function (a): number, NAME JSCompiler_StaticMethods_bar$self = a, FUNCTION JSCompiler_StaticMethods_bar = function (a, number): number, FUNCTION JSCompiler_StaticMethods_baz = function (a): ?, NEW a = a, CALL JSCompiler_StaticMethods_foo = number, CALL JSCompiler_StaticMethods_bar = number, CALL JSCompiler_StaticMethods_baz = ?]> but was:<[FUNCTION a = function (this:a): ?, NAME JSCompiler_StaticMethods_foo$self = null, FUNCTION JSCompiler_StaticMethods_foo = function (a): number, NAME JSCompiler_StaticMethods_bar$self = null, FUNCTION JSCompiler_StaticMethods_bar = function (a, number): number, FUNCTION JSCompiler_StaticMethods_baz = function (a): ?, NEW a = a, CALL JSCompiler_StaticMethods_foo = number, CALL JSCompiler_StaticMethods_bar = number, CALL JSCompiler_StaticMethods_baz = ?]>
+ - com.google.javascript.jscomp.TypeCheckTest::testGoodExtends9
+ --> junit.framework.AssertionFailedError: unexpected warnings(s):
+Modified: com.google.javascript.jscomp.DevirtualizePrototypeMethods, com.google.javascript.rhino.jstype.FunctionType
+
+Available API/signatures:
+[com.google.javascript.jscomp.DevirtualizePrototypeMethods | java]
+package com.google.javascript.jscomp;
+class DevirtualizePrototypeMethods implements CompilerPass {
+@Override
+public void process(Node externs, Node root) {
+private static boolean isCall(UseSite site) {
+private static boolean isPrototypeMethodDefinition(Node node) {
+private String getRewrittenMethodName(String orginalMethodName) {
+private void rewriteDefinition(Node node, String newMethodName) {
+private void fixFunctionType(Node functionNode) {
+private void replaceReferencesToThis(Node node, String name) {
+
+[com.google.javascript.rhino.jstype.FunctionType | java]
+package com.google.javascript.rhino.jstype;
+public class FunctionType extends PrototypeObjectType {
+private enum Kind {
+private List<ObjectType> implementedInterfaces = ImmutableList.of();
+@VisibleForTesting
+/** Creates an instance for a function that is an interface. */
+@Override
+public boolean isInstanceType() {
+public boolean isConstructor() {
+public boolean isInterface() {
+public boolean isOrdinaryFunction() {
+public boolean isFunctionType() {
+public boolean canBeCalled() {
+public Iterable<Node> getParameters() {
+public Node getParametersNode() {
+public int getMinArguments() {
+public int getMaxArguments() {
+public JSType getReturnType() {
+public FunctionPrototypeType getPrototype() {
+public void setPrototypeBasedOn(ObjectType baseType) {
+public boolean setPrototype(FunctionPrototypeType prototype) {
+public Iterable<Ob
+...[truncated deterministically]...
+{
+public boolean isSubtype(JSType that) {
+public <T> T visit(Visitor<T> visitor) {
+public ObjectType getInstanceType() {
+public boolean hasInstanceType() {
+public ObjectType getTypeOfThis() {
+public Node getSource() {
+public void setSource(Node source) {
+private void addSubType(FunctionType subType) {
+public List<FunctionType> getSubTypes() {
+public boolean hasCachedValues() {
+public String getTemplateTypeName() {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import org.junit.Test;
+
+public class DevirtualizePrototypeMethodsRegressionTest extends CompilerTestCase {
+
+  public DevirtualizePrototypeMethodsRegressionTest() {
+    super("");
+  }
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    enableTypeCheck();
+  }
+
+  @Override
+  protected CompilerPass getProcessor(final Compiler compiler) {
+    return new CompilerPass() {
+      @Override
+      public void process(Node externs, Node root) {
+        new DevirtualizePrototypeMethods(compiler).process(externs, root);
+        assertRewrittenReceiverTypes(root);
+      }
+    };
+  }
+
+  @Test
+  public void testRewrittenPrototypeMethodsKeepInstanceTypedSelfParameter() {
+    test(
+        "/** @constructor */ function a() {}\n"
+            + "/** @return {number} */ a.prototype.foo = function() { return 1; };\n"
+            + "/** @param {number} x @return {number} */\n"
+            + "a.prototype.bar = function(x) { return x; };\n"
+            + "/** @param {number} x @param {number} y @return {number} */\n"
+            + "a.prototype.baz = function(x, y) { return x + y; };\n"
+            + "var instance = new a();\n"
+            + "var first = instance.foo();\n"
+            + "var second = instance.bar(2);\n"
+            + "var third = instance.baz(3, 4);",
+        "/** @constructor */ function a() {}\n"
+            + "/** @return {number} */\n"
+            + "var JSCompiler_StaticMethods_foo = "
+            + "function(JSCompiler_StaticMethods_foo$self) { return 1; };\n"
+            + "/** @param {number} x @return {number} */\n"
+            + "var JSCompiler_StaticMethods_bar = "
+            + "function(JSCompiler_StaticMethods_bar$self, x) { return x; };\n"
+            + "/** @param {number} x @param {number} y @return {number} */\n"
+            + "var JSCompiler_StaticMethods_baz = "
+            + "function(JSCompiler_StaticMethods_baz$self, x, y) { return x + y; };\n"
+            + "var instance = new a();\n"
+            + "var first = JSCompiler_StaticMethods_foo(instance);\n"
+            + "var second = JSCompiler_StaticMethods_bar(instance, 2);\n"
+            + "var third = JSCompiler_StaticMethods_baz(instance, 3, 4);");
+  }
+
+  @Test
+  public void testVarArgsPrototypeMethodIsNotRewritten() {
+    test(
+        "/** @constructor */ function a() {}\n"
+            + "a.prototype.count = function() { return arguments.length; };\n"
+            + "var instance = new a();\n"
+            + "var count = instance.count(1, 2, 3);",
+        "/** @constructor */ function a() {}\n"
+            + "a.prototype.count = function() { return arguments.length; };\n"
+            + "var instance = new a();\n"
+            + "var count = instance.count(1, 2, 3);");
+  }
+
+  private void assertRewrittenReceiverTypes(Node node) {
+    if (node.getType() == Token.VAR) {
+      for (Node name = node.getFirstChild(); name != null; name = name.getNext()) {
+        if (name.getType() == Token.NAME
+            && name.getString().startsWith("JSCompiler_StaticMethods_")) {
+          Node function = name.getFirstChild();
+          assertNotNull(function);
+          assertEquals(Token.FUNCTION, function.getType());
+
+          Node parameters = function.getFirstChild().getNext();
+          Node self = parameters.getFirstChild();
+          assertNotNull(self);
+          assertNotNull(self.getJSType());
+          assertEquals("a", self.getJSType().toString());
+        }
+      }
+    }
+
+    for (Node child = node.getFirstChild(); child != null; child = child.getNext()) {
+      assertRewrittenReceiverTypes(child);
+    }
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-135f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-135f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-135f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-135f-ai/.test_suite/com/google/javascript/jscomp/DevirtualizePrototypeMethodsRegressionTest.java:7: error: cannot find symbol
+ [javac] public class DevirtualizePrototypeMethodsRegressionTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

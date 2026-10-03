@@ -1,0 +1,208 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 41  Version: JacksonDatabind-41b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1115
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testDeprecatedTypeResolution
+ --> java.lang.IllegalArgumentException: Unrecognized Type: [null]
+Modified: com.fasterxml.jackson.databind.type.TypeFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.TypeFactory | java]
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes" })
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static TypeBindings EMPTY_BINDINGS = TypeBindings.emptyBindings();
+private final static Class<?> CLS_STRING = String.class;
+private final static Class<?> CLS_OBJECT = Object.class;
+private final static Class<?> CLS_COMPARABLE = Comparable.class;
+private final static Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(CLS_INT);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(CLS_LONG);
+protected final static SimpleType CORE_TYPE_STRING = new SimpleType(CLS_STRING);
+protected final static SimpleType CORE_TYPE_OBJECT = new SimpleType(CLS_OBJECT);
+protected final static SimpleType CORE_TYPE_COMPARABLE = new SimpleType(CLS_COMPARABLE);
+protected final static SimpleType CORE_TYPE_ENUM = new SimpleType(CLS_ENUM);
+protected final static SimpleType CORE_TYPE_CLASS = new SimpleType(CLS_CLASS);
+protected final LRUMap<Class<?>, JavaType> _typeCache = new LRUMap<Class<?>, JavaType>(16, 100);
+protected final TypeModifier[] _modifiers;
+protected final TypeParser _parser;
+protected final ClassLoader _classLoader;
+private TypeFactory() {
+protected TypeFactory(TypeParser p, TypeModifier[] mods) {
+protected TypeFactory(TypeParser p, TypeModifier[] mods, ClassLoader classLoader) {
+public TypeFactory withModifier(TypeModifier
+...[truncated deterministically]...
+fromAny(ClassStack context, Type type, TypeBindings bindings)
+protected JavaType _fromClass(ClassStack context, Class<?> rawType, TypeBindings bindings)
+if (rawType == Properties.class) {
+protected JavaType _resolveSuperClass(ClassStack context, Class<?> rawType, TypeBindings parentBindings)
+protected JavaType[] _resolveSuperInterfaces(ClassStack context, Class<?> rawType, TypeBindings parentBindings)
+if (rawType == Map.class) {
+if (rawType == Collection.class) {
+if (rawType == AtomicReference.class) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+import static org.junit.Assert.;
+import static org.mockito.Mockito.;
+
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+
+import org.junit.Test;
+import org.powermock.reflect.Whitebox;
+
+import com.fasterxml.jackson.databind.JavaType;
+
+/**
+
+ - Regression test for issue #1115: TypeFactory fails with IllegalArgumentException
+ - "Unrecognized Type: [null]" when encountering wildcard types or type variables
+ - whose bounds contain null or are empty (e.g. raw unbounded wildcards).
+  */
+ public class TypeFactoryNullBoundsTest {
+  private final TypeFactory factory = TypeFactory.defaultInstance();
+  private final TypeBindings bindings = TypeBindings.emptyBindings();
+  // Helper to create a simple ClassStack for testing
+  private ClassStack classStack() {
+  return new ClassStack(Object.class);
+  }
+  @Test
+  public void testWildcardNullUpperBoundElement() throws Exception {
+  WildcardType wildcard = mock(WildcardType.class);
+  // simulate an upper bound array with a null entry
+  when(wildcard.getUpperBounds()).thenReturn(new Type[] { null });
+  when(wildcard.getLowerBounds()).thenReturn(new Type[0]);
+  // should not throw; the fix maps null bounds to Object
+  JavaType result = Whitebox.invokeMethod(factory, "_fromWildcard",
+          classStack(), wildcard, bindings);
+  assertNotNull(result);
+  assertEquals(Object.class, result.getRawClass());
+  }
+  @Test
+  public void testWildcardEmptyUpperBounds() throws Exception {
+  WildcardType wildcard = mock(WildcardType.class);
+  when(wildcard.getUpperBounds()).thenReturn(new Type[0]);
+  when(wildcard.getLowerBounds()).thenReturn(new Type[0]);
+  // should resolve to Object (unbounded wildcard) without exception
+  JavaType result = Whitebox.invokeMethod(factory, "_fromWildcard",
+          classStack(), wildcard, bindings);
+  assertNotNull(result);
+  assertEquals(Object.class, result.getRawClass());
+  }
+  @Test
+  public void testWildcardNormalExtends() throws Exception {
+  WildcardType wildcard = mock(WildcardType.class);
+  when(wildcard.getUpperBounds()).thenReturn(new Type[] { Number.class });
+  when(wildcard.getLowerBounds()).thenReturn(new Type[0]);
+  JavaType result = Whitebox.invokeMethod(factory, "_fromWildcard",
+          classStack(), wildcard, bindings);
+  assertNotNull(result);
+  assertEquals(Number.class, result.getRawClass());
+  }
+  @Test
+  public void testTypeVariableNullBound() throws Exception {
+  TypeVariable<?> tv = mock(TypeVariable.class);
+  when(tv.getBounds()).thenReturn(new Type[] { null });
+  when(tv.getGenericDeclaration()).thenReturn(TypeFactoryNullBoundsTest.class);
+  when(tv.getName()).thenReturn("T");
+  JavaType result = Whitebox.invokeMethod(factory, "_fromVariable",
+          classStack(), tv, bindings);
+  assertNotNull(result);
+  assertEquals(Object.class, result.getRawClass());
+  }
+  @Test
+  public void testTypeVariableEmptyBounds() throws Exception {
+  TypeVariable<?> tv = mock(TypeVariable.class);
+  when(tv.getBounds()).thenReturn(new Type[0]);
+  when(tv.getGenericDeclaration()).thenReturn(TypeFactoryNullBoundsTest.class);
+  when(tv.getName()).thenReturn("E");
+  JavaType result = Whitebox.invokeMethod(factory, "_fromVariable",
+          classStack(), tv, bindings);
+  assertNotNull(result);
+  assertEquals(Object.class, result.getRawClass());
+  }
+  @Test
+  public void testTypeVariableWithBound() throws Exception {
+  TypeVariable<?> tv = mock(TypeVariable.class);
+  when(tv.getBounds()).thenReturn(new Type[] { Comparable.class });
+  when(tv.getGenericDeclaration()).thenReturn(TypeFactoryNullBoundsTest.class);
+  when(tv.getName()).thenReturn("C");
+  JavaType result = Whitebox.invokeMethod(factory, "_fromVariable",
+          classStack(), tv, bindings);
+  assertNotNull(result);
+  assertEquals(Comparable.class, result.getRawClass());
+  }
+  @Test
+  public void testWildcardNullUpperBoundViaAny() throws Exception {
+  // Simulate arriving at _fromAny with a WildcardType containing null bounds
+  WildcardType wildcard = mock(WildcardType.class);
+  when(wildcard.getUpperBounds()).thenReturn(new Type[] { null });
+  when(wildcard.getLowerBounds()).thenReturn(new Type[0]);
+  // _fromAny dispatches to _fromWildcard
+  JavaType result = Whitebox.invokeMethod(factory, "_fromAny",
+          classStack(), wildcard, bindings);
+  assertNotNull(result);
+  assertEquals(Object.class, result.getRawClass());
+  }
+  @Test
+  public void testVariableNullBoundViaAny() throws Exception {
+  TypeVariable<?> tv = mock(TypeVariable.class);
+  when(tv.getBounds()).thenReturn(new Type[] { null });
+  when(tv.getGenericDeclaration()).thenReturn(TypeFactoryNullBoundsTest.class);
+  when(tv.getName()).thenReturn("V");
+  JavaType result = Whitebox.invokeMethod(factory, "_fromAny",
+          classStack(), tv, bindings);
+  assertNotNull(result);
+  assertEquals(Object.class, result.getRawClass());
+  }
+  @Test
+  public void testNestedWildcardWithNullInnerBound() throws Exception {
+  // Simulate ? extends ? where inner wildcard has null upper bound
+  WildcardType inner = mock(WildcardType.class);
+  when(inner.getUpperBounds()).thenReturn(new Type[] { null });
+  when(inner.getLowerBounds()).thenReturn(new Type[0]);
+  WildcardType outer = mock(WildcardType.class);
+  when(outer.getUpperBounds()).thenReturn(new Type[] { inner });
+  when(outer.getLowerBounds()).thenReturn(new Type[0]);
+  JavaType result = Whitebox.invokeMethod(factory, "_fromAny",
+          classStack(), outer, bindings);
+  assertNotNull(result);
+  // The resolved upper bound of inner wildcard is Object -> outer resolves to Object
+  assertEquals(Object.class, result.getRawClass());
+  }
+
+}
+```
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-41f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-41f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-41f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-41f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-41f-copilot/.test_suite/com/fasterxml/jackson/databind/type/TypeFactoryNullBoundsTest.java:3: error: <identifier> expected
+ [javac] import static org.junit.Assert.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 52 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

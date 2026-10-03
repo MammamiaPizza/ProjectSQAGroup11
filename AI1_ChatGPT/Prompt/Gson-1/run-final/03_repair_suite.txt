@@ -1,0 +1,406 @@
+The previously generated JUnit Test Suite failed to compile or run.
+Analyze the production source code, generated test, Project Context, behavioral specification, and error
+output. Return a corrected complete Java Test Class.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Preserve all valid and meaningful Test Cases.
+4. Fix package, import, syntax, type, constructor, method-call, dependency, mock, and assertion errors.
+5. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+6. Do not invent missing APIs, dependencies, or expected behavior.
+7. Do not change an assertion only to make the test pass unless the supplied specification, API
+documentation, public contract, or bug report supports the change.
+8. Do not remove a Test Case merely to hide an error unless the scenario is impossible according to the
+supplied context.
+9. Do not modify the intended behavior being tested.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Keep the Test Cases independent and free from execution-order dependencies.
+12. Briefly explain the cause of each error and the correction made.
+13. Return the complete corrected Java Test Class.
+Project ID:
+Gson
+Bug ID:
+1
+Source Version:
+Gson-1b
+JUnit Version:
+junit-3.8.2.jar
+Build Tool:
+Defects4J project build
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: Gson
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: Gson
+       Program: gson
+    Build file: /root/defects4j/framework/projects/Gson/Gson.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/gson.git
+     Commit db: /root/defects4j/framework/projects/Gson/active-bugs.csv
+Number of bugs: 18
+--------------------------------------------------------------------------------
+
+Summary for Bug: Gson-1
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+c6a4f55d1a9b191dbbd958c366091e567191ccab
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2010-11-02 03:32:39 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+40
+--------------------------------------------------------------------------------
+Bug report url:
+https://github.com/google/gson/issues/40
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - com.google.gson.functional.TypeVariableTest::testSingle
+   --> java.lang.UnsupportedOperationException: Expecting parameterized type, got class com.google.gson.functional.TypeVariableTest$Bar.
+--------------------------------------------------------------------------------
+List of modified sources:
+ - com.google.gson.TypeInfoFactory
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: com.google.gson.TypeInfoFactory =====
+/*
+ * Copyright (C) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+
+/**
+ * A static factory class used to construct the "TypeInfo" objects.
+ *
+ * @author Inderjeet Singh
+ * @author Joel Leitch
+ */
+final class TypeInfoFactory {
+
+  private TypeInfoFactory() {
+    // Not instantiable since it provides factory methods only.
+  }
+
+  public static TypeInfoArray getTypeInfoForArray(Type type) {
+    Preconditions.checkArgument(TypeUtils.isArray(type));
+    return new TypeInfoArray(type);
+  }
+
+  /**
+   * Evaluates the "actual" type for the field.  If the field is a "TypeVariable" or has a
+   * "TypeVariable" in a parameterized type then it evaluates the real type.
+   *
+   * @param f the actual field object to retrieve the type from
+   * @param typeDefiningF the type that contains the field {@code f}
+   * @return the type information for the field
+   */
+  public static TypeInfo getTypeInfoForField(Field f, Type typeDefiningF) {
+    Class<?> classDefiningF = TypeUtils.toRawClass(typeDefiningF);
+    Type type = f.getGenericType();
+    Type actualType = getActualType(type, typeDefiningF, classDefiningF);
+    return new TypeInfo(actualType);
+  }
+
+  private static Type getActualType(
+      Type typeToEvaluate, Type parentType, Class<?> rawParentClass) {
+    if (typeToEvaluate instanceof Class<?>) {
+      return typeToEvaluate;
+    } else if (typeToEvaluate instanceof ParameterizedType) {
+      ParameterizedType castedType = (ParameterizedType) typeToEvaluate;
+      Type owner = castedType.getOwnerType();
+      Type[] actualTypeParameters =
+          extractRealTypes(castedType.getActualTypeArguments(), parentType, rawParentClass);
+      Type rawType = castedType.getRawType();
+      return new ParameterizedTypeImpl(rawType, actualTypeParameters, owner);
+    } else if (typeToEvaluate instanceof GenericArrayType) {
+      GenericArrayType castedType = (GenericArrayType) typeToEvaluate;
+      Type componentType = castedType.getGenericComponentType();
+      Type actualType = getActualType(componentType, parentType, rawParentClass);
+      if (componentType.equals(actualType)) {
+        return castedType;
+      }
+      return actualType instanceof Class<?> ?
+          TypeUtils.wrapWithArray(TypeUtils.toRawClass(actualType))
+          : new GenericArrayTypeImpl(actualType);
+    } else if (typeToEvaluate instanceof TypeVariable<?>) {
+      if (parentType instanceof ParameterizedType) {
+        // The class definition has the actual types used for the type variables.
+        // Find the matching actual type for the Type Variable used for the field.
+        // For example, class Foo<A> { A a; }
+        // new Foo<Integer>(); defines the actual type of A to be Integer.
+        // So, to find the type of the field a, we will have to look at the class'
+        // actual type arguments.
+        TypeVariable<?> fieldTypeVariable = (TypeVariable<?>) typeToEvaluate;
+        TypeVariable<?>[] classTypeVariables = rawParentClass.getTypeParameters();
+        ParameterizedType objParameterizedType = (ParameterizedType) parentType;
+        int indexOfActualTypeArgument = getIndex(classTypeVariables, fieldTypeVariable);
+        Type[] actualTypeArguments = objParameterizedType.getActualTypeArguments();
+        return actualTypeArguments[indexOfActualTypeArgument];
+
+
+      }
+
+      throw new UnsupportedOperationException("Expecting parameterized type, got " + parentType
+          + ".\n Are you missing the use of TypeToken idiom?\n See "
+          + "http://sites.google.com/site/gson/gson-user-guide#TOC-Serializing-and-Deserializing-Gener");
+    } else if (typeToEvaluate instanceof WildcardType) {
+      WildcardType castedType = (WildcardType) typeToEvaluate;
+      return getActualType(castedType.getUpperBounds()[0], parentType, rawParentClass);
+    } else {
+      throw new IllegalArgumentException("Type \'" + typeToEvaluate + "\' is not a Class, "
+          + "ParameterizedType, GenericArrayType or TypeVariable. Can't extract type.");
+    }
+  }
+
+
+      // Evaluate type on this type
+
+
+
+
+  private static Type[] extractRealTypes(
+      Type[] actualTypeArguments, Type parentType, Class<?> rawParentClass) {
+    Preconditions.checkNotNull(actualTypeArguments);
+
+    Type[] retTypes = new Type[actualTypeArguments.length];
+    for (int i = 0; i < actualTypeArguments.length; ++i) {
+      retTypes[i] = getActualType(actualTypeArguments[i], parentType, rawParentClass);
+    }
+    return retTypes;
+  }
+
+  private static int getIndex(TypeVariable<?>[] types, TypeVariable<?> type) {
+    for (int i = 0; i < types.length; ++i) {
+      if (type.equals(types[i])) {
+        return i;
+      }
+    }
+    throw new IllegalStateException(
+        "How can the type variable not be present in the class declaration!");
+  }
+}
+
+Related classes and project context:
+Modified classes:
+- com.google.gson.TypeInfoFactory
+
+Triggering tests:
+- com.google.gson.functional.TypeVariableTest::testSingle
+Generated JUnit Test:
+package com.google.gson;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.List;
+
+import junit.framework.TestCase;
+
+/**
+ * Tests for {@link TypeInfoFactory}.
+ */
+public class TypeInfoFactoryTest extends TestCase {
+
+  private static class GenericHolder<T> {
+    public T value;
+    public T[] array;
+    public List<T> values;
+    public List<? extends T> boundedValues;
+  }
+
+  private static class StringHolder extends GenericHolder<String> {
+  }
+
+  private static class TypeReferences {
+    @SuppressWarnings("unused")
+    GenericHolder<String> stringHolder;
+  }
+
+  public void testGetTypeInfoForArrayAcceptsClassArrayType() {
+    TypeInfoArray typeInfo = TypeInfoFactory.getTypeInfoForArray(String[].class);
+
+    assertEquals(String[].class, typeInfo.getType());
+    assertEquals(String[].class, typeInfo.getRawClass());
+  }
+
+  public void testGetTypeInfoForArrayRejectsNonArrayType() {
+    try {
+      TypeInfoFactory.getTypeInfoForArray(String.class);
+      fail("A non-array type must be rejected");
+    } catch (IllegalArgumentException expected) {
+      assertNotNull(expected);
+    }
+  }
+
+  public void testGetTypeInfoForFieldReturnsConcreteNonGenericFieldType()
+      throws NoSuchFieldException {
+    Field field = String.class.getDeclaredField("value");
+
+    TypeInfo typeInfo = TypeInfoFactory.getTypeInfoForField(field, String.class);
+
+    assertEquals(char[].class, typeInfo.getType());
+  }
+
+  public void testGetTypeInfoForFieldResolvesTypeVariableFromParameterizedParent()
+      throws NoSuchFieldException {
+    Field valueField = GenericHolder.class.getField("value");
+    Type parameterizedHolderType = getStringHolderType();
+
+    TypeInfo typeInfo =
+        TypeInfoFactory.getTypeInfoForField(valueField, parameterizedHolderType);
+
+    assertEquals(String.class, typeInfo.getType());
+  }
+
+  public void testGetTypeInfoForFieldResolvesGenericArrayComponentType()
+      throws NoSuchFieldException {
+    Field arrayField = GenericHolder.class.getField("array");
+    Type parameterizedHolderType = getStringHolderType();
+
+    TypeInfo typeInfo =
+        TypeInfoFactory.getTypeInfoForField(arrayField, parameterizedHolderType);
+
+    assertEquals(String[].class, typeInfo.getType());
+    assertEquals(String[].class, typeInfo.getRawClass());
+  }
+
+  public void testGetTypeInfoForFieldResolvesTypeVariableInsideParameterizedField()
+      throws NoSuchFieldException {
+    Field valuesField = GenericHolder.class.getField("values");
+    Type parameterizedHolderType = getStringHolderType();
+
+    TypeInfo typeInfo =
+        TypeInfoFactory.getTypeInfoForField(valuesField, parameterizedHolderType);
+
+    assertEquals(List.class, typeInfo.getRawClass());
+    assertParameterizedTypeArgument(typeInfo.getType(), List.class, String.class);
+  }
+
+  public void testGetTypeInfoForFieldResolvesWildcardUpperBoundContainingTypeVariable()
+      throws NoSuchFieldException {
+    Field boundedValuesField = GenericHolder.class.getField("boundedValues");
+    Type parameterizedHolderType = getStringHolderType();
+
+    TypeInfo typeInfo =
+        TypeInfoFactory.getTypeInfoForField(boundedValuesField, parameterizedHolderType);
+
+    assertEquals(List.class, typeInfo.getRawClass());
+    assertParameterizedTypeArgument(typeInfo.getType(), List.class, String.class);
+  }
+
+  public void testGetTypeInfoForFieldResolvesInheritedGenericFieldUsingConcreteSubclass()
+      throws NoSuchFieldException {
+    Field inheritedValueField = StringHolder.class.getField("value");
+
+    TypeInfo typeInfo =
+        TypeInfoFactory.getTypeInfoForField(inheritedValueField, StringHolder.class);
+
+    assertEquals(
+        "A field inherited from GenericHolder<String> must resolve T to String "
+            + "when the supplied containing type is the concrete subclass.",
+        String.class,
+        typeInfo.getType());
+  }
+
+  public void testGetTypeInfoForFieldRejectsUnresolvedRawGenericType()
+      throws NoSuchFieldException {
+    Field valueField = GenericHolder.class.getField("value");
+
+    try {
+      TypeInfoFactory.getTypeInfoForField(valueField, GenericHolder.class);
+      fail("A raw generic type does not provide an actual type for T");
+    } catch (UnsupportedOperationException expected) {
+      assertTrue(expected.getMessage().indexOf("Expecting parameterized type") >= 0);
+    }
+  }
+
+  private Type getStringHolderType() throws NoSuchFieldException {
+    return TypeReferences.class.getDeclaredField("stringHolder").getGenericType();
+  }
+
+  private void assertParameterizedTypeArgument(
+      Type type, Class<?> expectedRawType, Type expectedArgument) {
+    assertTrue("Expected a ParameterizedType but was: " + type,
+        type instanceof ParameterizedType);
+
+    ParameterizedType parameterizedType = (ParameterizedType) type;
+    assertEquals(expectedRawType, parameterizedType.getRawType());
+    assertEquals(1, parameterizedType.getActualTypeArguments().length);
+    assertEquals(expectedArgument, parameterizedType.getActualTypeArguments()[0]);
+  }
+}
+
+Compiler or Test Runner error:
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /root/sqa-workspaces/Gson-1f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Gson-1f-ai -Dd4j.test.dir=/root/sqa-workspaces/Gson-1f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+gson-from-maven.compile:
+    [mkdir] Created dir: /root/sqa-workspaces/Gson-1f-ai/target/classes
+    [javac] /root/sqa-workspaces/Gson-1f-ai/gson/maven-build.xml:73: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 93 source files to /root/sqa-workspaces/Gson-1f-ai/target/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] 4 warnings
+    [javac] Creating empty /root/sqa-workspaces/Gson-1f-ai/target/classes/com/google/gson/reflect/package-info.class
+    [javac] Creating empty /root/sqa-workspaces/Gson-1f-ai/target/classes/com/google/gson/annotations/package-info.class
+    [javac] Creating empty /root/sqa-workspaces/Gson-1f-ai/target/classes/com/google/gson/package-info.class
+     [copy] Copying 1 file to /root/sqa-workspaces/Gson-1f-ai/target/classes
+
+compile:
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target/classes/..
+    [mkdir] Created dir: /root/sqa-workspaces/Gson-1f-ai/.classes_testgen
+    [javac] /root/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /root/sqa-workspaces/Gson-1f-ai/.classes_testgen
+    [javac] /root/sqa-workspaces/Gson-1f-ai/.test_suite/com/google/gson/TypeInfoFactoryTest.java:33: error: cannot find symbol
+    [javac]     assertEquals(String[].class, typeInfo.getType());
+    [javac]                                          ^
+    [javac]   symbol:   method getType()
+    [javac]   location: variable typeInfo of type TypeInfoArray
+    [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.
+
+
+Generated tests failing on fixed:
+(none listed; inspect log)

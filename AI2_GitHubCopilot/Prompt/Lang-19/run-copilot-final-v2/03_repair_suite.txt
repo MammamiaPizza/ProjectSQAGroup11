@@ -1,0 +1,146 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 19  Version: Lang-19b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-710
+Trigger failures:
+- org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testUnfinishedEntity
+ --> java.lang.StringIndexOutOfBoundsException: String index out of range: 19
+ - org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testOutOfBounds
+ --> java.lang.StringIndexOutOfBoundsException: String index out of range: 7
+Modified: org.apache.commons.lang3.text.translate.NumericEntityUnescaper
+
+Available API/signatures:
+[org.apache.commons.lang3.text.translate.NumericEntityUnescaper | java]
+package org.apache.commons.lang3.text.translate;
+public class NumericEntityUnescaper extends CharSequenceTranslator {
+@Override
+public int translate(CharSequence input, int index, Writer out) throws IOException {
+
+Generated JUnit Test:
+package org.apache.commons.lang3.text.translate;
+
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.io.StringWriter;
+
+import org.junit.Test;
+
+public class NumericEntityUnescaperTest {
+
+ private final NumericEntityUnescaper unescaper = new NumericEntityUnescaper();
+
+ @Test
+ public void testValidDecimal() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("&#65;", 0, sw);
+     assertEquals("A", sw.toString());
+     assertEquals(5, consumed);
+ }
+
+ @Test
+ public void testValidHex() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("&#x41;", 0, sw);
+     assertEquals("A", sw.toString());
+     assertEquals(6, consumed);
+ }
+
+ @Test
+ public void testEntityWithoutSemicolon() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("&#65", 0, sw);
+     assertEquals("A", sw.toString());
+     assertEquals(4, consumed); // without semi-colon we expect 4, not 5
+ }
+
+ @Test(expected = StringIndexOutOfBoundsException.class)
+ public void testUnfinishedEntityNoDigits() throws IOException {
+     // "&#" without digits; code tries to read past the end
+     unescaper.translate("&#", 0, new StringWriter());
+ }
+
+ @Test(expected = StringIndexOutOfBoundsException.class)
+ public void testUnfinishedHexEntity() throws IOException {
+     // "&#x" with no hex digits
+     unescaper.translate("&#x", 0, new StringWriter());
+ }
+
+ @Test
+ public void testIndexBeyondLength() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("ABC", 3, sw);
+     assertEquals("", sw.toString());
+     assertEquals(0, consumed);
+ }
+
+ @Test
+ public void testNegativeCodepoint() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("&#-1;", 0, sw);
+     assertEquals("", sw.toString());
+     assertEquals(0, consumed);
+ }
+
+ @Test
+ public void testLargeCodepoint() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("&#1114111;", 0, sw);
+     assertEquals(new String(Character.toChars(1114111)), sw.toString());
+     assertEquals(10, consumed); // "&#1114111;" length
+ }
+
+ @Test
+ public void testNoHashAfterAmpersand() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("&amp;", 0, sw);
+     assertEquals("", sw.toString());
+     assertEquals(0, consumed);
+ }
+
+ @Test
+ public void testEmptyInput() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("", 0, sw);
+     assertEquals("", sw.toString());
+     assertEquals(0, consumed);
+ }
+
+ @Test
+ public void testIndexAtLastChar() throws IOException {
+     StringWriter sw = new StringWriter();
+     int consumed = unescaper.translate("A&", 1, sw); // '&' is last char, no next char
+     assertEquals("", sw.toString());
+     assertEquals(0, consumed);
+ }
+
+ @Test
+ public void testUnfinishedEntityAtEndOfString() throws IOException {
+     // "Test &#" length 7, index 5 points at '&'; no digits after #
+     String input = "Test &#";
+     StringWriter sw = new StringWriter();
+     try {
+         unescaper.translate(input, 5, sw);
+     } catch (StringIndexOutOfBoundsException e) {
+         // expected in buggy version; nothing written
+         assertEquals("", sw.toString());
+         return;
+     }
+     // If no exception thrown (hypothetical fix), ensure no output and return 0
+     assertEquals("", sw.toString());
+     assertEquals(0, -1); // force failure to highlight that we expected an exception
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testEmptyInput
+ - org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testUnfinishedEntityNoDigits
+ - org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testUnfinishedEntityAtEndOfString
+Failing generated tests: org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testEmptyInput, org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testIndexBeyondLength, org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testUnfinishedEntityAtEndOfString, org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testUnfinishedEntityNoDigits, org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testUnfinishedHexEntity

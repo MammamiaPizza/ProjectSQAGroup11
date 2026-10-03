@@ -1,0 +1,159 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 43  Version: Closure-43b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 314
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testLends10
+ --> junit.framework.ComparisonFailure: expected:<[inconsistent return type
+ - com.google.javascript.jscomp.TypeCheckTest::testLends11
+ --> junit.framework.ComparisonFailure: expected:<[inconsistent return type
+Modified: com.google.javascript.jscomp.TypedScopeCreator
+
+Available API/signatures:
+[com.google.javascript.jscomp.TypedScopeCreator | java]
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private final List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+@Override
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static class DiscoverEnumsAndTypedefs
+public void visit(NodeTraversal t, Node node, Node parent) {
+private JSType getNativeType(JSTypeNative nativeType) {
+private abstract class AbstractScopeBuilder
+private final List<Node> nonExternFunctions = Lists.newArrayList();
+private AbstractScopeBuilder(Scope scope) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void attachLiteralTypes(NodeTraversal t, Node n) {
+private void defineObjectLiteral(Node objectLit) {
+private void defineName(Node name, Node var, Node parent, JSDocInfo info) {
+@Nullable Node rValue,
+@Nullable String name,
+@Nullable JSDocInfo info,
+@Nullable Node lvalueNode) {
+private void defineSlot(Node name, Node parent, JSType type) {
+private boolean isQnameRootedInGlobalScope(Node n) {
+private Scope getQnameRootScope(Node n) {
+private FunctionType getFunctionType(@Nullable Var v) {
+private ObjectType getObjectSlot(String slotName) {
+private final class CollectProperties
+private static final class StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class GlobalScopeBuilder extends AbstractScopeBuilder {
+private GlobalScopeBuilder(Scope scope) {
+@Override public void visit(NodeTraversal t, Node n, Node parent) {
+private final class LocalScopeBuilder extends AbstractScopeBuilder {
+private LocalScopeBuilder(Scope scope) {
+private void handleFunctionInputs(Node fnNode) {
+private void declareArguments(Node functionNode) {
+private static class FirstOrderFunctionAnalyzer
+@Override public void process(Node externs, Node root) {
+@Override public void enterScope(NodeTraversal t) {
+private AstFunctionContents getFunctionAnalysisResults(@Nullable Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.common.collect.ImmutableList;
+import org.junit.Test;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class TypedScopeCreatorLendsTest {
+
+  @Test
+  public void testLendsPropertyConflictingWithPreviouslyInferredReturnReportsError() {
+    String diagnostics = compile(
+        "/** @constructor */ function Foo() {}\n"
+            + "/** @lends {Foo.prototype} */\n"
+            + "var members = { method: function() { return 1; } };\n"
+            + "Foo.prototype.method = function() { return 'wrong'; };\n");
+
+    assertTrue(
+        "Expected an inconsistent return type diagnostic, but got:\n" + diagnostics,
+        diagnostics.contains("inconsistent return type"));
+  }
+
+  @Test
+  public void testLendsPropertyConflictingWithExistingReturnReportsError() {
+    String diagnostics = compile(
+        "/** @constructor */ function Foo() {}\n"
+            + "Foo.prototype.method = function() { return 1; };\n"
+            + "/** @lends {Foo.prototype} */\n"
+            + "var members = { method: function() { return 'wrong'; } };\n");
+
+    assertTrue(
+        "Expected an inconsistent return type diagnostic, but got:\n" + diagnostics,
+        diagnostics.contains("inconsistent return type"));
+  }
+
+  @Test
+  public void testNestedObjectLiteralIsNotAttributedToLendsTarget() {
+    String diagnostics = compile(
+        "/** @constructor */ function Foo() {}\n"
+            + "Foo.prototype.method = function() { return 1; };\n"
+            + "/** @lends {Foo.prototype} */\n"
+            + "var members = {\n"
+            + "  method: function() {\n"
+            + "    var nested = { method: function() { return 'nested'; } };\n"
+            + "    return 1;\n"
+            + "  }\n"
+            + "};\n");
+
+    assertFalse(
+        "A nested object literal must not change the lends target's return type:\n"
+            + diagnostics,
+        diagnostics.contains("inconsistent return type"));
+  }
+
+  private String compile(String source) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+
+    compiler.compile(
+        ImmutableList.of(SourceFile.fromCode("externs.js", "")),
+        ImmutableList.of(SourceFile.fromCode("input.js", source)),
+        options);
+
+    StringBuilder diagnostics = new StringBuilder();
+    for (JSError error : compiler.getErrors()) {
+      diagnostics.append(error.description).append('\n');
+    }
+    for (JSError warning : compiler.getWarnings()) {
+      diagnostics.append(warning.description).append('\n');
+    }
+    return diagnostics.toString();
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-43f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-43f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-43f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-43f-ai/.test_suite/com/google/javascript/jscomp/TypedScopeCreatorLendsTest.java:62: error: no suitable method found for compile(ImmutableList<SourceFile>,ImmutableList<SourceFile>,CompilerOptions)
+ [javac] compiler.compile(
+ [javac] ^
+ [javac] method Compiler.compile(JSSourceFile,JSSourceFile,CompilerOptions) is not applicable
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,402 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 63  Version: Jsoup-63b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.Tokeniser
+Modified: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.Tokeniser
+Triggers: org.jsoup.parser.HtmlParserTest::selfClosingOnNonvoidIsError, org.jsoup.parser.HtmlParserTest::selfClosingVoidIsNotAnError, org.jsoup.parser.HtmlParserTest::tracksErrorsWhenRequested
+
+Bug/specification summary:
+Bug report: 868
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::selfClosingOnNonvoidIsError
+ --> junit.framework.AssertionFailedError: expected:<18: [Tag cannot be self closing; not a void tag]> but was:<18: [Self closing flag not acknowledged]>
+ - org.jsoup.parser.HtmlParserTest::selfClosingVoidIsNotAnError
+ --> junit.framework.AssertionFailedError: expected:<0> but was:<2>
+ - org.jsoup.parser.HtmlParserTest::tracksErrorsWhenRequested
+ --> junit.framework.AssertionFailedError: expected:<50: [Tag cannot be self closing; not a void tag]> but was:<50: [Self closing flag not acknowledged]>
+Modified: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.Tokeniser
+
+Prompt-01 test plan:
+TARGETS: HtmlTreeBuilder token processing and Tokeniser self-closing-flag acknowledgement/error reporting. 
+ORACLES: Trigger assertions define exact ParseError positions/messages and error counts. 
+CASES: Self-closing non-void tag reports “Tag cannot be self closing; not a void tag” at position 18. 
+CASES: Self-closing void tag produces zero parse errors. 
+CASES: Error tracking requested reports non-void self-closing error at position 50. 
+RISKS: Context omits source bodies and public parser/error-list APIs; derive expectations only from listed triggers.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.HtmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(ArrayList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(ArrayList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+public class HtmlTreeBuilder extends TreeBuilder {
+
+/* METHOD HtmlTreeBuilder */
+HtmlTreeBuilder() {}
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+ super.initialiseParse(input, baseUri, errors, settings);
+
+ // this is a bit mucky. todo - probably just create new parser objects to ensure all reset.
+ state = HtmlTreeBuilderState.Initial;
+ originalState = null;
+ baseUriSetFromDoc = false;
+ headElement = null;
+ formElement = null;
+ contextElement = null;
+ formattingElements = new ArrayList<>();
+ pendingTableCharacters = new ArrayList<>();
+ emptyEnd = new Token.EndTag();
+ framesetOk = true;
+ fosterInserts = false;
+ fragmentParsing = false;
+ }
+
+/* METHOD insert */
+Element insert(Token.StartTag startTag) {
+ // handle empty unknown tags
+ // when the spec expects an empty tag, will directly hit insertEmpty, so won't generate this fake end tag.
+ if (startTag.isSelfClosing()) {
+ Element el = insertEmpty(startTag);
+ stack.add(el);
+ tokeniser.transition(TokeniserState.Data); // handles <script />, otherwise needs breakout steps from script data
+ tokeniser.emit(emptyEnd.reset().name(el.tagName())); // ensure we get out of whatever state we are in. emitted for yielded processing
+ return el;
+ }
+ 
+ Element el = new Element(Tag.valueOf(startTag.name(), settings), baseUri, settings.normalizeAttributes(startTag.attributes));
+ insert(el);
+ return el;
+ }
+
+ Element insertStartTag(String startTagName) {
+ Element el = new Element(Tag.valueOf(startTagName, settings), baseUri);
+ insert(el);
+ return el;
+ }
+
+ void insert(Element el) {
+ insertNode(el);
+ stack.add(el);
+ }
+
+ Element insertEmpty(Token.StartTag startTag) {
+ Tag tag = Tag.valueOf(startTag.name(), settings);
+ Element el = new Element(tag, baseUri, startTag.attributes);
+ insertNode(el);
+ if (startTag.isSelfClosing()) {
+ if (tag.isKnownTag()) {
+ if (tag.isSelfClosing()) tokeniser.acknowledgeSelfClosingFlag();
+ }
+ else {
+ tag.setSelfClosing();
+ tokeniser.acknowledgeSelfClosingFlag();
+ }
+ }
+ return el;
+ }
+
+ FormElement insertForm(Token.StartTag startTag, boolean onStack) {
+ Tag tag = Tag.valueOf(startTag.name(), settings);
+ FormElement el = new FormElement(tag, baseUri, startTag.attributes);
+ setFormElement(el);
+ insertNode(el);
+ if (onStack)
+ stack.add(el);
+ return el;
+ }
+
+ void insert(Token.Comment commentToken) {
+ Comment comment = new Comment(commentToken.getData(), baseUri);
+ insertNode(comment);
+ }
+
+ void insert(Token.Character characterToken) {
+ Node
+...[truncated deterministically]...
+es
+ String tagName = currentElement().tagName();
+ if (tagName.equals("script") || tagName.equals("style"))
+ node = new DataNode(characterToken.getData(), baseUri);
+ else
+ node = new TextNode(characterToken.getData(), baseUri);
+ currentElement().appendChild(node); // doesn't use insertNode, because we don't foster these; and will always have a stack.
+ }
+
+ private void insertNode(Node node) {
+ // if the stack hasn't been set up yet, elements (doctype, comments) go into the doc
+ if (stack.size() == 0)
+ doc.appendChild(node);
+ else if (isFosterInserts())
+ insertInFosterParent(node);
+ else
+ currentElement().appendChild(node);
+
+ // connect form controls to their form element
+ if (node instanceof Element && ((Element) node).tag().isFormListed()) {
+ if (formElement != null)
+ formElement.addElement((Element) node);
+ }
+ }
+
+/* METHOD parseFragment */
+List<Node> parseFragment(String inputFragment, Element context, String baseUri, ParseErrorList errors, ParseSettings settings) {
+ // context may be null
+ state = HtmlTreeBuilderState.Initial;
+ initialiseParse(new StringReader(inputFragment), baseUri, errors, settings);
+ contextElement = context;
+ fragmentParsing = true;
+ Element root = null;
+
+ if (context != null) {
+ if (context.ownerDocument() != null) // quirks setup:
+ doc.quirksMode(context.ownerDocument().quirksMode());
+
+ // initialise the tokeniser state:
+ String contextTag = context.tagName();
+ if (StringUtil.in(contextTag, "title", "textarea"))
+ tokeniser.transition(TokeniserState.Rcdata);
+ else if (StringUtil.in(contextTag, "iframe", "noembed", "noframes", "style", "xmp"))
+...[truncated deterministically]...
+hain). ensures form controls are associated
+ // with form correctly
+ Elements contextChain = context.parents();
+ contextChain.add(0, context);
+ for (Element parent: contextChain) {
+ if (parent instanceof FormElement) {
+ formElement = (FormElement) parent;
+ break;
+ }
+ }
+ }
+
+ runParser();
+ if (context != null)
+ return root.childNodes();
+ else
+ return doc.childNodes();
+ }
+
+===== org.jsoup.parser.Tokeniser (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+final class Tokeniser {
+private StringBuilder charsBuilder = new StringBuilder(1024); // buffers characters to output as one token, if more than one emit per read
+void emit(final String str) {
+private void characterReferenceError(String message) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Entities;
+import java.util.Arrays;
+
+/* METHOD Tokeniser */
+Tokeniser(CharacterReader reader, ParseErrorList errors) {
+ this.reader = reader;
+ this.errors = errors;
+ }
+
+/* METHOD emit */
+void emit(Token token) {
+ Validate.isFalse(isEmitPending, "There is an unread token pending!");
+
+ emitPending = token;
+ isEmitPending = true;
+
+ if (token.type == Token.TokenType.StartTag) {
+ Token.StartTag startTag = (Token.StartTag) token;
+ lastStartTag = startTag.tagName;
+ if (startTag.selfClosing)
+ selfClosingFlagAcknowledged = false;
+ } else if (token.type == Token.TokenType.EndTag) {
+ Token.EndTag endTag = (Token.EndTag) token;
+ if (endTag.attributes != null)
+ error("Attributes incorrectly present on end tag");
+ }
+ }
+
+/* METHOD read */
+Token read() {
+ if (!selfClosingFlagAcknowledged) {
+ error("Self closing flag not acknowledged");
+ selfClosingFlagAcknowledged = true;
+ }
+ while (!isEmitPending)
+ state.read(this, reader);
+
+ // if emit is pending, a non-character token was found: return any chars in buffer, and leave token for next read:
+ if (charsBuilder.length() > 0) {
+ String str = charsBuilder.toString();
+ charsBuilder.delete(0, charsBuilder.length());
+ charsString = null;
+ return charPending.data(str);
+ } else if (charsString != null) {
+ Token token = charPending.data(charsString);
+ charsString = null;
+ return token;
+ } else {
+ isEmitPending = false;
+ return emitPending;
+ }
+ }
+
+/* METHOD acknowledgeSelfClosingFlag */
+void acknowledgeSelfClosingFlag() {
+ selfClosingFlagAcknowledged = true;
+ }
+
+/* METHOD consumeCharacterReference */
+int[] consumeCharacterReference(Character additionalAllowedCharacter, boolean inAttribute) {
+ if (reader.isEmpty())
+ return null;
+ if (additionalAllowedCharacter != null && additionalAllowedCharacter == reader.current())
+ return null;
+ if (reader.matchesAnySorted(notCharRefCharsSorted))
+ return null;
+
+ final int[] codeRef = codepointHolder;
+ reader.mark();
+ if (reader.matchConsume("#")) { // numbered
+ boolean isHexMode = reader.matchConsumeIgnoreCase("X");
+ String numRef = isHexMode ? reader.consumeHexSequence() : reader.consumeDigitSequence();
+ if (numRef.length() == 0) { // didn't match anything
+ characterReferenceError("numeric reference with no numerals");
+ reader.rewindToMark();
+ return null;
+ }
+ if (!reader.matchConsume(";"))
+ characterReferenceError("missing semicolon"); // missing semi
+ int charval = -1;
+ try {
+ int base = isHexMode ? 16 : 10;
+ charval = Integer.valueOf(numRef, base);
+ } catch (NumberFormatException ignored) {
+ } // skip
+ if (charval == -1 || (charval >= 0xD800 && charval <= 0xDFFF) || charval > 0x10FFFF) {
+ characterReferenceError("character outside of valid range");
+ codeRef[0] = replacementChar;
+ return codeRef;
+ } else {
+ // todo: implement number replacement table
+ // todo: check for extra illegal unicode points as parse errors
+ codeRef[0] = charval;
+ return codeRef;
+ }
+ } else { // named
+ // get as many letters as possible, and look for matching entities.
+ String nameRef = reader.consumeLetterThenDigitSequence();
+ boolean looksLegit = reader.matches(';');
+ // found if a base named entity without a ;, or an extended entity with the ;.
+ boolean found = (Entities.isBaseNamedEntity(nameRef) || (Entities.isNamedEntity(nameRef) && looksLegit));
+
+ if (!found) {
+ reader.rewindToMark();
+ if (looksLegit) // named with semicolon
+ characterReferenceError(String.format("invalid named referenece '%s'", nameRef));
+ return null;
+ }
+ if (inAttribute && (reader.matchesLetter() || reader.matchesDigit() || reader.matchesAny('=', '-', '_'))) {
+ // don't want that to match
+ reader.rewindToMark();
+ return null;
+ }
+ if (!reader.matchConsume(";"))
+ characterReferenceError("missing semicolon"); // missing semi
+ int numChars = Entities.codepointsForName(nameRef, multipointHolder);
+ if (numChars == 1) {
+ codeRef[0] = multipointHolder[0];
+ return codeRef;
+ } else if (numChars ==2) {
+ return multipointHolder;
+ } else {
+ Validate.fail("Unexpected characters returned for " + nameRef);
+ return multipointHolder;
+ }
+ }
+ }
+
+/* METHOD emit */
+void emit(final String str) {
+ // buffer strings up until last string token found, to emit only one token for a run of character refs etc.
+ // does not set isEmitPending; read checks that
+ if (charsString == null) {
+ charsString = str;
+ }
+ else {
+ if (charsBuilder.length() == 0) { // switching to string builder as more than one emit before read
+ charsBuilder.append(charsString);
+ }
+ charsBuilder.append(str);
+ }
+ }
+
+/* METHOD eofError */
+void eofError(TokeniserState state) {
+ if (errors.canAddError())
+ errors.add(new ParseError(reader.pos(), "Unexpectedly reached end of file (EOF) in input state [%s]", state));
+ }
+
+/* METHOD transition */
+void transition(TokeniserState state) {
+ this.state = state;
+ }
+
+/* METHOD advanceTransition */
+void advanceTransition(TokeniserState state) {
+ reader.advance();
+ this.state = state;
+ }
+
+/* METHOD emitTagPending */
+void emitTagPending() {
+ tagPending.finaliseTag();
+ emit(tagPending);
+ }
+
+/* METHOD createCommentPending */
+void createCommentPending() {
+ commentPending.reset();
+ }
+
+/* METHOD emitCommentPending */
+void emitCommentPending() {
+ emit(commentPending);
+ }

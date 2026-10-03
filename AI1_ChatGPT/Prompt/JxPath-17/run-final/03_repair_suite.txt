@@ -1,0 +1,538 @@
+The previously generated JUnit Test Suite failed to compile or run.
+Analyze the production source code, generated test, Project Context, behavioral specification, and error
+output. Return a corrected complete Java Test Class.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Preserve all valid and meaningful Test Cases.
+4. Fix package, import, syntax, type, constructor, method-call, dependency, mock, and assertion errors.
+5. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+6. Do not invent missing APIs, dependencies, or expected behavior.
+7. Do not change an assertion only to make the test pass unless the supplied specification, API
+documentation, public contract, or bug report supports the change.
+8. Do not remove a Test Case merely to hide an error unless the scenario is impossible according to the
+supplied context.
+9. Do not modify the intended behavior being tested.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Keep the Test Cases independent and free from execution-order dependencies.
+12. Briefly explain the cause of each error and the correction made.
+13. Return the complete corrected Java Test Class.
+Project ID:
+JxPath
+Bug ID:
+17
+Source Version:
+JxPath-17b
+JUnit Version:
+junit-3.8.2.jar
+Build Tool:
+Maven
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: JxPath
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: JxPath
+       Program: commons-jxpath
+    Build file: /root/defects4j/framework/projects/JxPath/JxPath.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-jxpath.git
+     Commit db: /root/defects4j/framework/projects/JxPath/active-bugs.csv
+Number of bugs: 22
+--------------------------------------------------------------------------------
+
+Summary for Bug: JxPath-17
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+a1bc20f2af31730caa12faa116e14a964354f28d
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2008-02-03 02:13:59 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+JXPATH-109
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/JXPATH-109
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testAxisAttribute
+   --> junit.framework.AssertionFailedError: Evaluating value iterator <vendor/product/price:amount/@*> expected:<[10%, 20%]> but was:<[20%]>
+ - org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testAxisAttribute
+   --> junit.framework.AssertionFailedError: Evaluating value iterator <vendor/product/price:amount/@*> expected:<[10%, 20%]> but was:<[20%]>
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIterator
+ - org.apache.commons.jxpath.ri.model.jdom.JDOMAttributeIterator
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.jxpath.ri.model.dom.DOMAttributeIterator (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.model.dom;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodeIterator;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+
+/**
+ * An iterator of attributes of a DOM Node.
+ *
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public class DOMAttributeIterator implements NodeIterator {
+    private NodePointer parent;
+    private QName name;
+    private List attributes;
+    private int position = 0;
+
+    public DOMAttributeIterator(NodePointer parent, QName name) {
+        this.parent = parent;
+        this.name = name;
+        attributes = new ArrayList();
+        Node node = (Node) parent.getNode();
+        if (node.getNodeType() == Node.ELEMENT_NODE) {
+            String lname = name.getName();
+            if (!lname.equals("*")) {
+                Attr attr = getAttribute((Element) node, name);
+                if (attr != null) {
+                    attributes.add(attr);
+                }
+            }
+            else {
+                NamedNodeMap map = node.getAttributes();
+                int count = map.getLength();
+                for (int i = 0; i < count; i++) {
+                    Attr attr = (Attr) map.item(i);
+                    if (testAttr(attr)) {
+                        attributes.add(attr);
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean testAttr(Attr attr) {
+        String nodePrefix = DOMNodePointer.getPrefix(attr);
+        String nodeLocalName = DOMNodePointer.getLocalName(attr);
+
+        if (nodePrefix != null && nodePrefix.equals("xmlns")) {
+            return false;
+        }
+
+        if (nodePrefix == null && nodeLocalName.equals("xmlns")) {
+            return false;
+        }
+
+        String testLocalName = name.getName();
+        if (testLocalName.equals("*") || testLocalName.equals(nodeLocalName)) {
+            String testPrefix = name.getPrefix();
+
+            if (equalStrings(testPrefix, nodePrefix)) {
+                return true;
+            }
+            String testNS = null;
+            if (testPrefix != null) {
+                testNS = parent.getNamespaceURI(testPrefix);
+            }
+            String nodeNS = null;
+            if (nodePrefix != null) {
+                nodeNS = parent.getNamespaceURI(nodePrefix);
+            }
+            return equalStrings(testNS, nodeNS);
+        }
+        return false;
+    }
+
+    private static boolean equalStrings(String s1, String s2) {
+        return s1 == s2 || s1 != null && s1.equals(s2);
+    }
+
+    private Attr getAttribute(Element element, QName name) {
+        String testPrefix = name.getPrefix();
+        String testNS = null;
+
+        if (testPrefix != null) {
+            testNS = parent.getNamespaceResolver().getNamespaceURI(testPrefix);
+        }
+
+        if (testNS != null) {
+            Attr attr = element.getAttributeNodeNS(testNS, name.getName());
+            if (attr != null) {
+                return attr;
+            }
+
+            // This may mean that the parser does not support NS for
+            // attributes, example - the version of Crimson bundled
+            // with JDK 1.4.0
+            NamedNodeMap nnm = element.getAttributes();
+            for (int i = 0; i < nnm.getLength(); i++) {
+                attr = (Attr) nnm.item(i);
+                if (testAttr(attr)) {
+                    return attr;
+                }
+            }
+            return null;
+        }
+        return element.getAttributeNode(name.getName());
+    }
+
+    public NodePointer getNodePointer() {
+        if (position == 0) {
+            if (!setPosition(1)) {
+                return null;
+            }
+            position = 0;
+        }
+        int index = position - 1;
+        if (index < 0) {
+            index = 0;
+        }
+        return new DOMAttributePointer(parent, (Attr) attributes.get(index));
+    }
+
+    public int getPosition() {
+        return position;
+    }
+
+    public boolean setPosition(int position) {
+        this.position = position;
+        return position >= 1 && position <= attributes.size();
+    }
+}
+
+
+===== TARGET CLASS: org.apache.commons.jxpath.ri.model.jdom.JDOMAttributeIterator (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.model.jdom;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodeIterator;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.jdom.Attribute;
+import org.jdom.Element;
+import org.jdom.Namespace;
+
+/**
+ * An iterator of attributes of a DOM Node.
+ *
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public class JDOMAttributeIterator implements NodeIterator {
+    private NodePointer parent;
+    private List attributes;
+    private int position = 0;
+
+    public JDOMAttributeIterator(NodePointer parent, QName name) {
+        this.parent = parent;
+        if (parent.getNode() instanceof Element) {
+            Element element = (Element) parent.getNode();
+            String prefix = name.getPrefix();
+            Namespace ns = null;
+            if (prefix != null) {
+                if (prefix.equals("xml")) {
+                    ns = Namespace.XML_NAMESPACE;
+                }
+                else {
+                    String uri = parent.getNamespaceResolver().getNamespaceURI(prefix);
+                    if (uri != null) {
+                        ns = Namespace.getNamespace(prefix, uri);
+                    }
+                    if (ns == null) {
+                        // TBD: no attributes
+                        attributes = Collections.EMPTY_LIST;
+                        return;
+                    }
+                }
+            }
+            else {
+                ns = Namespace.NO_NAMESPACE;
+            }
+
+            String lname = name.getName();
+            if (!lname.equals("*")) {
+                attributes = new ArrayList();
+                if (ns != null) {
+                Attribute attr = element.getAttribute(lname, ns);
+                if (attr != null) {
+                    attributes.add(attr);
+                    }
+                }
+            }
+            else {
+                attributes = new ArrayList();
+                List allAttributes = element.getAttributes();
+                for (int i = 0; i < allAttributes.size(); i++) {
+                    Attribute attr = (Attribute) allAttributes.get(i);
+                    if (attr.getNamespace().equals(ns)) {
+                        attributes.add(attr);
+                    }
+                }
+            }
+        }
+    }
+
+    public NodePointer getNodePointer() {
+        if (position == 0) {
+            if (!setPosition(1)) {
+                return null;
+            }
+            position = 0;
+        }
+        int index = position - 1;
+        if (index < 0) {
+            index = 0;
+        }
+        return new JDOMAttributePointer(
+            parent,
+            (Attribute) attributes.get(index));
+    }
+
+    public int getPosition() {
+        return position;
+    }
+
+    public boolean setPosition(int position) {
+        if (attributes == null) {
+            return false;
+        }
+        this.position = position;
+        return position >= 1 && position <= attributes.size();
+    }
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.jxpath.ri.model.dom.DOMAttributeIterator
+- org.apache.commons.jxpath.ri.model.jdom.JDOMAttributeIterator
+
+Triggering tests:
+- org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testAxisAttribute
+- org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testAxisAttribute
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model.dom;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.apache.commons.jxpath.ri.model.jdom.JDOMAttributeIterator;
+import org.jdom.Namespace;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+/**
+ * Tests attribute-axis behavior for DOM and JDOM models, including namespaced
+ * attributes selected through the wildcard attribute test.
+ */
+public class AttributeIteratorTest extends TestCase {
+
+    private static final String PRICE_NAMESPACE = "urn:test:price";
+    private static final String META_NAMESPACE = "urn:test:meta";
+
+    public void testDomWildcardAttributeAxisIncludesQualifiedAndUnqualifiedAttributes()
+        throws Exception {
+        JXPathContext context = createDomContext();
+
+        List values = iteratorValues(
+            context.iterate("/vendor/product/price:amount/@*"));
+
+        assertEquals("Only real attributes should be returned", 2, values.size());
+        assertTrue(values.contains("10%"));
+        assertTrue(values.contains("20%"));
+    }
+
+    public void testJdomWildcardAttributeAxisIncludesQualifiedAndUnqualifiedAttributes()
+        throws Exception {
+        JXPathContext context = createJdomContext();
+
+        List values = iteratorValues(
+            context.iterate("/vendor/product/price:amount/@*"));
+
+        assertEquals("Wildcard attribute selection must include both namespaces",
+            2, values.size());
+        assertTrue(values.contains("10%"));
+        assertTrue(values.contains("20%"));
+    }
+
+    public void testDomIteratorFindsNamedNamespacedAttributeAndHandlesPositions()
+        throws Exception {
+        JXPathContext context = createDomContext();
+        NodePointer parent = (NodePointer) context.getPointer(
+            "/vendor/product/price:amount");
+
+        DOMAttributeIterator iterator =
+            new DOMAttributeIterator(parent, new QName("meta", "qualified"));
+
+        NodePointer pointer = iterator.getNodePointer();
+        assertNotNull(pointer);
+        assertEquals("10%", ((Attr) pointer.getNode()).getValue());
+        assertEquals("Reading the first pointer must not advance the iterator",
+            0, iterator.getPosition());
+
+        assertFalse(iterator.setPosition(0));
+        assertTrue(iterator.setPosition(1));
+        assertEquals("10%",
+            ((Attr) iterator.getNodePointer().getNode()).getValue());
+        assertFalse(iterator.setPosition(2));
+
+        DOMAttributeIterator missing =
+            new DOMAttributeIterator(parent, new QName("meta", "missing"));
+        assertNull(missing.getNodePointer());
+    }
+
+    public void testJdomIteratorFindsNamedNamespacedAttributeAndHandlesPositions()
+        throws Exception {
+        JXPathContext context = createJdomContext();
+        NodePointer parent = (NodePointer) context.getPointer(
+            "/vendor/product/price:amount");
+
+        JDOMAttributeIterator iterator =
+            new JDOMAttributeIterator(parent, new QName("meta", "qualified"));
+
+        NodePointer pointer = iterator.getNodePointer();
+        assertNotNull(pointer);
+        assertEquals("10%",
+            ((org.jdom.Attribute) pointer.getNode()).getValue());
+        assertEquals("Reading the first pointer must not advance the iterator",
+            0, iterator.getPosition());
+
+        assertFalse(iterator.setPosition(0));
+        assertTrue(iterator.setPosition(1));
+        assertEquals("10%",
+            ((org.jdom.Attribute) iterator.getNodePointer().getNode())
+                .getValue());
+        assertFalse(iterator.setPosition(2));
+
+        JDOMAttributeIterator missing =
+            new JDOMAttributeIterator(parent, new QName("meta", "missing"));
+        assertNull(missing.getNodePointer());
+    }
+
+    private JXPathContext createDomContext() throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+
+        Document document = factory.newDocumentBuilder().newDocument();
+
+        Element vendor = document.createElement("vendor");
+        Element product = document.createElement("product");
+        Element amount = document.createElementNS(
+            PRICE_NAMESPACE, "price:amount");
+
+        amount.setAttributeNS(
+            "http://www.w3.org/2000/xmlns/", "xmlns:price", PRICE_NAMESPACE);
+        amount.setAttributeNS(
+            "http://www.w3.org/2000/xmlns/", "xmlns:meta", META_NAMESPACE);
+        amount.setAttributeNS(META_NAMESPACE, "m:qualified", "10%");
+        amount.setAttribute("plain", "20%");
+
+        document.appendChild(vendor);
+        vendor.appendChild(product);
+        product.appendChild(amount);
+
+        JXPathContext context = JXPathContext.newContext(document);
+        context.registerNamespace("price", PRICE_NAMESPACE);
+        context.registerNamespace("meta", META_NAMESPACE);
+        return context;
+    }
+
+    private JXPathContext createJdomContext() {
+        Namespace price = Namespace.getNamespace("price", PRICE_NAMESPACE);
+        Namespace meta = Namespace.getNamespace("m", META_NAMESPACE);
+
+        org.jdom.Element vendor = new org.jdom.Element("vendor");
+        org.jdom.Element product = new org.jdom.Element("product");
+        org.jdom.Element amount = new org.jdom.Element("amount", price);
+
+        amount.addNamespaceDeclaration(meta);
+        amount.setAttribute("qualified", "10%", meta);
+        amount.setAttribute("plain", "20%");
+
+        vendor.addContent(product);
+        product.addContent(amount);
+
+        JXPathContext context = JXPathContext.newContext(
+            new org.jdom.Document(vendor));
+        context.registerNamespace("price", PRICE_NAMESPACE);
+        context.registerNamespace("meta", META_NAMESPACE);
+        return context;
+    }
+
+    private List iteratorValues(Iterator iterator) {
+        List values = new ArrayList();
+        while (iterator.hasNext()) {
+            values.add(iterator.next());
+        }
+        return values;
+    }
+}
+
+Compiler or Test Runner error:
+Failing tests: 2
+  - org.apache.commons.jxpath.ri.model.dom.AttributeIteratorTest::testDomIteratorFindsNamedNamespacedAttributeAndHandlesPositions
+  - org.apache.commons.jxpath.ri.model.dom.AttributeIteratorTest::testDomWildcardAttributeAxisIncludesQualifiedAndUnqualifiedAttributes
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+
+
+Generated tests failing on fixed:
+- org.apache.commons.jxpath.ri.model.dom.AttributeIteratorTest::testDomIteratorFindsNamedNamespacedAttributeAndHandlesPositions
+- org.apache.commons.jxpath.ri.model.dom.AttributeIteratorTest::testDomWildcardAttributeAxisIncludesQualifiedAndUnqualifiedAttributes

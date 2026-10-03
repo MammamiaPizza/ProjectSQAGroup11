@@ -1,0 +1,396 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 169  Version: Closure-169b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.rhino.jstype.ArrowType, com.google.javascript.rhino.jstype.EquivalenceMethod, com.google.javascript.rhino.jstype.FunctionType, com.google.javascript.rhino.jstype.JSType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.UnionType
+Modified: com.google.javascript.rhino.jstype.ArrowType, com.google.javascript.rhino.jstype.EquivalenceMethod, com.google.javascript.rhino.jstype.FunctionType, com.google.javascript.rhino.jstype.JSType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.UnionType
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testIssue791, com.google.javascript.rhino.jstype.RecordTypeTest::testSubtypeWithUnknowns2
+
+Bug/specification summary:
+Bug report: 791
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue791
+ --> junit.framework.AssertionFailedError: unexpected warnings(s):
+ - com.google.javascript.rhino.jstype.RecordTypeTest::testSubtypeWithUnknowns2
+ --> junit.framework.AssertionFailedError
+Modified: com.google.javascript.rhino.jstype.ArrowType, com.google.javascript.rhino.jstype.EquivalenceMethod, com.google.javascript.rhino.jstype.FunctionType, com.google.javascript.rhino.jstype.JSType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.UnionType
+
+Prompt-01 test plan:
+TARGETS: RecordType/JSType subtype behavior with unknown types; UnionType subtype/equivalence interactions. 
+TARGETS: ArrowType and FunctionType subtype, least-supertype, greatest-subtype, equality behavior. 
+ORACLES: Existing triggers TypeCheckTest::testIssue791 and RecordTypeTest::testSubtypeWithUnknowns2. 
+CASES: Record subtype checks where required property types include unknown versus concrete types. 
+CASES: Type-check code path from issue 791; assert no unexpected warnings using existing test harness. 
+CASES: Union/record/function comparisons involving unknown alternates and subtype direction. 
+RISKS: Available signatures lack constructors/factories and exact expected subtype outcomes. 
+RISKS: Do not infer semantics beyond trigger assertions and existing test utilities.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.rhino.jstype.ArrowType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+final class ArrowType extends JSType {
+@Override
+public boolean isSubtype(JSType other) {
+public int hashCode() {
+public JSType getLeastSupertype(JSType that) {
+public JSType getGreatestSubtype(JSType that) {
+public TernaryValue testForEquality(JSType that) {
+public <T> T visit(Visitor<T> visitor) {
+public BooleanLiteralSet getPossibleToBooleanOutcomes() {
+public boolean hasAnyTemplateInternal() {
+private boolean hasTemplatedParameterType() {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+
+/* METHOD ArrowType */
+ArrowType(JSTypeRegistry registry, Node parameters,
+ JSType returnType) {
+ this(registry, parameters, returnType, false);
+ }
+
+/* METHOD ArrowType */
+ArrowType(JSTypeRegistry registry, Node parameters,
+ JSType returnType, boolean returnTypeInferred) {
+ super(registry);
+
+ this.parameters = parameters == null ?
+ registry.createParametersWithVarArgs(getNativeType(UNKNOWN_TYPE)) :
+ parameters;
+ this.returnType = returnType == null ?
+ getNativeType(UNKNOWN_TYPE) : returnType;
+ this.returnTypeInferred = returnTypeInferred;
+ }
+
+/* METHOD isSubtype */
+@Override
+ public boolean isSubtype(JSType other) {
+ if (!(other instanceof ArrowType)) {
+ return false;
+ }
+
+ ArrowType that = (ArrowType) other;
+
+ // This is described in Draft 2 of the ES4 spec,
+ // Section 3.4.7: Subtyping Function Types.
+
+ // this.returnType <: that.returnType (covariant)
+ if (!this.returnType.isSubtype(that.returnType)) {
+ return fa
+...[truncated deterministically]...
+//
+ // If this.paramType[i] is required,
+ // then that.paramType[i] is required.
+ //
+ // In theory, the "required-ness" should work in the other direction as
+ // well. In other words, if we have
+ //
+ // function f(number, number) {}
+ // function g(number) {}
+ //
+ // Then f *should* not be a subtype of g, and g *should* not be
+ // a subtype of f. But in practice, we do not implement it t
+...[truncated deterministically]...
+e == null ||
+ thatParamType.isUnknownType() ||
+ thatParamType.isNoType());
+ if (!isTopFunction) {
+ return false;
+ }
+ }
+
+ // don't advance if we have variable arguments
+ if (!thisIsVarArgs) {
+ thisParam = thisParam.getNext();
+ }
+ if (!thatIsVarArgs) {
+ thatParam = thatParam.getNext();
+ }
+
+ // both var_args indicates the end
+ if (thisIsVarArgs && thatIsVarArgs) {
+ thisParam = null;
+ thatParam = null;
+ }
+ }
+
+===== com.google.javascript.rhino.jstype.FunctionType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public class FunctionType extends PrototypeObjectType {
+private enum Kind {
+private enum PropAccess { ANY, STRUCT, DICT }
+private List<ObjectType> implementedInterfaces = ImmutableList.of();
+private List<ObjectType> extendedInterfaces = ImmutableList.of();
+/** Creates an instance for a function that is an interface. */
+private FunctionType(JSTypeRegistry registry, String name, Node source) {
+@Override
+public boolean isInstanceType() {
+public boolean isConstructor() {
+public boolean isInterface() {
+public b
+...[truncated deterministically]...
+es() {
+public boolean hasCachedValues() {
+public ImmutableList<String> getTemplateTypeNames() {
+public String toDebugHashCodeString() {
+private String getDebugHashCodeStringOf(JSType type) {
+public FunctionType cloneWithoutArrowType() {
+public boolean hasAnyTemplateInternal() {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+public class FunctionType extends PrototypeObjectType {
+
+/* METHOD FunctionType */
+FunctionType(JSTypeRegistry registry, String name,
+...[truncated deterministically]...
+leList<String> templateTypeNames,
+ boolean isConstructor, boolean nativeType) {
+ super(registry, name,
+ registry.getNativeObjectType(JSTypeNative.FUNCTION_INSTANCE_TYPE),
+ nativeType);
+ setPrettyPrint(true);
+
+ Preconditions.checkArgument(source == null ||
+ Token.FUNCTION == source.getType());
+ Preconditions.checkNotNull(arrowType);
+ this.source = source;
+ if (isConstructor) {
+ this.kind = Kind.CONSTRUCTOR;
+ this.propAccess = PropAccess.ANY;
+ this.typeOfThis = typeOfThis != null ?
+ typeOf
+...[truncated deterministically]...
+ry, this, nativeType);
+ } else {
+ this.kind = Kind.ORDINARY;
+ this.typeOfThis = typeOfThis != null ?
+ typeOfThis :
+ registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+ }
+ this.call = arrowType;
+ this.templateTypeNames = templateTypeNames != null
+ ? templateTypeNames : ImmutableList.<String>of();
+ }
+
+===== com.google.javascript.rhino.jstype.JSType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public abstract class JSType implements Serializable {
+"Unknown class name";
+static final Comparator<JSType> ALPHA = new Comparator<JSType>() {
+@Override
+public int compare(JSType t1, JSType t2) {
+public static final int ENUMDECL = 1;
+public static final int NOT_ENUMDECL = 0;
+public JSDocInfo getJSDocInfo() {
+public String getDisplayName() {
+public boolean hasDisplayName() {
+public boolean hasProperty(String pname) {
+public boolean isNoType() {
+public boolean isNoResolvedType() {
+public boolean isNoObjectT
+...[truncated deterministically]...
+al JSType typeB;
+public TypePair(JSType typeA, JSType typeB) {
+public String toString() {
+public String toDebugHashCodeString() {
+public final String toAnnotationString() {
+abstract String toStringHelper(boolean forAnnotations);
+public void matchConstraint(JSType constraint) {}
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.TernaryValue.UNKNOWN;
+import com.google.common.base.Predicate;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.jstype.JSTypeRegistry.ResolveMode;
+import java.io.Serializable;
+import java.util.Comparator;
+
+/* METHOD JSType */
+JSType(JSTypeRegistry registry) {
+ this.registry = registry;
+ }
+
+/* METHOD canTestForShallowEqualityWith */
+public final boolean canTestForShallowEqualityWith(JSType that) {
+ if (isEmptyType() || that.isEmptyType()) {
+ return isSubtype(that) || that.isSubtype(this);
+ }
+
+ JSType inf = getGreatestSubtype(that);
+ return !inf.isEmptyType() ||
+ // Our getGreatestSubtype relation on functions is pretty bad.
+ // Let's just say it's always ok to compare two functions.
+ // Once the TODO in FunctionType is fixed, we should be able to
+ // remove this.
+ inf == registry.getNativeType(JSTypeNative.LEAST_FUNCTION_TYPE);
+ }
+
+/* METHOD forceResolve */
+public final JSType forceResolve(ErrorReporter t, StaticScope<JSType> scope) {
+ ResolveMode oldResolveMode = registry.getResolveMode();
+ registry.setResolveMode(ResolveMode.IMMEDIATE);
+ JSType result = resolve(t, scope);
+ registry.setResolveMode(oldResolveMode);
+ return result;
+ }
+
+===== com.google.javascript.rhino.jstype.RecordType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+class RecordType extends PrototypeObjectType {
+private final SortedMap<String, JSType> properties = Maps.newTreeMap();
+@Override
+public ObjectType getImplicitPrototype() {
+public boolean isSubtype(JSType that) {
+static boolean isSubtype(ObjectType typeA, RecordType typeB) {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import com.google.common.collect.Maps;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.RecordTypeBuilder.RecordProperty;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+class RecordType extends PrototypeObjectType {
+
+/* METHOD RecordType */
+RecordType(JSTypeRegistry registry, Map<String, RecordProperty> properties) {
+ this(registry, properties, true);
+ }
+
+/* METHOD RecordType */
+RecordType(JSTypeRegistry registry, Map<String, RecordProperty> properties,
+ boolean declared) {
+ super(registry, null, null);
+ setPrettyPrint(true);
+ this.declared = declared;
+
+ for (String property : properties.keySet()) {
+ RecordProperty prop = properties.get(property);
+ if (prop == null) {
+ throw new IllegalStateException(
+ "RecordProperty associated with a property should not be null!");
+ }
+ if (declared) {
+ defineDeclaredProperty(
+ property, prop.getType(), prop.getPropertyNode());
+ } else {
+ defineSynthesizedProperty(
+ property, prop.getType(), prop.getPropertyNode());
+ }
+ }
+
+ // Freeze the record type.
+ isFrozen = true;
+ }
+
+/* METHOD isSubtype */
+@Override
+ public boolean isSubtype(JSType that) {
+ if (JSType.isSubtypeHelper(this, that)) {
+ return true;
+ }
+
+ // Top of the record types is the empty record, or OBJECT_TYPE.
+ if (registry.getNativeObjectType(
+ JSTypeNative.OBJECT_TYPE).isSubtype(that)) {
+ return true;
+ }
+
+ // A type is a subtype of a record type if it itself is a record
+ // type and it has at least the same members as the parent record type
+ // with the same types.
+ if (!that.isRecordType()) {
+ return false;
+ }
+
+ return RecordType.isSubtype(this, that.toMaybeRecordType());
+ }
+
+===== com.google.javascript.rhino.jstype.UnionType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public class UnionType extends JSType {
+public Iterable<JSType> getAlternates() {
+@Override
+public boolean matchesNumberContext() {
+public boolean matchesStringContext() {
+public boolean matchesObjectContext() {
+public JSType findPropertyType(String propertyName) {
+public boolean canAssignTo(JSType that) {
+public boolean canBeCalled() {
+public JSType autobox() {
+public JSType restrictByNotNullOrUndefined() {
+public TernaryValue testForEquality(JSType that) {
+public boolean isNullable() {
+public boolean isU
+...[truncated deterministically]...
+(JSType that) {
+public <T> T visit(Visitor<T> visitor) {
+public String toDebugHashCodeString() {
+public boolean setValidator(Predicate<JSType> validator) {
+public JSType collapseUnion() {
+public void matchConstraint(JSType constraint) {
+public boolean hasAnyTemplateInternal() {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.TernaryValue.UNKNOWN;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.ErrorReporter;
+import java.util.Collection;
+import java.util.List;
+import java.util.SortedSet;
+import java.util.TreeSet;
+public class UnionType extends JSType {
+
+/* METHOD UnionType */
+UnionType(JSTypeRegistry registry, Collection<JSType> alternates) {
+ super(registry);
+ this.alternates = alternates;
+ this.hashcode = this.alternates.hashCode();
+ }
+
+/* METHOD getRestrictedTypeGivenToBooleanOutcome */
+@Override
+ public JSType getRestrictedTypeGivenToBooleanOutcome(boolean outcome) {
+ // gather elements after restriction
+ UnionTypeBuilder restricted = new UnionTypeBuilder(registry);
+ for (JSType element : alternates) {
+ restricted.addAlternate(
+ element.getRestrictedTypeGivenToBooleanOutcome(outcome));
+ }
+ return restricted.build();
+ }

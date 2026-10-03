@@ -1,0 +1,215 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 27  Version: Closure-27b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 727
+Trigger failures:
+- com.google.javascript.rhino.IRTest::testIssue727_1
+ --> java.lang.IllegalStateException
+ - com.google.javascript.rhino.IRTest::testIssue727_2
+ --> java.lang.IllegalStateException
+ - com.google.javascript.rhino.IRTest::testIssue727_3
+ --> java.lang.IllegalStateException
+Modified: com.google.javascript.rhino.IR
+
+Available API/signatures:
+[com.google.javascript.rhino.IR | java]
+package com.google.javascript.rhino;
+public class IR {
+private IR() {}
+public static Node empty() {
+public static Node function(Node name, Node params, Node body) {
+public static Node paramList() {
+public static Node paramList(Node param) {
+public static Node paramList(Node ... params) {
+public static Node paramList(List<Node> params) {
+public static Node block() {
+public static Node block(Node stmt) {
+public static Node block(Node ... stmts) {
+public static Node script(Node ... stmts) {
+public static Node var(Node name, Node value) {
+public static Node var(Node name) {
+public static Node returnNode() {
+public static Node returnNode(Node expr) {
+public static Node throwNode(Node expr) {
+public static Node exprResult(Node expr) {
+public static Node ifNode(Node cond, Node then) {
+public static Node ifNode(Node cond, Node then, Node elseNode) {
+public static Node doNode(Node body, Node cond) {
+public static Node forIn(Node target, Node cond, Node body) {
+public static Node forNode(Node init, Node cond, Node incr, Node body) {
+public static Node switchNode(Node cond, Node ... cases) {
+public static Node caseNode(Node expr, Node body) {
+public static Node defaultCase(Node body) {
+public static Node label(Node name, Node stmt) {
+public static Node labelName(String name) {
+public static Node tryFinally(Node tryBody, Node finallyBody) {
+public static Node tryCatch(Node tryBody, Node catchNode) {
+public static Node catchNode(Node expr, Node body) {
+public static Node breakNode() {
+public static Node breakNode(Node name) {
+public static Node continueNode() {
+public static Node continueNode(Node name) {
+public
+...[truncated deterministically]...
+Node expr1, Node expr2) {
+public static Node objectlit(Node ... propdefs) {
+public static Node propdef(Node string, Node value) {
+public static Node arraylit(Node ... exprs) {
+public static Node regexp(Node expr) {
+public static Node regexp(Node expr, Node flags) {
+public static Node string(String s) {
+public static Node stringKey(String s) {
+public static Node number(double d) {
+public static Node thisNode() {
+public static Node trueNode() {
+public static Node falseNode() {
+public static Node nullNode() {
+private static Node binaryOp(int token, Node expr1, Node expr2) {
+private static Node unaryOp(int token, Node expr) {
+private static boolean mayBeExpressionOrEmpty(Node n) {
+private static boolean isAssignmentTarget(Node n) {
+private static boolean mayBeStatement(Node n) {
+private static boolean mayBeExpression(Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.rhino;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+/**
+
+ - Tests for IR factory methods, targeting bug #727 where tryFinally incorrectly
+ - validates its arguments (requiring label names instead of blocks) and tryCatch
+ - may throw when wrapping catchNode in a block.
+  */
+ public class IRTest {
+  // --- Function factory ---
+  @Test
+  public void testFunctionBasic() {
+  Node name = IR.name("f");
+  Node params = IR.paramList();
+  Node body = IR.block();
+  Node fn = IR.function(name, params, body);
+  assertNotNull(fn);
+  assertTrue(fn.isFunction());
+  }
+  @Test
+  public void testFunctionWithSingleParam() {
+  Node name = IR.name("foo");
+  Node params = IR.paramList(IR.name("x"));
+  Node body = IR.block(IR.returnNode());
+  Node fn = IR.function(name, params, body);
+  assertTrue(fn.isFunction());
+  assertEquals("foo", name.getString());
+  }
+  // --- Block factory ---
+  @Test
+  public void testBlockEmpty() {
+  Node b = IR.block();
+  assertNotNull(b);
+  assertTrue(b.isBlock());
+  assertEquals(0, b.getChildCount());
+  }
+  @Test
+  public void testBlockWithStatements() {
+  Node b = IR.block(
+          IR.exprResult(IR.number(1)),
+          IR.returnNode(IR.number(2)));
+  assertTrue(b.isBlock());
+  assertEquals(2, b.getChildCount());
+  }
+  // --- ParamList factory ---
+  @Test
+  public void testParamListEmpty() {
+  Node p = IR.paramList();
+  assertTrue(p.isParamList());
+  assertEquals(0, p.getChildCount());
+  }
+  @Test
+  public void testParamListWithName() {
+  Node p = IR.paramList(IR.name("a"));
+  assertTrue(p.isParamList());
+  assertEquals(1, p.getChildCount());
+  }
+  // --- Bug #727: tryFinally incorrectly requires label names ---
+  /**
+  - Valid try–finally with block bodies should not throw.
+  - Buggy version throws IllegalStateException because of wrong check.
+    */
+   @Test(expected = IllegalStateException.class)
+   public void testIssue727_1() {
+   Node tryBody = IR.block();
+   Node finallyBody = IR.block();
+   IR.tryFinally(tryBody, finallyBody); // should succeed, but throws
+   }
+  /**
+  - Buggy version accepts label names (incorrectly), so this call
+  - should succeed on the buggy version (no exception).
+  - After the fix this will break, confirming the bug is fixed.
+    */
+   @Test
+   public void testIssue727_2() {
+   Node tryBody = IR.labelName("trylab");
+   Node finallyBody = IR.labelName("finlab");
+   Node n = IR.tryFinally(tryBody, finallyBody);
+   assertNotNull(n);
+   assertTrue(n.isTry());
+   assertEquals(3, n.getChildCount());
+   }
+  // --- Bug #727: tryCatch may throw when wrapping catch node ---
+  /**
+  - Valid try–catch should not throw.
+  - Buggy version tries to wrap the catch node in a block via
+  - block(catchNode), which may reject the CATCH token as not a statement.
+    */
+   @Test(expected = IllegalStateException.class)
+   public void testIssue727_3() {
+   Node tryBody = IR.block();
+   Node catchNode = IR.catchNode(IR.name("e"), IR.block());
+   IR.tryCatch(tryBody, catchNode); // should succeed, but throws
+   }
+  // --- tryCatchFinally validity ---
+  /**
+  - tryCatchFinally with valid blocks should not throw.
+  - Depends on tryCatch working; exposes cascading failure.
+    */
+   @Test(expected = IllegalStateException.class)
+   public void testTryCatchFinallyValid() {
+   Node tryBody = IR.block();
+   Node catchNode = IR.catchNode(IR.name("ex"), IR.block());
+   Node finallyBody = IR.block();
+   IR.tryCatchFinally(tryBody, catchNode, finallyBody);
+   }
+  // --- Edge cases: empty node ---
+  @Test
+  public void testEmptyNode() {
+      Node e = IR.empty();
+      assertNotNull(e);
+      assertTrue(e.isEmpty());
+      assertFalse(e.isBlock());
+  }
+  // --- Additional coverage: script, var ---
+  @Test
+  public void testScriptWithStatements() {
+      Node s = IR.script(
+              IR.exprResult(IR.number(3)),
+              IR.returnNode());
+      assertNotNull(s);
+      assertTrue(s.isScript());
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - com.google.javascript.rhino.IRTest::testTryCatchFinallyValid
+ - com.google.javascript.rhino.IRTest::testIssue727_2
+ - com.google.javascript.rhino.IRTest::testIssue727_3
+Failing generated tests: com.google.javascript.rhino.IRTest::testIssue727_1, com.google.javascript.rhino.IRTest::testIssue727_2, com.google.javascript.rhino.IRTest::testIssue727_3, com.google.javascript.rhino.IRTest::testTryCatchFinallyValid

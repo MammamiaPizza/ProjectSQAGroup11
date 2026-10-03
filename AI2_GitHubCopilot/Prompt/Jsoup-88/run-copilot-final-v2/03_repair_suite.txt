@@ -1,0 +1,151 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 88  Version: Jsoup-88b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1065
+Trigger failures:
+- org.jsoup.nodes.AttributeTest::booleanAttributesAreEmptyStringValues
+ --> junit.framework.AssertionFailedError: expected:<> but was:<null>
+Modified: org.jsoup.nodes.Attribute
+
+Available API/signatures:
+[org.jsoup.nodes.Attribute | java]
+package org.jsoup.nodes;
+public class Attribute implements Map.Entry<String, String>, Cloneable {
+Attributes parent; // used to update the holding Attributes when the key / value is changed via this interface
+public Attribute(String key, String value) {
+public Attribute(String key, String val, Attributes parent) {
+@return the attribute key
+public String getKey() {
+@param key the new key; must not be null
+public void setKey(String key) {
+@return the attribute value
+public String getValue() {
+@param val the new attribute value; must not be null
+public String setValue(String val) {
+@return HTML
+public String html() {
+protected static void html(String key, String val, Appendable accum, Document.OutputSettings out) throws IOException {
+protected void html(Appendable accum, Document.OutputSettings out) throws IOException {
+@return string
+@Override
+public String toString() {
+public static Attribute createFromEncoded(String unencodedKey, String encodedValue) {
+protected boolean isDataAttribute() {
+protected static boolean isDataAttribute(String key) {
+protected final boolean shouldCollapseAttribute(Document.OutputSettings out) {
+protected static boolean shouldCollapseAttribute(final String key, final String val, final Document.OutputSettings out) {
+protected boolean isBooleanAttribute() {
+protected static boolean isBooleanAttribute(final String key) {
+public boolean equals(Object o) { // note parent not considered
+public int hashCode() { // note parent not considered
+public Attribute clone() {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class AttributeTest {
+    @Test
+    public void booleanAttributesAreEmptyStringValues() {
+        Attribute attr = new Attribute("checked", null);
+        assertEquals("", attr.getValue());
+    }
+
+ @Test
+ public void booleanAttributeWithExplicitEmptyValue() {
+     Attribute attr = new Attribute("checked", "");
+     assertEquals("", attr.getValue());
+ }
+
+ @Test
+ public void nonBooleanAttributeNullValueRemainsNull() {
+     Attribute attr = new Attribute("class", null);
+     assertNull(attr.getValue());
+ }
+
+ @Test
+ public void isBooleanAttributeStaticReturnsTrue() {
+     String[] boolKeys = {"checked", "disabled", "hidden", "readonly", "selected"};
+     for (String k : boolKeys) {
+         assertTrue(Attribute.isBooleanAttribute(k));
+     }
+ }
+
+ @Test
+ public void isBooleanAttributeStaticReturnsFalse() {
+     assertFalse(Attribute.isBooleanAttribute("class"));
+     assertFalse(Attribute.isBooleanAttribute("style"));
+     assertFalse(Attribute.isBooleanAttribute("data-attr"));
+ }
+
+ @Test
+ public void shouldCollapseBooleanWithEmptyOrEqualToKeyInHtmlSyntax() {
+     Document.OutputSettings out = new Document("").outputSettings();
+     assertTrue(Attribute.shouldCollapseAttribute("checked", "", out));
+     assertTrue(Attribute.shouldCollapseAttribute("checked", "checked", out));
+     assertTrue(Attribute.shouldCollapseAttribute("checked", "CHECKED", out));
+     assertFalse(Attribute.shouldCollapseAttribute("checked", "yes", out));
+ }
+
+ @Test
+ public void shouldNotCollapseBooleanInXmlSyntax() {
+     Document.OutputSettings out = new Document("").outputSettings();
+     out.syntax(Document.OutputSettings.Syntax.xml);
+     assertFalse(Attribute.shouldCollapseAttribute("checked", "", out));
+ }
+
+ @Test
+ public void shouldNotCollapseNonBooleanAttribute() {
+     Document.OutputSettings out = new Document("").outputSettings();
+     assertFalse(Attribute.shouldCollapseAttribute("class", "", out));
+     assertFalse(Attribute.shouldCollapseAttribute("class", "class", out));
+ }
+
+ @Test
+ public void htmlBooleanAttributeWithEmptyValueCollapses() {
+     Attribute attr = new Attribute("checked", "");
+     assertEquals("checked", attr.html());
+ }
+
+ @Test
+ public void htmlNonBooleanAttributeWithNullValueOutputsEmptyString() {
+     Attribute attr = new Attribute("id", null);
+     assertEquals("id=\"\"", attr.html());
+ }
+
+ @Test
+ public void cloneCreatesEqualIndependentAttribute() {
+     Attribute attr = new Attribute("key", "val");
+     Attribute clone = attr.clone();
+     assertNotSame(attr, clone);
+     assertEquals(attr.getKey(), clone.getKey());
+     assertEquals(attr.getValue(), clone.getValue());
+ }
+
+ @Test
+ public void equalsAndHashCode() {
+     Attribute a1 = new Attribute("key", "val");
+     Attribute a2 = new Attribute("key", "val");
+     Attribute a3 = new Attribute("key", null);
+     Attribute a4 = new Attribute("other", "val");
+     assertEquals(a1, a2);
+     assertEquals(a1.hashCode(), a2.hashCode());
+     assertNotEquals(a1, a3);
+     assertNotEquals(a1, a4);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.nodes.AttributeTest::nonBooleanAttributeNullValueRemainsNull
+ - org.jsoup.nodes.AttributeTest::htmlNonBooleanAttributeWithNullValueOutputsEmptyString
+
+Failing generated tests: org.jsoup.nodes.AttributeTest::htmlNonBooleanAttributeWithNullValueOutputsEmptyString, org.jsoup.nodes.AttributeTest::nonBooleanAttributeNullValueRemainsNull

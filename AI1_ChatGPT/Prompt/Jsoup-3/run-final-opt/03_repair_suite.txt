@@ -1,0 +1,168 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 3  Version: Jsoup-3b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 21
+Trigger failures:
+- org.jsoup.nodes.ElementTest::testAppendRowToTable
+ --> junit.framework.AssertionFailedError: expected:<...tr><td>1</td></tr><t[r><td>2</td></tr]></table>> but was:<...tr><td>1</td></tr><t[able><tr><td>2</td></tr></table]></table>>
+ - org.jsoup.nodes.ElementTest::testPrependRowToTable
+ --> junit.framework.AssertionFailedError: expected:<<table><t[r><td>2</td></tr]><tr><td>1</td></tr>...> but was:<<table><t[able><tr><td>2</td></tr></table]><tr><td>1</td></tr>...>
+ - org.jsoup.parser.ParserTest::handlesNestedImplicitTable
+ --> junit.framework.AssertionFailedError: expected:<...> <tr><td> <table><t[r><td>3</td> <td>4</td></tr></table> </td></tr><tr><td>5]</td></tr></table>> but was:<...> <tr><td> <table><t[d>3</td> <td>4</td></table> <tr><td>5</td></tr>]</td></tr></table>>
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.Parser, org.jsoup.parser.Tag
+
+Available API/signatures:
+[org.jsoup.nodes.Element | java]
+package org.jsoup.nodes;
+public class Element extends Node {
+public Element(Tag tag, String baseUri, Attributes attributes) {
+public Element(Tag tag, String baseUri) {
+@Override
+public String nodeName() {
+public String tagName() {
+public Tag tag() {
+public boolean isBlock() {
+public String id() {
+public Element attr(String attributeKey, String attributeValue) {
+public Element parent() {
+public Elements parents() {
+private static void accumulateParents(Element el, Elements parents) {
+public Element child(int index) {
+public Elements children() {
+public Elements select(String query) {
+public Element appendChild(Node child) {
+public Element prependChild(Node child) {
+public Element appendElement(String tagName) {
+public Element prependElement(String tagName) {
+public Element appendText(String
+...[truncated deterministically]...
+lement's {@code class} attribute: if present, remove it; otherwise add it.
+@param className class name to toggle
+public Element toggleClass(String className) {
+public String val() {
+public Element val(String value) {
+public String html() {
+private void html(StringBuilder accum) {
+public Element html(String html) {
+public String toString() {
+public boolean equals(Object o) {
+public int hashCode() {
+
+[org.jsoup.parser.Parser | java]
+package org.jsoup.parser;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Parser {
+private static final Tag htmlTag = Tag.valueOf("html");
+private static final Tag headTag = Tag.valueOf("head");
+private static final Tag bodyTag = Tag.valueOf("body");
+private static final Tag titleTag = Tag.valueOf("title");
+private static final Tag textareaTag =
+...[truncated deterministically]...
+d potential child tag.
+@return true if this can contain child.
+@return if block tag
+public boolean isBlock() {
+@return if tag can contain block tags
+public boolean canContainBlock() {
+@return if this tag is an inline tag.
+public boolean isInline() {
+@return if this tag is a data only tag
+public boolean isData() {
+@return if this is an emtpy tag
+public boolean isEmpty() {
+@return if preserve whi
+...[truncated deterministically]...
+ic int hashCode() {
+public String toString() {
+private static Tag createBlock(String tagName) {
+private static Tag createInline(String tagName) {
+private static Tag register(Tag tag) {
+private Tag setContainInlineOnly() {
+private Tag setContainDataOnly() {
+private Tag setEmpty() {
+private Tag setOptionalClosing() {
+private Tag setPreserveWhitespace() {
+private Tag setAncestor(String... tagNames) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+
+public class ParserTableStructureTest {
+
+    @Test
+    public void appendRowToTableAddsRowAsTableChild() {
+        Element table = tableWithOneRow();
+
+        table.append("<tr><td>2</td></tr>");
+
+        assertEquals("<table><tr><td>1</td></tr><tr><td>2</td></tr></table>", table.toString());
+    }
+
+    @Test
+    public void prependRowToTableAddsRowBeforeExistingRow() {
+        Element table = tableWithOneRow();
+
+        table.prepend("<tr><td>2</td></tr>");
+
+        assertEquals("<table><tr><td>2</td></tr><tr><td>1</td></tr></table>", table.toString());
+    }
+
+    @Test
+    public void nestedImplicitTablesKeepTheirOwnImplicitRows() {
+        Document document = Parser.parse(
+                "<table><td><table><td>3</td><td>4</td></table><td>5</td></table>", "");
+
+        assertEquals(
+                "<table><tr><td><table><tr><td>3</td><td>4</td></tr></table></td></tr><tr><td>5</td></tr></table>",
+                document.body().html());
+    }
+
+    @Test
+    public void appendingEmptyHtmlLeavesTableUnchangedAndReturnsTable() {
+        Element table = tableWithOneRow();
+
+        Element result = table.append("");
+
+        assertSame(table, result);
+        assertEquals("<table><tr><td>1</td></tr></table>", table.toString());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void appendRejectsNullHtml() {
+        tableWithOneRow().append(null);
+    }
+
+    @Test
+    public void predefinedTagsAreCaseInsensitiveAndCanonical() {
+        Tag lowerCase = Tag.valueOf("tr");
+        Tag upperCase = Tag.valueOf("TR");
+
+        assertSame(lowerCase, upperCase);
+        assertEquals("tr", upperCase.getName());
+    }
+
+    private Element tableWithOneRow() {
+        Element table = new Element(Tag.valueOf("table"), "");
+        table.appendElement("tr").appendElement("td").appendText("1");
+        return table;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.jsoup.parser.ParserTableStructureTest::prependRowToTableAddsRowBeforeExistingRow
+ - org.jsoup.parser.ParserTableStructureTest::appendingEmptyHtmlLeavesTableUnchangedAndReturnsTable
+ - org.jsoup.parser.ParserTableStructureTest::nestedImplicitTablesKeepTheirOwnImplicitRows
+Failing generated tests: org.jsoup.parser.ParserTableStructureTest::appendRowToTableAddsRowAsTableChild, org.jsoup.parser.ParserTableStructureTest::appendingEmptyHtmlLeavesTableUnchangedAndReturnsTable, org.jsoup.parser.ParserTableStructureTest::nestedImplicitTablesKeepTheirOwnImplicitRows, org.jsoup.parser.ParserTableStructureTest::prependRowToTableAddsRowBeforeExistingRow

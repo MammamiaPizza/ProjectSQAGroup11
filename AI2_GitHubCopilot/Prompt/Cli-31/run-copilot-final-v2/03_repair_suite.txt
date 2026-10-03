@@ -1,0 +1,223 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 31  Version: Cli-31b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-205
+Trigger failures:
+- org.apache.commons.cli.HelpFormatterTest::testDefaultArgName
+ --> junit.framework.ComparisonFailure: expected:<usage: app -f <arg[ument]>
+Modified: org.apache.commons.cli.HelpFormatter, org.apache.commons.cli.Option, org.apache.commons.cli.OptionBuilder
+
+Available API/signatures:
+[org.apache.commons.cli.HelpFormatter | java]
+package org.apache.commons.cli;
+public class HelpFormatter
+public static final int DEFAULT_WIDTH = 74;
+public static final int DEFAULT_LEFT_PAD = 1;
+public static final int DEFAULT_DESC_PAD = 3;
+public static final String DEFAULT_SYNTAX_PREFIX = "usage: ";
+public static final String DEFAULT_OPT_PREFIX = "-";
+public static final String DEFAULT_LONG_OPT_PREFIX = "--";
+public static final String DEFAULT_LONG_OPT_SEPARATOR = " ";
+public static final String DEFAULT_ARG_NAME = "arg";
+public int defaultWidth = DEFAULT_WIDTH;
+public int defaultLeftPad = DEFAULT_LEFT_PAD;
+public int defaultDescPad = DEFAULT_DESC_PAD;
+public String defaultSyntaxPrefix = DEFAULT_SYNTAX_PREFIX;
+public String defaultNewLine = System.getProperty("line.separator");
+public String defaultOptPrefix = DEFAULT_OPT_PREFIX;
+pub
+...[truncated deterministically]...
+ftPad, int descPad)
+final String lpad = createPadding(leftPad);
+final String dpad = createPadding(descPad);
+final String padding = createPadding(nextLineTabStop);
+protected int findWrapPos(String text, int width, int startPos)
+protected String createPadding(int len)
+protected String rtrim(String s)
+private static class OptionComparator implements Comparator
+public int compare(Object o1, Object o2)
+
+[org.apache.commons.cli.Option | java]
+package org.apache.commons.cli;
+public class Option implements Cloneable, Serializable
+public static final int UNINITIALIZED = -1;
+public static final int UNLIMITED_VALUES = -2;
+private List values = new ArrayList();
+public Option(String opt, String description) throws IllegalArgumentException
+public Option(String opt, boolean hasArg, Strin
+...[truncated deterministically]...
+Arg(boolean hasArg)
+public static OptionBuilder withArgName(String name)
+public static OptionBuilder isRequired()
+public static OptionBuilder withValueSeparator(char sep)
+public static OptionBuilder withValueSeparator()
+public static OptionBuilder isRequired(boolean newRequired)
+public static OptionBuilder hasArgs()
+public static OptionBuilder hasArgs(int num)
+public static OptionBuilder hasOptionalArg()
+public static OptionBuilder hasOptionalArgs()
+public static OptionBuilder hasOptionalArgs(int numArgs)
+public static OptionBuilder withType(Object newType)
+public static OptionBuilder withDescription(String newDescription)
+public static Option create(char opt) throws IllegalArgumentException
+public static Option create() throws IllegalArgumentException
+public static Option create(String opt) throws IllegalArgumentException
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
+import junit.framework.TestCase;
+
+public class HelpFormatterTest extends TestCase {
+
+ private HelpFormatter formatter;
+ private StringWriter sw;
+ private PrintWriter pw;
+
+ protected void setUp() {
+     formatter = new HelpFormatter();
+     sw = new StringWriter();
+     pw = new PrintWriter(sw);
+ }
+
+ protected void tearDown() {
+     pw.close();
+ }
+
+ public void testDefaultArgName() {
+     Option option =
+OptionBuilder.hasArg().withArgName("argument").withDescription("foo").create('f');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     assertTrue(sw.toString().contains("-f <argument>"));
+ }
+
+ public void testDefaultArgNameFallback() {
+     Option option = OptionBuilder.hasArg().withDescription("foo").create('f');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("-f <arg>"));
+     assertFalse(out.contains("<argument>"));
+ }
+
+ public void testNoArgOption() {
+     Option option = OptionBuilder.withDescription("foo").create('f');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("-f"));
+     assertFalse(out.contains("<"));
+ }
+
+ public void testOptionalArgWithCustomName() {
+     Option option =
+OptionBuilder.hasOptionalArg().withArgName("file").withDescription("foo").create('f');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("["));
+     assertTrue(out.contains("<file>"));
+ }
+
+ public void testOptionalArgDefaultName() {
+     Option option = OptionBuilder.hasOptionalArg().withDescription("foo").create('f');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("["));
+     assertTrue(out.contains("<arg>"));
+ }
+
+ public void testNullArgNameFallback() {
+     Option option = OptionBuilder.hasArg().withDescription("foo").create('f');
+     option.setArgName(null);
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     assertTrue(sw.toString().contains("<arg>"));
+ }
+
+ public void testEmptyArgNameFallback() {
+     Option option = OptionBuilder.hasArg().withDescription("foo").create('f');
+     option.setArgName("");
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     assertTrue(sw.toString().contains("<arg>"));
+ }
+
+ public void testLongOptCustomArgName() {
+     Option option =
+OptionBuilder.hasArg().withLongOpt("output").withArgName("file").withDescription("foo").create('o');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     assertTrue(sw.toString().contains("--output <file>"));
+ }
+
+ public void testMultipleOptionsMixed() {
+     Options options = new Options();
+     options.addOption(OptionBuilder.hasArg().withArgName("file").create('f'));
+     options.addOption(OptionBuilder.hasArg().create('x'));
+     options.addOption(OptionBuilder.withDescription("verbose").create('v'));
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("<file>"));
+     assertTrue(out.contains("<arg>"));
+     assertFalse(out.contains("-v <"));
+ }
+
+ public void testOptionGroupCustomArgName() {
+     OptionGroup group = new OptionGroup();
+     group.addOption(OptionBuilder.hasArg().withArgName("file").create('f'));
+     Options options = new Options();
+     options.addOptionGroup(group);
+     formatter.printUsage(pw, 80, "app", options);
+     assertTrue(sw.toString().contains("<file>"));
+ }
+
+ public void testHasArgsCustomArgName() {
+     Option option = OptionBuilder.hasArgs().withArgName("files").create('f');
+     Options options = new Options();
+     options.addOption(option);
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("<files"));
+     assertTrue(out.contains("..."));
+ }
+
+ public void testOptionBuilderReset() {
+     OptionBuilder.withArgName("custom");
+     Option option = OptionBuilder.hasArg().create('f');
+     Option next = OptionBuilder.hasArg().create('x');
+     Options options = new Options();
+     options.addOption(option);
+     options.addOption(next);
+     formatter.printUsage(pw, 80, "app", options);
+     String out = sw.toString();
+     assertTrue(out.contains("-f <custom>"));
+     assertTrue(out.contains("-x <arg>"));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - org.apache.commons.cli.HelpFormatterTest::testEmptyArgNameFallback
+ - org.apache.commons.cli.HelpFormatterTest::testLongOptCustomArgName
+ - org.apache.commons.cli.HelpFormatterTest::testHasArgsCustomArgName
+Failing generated tests: org.apache.commons.cli.HelpFormatterTest::testEmptyArgNameFallback, org.apache.commons.cli.HelpFormatterTest::testHasArgsCustomArgName, org.apache.commons.cli.HelpFormatterTest::testLongOptCustomArgName

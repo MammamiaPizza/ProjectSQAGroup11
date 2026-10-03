@@ -1,0 +1,464 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 105  Version: Closure-105b
+JUnit: junit4-core.jar  Build: Ant
+Target: com.google.javascript.jscomp.FoldConstants
+Modified: com.google.javascript.jscomp.FoldConstants
+Triggers: com.google.javascript.jscomp.FoldConstantsTest::testStringJoinAdd
+
+Bug/specification summary:
+Bug report: 106
+Trigger failures:
+- com.google.javascript.jscomp.FoldConstantsTest::testStringJoinAdd
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.FoldConstants
+
+Prompt-01 test plan:
+TARGETS: FoldConstants::tryFoldAssign (ADD folding), FoldConstants::visit (Token.ADD, Token.STRING)
+ORACLES: expected folded JS code string; node-tree equality after process(…)
+CASES: normal "a"+"b"→"ab"; multi-literal chain; literal+variable (no fold); empty strings; order of
+operands; inside assignment/function/return; non-foldable mixed types
+RISKS: only simple concat covered; no error/diagnostic checks; static AST comparison only; no
+runtime eval
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.FoldConstants (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class FoldConstants extends AbstractPostOrderCallback
+private static final int AND_PRECEDENCE = NodeUtil.precedence(Token.AND);
+private static final int OR_PRECEDENCE = NodeUtil.precedence(Token.OR);
+public void process(Node externs, Node jsRoot) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void error(NodeTraversal t, DiagnosticType diagnostic, Node n) {
+private boolean consumesDanglingElse(Node n) {
+private void tryFoldAssign(NodeTraversal t, Node n, Node left, Node right) {
+private boolean tryMinimizeNot(NodeTraversal t, Node n, Node parent) {
+private void tryRemoveRepeatedStatements(NodeTraversal t, Node n) {
+private void tryReduceReturn(NodeTraversal t, Node n) {
+private boolean isPropertyAssignmentInExpression(NodeTraversal t, Node n) {
+@SuppressWarnings("fallthrough")
+private static final Pattern REGEXP_FLAGS_RE = Pattern.compile("^[gmi]*$");
+private static boolean areValidRegexpFlags(String flags) {
+private static boolean areSafeFlagsToFold(String flags) {
+private static Node makeForwardSlashBracketSafe(Node n) {
+static boolean containsUnicodeEscape(String s) {
+private void tryFoldForCondition(Node n, Node parent) {
+private boolean isExpressBlock(Node n) {
+private Node getBlockExpression(Node n) {
+private boolean isReturnExpressBlock(Node n) {
+private Node getBlockReturnExpression(Node n) {
+private boolean isVarBlock(Node n) {
+private Node getBlockVar(Node n) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.AbstractShallowCallback;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.List;
+import java.util.regex.Pattern;
+class FoldConstants extends AbstractPostOrderCallback
+
+/* METHOD FoldConstants */
+FoldConstants(AbstractCompiler compiler) {
+ this.compiler = compiler;
+ }
+
+/* METHOD process */
+public void process(Node externs, Node jsRoot) {
+ NodeTraversal.traverse(compiler, jsRoot, this);
+ }
+
+/* METHOD tryMinimizeNot */
+private boolean tryMinimizeNot(NodeTraversal t, Node n, Node parent) {
+ Node notChild = n.getFirstChild();
+ // negative operator of the current one : == -> != for instance.
+ int complementOperator;
+ switch (notChild.getType()) {
+ case Token.EQ:
+ complementOperator = Token.NE;
+ break;
+ case Token.NE:
+ complementOperator = Token.EQ;
+ break;
+ case Token.SHEQ:
+ complementOperator = Token.SHNE;
+ break;
+ case Token.SHNE:
+ complementOperator = Token.SHEQ;
+ break;
+ // GT, GE, LT, LE are not handled in this because !(x<NaN) != x>=NaN.
+ default:
+ return false;
+ }
+ Node newOperator = n.removeFirstChild();
+ newOperator.setType(complementOperator);
+ parent.replaceChild(n, newOperator);
+ t.getCompiler().reportCodeChange();
+ return true;
+ }
+
+/* METHOD isPropertyAssignmentInExpression */
+private boolean isPropertyAssignmentInExpression(NodeTraversal t, Node n) {
+ final boolean[] found = { false };
+ new NodeTraversal(t.getCompiler(), new AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ found[0] |= (n.getType() == Token.GETPROP &&
+ parent.getType() == Token.ASSIGN);
+ }
+ }).traverse(n);
+ return found[0];
+ }
+
+/* METHOD NodeTraversal */
+new NodeTraversal(t.getCompiler(), new AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ found[0] |= (n.getType() == Token.GETPROP &&
+ parent.getType() == Token.ASSIGN);
+ }
+ }
+
+/* METHOD isLowerPrecedenceInExpression */
+private boolean isLowerPrecedenceInExpression(NodeTraversal t, Node n,
+ final int precedence) {
+ final boolean[] lower = { false };
+ new NodeTraversal(t.getCompiler(), new AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ lower[0] |= NodeUtil.precedence(n.getType()) < precedence;
+ }
+ }).traverse(n);
+ return lower[0];
+ }
+
+/* METHOD NodeTraversal */
+new NodeTraversal(t.getCompiler(), new AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ lower[0] |= NodeUtil.precedence(n.getType()) < precedence;
+ }
+ }
+
+/* METHOD tryFoldLeftChildAdd */
+void tryFoldLeftChildAdd(NodeTraversal t, Node n, Node left, Node right,
+ Node parent) {
+
+ if (NodeUtil.isLiteralValue(right) &&
+ left.getType() == Token.ADD &&
+ left.getChildCount() == 2) {
+
+ Node ll = left.getFirstChild();
+ Node lr = ll.getNext();
+
+ // Left's right child MUST be a string. We would not want to fold
+ // foo() + 2 + 'a' because we don't know what foo() will return, and
+ // therefore we don't know if left is a string concat, or a numeric add.
+ if (lr.getType() != Token.STRING)
+ return;
+
+ String leftString = NodeUtil.getStringValue(lr);
+ String rightString = NodeUtil.getStringValue(right);
+ if (leftString != null && rightString != null) {
+ left.removeChild(ll);
+ String result = leftString + rightString;
+ n.replaceChild(left, ll);
+ n.replaceChild(right, Node.newString(result));
+ t.getCompiler().reportCodeChange();
+ }
+ }
+ }
+
+ /**
+ * Try to fold a ADD node
+ */
+ void tryFoldAdd(NodeTraversal t, Node n, Node left, Node right,
+ Node parent) {
+ if (left.getType() == Token.STRING ||
+ right.getType() == Token.STRING) {
+
+ // Add strings.
+ String leftString = NodeUtil.getStringValue(left);
+ String rightString = NodeUtil.getStringValue(right);
+ if (leftString != null && rightString != null) {
+ parent.replaceChild(n, Node.newString(leftString + rightString));
+ t.getCompiler().reportCodeChange();
+ }
+ } else {
+ // Try arithmetic add
+ tryFoldArithmetic(t, n, left, right, parent);
+ }
+ }
+
+ /**
+ * Try to fold arithmetic binary operators
+ */
+ void tryFoldArithmetic(NodeTraversal t, Node n, Node left, Node right,
+ Node parent) {
+
+ if (left.getType() == Token.NUMBER &&
+ right.getType() == Token.NUMBER) {
+ double result;
+ double lval = left.getDouble();
+ double rval = right.getDouble();
+
+ switch (n.getType()) {
+ case Token.ADD:
+ result = lval + rval;
+ break;
+ case Token.SUB:
+ result = lval - rval;
+ break;
+ case Token.MUL:
+ result = lval * rval;
+ break;
+ case Token.DIV:
+ if (rval == 0) {
+ error(t, DIVIDE_BY_0_ERROR, right);
+ return;
+ }
+ result = lval / rval;
+ break;
+ default:
+ throw new Error("Unknown arithmetic operator");
+ }
+
+ // length of the left and right value plus 1 byte for the operator.
+ if (String.valueOf(result).length() <=
+ String.valueOf(lval).length() + String.valueOf(rval).length() + 1) {
+ parent.replaceChild(n, Node.newNumber(result));
+ t.getCompiler().reportCodeChange();
+ }
+ }
+ }
+
+ /**
+ * Try to fold arithmetic binary operators
+ */
+ void tryFoldBitAndOr(NodeTraversal t, Node n, Node left, Node right,
+ Node parent) {
+
+ if (left.getType() == Token.NUMBER &&
+ right.getType() == Token.NUMBER) {
+ double result;
+ double lval = left.getDouble();
+ double rval = right.getDouble();
+
+ // For now, we are being extra conservative, and only folding ints in
+ // the range MIN_VALUE-MAX_VALUE
+ if (lval < Integer.MIN_VALUE || lval > Integer.MAX_VALUE ||
+ rval < Integer.MIN_VALUE || rval > Integer.MAX_VALUE) {
+
+ // Fall back through and let the javascript use the larger values
+ return;
+ }
+
+ // Convert the numbers to ints
+ int lvalInt = (int) lval;
+ if (lvalInt != lval) {
+ return;
+ }
+
+ int rvalInt = (int) rval;
+ if (rvalInt != rval) {
+ return;
+ }
+
+ switch (n.getType()) {
+ case Token.BITAND:
+ result = lvalInt & rvalInt;
+ break;
+ case Token.BITOR:
+ result = lvalInt | rvalInt;
+ break;
+ default:
+ throw new Error("Unknown bitwise operator");
+ }
+ parent.replaceChild(n, Node.newNumber(result));
+ t.getCompiler().reportCodeChange();
+ }
+ }
+
+ /**
+ * Try to fold shift operations
+ */
+ void tryFoldShift(NodeTraversal t, Node n, Node left, Node right,
+ Node parent) {
+
+ if (left.getType() == Token.NUMBER &&
+ right.getType() == Token.NUMBER) {
+
+ double result;
+ double lval = left.getDouble();
+ double rval =
+...[truncated deterministically]...
+t.
+ if (!(lval >= Integer.MIN_VALUE && lval <= Integer.MAX_VALUE)) {
+ error(t, BITWISE_OPERAND_OUT_OF_RANGE, left);
+ return;
+ }
+
+ // only the lower 5 bits are used when shifting, so don't do anything
+ // if the shift amount is outside [0,32)
+ if (!(rval >= 0 && rval < 32)) {
+ error(t, SHIFT_AMOUNT_OUT_OF_BOUNDS, right);
+ return;
+ }
+
+ // Convert the numbers to ints
+ int lvalInt = (int) lval;
+ if (lvalInt != lval) {
+ error(t, FRACTIONAL_BITWISE_OPERAND, left);
+ return;
+ }
+
+ int rvalInt = (int) rval;
+ if (rvalInt != rval) {
+ error(t, FRACTIONAL_BITWISE_OPERAND, right);
+ return;
+ }
+
+ switch (n.getType()) {
+ case Token.LSH:
+ result = lvalInt << rvalInt;
+ break;
+ case Token.RSH:
+ result = lvalInt >> rvalInt;
+ break;
+ case Token.URSH:
+ result = lvalInt >>> rvalInt;
+ break;
+ default:
+ throw new AssertionError("Unknown shift operator: " +
+ Node.tokenToName(n.getType()));
+ }
+ parent.replaceChild(n, Node.newNumber(result));
+ t.getCompiler().reportCodeChange();
+ }
+ }
+
+/* METHOD tryFoldArithmetic */
+void tryFoldArithmetic(NodeTraversal t, Node n, Node left, Node right,
+ Node parent) {
+
+ if (left.getType() == Token.NUMBER &&
+ right.getType() == Token.NUMBER) {
+ double result;
+ double lval = left.getDouble();
+ double rval = right.getDouble();
+
+ switch (n.getType()) {
+ case Token.ADD:
+ result = lval + rval;
+ break;
+ case Token.SUB:
+ result = lval - rval;
+ break;
+ case Token.MUL:
+ result = lval * rval;
+ break;
+ case Token.DIV:
+ if (rval == 0) {
+ error(t, DIVIDE_BY_0_ERROR, right);
+ return;
+ }
+ result = lval / rval;
+ break;
+ default:
+ throw new Error("Unknown arithmetic operator");
+ }
+
+ // length of the left and right value plus 1 byte for the operator.
+ if (String.valueOf(result).length() <=
+ String.valueOf(lval).length() + String.valueOf(rval).length() + 1) {
+ parent.replaceChild(n, Node.newNumber(result));
+ t.getCompiler().reportCodeChange();
+ }
+ }
+ }
+
+/* METHOD maybeReplaceChildWithNumber */
+private void maybeReplaceChildWithNumber(NodeTraversal t, Node n, Node parent,
+ int num) {
+ Node newNode = Node.newNumber(num);
+ if(!newNode.isEquivalentTo(n)) {
+ parent.replaceChild(n, newNode);
+ t.getCompiler().reportCodeChange();
+ }
+ }
+
+/* METHOD tryFoldBlock */
+void tryFoldBlock(NodeTraversal t, Node n, Node parent) {
+ // Remove any useless children
+ for (Node c = n.getFirstChild(); c != null; ) {
+ Node next = c.getNext(); // save c.next, since 'c' may be removed
+ if (!NodeUtil.mayHaveSideEffects(c)) {
+ n.removeChild(c); // lazy kids
+ t.getCompiler().reportCodeChange();
+ }
+ c = next;
+ }
+
+ if (n.isSyntheticBlock() || parent == null) {
+ return;
+ }
+
+ // Try to remove the block.
+ if (NodeUtil.tryMergeBlock(n)) {
+ t.getCompiler().reportCodeChange();
+ }
+ }
+
+/* METHOD tryFoldHookIf */
+boolean tryFoldHookIf(NodeTraversal t, Node n, Node parent) {
+ int type = n.getType();
+ Node cond = n.getFirstChild();
+ Node thenBody = cond.getNext();
+ Node elseBody = thenBody.getNext();
+
+ boolean changes = false;
+
+ if (type == Token.IF) {
+ // if (x) { .. } else { } --> if (x) { ... }
+ if (elseBody != null && !NodeUtil.mayHaveSideEffects(elseBody)) {
+ n.removeChild(elseBody);
+ elseBody = null;
+ t.getCompiler().reportCodeChange();
+ changes = true;
+ }
+
+ // if (x) { } else { ... } --> if (!x) { ... }
+ if (!NodeUtil.mayHaveSideEffects(thenBody) && elseBody != null) {
+ n.removeChild(elseBody);
+ n.replaceChild(thenBody, elseBody);
+ Node notCond = new Node(Token.NOT);
+ n.replaceChild(cond, notCond);
+ notCond.addChildToFront(cond);
+ cond = notCond;
+ thenBody = cond.getNext();
+ elseBody = null;
+ t.getCompiler().reportCodeChange();
+ ch
+...[truncated deterministically]...
+(); -> x||bar();
+ if (isLowerPrecedenceInExpression(t, cond, OR_PRECEDENCE) &&
+ isLowerPrecedenceInExpression(t, expr.getFirstChild(),
+ OR_PRECEDENCE)) {
+ // It's not okay to add two sets of parentheses.
+ return;
+ }
+
+ Node or = new Node(Token.OR, cond.removeFirstChild(),
+ expr.removeFirstChild());
+ Node newExpr = NodeUtil.newExpr(or);
+ parent.replaceChild(n, newExpr);
+ t.getCompiler().reportCodeChange();
+
+ return;
+ }

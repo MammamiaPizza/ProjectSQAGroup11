@@ -1,0 +1,317 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 15  Version: JacksonDatabind-15b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 731
+Trigger failures:
+- com.fasterxml.jackson.databind.convert.TestConvertingSerializer::testIssue731
+ --> com.fasterxml.jackson.databind.JsonMappingException: No serializer found for class com.fasterxml.jackson.databind.convert.TestConvertingSerializer$DummyBean and no properties discovered to create BeanSerializer (to avoid exception, disable SerializationFeature.FAIL_ON_EMPTY_BEANS) )
+Modified: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.ser.BeanSerializerFactory, com.fasterxml.jackson.databind.ser.std.BeanSerializerBase, com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer, com.fasterxml.jackson.databind.ser.std.StdSerializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.JavaType | java]
+package com.fasterxml.jackson.databind;
+public abstract class JavaType
+protected final Class<?> _class;
+protected final int _hash;
+protected final Object _valueHandler;
+protected final Object _typeHandler;
+protected final boolean _asStatic;
+public abstract JavaType withTypeHandler(Object h);
+public abstract JavaType withContentTypeHandler(Object h);
+public abstract JavaType withValueHandler(Object h);
+public abstract JavaType withContentValueHandler(Object h);
+public abstract JavaType withStaticTyping();
+public JavaType narrowBy(Class<?> subclass)
+public JavaType forcedNarrowBy(Class<?> subclass)
+public JavaType widenBy(Class<?> superclass) {
+protected abstract JavaType _narrow(Class<?> subclass);
+protected JavaType _widen(Class<?> superclass) { return _narrow(superclass); }
+public abstrac
+...[truncated deterministically]...
+String getGenericSignature() {
+public abstract StringBuilder getGenericSignature(StringBuilder sb);
+public String getErasedSignature() {
+public abstract StringBuilder getErasedSignature(StringBuilder sb);
+protected void _assertSubclass(Class<?> subclass, Class<?> superClass) {
+public abstract String toString();
+public abstract boolean equals(Object o);
+public final int hashCode() { return _hash; }
+
+[com.fasterxml.jackson.databind.ser.BeanSerializerFactory | java]
+package com.fasterxml.jackson.databind.ser;
+public class BeanSerializerFactory
+public final static BeanSerializerFactory instance = new BeanSerializerFactory(null);
+protected BeanSerializerFactory(SerializerFactoryConfig config)
+@Override
+public SerializerFactory withConfig(SerializerFactoryConfig config)
+if (g
+...[truncated deterministically]...
+SuppressWarnings("unchecked")
+protected StdSerializer(JavaType type) {
+protected StdSerializer(Class<?> t, boolean dummy) {
+@Override
+public Class<T> handledType() { return _handledType; }
+public abstract void serialize(T value, JsonGenerator jgen, SerializerProvider provider)
+public JsonNode getSchema(SerializerProvider provider, Type typeHint)
+public JsonNode getSchema(SerializerProvider provider, Type typeHint, boolean isOptional)
+protected ObjectNode createObjectNode() {
+protected ObjectNode createSchemaNode(String type)
+protected ObjectNode createSchemaNode(String type, boolean isOptional)
+public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint)
+protected boolean isDefaultSerializer(JsonSerializer<?> serializer) {
+final AnnotationIntrospector intr = provider.getAnnotationIntrospector();
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.convert;
+
+import java.util.*;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer;
+import com.fasterxml.jackson.databind.util.Converter;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+public class TestConvertingSerializerBug731 {
+
+ public static class DummyBean { }
+
+ public static class TargetBean {
+     private String name;
+     public TargetBean() { }
+     public TargetBean(String name) { this.name = name; }
+     public String getName() { return name; }
+     public void setName(String name) { this.name = name; }
+ }
+
+ public static class EmptyBean { }
+
+ public static class NestedBean {
+     private int id;
+     private TargetBean child;
+     public NestedBean() { }
+     public NestedBean(int id, TargetBean child) { this.id = id; this.child = child; }
+     public int getId() { return id; }
+     public void setId(int id) { this.id = id; }
+     public TargetBean getChild() { return child; }
+     public void setChild(TargetBean child) { this.child = child; }
+ }
+
+ // Converter implementations
+ public static class DummyToTargetConverter implements Converter<DummyBean, TargetBean> {
+     @Override
+     public TargetBean convert(DummyBean value) {
+         return new TargetBean("converted");
+     }
+ }
+
+ public static class NullResultConverter implements Converter<DummyBean, TargetBean> {
+     @Override
+     public TargetBean convert(DummyBean value) {
+         return null;
+     }
+ }
+
+ public static class DummyToListConverter implements Converter<DummyBean, List<String>> {
+     @Override
+     public List<String> convert(DummyBean value) {
+         return Arrays.asList("a", "b");
+     }
+ }
+
+ public static class DummyToMapConverter implements Converter<DummyBean, Map<String, Object>> {
+     @Override
+     public Map<String, Object> convert(DummyBean value) {
+         Map<String, Object> m = new HashMap<String, Object>();
+         m.put("key", 123);
+         return m;
+     }
+ }
+
+ public static class DummyToEmptyBeanConverter implements Converter<DummyBean, EmptyBean> {
+     @Override
+     public EmptyBean convert(DummyBean value) {
+         return new EmptyBean();
+     }
+ }
+
+ public static class DummyToNestedBeanConverter implements Converter<DummyBean, NestedBean> {
+     @Override
+     public NestedBean convert(DummyBean value) {
+         return new NestedBean(1, new TargetBean("inner"));
+     }
+ }
+
+ public static class WrappingConverter implements Converter<DummyBean, TargetBean> {
+     @Override
+     public TargetBean convert(DummyBean value) {
+         return new TargetBean("wrapped");
+     }
+ }
+
+ // Custom serializer for TargetBean (to test delegation)
+ @SuppressWarnings("serial")
+ public static class CustomTargetSerializer extends
+com.fasterxml.jackson.databind.ser.std.StdSerializer<TargetBean> {
+     public CustomTargetSerializer() {
+         super(TargetBean.class);
+     }
+     @Override
+     public void serialize(TargetBean value, com.fasterxml.jackson.core.JsonGenerator gen,
+             SerializerProvider provider) throws java.io.IOException {
+         gen.writeString(value.getName().toUpperCase());
+     }
+ }
+
+ // ================ Tests ================
+
+ @Test
+ public void testIssue731() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToTargetConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("{\"name\":\"converted\"}", json);
+ }
+
+ @Test
+ public void testNullResult() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new NullResultConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("null", json);
+ }
+
+ @Test
+ public void testListResult() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToListConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("[\"a\",\"b\"]", json);
+ }
+
+ @Test
+ public void testMapResult() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToMapConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("{\"key\":123}", json);
+ }
+
+ @Test
+ public void testNestedBeanResult() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToNestedBeanConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("{\"id\":1,\"child\":{\"name\":\"inner\"}}", json);
+ }
+
+ @Test
+ public void testEmptyBeanWithFailEnabled() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     mapper.enable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToEmptyBeanConverter()));
+     mapper.registerModule(mod);
+     try {
+         mapper.writeValueAsString(new DummyBean());
+         Assert.fail("Should throw JsonMappingException");
+     } catch (JsonMappingException e) {
+         // expected
+     }
+ }
+
+ @Test
+ public void testEmptyBeanWithFailDisabled() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToEmptyBeanConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("{}", json);
+ }
+
+ @Test
+ public void testCustomSerializerForDelegateTypeIsUsed() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     SimpleModule mod = new SimpleModule();
+     // register a custom serializer for TargetBean
+     mod.addSerializer(TargetBean.class, new CustomTargetSerializer());
+     // register delegating serializer for DummyBean
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToTargetConverter()));
+     mapper.registerModule(mod);
+     // The delegating serializer should use the custom serializer for TargetBean
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("\"CONVERTED\"", json);
+ }
+
+ @Test
+ public void testConverterOutputTypeWithWildcard() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     // Create a converter that returns a Collection with wildcard type
+     Converter<DummyBean, Collection<?>> converter = new Converter<DummyBean, Collection<?>>() {
+         @Override
+         public Collection<?> convert(DummyBean value) {
+             return Arrays.asList("x", "y");
+         }
+     };
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(converter));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("[\"x\",\"y\"]", json);
+ }
+
+ @Test
+ public void testSerializerHandlesTypeHandler() throws Exception {
+     // Use a mix-in to attach a typeHandler to DummyBean
+     ObjectMapper mapper = new ObjectMapper();
+     abstract class DummyMixIn {
+         // This annotation might need a specific type handler; we use a simple delegating
+serializer
+         // to verify that the typeHandler does not break the delegated serialization
+     }
+     // Not strictly necessary, but we test that registration remains working
+     SimpleModule mod = new SimpleModule();
+     mod.addSerializer(new StdDelegatingSerializer(new DummyToTargetConverter()));
+     mapper.registerModule(mod);
+     String json = mapper.writeValueAsString(new DummyBean());
+     Assert.assertEquals("{\"name\":\"converted\"}", json);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-15f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-15f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-15f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-15f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-15f-copilot/.test_suite/com/fasterxml/jackson/databind/convert/TestConvertingSerializerBug731.java:220: error: <identifier> expected
+ [javac] serializer
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

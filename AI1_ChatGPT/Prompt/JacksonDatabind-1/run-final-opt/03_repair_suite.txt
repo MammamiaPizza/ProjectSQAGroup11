@@ -1,0 +1,141 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 1  Version: JacksonDatabind-1b
+JUnit: junit-4.10.jar  Build: Maven
+Bug/specification summary:
+Bug report: 223
+Trigger failures:
+- com.fasterxml.jackson.databind.struct.TestPOJOAsArray::testNullColumn
+ --> junit.framework.ComparisonFailure: expected:<[null,[]"bar"]> but was:<[null,[null,]"bar"]>
+Modified: com.fasterxml.jackson.databind.ser.BeanPropertyWriter
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ser.BeanPropertyWriter | java]
+package com.fasterxml.jackson.databind.ser;
+public class BeanPropertyWriter
+public final static Object MARKER_FOR_EMPTY = new Object();
+protected final AnnotatedMember _member;
+protected final Annotations _contextAnnotations;
+protected final JavaType _declaredType;
+protected final Method _accessorMethod;
+protected final Field _field;
+protected HashMap<Object,Object> _internalSettings;
+protected final SerializedString _name;
+protected final PropertyName _wrapperName;
+protected final JavaType _cfgSerializationType;
+protected JsonSerializer<Object> _serializer;
+protected JsonSerializer<Object> _nullSerializer;
+protected PropertySerializerMap _dynamicSerializers;
+protected final boolean _suppressNulls;
+protected final Object _suppressableValue;
+protected final Class<?>[] _includeInViews;
+protected TypeSerializer _typeSerializer;
+protected JavaType _nonTrivialBaseType;
+protected final boolean _isRequired;
+@SuppressWarnings("unchecked")
+protected BeanPropertyWriter(BeanPropertyWriter base) {
+protected BeanPropertyWriter(BeanPropertyWriter base, SerializedString name)
+public BeanPropertyWriter rename(NameTransformer transformer) {
+public void assignSerializer(JsonSerializer<Object> ser)
+public void assignNullSerializer(JsonSerializer<Object> nullSer)
+public BeanPropertyWriter unwrappingWriter(NameTransformer unwrapper) {
+public void setNonTrivialBaseType(JavaType t) {
+@Override
+public String getName() {
+public JavaType getType() {
+public PropertyName getWrapperName() {
+public boolean isRequired() {
+public <A extends Annotation> A getAnnotation(Class<A> acls) {
+public <A extends Annot
+...[truncated deterministically]...
+ropertyType()
+public Type getGenericPropertyType()
+public Class<?>[] getViews() { return _includeInViews; }
+@Deprecated
+protected boolean isRequired(AnnotationIntrospector intr) {
+@SuppressWarnings("deprecation")
+public void depositSchemaProperty(ObjectNode propertiesNode, SerializerProvider provider)
+public void serializeAsField(Object bean, JsonGenerator jgen, SerializerProvider prov)
+public void serializeAsColumn(Object bean, JsonGenerator jgen, SerializerProvider prov)
+public void serializeAsPlaceholder(Object bean, JsonGenerator jgen, SerializerProvider prov)
+public final Object get(Object bean) throws Exception
+protected void _handleSelfReference(Object bean, JsonSerializer<?> ser)
+public String toString()
+sb.append(", no static serializer");
+sb.append(", static serializer of type "+_serializer.getClass().getName());
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.ser;
+
+import java.util.Collections;
+import java.util.List;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import static org.junit.Assert.assertEquals;
+
+public class BeanPropertyWriterNullColumnTest
+{
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    public void nullSuppressedColumnIsOmittedWithoutAddingArrayNull() throws Exception
+    {
+        ArrayRow row = new ArrayRow(null, null, Collections.<String>emptyList(), "bar");
+
+        assertEquals("[null,[],\"bar\"]", mapper.writeValueAsString(row));
+    }
+
+    @Test
+    public void nonNullSuppressedColumnIsRetainedInItsOriginalOrder() throws Exception
+    {
+        ArrayRow row = new ArrayRow(null, "included", Collections.<String>emptyList(), "bar");
+
+        assertEquals("[null,\"included\",[],\"bar\"]", mapper.writeValueAsString(row));
+    }
+
+    @Test
+    public void emptyCollectionColumnIsSerializedAsEmptyArrayRatherThanOmitted() throws Exception
+    {
+        ArrayRow row = new ArrayRow("first", null, Collections.<String>emptyList(), "last");
+
+        assertEquals("[\"first\",[],\"last\"]", mapper.writeValueAsString(row));
+    }
+
+    @JsonFormat(shape = JsonFormat.Shape.ARRAY)
+    @JsonPropertyOrder({ "leading", "suppressed", "values", "tail" })
+    public static class ArrayRow
+    {
+        public String leading;
+
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String suppressed;
+
+        public List<String> values;
+
+        public String tail;
+
+        public ArrayRow(String leading, String suppressed, List<String> values, String tail)
+        {
+            this.leading = leading;
+            this.suppressed = suppressed;
+            this.values = values;
+            this.tail = tail;
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.ser.BeanPropertyWriterNullColumnTest::emptyCollectionColumnIsSerializedAsEmptyArrayRatherThanOmitted
+ - com.fasterxml.jackson.databind.ser.BeanPropertyWriterNullColumnTest::nullSuppressedColumnIsOmittedWithoutAddingArrayNull
+
+Failing generated tests: com.fasterxml.jackson.databind.ser.BeanPropertyWriterNullColumnTest::emptyCollectionColumnIsSerializedAsEmptyArrayRatherThanOmitted, com.fasterxml.jackson.databind.ser.BeanPropertyWriterNullColumnTest::nullSuppressedColumnIsOmittedWithoutAddingArrayNull

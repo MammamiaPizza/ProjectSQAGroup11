@@ -1,0 +1,144 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 32  Version: Mockito-32b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 216
+Trigger failures:
+- org.mockitousage.bugs.SpyShouldHaveNiceNameTest::shouldPrintNiceName
+ --> junit.framework.AssertionFailedError: <'
+Modified: org.mockito.internal.configuration.SpyAnnotationEngine
+
+Available API/signatures:
+[org.mockito.internal.configuration.SpyAnnotationEngine | java]
+package org.mockito.internal.configuration;
+@SuppressWarnings({"unchecked"})
+public class SpyAnnotationEngine implements AnnotationEngine {
+public Object createMockFor(Annotation annotation, Field field) {
+@SuppressWarnings("deprecation")
+public void process(Class<?> context, Object testClass) {
+if (field.isAnnotationPresent(Spy.class)) {
+assertNoAnnotations(Spy.class, field, Mock.class, org.mockito.MockitoAnnotations.Mock.class, Captor.class);
+
+Generated JUnit Test:
+package org.mockito.internal.configuration;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.Spy;
+import org.mockito.Mockito;
+import org.mockito.exceptions.base.MockitoException;
+import org.mockito.internal.util.MockUtil;
+
+public class SpyAnnotationEngineTest {
+
+ static class SingleSpyField {
+     @Spy Object f = new Object();
+ }
+
+ static class SpecialCharField {
+     @Spy Object my$Field = new Object();
+ }
+
+ static class PrivateSpyField {
+     @Spy private Object secret = new Object();
+ }
+
+ static class InnerClassFixture {
+     @Spy Object innerField = new Object();
+ }
+
+ static class NullSpyField {
+     @Spy Object nullField;
+ }
+
+ static class MultipleSpyFields {
+     @Spy Object a = new Object();
+     @Spy Object b = new Object();
+ }
+
+ static class NonSpyFieldFixture {
+     @Spy Object spied = new Object();
+     Object notSpied = new Object();
+ }
+
+ static class CombinedAnnotationFixture {
+     @Spy @Mock Object bad;
+ }
+
+ @Test
+ public void shouldUseFieldNameAsSpyName() {
+     SingleSpyField tc = new SingleSpyField();
+     new SpyAnnotationEngine().process(SingleSpyField.class, tc);
+     assertEquals("f", tc.f.toString());
+ }
+
+ @Test
+ public void shouldHandleSpecialCharsInFieldName() {
+     SpecialCharField tc = new SpecialCharField();
+     new SpyAnnotationEngine().process(SpecialCharField.class, tc);
+     assertEquals("my$Field", tc.my$Field.toString());
+ }
+
+ @Test
+ public void shouldSpyPrivateField() {
+     PrivateSpyField tc = new PrivateSpyField();
+     new SpyAnnotationEngine().process(PrivateSpyField.class, tc);
+     assertEquals("secret", tc.secret.toString());
+ }
+
+ @Test
+ public void shouldSpyFieldInInnerClass() {
+     InnerClassFixture tc = new InnerClassFixture();
+     new SpyAnnotationEngine().process(InnerClassFixture.class, tc);
+     assertEquals("innerField", tc.innerField.toString());
+ }
+
+ @Test(expected = MockitoException.class)
+ public void shouldThrowExceptionWhenInstanceNull() {
+     NullSpyField tc = new NullSpyField();
+     new SpyAnnotationEngine().process(NullSpyField.class, tc);
+ }
+
+ @Test
+ public void shouldAssignCorrectNamesToMultipleSpyFields() {
+     MultipleSpyFields tc = new MultipleSpyFields();
+     new SpyAnnotationEngine().process(MultipleSpyFields.class, tc);
+     assertEquals("a", tc.a.toString());
+     assertEquals("b", tc.b.toString());
+ }
+
+ @Test
+ public void shouldIgnoreNonSpyField() {
+     NonSpyFieldFixture tc = new NonSpyFieldFixture();
+     new SpyAnnotationEngine().process(NonSpyFieldFixture.class, tc);
+     assertFalse(new MockUtil().isMock(tc.notSpied));
+ }
+
+ @Test
+ public void shouldResetAlreadyMockedSpy() {
+     SingleSpyField tc = new SingleSpyField();
+     tc.f = Mockito.mock(Object.class);
+     Object originalMock = tc.f;
+     new SpyAnnotationEngine().process(SingleSpyField.class, tc);
+     assertSame(originalMock, tc.f);
+ }
+
+ @Test(expected = RuntimeException.class)
+ public void shouldThrowForCombinedSpyAndMock() {
+     CombinedAnnotationFixture tc = new CombinedAnnotationFixture();
+     new SpyAnnotationEngine().process(CombinedAnnotationFixture.class, tc);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldHandleSpecialCharsInFieldName
+ - org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldSpyFieldInInnerClass
+ - org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldAssignCorrectNamesToMultipleSpyFields
+Failing generated tests: org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldAssignCorrectNamesToMultipleSpyFields, org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldHandleSpecialCharsInFieldName, org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldSpyFieldInInnerClass, org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldSpyPrivateField, org.mockito.internal.configuration.SpyAnnotationEngineTest::shouldUseFieldNameAsSpyName

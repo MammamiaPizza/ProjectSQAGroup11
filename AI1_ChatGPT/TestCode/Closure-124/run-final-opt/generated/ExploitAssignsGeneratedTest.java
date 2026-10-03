@@ -1,0 +1,46 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+
+public final class ExploitAssignsGeneratedTest extends CompilerTestCase {
+
+  @Override
+  protected CompilerPass getProcessor(Compiler compiler) {
+    return new PeepholeOptimizationsPass(compiler, new ExploitAssigns());
+  }
+
+  @Override
+  protected int getNumRepetitions() {
+    return 1;
+  }
+
+  @Test
+  public void testChainsNameAssignmentIntoFollowingAssignment() {
+    test("a = 3; b = a;", "b = a = 3;");
+  }
+
+  @Test
+  public void testChainsImmutableValueIntoFollowingAssignment() {
+    test("a = true; b = true;", "b = a = true;");
+  }
+
+  @Test
+  public void testChainsThisPropertyAssignment() {
+    test("this.a = 0; this.a;", "this.a = this.a = 0;");
+  }
+
+  @Test
+  public void testDoesNotExploitReplacementThatReassignsReferencedName() {
+    testSame("a = a.b; a.b;");
+  }
+
+  @Test
+  public void testIssue1017DoesNotExploitReplacementThatChangesQualifiedBase() {
+    testSame("a.b = a.b.c; a.b.c;");
+  }
+
+  @Test
+  public void testDoesNotMoveAssignmentAcrossArbitraryPropertyLValue() {
+    testSame("a.b = 0; a.b = 0;");
+  }
+}

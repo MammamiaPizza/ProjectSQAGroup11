@@ -1,0 +1,212 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: JacksonDatabind  Bug: 109  Version: JacksonDatabind-109b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.std.NumberSerializer, com.fasterxml.jackson.databind.ser.std.NumberSerializers
+Bug/specification summary:
+Bug report: 2230
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.jdk.BigDecimalPlain2230Test::testBigIntegerAsPlainTest
+ --> junit.framework.ComparisonFailure: expected:<{"value":"[0.0000000005]"}> but was:<{"value":"[5E-10]"}>
+Modified: com.fasterxml.jackson.databind.ser.std.NumberSerializer, com.fasterxml.jackson.databind.ser.std.NumberSerializers
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ser.std.NumberSerializer | java]
+package com.fasterxml.jackson.databind.ser.std;
+@JacksonStdImpl
+@SuppressWarnings("serial")
+public class NumberSerializer
+public final static NumberSerializer instance = new NumberSerializer(Number.class);
+protected final boolean _isInt;
+public NumberSerializer(Class<? extends Number> rawType) {
+_isInt = (rawType == BigInteger.class);
+@Override
+public void serialize(Number value, JsonGenerator g, SerializerProvider provider) throws IOException
+public JsonNode getSchema(SerializerProvider provider, Type typeHint) {
+public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) throws JsonMappingException
+if (((Class<?>) handledType()) == BigDecimal.class) {
+
+[com.fasterxml.jackson.databind.ser.std.NumberSerializers | java]
+package com.fasterxml.jackson.databind.ser.std;
+@SuppressWarnings("serial")
+public class NumberSerializers {
+protected NumberSerializers() { }
+public static void addAll(Map<String, JsonSerializer<?>> allDeserializers) {
+allDeserializers.put(Integer.class.getName(), new IntegerSerializer(Integer.class));
+allDeserializers.put(Long.class.getName(), new LongSerializer(Long.class));
+allDeserializers.put(Byte.class.getName(), IntLikeSerializer.instance);
+allDeserializers.put(Short.class.getName(), ShortSerializer.instance);
+allDeserializers.put(Double.class.getName(), new DoubleSerializer(Double.class));
+allDeserializers.put(Float.class.getName(), FloatSerializer.instance);
+/* Shared base class
+public abstract static class Base<T> extends StdScalarSerializer<T>
+protected final JsonParser.NumberType _numberType;
+protected final
+...[truncated deterministically]...
+, "integer");
+public static class LongSerializer extends Base<Object> {
+public LongSerializer(Class<?> cls) {
+public static class FloatSerializer extends Base<Object> {
+final static FloatSerializer instance = new FloatSerializer();
+public FloatSerializer() {
+super(Float.class, JsonParser.NumberType.FLOAT, "number");
+public static class DoubleSerializer extends Base<Object> {
+public DoubleSerializer(Class<?> cls) {
+
+Existing test summary (method names/assertions only):
+Test methods: testPlainEnabledNormalValues, testPlainEnabledBoundaryValues, testPlainEnabledLargeIntegerScale, testPlainDisabledExponentOutput, testBigIntegerUnaffectedByFeature, testNonBigDecimalNumberTypes, testNullNumber, testPlainKeepsTrailingZeros
+Representative assertions:
+assertEquals("0.1", mapperPlain.writeValueAsString(new BigDecimal("0.1")));
+assertEquals("100", mapperPlain.writeValueAsString(new BigDecimal("100")));
+assertEquals("0.0000000005", mapperPlain.writeValueAsString(new BigDecimal("0.0000000005")));
+assertEquals("0.00000000000000000001", mapperPlain.writeValueAsString(new
+assertEquals("-0.00000000000000000001", mapperPlain.writeValueAsString(new
+assertEquals("100000000000000000000", mapperPlain.writeValueAsString(new
+assertEquals("0", mapperPlain.writeValueAsString(BigDecimal.ZERO));
+assertEquals("5E-10", mapperDefault.writeValueAsString(new BigDecimal("0.0000000005")));
+assertEquals("1E-20", mapperDefault.writeValueAsString(new BigDecimal("1E-20")));
+assertEquals("1E+20", mapperDefault.writeValueAsString(new BigDecimal("1E+20")));
+assertEquals(bigInt.toString(), mapperPlain.writeValueAsString(bigInt));
+assertEquals(bigInt.toString(), mapperDefault.writeValueAsString(bigInt));
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+116,61,52,14
+
+Line/branch gaps:
+Class: com.fasterxml.jackson.databind.ser.std.NumberSerializer
+Uncovered lines: 102, 103, 105, 106, 109, 112, 118, 59, 60, 62, 96, 80, 81, 82, 83, 84, 85, 86, 87, 90, 59, 60, 62, 80, 81, 82, 83, 84, 85, 86 ... (+10 more)
+Partially covered branch lines: 55 (50% (1/2)), 56 (50% (1/2)), 75 (50% (1/2)), 55 (50% (1/2)), 56 (50% (1/2)), 75 (50% (1/2))
+Class: com.fasterxml.jackson.databind.ser.std.NumberSerializers
+Uncovered lines: 24, 24
+Partially covered branch lines: (none)
+
+Relevant buggy-source snippets around reported gaps:
+[com.fasterxml.jackson.databind.ser.std.NumberSerializer]
+100: } else {
+101: if (((Class<?>) handledType()) == BigDecimal.class) {
+102: visitFloatFormat(visitor, typeHint, JsonParser.NumberType.BIG_DECIMAL);
+103: } else {
+104: // otherwise bit unclear what to call... but let's try:
+---
+101: if (((Class<?>) handledType()) == BigDecimal.class) {
+102: visitFloatFormat(visitor, typeHint, JsonParser.NumberType.BIG_DECIMAL);
+103: } else {
+104: // otherwise bit unclear what to call... but let's try:
+105: /*JsonNumberFormatVisitor v2 =*/ visitor.expectNumberFormat(typeHint);
+---
+103: } else {
+104: // otherwise bit unclear what to call... but let's try:
+105: /*JsonNumberFormatVisitor v2 =*/ visitor.expectNumberFormat(typeHint);
+106: }
+107: }
+---
+104: // otherwise bit unclear what to call... but let's try:
+105: /*JsonNumberFormatVisitor v2 =*/ visitor.expectNumberFormat(typeHint);
+106: }
+107: }
+108: }
+---
+107: }
+108: }
+109: 
+110: /**
+111: * @since 2.10
+---
+110: /**
+111: * @since 2.10
+112: */
+113: 
+114: 
+---
+116: // 24-Aug-2016, tatu: [core#315] prevent possible DoS vector, so we need this
+117: // ... but wouldn't it be nice to trigger error via generator? Alas,
+118: // no method to do that. So we'll do...
+119: 
+120: // should never be called
+---
+57: // [databind#2264]: Need special handling for `BigDecimal`
+58: return ToStringSerializer.instance;
+59: default:
+60: }
+61: }
+---
+58: return ToStringSerializer.instance;
+59: default:
+60: }
+61: }
+62: return this;
+---
+60: }
+61: }
+62: return this;
+63: }
+64: 
+---
+94: 
+95: @Override
+96: public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) throws JsonMappingException
+97: {
+98: if (_isInt) {
+---
+78: } else if (value instanceof Double) {
+79: g.writeNumber(value.doubleValue());
+80: } else if (value instanceof Float) {
+81: g.writeNumber(value.floatValue());
+82: } else if (value instanceof Integer || value instanceof Byte || value instanceof Short) {
+---
+79: g.writeNumber(value.doubleValue());
+80: } else if (value instanceof Float) {
+81: g.writeNumber(value.floatValue());
+82: } else if (value instanceof Integer || value instanceof Byte || value instanceof Short) {
+83: g.writeNumber(value.intValue()); // doesn't need to be cast to smaller numbers
+---
+80: } else if (value instanceof Float) {
+81: g.writeNumber(value.floatValue());
+82: }
+...[truncated deterministically]...
+berType);
+87: } else {
+---
+84: {
+85: if (_isInt) {
+86: visitIntFormat(visitor, typeHint, _numberType);
+87: } else {
+88: visitFloatFormat(visitor, typeHint, _numberType);
+---
+85: if (_isInt) {
+86: visitIntFormat(visitor, typeHint, _numberType);
+87: } else {
+88: visitFloatFormat(visitor, typeHint, _numberType);
+89: }
+---
+88: visitFloatFormat(visitor, typeHint, _numberType);
+89: }
+90: }
+91: 
+92: @Override
+---
+8: 
+9: import com.fasterxml.jackson.core.*;
+10: 
+11: import com.fasterxml.jackson.databind.*;
+12: import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+---
+53: * being part of public API its implementation and interfaces may change
+54: * in minor releases; however deprecation markers will be used to allow
+55: * code evolution.
+56: *<p>
+57: * NOTE: {@code public} since 2.10: previously had {@code protected} access.
+---
+48: 
+49: /**
+50: * Shared base class for actual primitive/wrapper number serializers.
+51: * Note that this class is not meant as general-purpose base class nor
+52: * is it part of public API: you may extend it with the caveat that not
+---
+1: package com.fasterxml.jackson.databind.ser.std;
+2: 
+3: import java.io.IOException;

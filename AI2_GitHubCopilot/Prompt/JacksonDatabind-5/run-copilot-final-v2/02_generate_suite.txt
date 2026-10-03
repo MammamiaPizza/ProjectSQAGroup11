@@ -1,0 +1,345 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 5  Version: JacksonDatabind-5b
+JUnit: junit-4.8.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.introspect.AnnotatedClass
+Modified: com.fasterxml.jackson.databind.introspect.AnnotatedClass
+Triggers: com.fasterxml.jackson.databind.introspect.TestMixinMerging::testDisappearingMixins515
+
+Bug/specification summary:
+Bug report: 515
+Trigger failures:
+- com.fasterxml.jackson.databind.introspect.TestMixinMerging::testDisappearingMixins515
+ --> com.fasterxml.jackson.databind.JsonMappingException: No serializer found for class com.fasterxml.jackson.databind.introspect.TestMixinMerging$PersonImpl and no properties discovered to create BeanSerializer (to avoid exception, disable SerializationFeature.FAIL_ON_EMPTY_BEANS) )
+Modified: com.fasterxml.jackson.databind.introspect.AnnotatedClass
+
+Prompt-01 test plan:
+TARGETS: resolveMemberMethods, resolveFields, _addMixUnders, _addClassMixIns; annotation retrieval
+via getAnnotation, annotations().
+ORACLES: Check that mixin annotations appear on target member methods/fields; verify serialization
+succeeds with expected properties.
+CASES: Mixin with @JsonProperty on getter; mixin with @JsonIgnore on field; multiple mixins; mixin
+on superclass; mixin resolver returns null.
+RISKS: Cannot inspect PersonImpl test data; internal resolution depends on
+AnnotationIntrospector/MixInResolver not shown.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.introspect.AnnotatedClass (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.introspect;
+public final class AnnotatedClass
+final protected Class<?> _class;
+final protected List<Class<?>> _superTypes;
+final protected AnnotationIntrospector _annotationIntrospector;
+final protected MixInResolver _mixInResolver;
+final protected Class<?> _primaryMixIn;
+protected AnnotationMap _classAnnotations;
+protected boolean _creatorsResolved = false;
+protected AnnotatedConstructor _defaultConstructor;
+protected List<AnnotatedConstructor> _constructors;
+protected List<AnnotatedMethod> _creatorMethods;
+protected AnnotatedMethodMap _memberMethods;
+protected List<AnnotatedField> _fields;
+@Override
+public AnnotatedClass withAnnotations(AnnotationMap ann) {
+public Class<?> getAnnotated() { return _class; }
+public int getModifiers() { return _class.getModifiers(); }
+public String getName() { return _class.getName(); }
+public <A extends Annotation> A getAnnotation(Class<A> acls)
+public Type getGenericType() {
+public Class<?> getRawType() {
+public Iterable<Annotation> annotations() {
+protected AnnotationMap getAllAnnotations() {
+public Annotations getAnnotations() {
+public boolean hasAnnotations() {
+public AnnotatedConstructor getDefaultConstructor()
+public List<AnnotatedConstructor> getConstructors()
+public List<AnnotatedMethod> getStaticMethods()
+public Iterable<AnnotatedMethod> memberMethods()
+public int getMemberMethodCount()
+public AnnotatedMethod findMethod(String name, Class<?>[] paramTypes)
+public int getFieldCount() {
+public Iterable<AnnotatedField> fields()
+private void resolveClassAnnotations()
+_addClassMixIns(_classAnnotations, Object.class);
+private void resolveCreators()
+private void resolveMemberMethods()
+Class<?> mixin = _mixInResolver.findMixInClassFor(Object.class);
+Method m = Object.class.getDeclaredMethod(mixIn.getName(), mixIn.getRawParameterTypes());
+private void resolveFields()
+/* Helper methods for resolving class annotations
+protected void _addClassMixIns(AnnotationMap annotations, Class<?> toMask)
+protected void _addConstructorMixIns(Class<?> mixin)
+protected void _addFactoryMixIns(Class<?> mixin)
+if (cls == null) { // just so caller need not check when passing super-class
+/* If sub-class already has the method, we only want to augment
+/* Do we already have a method to augment (from sub-class
+protected Map<String,AnnotatedField> _findFields(Class<?> c, Map<String,AnnotatedField> fields)
+protected AnnotatedMethod _constructMethod(Method m)
+protected AnnotatedConstructor _constructConstructor(Constructor<?> ctor, boolean defaultCtor)
+protected AnnotatedMethod _constructCreatorMethod(Method m)
+protected AnnotatedField _constructField(Field f)
+private AnnotationMap _emptyAnnotationMap() {
+private AnnotationMap[] _emptyAnnotationMaps(int count) {
+protected boolean _isIncludableMemberMethod(Method m)
+private boolean _isIncludableField(Field f)
+protected AnnotationMap[] _collectRelevantAnnotations(Annotation[][] anns)
+protected AnnotationMap _collectRelevantAnnotations(Annotation[] anns)
+private void _addAnnotationsIfNotPresent(AnnotationMap result, Annotation[] anns)
+private void _addAnnotationsIfNotPresent(AnnotatedMember target, Annotation[] anns)
+private void _addOrOverrideAnnotations(AnnotatedMember target, Annotation[] anns)
+protected void _addMixUnders(Method src, AnnotatedMethod target) {
+private final boolean _isAnnotationBundle(Annotation ann)
+public String toString()
+
+/* HEADER */
+package com.fasterxml.jackson.databind.introspect;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.*;
+import java.util.*;
+import com.fasterxml.jackson.databind.AnnotationIntrospector;
+import com.fasterxml.jackson.databind.introspect.ClassIntrospector.MixInResolver;
+import com.fasterxml.jackson.databind.util.Annotations;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+
+/* METHOD AnnotatedClass */
+private AnnotatedClass(Class<?> cls, List<Class<?>> superTypes,
+ AnnotationIntrospector aintr, MixInResolver mir,
+ AnnotationMap classAnnotations)
+ {
+ _class = cls;
+ _superTypes = superTypes;
+ _annotationIntrospector = aintr;
+ _mixInResolver = mir;
+ _primaryMixIn = (_mixInResolver == null) ? null
+ : _mixInResolver.findMixInClassFor(_class);
+ _classAnnotations = classAnnotations;
+ }
+
+/* METHOD _constructConstructor */
+protected AnnotatedConstructor _constructConstructor(Constructor<?> ctor, boolean defaultCtor)
+ {
+ if (_annotationIntrospector == null) { // when annotation processing is disabled
+ return new AnnotatedConstructor(ctor, _emptyAnnotationMap(), _emptyAnnotationMaps(ctor.getParameterTypes().length));
+ }
+ if (defaultCtor) {
+ return new AnnotatedConstructor(ctor, _collectRelevantAnnotations(ctor.getDeclaredAnnotations()), null);
+ }
+ Annotation[][] paramAnns = ctor.getParameterAnnotations();
+ int paramCount = ctor.getParameterTypes().length;
+ /* [JACKSON-701]: Looks like JDK has discrepancy, whereas annotations for implicit 'this'
+ * (for non-static inner classes) are NOT included, but type is? Strange, sounds like
+ * a bug. Alas, we can't really fix that...
+ */
+ // Also: [JACKSON-757] (enum value constructors)
+ AnnotationMap[] resolvedAnnotations = null;
+ if (paramCount != paramAnns.length) {
+ // Limits of the work-around (to avoid hiding real errors):
+ // first, only applicable for member classes and then either:
+
+ Class<?> dc = ctor.getDeclaringClass();
+ // (a) is enum, which have two extra hidden params (name, index)
+ if (dc.isEnum() && (paramCount == paramAnns.length + 2)) {
+ Annotation[][] old = paramAnns;
+ paramAnns = new Annotation[old.length+2][];
+ System.arraycopy(old, 0, paramAnns, 2, old.length);
+ resolvedAnnotations = _collectRelevantAnnotations(paramAnns);
+ } else if (dc.isMemberClass()) {
+ // (b) non-static inner classes, get implicit 'this' for parameter, not annotation
+ if (paramCount == (paramAnns.length + 1)) {
+ // hack attack: prepend a null entry to make things match
+ Annotation[][] old = paramAnns;
+ paramAnns = new Annotation[old.length+1][];
+ System.arraycopy(old, 0, paramAnns, 1, old.length);
+ resolvedAnnotations = _collectRelevantAnnotations(paramAnns);
+ }
+ }
+ if (resolvedAnnotations == null) {
+ throw new IllegalStateException("Internal error: constructor for "+ctor.getDeclaringClass().getName()
+ +" has mismatch: "+paramCount+" parameters; "+paramAnns.length+" sets of annotations");
+ }
+ } else {
+ resolvedAnnotations = _collectRelevantAnnotations(paramAnns);
+ }
+ return new AnnotatedConstructor(ctor, _collectRelevantAnnotations(ctor.getDeclaredAnnotations()),
+ resolvedAnnotations);
+ }
+
+ protected AnnotatedMethod _constructCreatorMethod(Method m)
+ {
+ if (_annotationIntrospector == null) { // when annotation processing is disabled
+ return new AnnotatedMethod(m, _emptyAnnotationMap(), _emptyAnnotationMaps(m.getParameterTypes().length));
+ }
+ return new AnnotatedMethod(m, _collectRelevantAnnotations(m.getDeclaredAnnotations()),
+ _collectRelevantAnnotations(m.getParameterAnnotations()));
+ }
+
+ protected AnnotatedField _constructField(Field f)
+ {
+ if (_annotationIntrospector == null) { // when annotation processing is disabled
+ return new AnnotatedField(f, _emptyAnnotationMap());
+ }
+ return new AnnotatedField(f, _collectRelevantAnnotations(f.getDeclaredAnnotations()));
+ }
+ 
+ private AnnotationMap _emptyAnnotationMap() {
+ return new AnnotationMap();
+ }
+
+ private AnnotationMap[] _emptyAnnotationMaps(int count) {
+ if (count == 0) {
+ return NO_ANNOTATION_MAPS;
+ }
+ AnnotationMap[] maps = new AnnotationMap[count];
+ for (int i = 0; i < count; ++i) {
+ maps[i] = _emptyAnnotationMap();
+ }
+ return maps;
+ }
+ 
+ /*
+ /**********************************************************
+ /* Helper methods, inclusion filtering
+ /**********************************************************
+ */
+
+ protected boolean _isIncludableMemberMethod(Method m)
+ {
+ if (Modifier.isStatic(m.getModifiers())) {
+ return false;
+ }
+ /* 07-Apr-2009, tatu: Looks like generics can introduce hidden
+ * bridge and/or synthetic met
+...[truncated deterministically]...
+e want to
+ * consider those...
+ */
+ if (m.isSynthetic() || m.isBridge()) {
+ return false;
+ }
+ // also, for now we have no use for methods with 2 or more arguments:
+ int pcount = m.getParameterTypes().length;
+ return (pcount <= 2);
+ }
+
+/* METHOD constructWithoutSuperTypes */
+public static AnnotatedClass constructWithoutSuperTypes(Class<?> cls,
+ AnnotationIntrospector aintr, MixInResolver mir)
+ {
+ return new AnnotatedClass(cls,
+ Collections.<Class<?>>emptyList(), aintr, mir, null);
+ }
+
+/* METHOD withAnnotations */
+@Override
+ public AnnotatedClass withAnnotations(AnnotationMap ann) {
+ return new AnnotatedClass(_class, _superTypes,
+ _annotationIntrospector, _mixInResolver, ann);
+ }
+
+/* METHOD construct */
+public static AnnotatedClass construct(Class<?> cls,
+ AnnotationIntrospector aintr, MixInResolver mir)
+ {
+ return new AnnotatedClass(cls,
+ ClassUtil.findSuperTypes(cls, null), aintr, mir, null);
+ }
+
+/* METHOD _addClassMixIns */
+protected void _addClassMixIns(AnnotationMap annotations, Class<?> toMask,
+ Class<?> mixin)
+ {
+ if (mixin == null) {
+ return;
+ }
+ // Ok, first: annotations from mix-in class itself:
+ _addAnnotationsIfNotPresent(annotations, mixin.getDeclaredAnnotations());
+
+ /* And then from its supertypes, if any. But note that we will
+ * only consider super-types up until reaching the masked
+ * class (if found); this because often mix-in class
+ * is a sub-class (for convenience reasons). And if so, we
+ * absolutely must NOT include super types of masked class,
+ * as that would inverse precedence of annotations.
+ */
+ for (Class<?> parent : ClassUtil.findSuperTypes(mixin, toMask)) {
+ _addAnnotationsIfNotPresent(annotations, parent.getDeclaredAnnotations());
+ }
+ }
+
+/* METHOD _constructMethod */
+protected AnnotatedMethod _constructMethod(Method m)
+ {
+ /* note: parameter annotations not used for regular (getter, setter)
+ * methods; only for creator methods (static factory methods)
+ * -- at least not yet!
+ */
+ if (_annotationIntrospector == null) { // when annotation processing is disabled
+ return new AnnotatedMethod(m, _emptyAnnotationMap(), null);
+ }
+ return new AnnotatedMethod(m, _collectRelevantAnnotations(m.getDeclaredAnnotations()), null);
+ }
+
+/* METHOD _constructCreatorMethod */
+protected AnnotatedMethod _constructCreatorMethod(Method m)
+ {
+ if (_annotationIntrospector == null) { // when annotation processing is disabled
+ return new AnnotatedMethod(m, _emptyAnnotationMap(), _emptyAnnotationMaps(m.getParameterTypes().length));
+ }
+ return new AnnotatedMethod(m, _collectRelevantAnnotations(m.getDeclaredAnnotations()),
+ _collectRelevantAnnotations(m.getParameterAnnotations()));
+ }
+
+/* METHOD _constructField */
+protected AnnotatedField _constructField(Field f)
+ {
+ if (_annotationIntrospector == null) { // when annotation processing is disabled
+ return new AnnotatedField(f, _emptyAnnotationMap());
+ }
+ return new AnnotatedField(f, _collectRelevantAnnotations(f.getDeclaredAnnotations()));
+ }
+
+/* METHOD getConstructors */
+public List<AnnotatedConstructor> getConstructors()
+ {
+ if (!_creatorsResolved) {
+ resolveCreators();
+ }
+ return _constructors;
+ }
+
+/* METHOD getStaticMethods */
+public List<AnnotatedMethod> getStaticMethods()
+ {
+ if (!_creatorsResolved) {
+ resolveCreators();
+ }
+ return _creatorMethods;
+ }
+
+/* METHOD _addFieldMixIns */
+protected void _addFieldMixIns(Class<?> targetClass, Class<?> mixInCls,
+ Map<String,AnnotatedField> fields)
+ {
+ List<Class<?>> parents = new ArrayList<Class<?>>();
+ parents.add(mixInCls);
+ ClassUtil.findSuperTypes(mixInCls, targetClass, parents);
+ for (Class<?> mixin : parents) {
+ for (Field mixinField : mixin.getDeclaredFields()) {
+ // there are some dummy things (static, synthetic); better ignore
+ if (!_isIncludableField(mixinField)) {
+ continue;
+ }
+ String name = mixinField.getName();
+ // anything to mask? (if not, quietly ignore)
+ AnnotatedField maskedField = fields.get(name);
+ if (maskedField != null) {
+ _addOrOverrideAnnotations(maskedField, mixinField.getDeclaredAnnotations());
+ }
+ }
+ }
+ }

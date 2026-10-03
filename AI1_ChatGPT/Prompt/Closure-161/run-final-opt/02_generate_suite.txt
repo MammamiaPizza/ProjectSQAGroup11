@@ -1,0 +1,463 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 161  Version: Closure-161b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.PeepholeFoldConstants
+Modified: com.google.javascript.jscomp.PeepholeFoldConstants
+Triggers: com.google.javascript.jscomp.PeepholeFoldConstantsTest::testIssue522
+
+Bug/specification summary:
+Bug report: 522
+Trigger failures:
+- com.google.javascript.jscomp.PeepholeFoldConstantsTest::testIssue522
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_INDEX_OUT_OF_BOUNDS_ERROR. Array index out of bounds: NUMBER 1.0 1 [source_file: testcode] at testcode line 1 : 3 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.PeepholeFoldConstants
+
+Prompt-01 test plan:
+TARGETS: PeepholeFoldConstants array/get-element folding, especially tryFoldGetElem and tryFoldArrayAccess.
+ORACLES: Existing testIssue522: optimized testcode must produce no JSC_INDEX_OUT_OF_BOUNDS_ERROR.
+CASES: Array literal access at valid index 1 (reported NUMBER 1.0 / array size 1 boundary).
+CASES: In-range, first, last, and out-of-range numeric indices; ensure only valid accesses fold safely.
+RISKS: Private methods require compiler-level test harness; supplied context omits exact input/output assertion source.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.PeepholeFoldConstants (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class PeepholeFoldConstants extends AbstractPeepholeOptimization {
+private static final double MAX_FOLD_NUMBER = Math.pow(2, 53);
+@Override
+private Node tryFoldBinaryOperator(Node subtree) {
+private Node tryReduceVoid(Node n) {
+private void tryReduceOperandsForOp(Node n) {
+private void tryConvertOperandsToNumber(Node n) {
+private void tryConvertToNumber(Node n) {
+private Node tryFoldTypeof(Node originalTypeofNode) {
+private Node tryFoldUnaryOperator(Node n) {
+private Node tryFoldInstanceof(Node n, Node left, Node right) {
+private Node tryFoldAssign(Node n, Node left, Node right) {
+private Node tryFoldAndOr(Node n, Node left, Node right) {
+private Node tryFoldChildAddString(Node n, Node left, Node right) {
+private Node tryFoldAddConstantString(Node n, Node left, Node right) {
+private Node tryFoldArithmeticOp(Node n, Node left, Node right) {
+private Node performArithmeticOp(int opType, Node left, Node right) {
+private Node tryFoldLeftChildOp(Node n, Node left, Node right) {
+private Node tryFoldAdd(Node node, Node left, Node right) {
+private Node tryFoldShift(Node n, Node left, Node right) {
+@SuppressWarnings("fallthrough")
+private Node tryFoldComparison(Node n, Node left, Node right) {
+private int getNormalizedNodeType(Node n) {
+private Boolean compareAsNumbers(int op, Node left, Node right) {
+private boolean compareToUndefined(Node value, int op) {
+private Node tryFoldCtorCall(Node n) {
+private boolean inForcedStringContext(Node n) {
+private Node tryFoldInForcedStringContext(Node n) {
+private Node tryFoldGetElem(Node n, Node left, Node right) {
+private Node tryFoldGetProp(Node n, Node left, Node right) {
+private boolean isAssignmentTarget(Node n) {
+private Node tryFoldArrayAccess(Node n, Node left, Node right) {
+private Node tryFoldObjectPropAccess(Node n, Node left, Node right) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.javascript.jscomp.mozilla.rhino.ScriptRuntime;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.TernaryValue;
+class PeepholeFoldConstants extends AbstractPeepholeOptimization {
+
+/* METHOD tryFoldArrayAccess */
+private Node tryFoldArrayAccess(Node n, Node left, Node right) {
+ Node parent = n.getParent();
+ // If GETPROP/GETELEM is used as assignment target the array literal is
+ // acting as a temporary we can't fold it here:
+ // "[][0] += 1"
+
+ if (right.getType() != Token.NUMBER) {
+ // Sometimes people like to use complex expressions to index into
+ // arrays, or strings to index into array methods.
+ return n;
+ }
+
+ double index = right.getDouble();
+ int intIndex = (int) index;
+ if (intIndex != index) {
+ error(INVALID_GETELEM_INDEX_ERROR, right);
+ return n;
+ }
+
+ if (intIndex < 0) {
+ error(INDEX_OUT_OF_BOUNDS_ERROR, right);
+ return n;
+ }
+
+ Node elem = left.getFirstChild();
+ for (int i = 0; elem != null && i < intIndex; i++) {
+ elem = elem.getNext();
+ }
+
+ if (elem == null) {
+ error(INDEX_OUT_OF_BOUNDS_ERROR, right);
+ return n;
+ }
+
+ if (elem.getType() == Token.EMPTY) {
+ elem = NodeUtil.newUndefinedNode(elem);
+ } else {
+ left.removeChild(elem);
+ }
+
+ // Replace the entire GETELEM with the value
+ n.getParent().replaceChild(n, elem);
+ reportCodeChange();
+ return elem;
+ }
+
+ private Node tryFoldObjectPropAccess(Node n, Node left, Node right) {
+ Preconditions.checkArgument(NodeUtil.isGet(n));
+
+ if (left.getType() != Token.OBJECTLIT || right.getType() != Token.STRING) {
+ return n;
+ }
+
+ if (isAssignmentTarget(n)) {
+ // If GETPROP/GETELEM is used as assignment target the object literal is
+ // acting as a temporary we can't fold it here:
+ // "{a:x}.a += 1" is not "x += 1"
+ return n;
+ }
+
+/* METHOD tryConvertToNumber */
+private void tryConvertToNumber(Node n) {
+ switch (n.getType()) {
+ case Token.NUMBER:
+ // Nothing to do
+ return;
+ case Token.AND:
+ case Token.OR:
+ case Token.COMMA:
+ tryConvertToNumber(n.getLastChild());
+ return;
+ case Token.HOOK:
+ tryConvertToNumber(n.getChildAtIndex(1));
+ tryConvertToNumber(n.getLastChild());
+ return;
+ case Token.NAME:
+ if (!NodeUtil.isUndefined(n)) {
+ return;
+ }
+ break;
+ }
+
+ Double result = NodeUtil.getNumberValue(n);
+ if (result == null) {
+ return;
+ }
+
+ double value = result;
+
+ Node replacement;
+ if (Double.isNaN(value)) {
+ replacement = Node.newString(Token.NAME, "NaN");
+ } else if (value == Double.POSITIVE_INFINITY) {
+ replacement = Node.newString(Token.NAME, "Infinity");
+ } else if (value == Double.NEGATIVE_INFINITY) {
+ replacement = new Node(Token.NEG, Node.newString(Token.NAME, "Infinity"));
+ replacement.copyInformationFromForTree(n);
+ } else {
+ replacement = Node.newNumber(value);
+ }
+
+ n.getParent().replaceChild(n, replacement);
+ reportCodeChange();
+ }
+
+/* METHOD tryReduceVoid */
+private Node tryReduceVoid(Node n) {
+ Node child = n.getFirstChild();
+ if (child.getType() != Token.NUMBER || child.getDouble() != 0.0) {
+ if (!mayHaveSideEffects(n)) {
+ n.replaceChild(child, Node.newNumber(0));
+ reportCodeChange();
+ }
+ }
+ return n;
+ }
+
+/* METHOD tryFoldUnaryOperator */
+private Node tryFoldUnaryOperator(Node n) {
+ Preconditions.checkState(n.hasOneChild());
+
+ Node left = n.getFirstChild();
+ Node parent = n.getParent();
+
+ if (left == null) {
+ return n;
+ }
+
+ TernaryValue leftVal = NodeUtil.getPureBooleanValue(left);
+ if (leftVal == TernaryValue.UNKNOWN) {
+ return n;
+ }
+
+ switch (n.getType()) {
+ case Token.NOT:
+ // Don't fold !0 and !1 back to false.
+ if (left.getType() == Token.NUMBER) {
+ double numValue = left.getDouble();
+ if (numValue == 0 || numValue == 1) {
+ return n;
+ }
+ }
+ int result = leftVal.toBoolean(true) ? Token.FALSE : Token.TRUE;
+ Node replacementNode = new Node(result);
+ parent.replaceChild(n, replacementNode);
+ reportCodeChange();
+ return replacementNode;
+ case Token.POS:
+ if (NodeUtil.isNumericResult(left)) {
+ // POS does nothing to numeric values.
+ parent.replaceChild(n, left.detachFromParent());
+ reportCodeChange();
+ return left;
+ }
+ return n;
+ case Token.NEG:
+ try {
+ if (left.getType() == Token.NAME) {
+ if (left.getString().equals("Infinity")) {
+ // "-Infinity" is valid and a literal, don't modify it.
+ return n;
+ } else if (left.getString().equals("NaN")) {
+ // "-NaN" is "NaN".
+ n.removeChild(left);
+ parent.replaceChild(n, left);
+ reportCodeChange();
+ return left;
+ }
+ }
+
+/* METHOD tryFoldChildAddString */
+private Node tryFoldChildAddString(Node n, Node left, Node right) {
+
+ if (NodeUtil.isLiteralValue(right, false) &&
+ left.getType() == Token.ADD) {
+
+ Node ll = left.getFirstChild();
+ Node lr = ll.getNext();
+
+ // Left's right child MUST be a string. We would not want to fold
+ // foo() + 2 + 'a' because we don't know what foo() will return, and
+ // therefore we don't know if left is a string concat, or a numeric add.
+ if (lr.getType() == Token.STRING) {
+ String leftString = NodeUtil.getStringValue(lr);
+ String rightString = NodeUtil.getStringValue(right);
+ if (leftString != null && rightString != null) {
+ left.removeChild(ll);
+ String result = leftString + rightString;
+ n.replaceChild(left, ll);
+ n.replaceChild(right, Node.newString(result));
+ reportCodeChange();
+ return n;
+ }
+ }
+ }
+
+ if (NodeUtil.isLiteralValue(left, false) &&
+ right.getType() == Token.ADD) {
+
+ Node rl = right.getFirstChild();
+ Node rr = right.getLastChild();
+
+ // Left's right child MUST be a string. We would not want to fold
+ // foo() + 2 + 'a' because we don't know what foo() will return, and
+ // therefore we don't know if left is a string concat, or a numeric add.
+ if (rl.getType() == Token.STRING) {
+ String leftString = NodeUtil.getStringValue(left);
+ String rightString = NodeUtil.getStringValue(rl);
+ if (leftString != null && rightString != null) {
+ right.removeChild(rr);
+ String result = leftString + rightString;
+ n.replaceChild(right, rr);
+ n.replaceChild(left, Node.newString(result));
+ reportCodeChange();
+ return n;
+ }
+ }
+ }
+
+ return n;
+ }
+
+/* METHOD try
+...[truncated deterministically]...
+.
+double result;
+ double lval = left.getDouble();
+ double rval = right.getDouble();
+
+ // check ranges. We do not do anything that would clip the double to
+ // a 32-bit range, since the user likely does not intend that.
+ if (!(lval >= Integer.MIN_VALUE && lval <= Integer.MAX_VALUE)) {
+ error(BITWISE_OPERAND_OUT_OF_RANGE, left);
+ return n;
+ }
+
+ // only the lower 5 bits are used when shifting, so don't do anything
+ // if the shift amount is outside [0,32)
+ if (!(rval >= 0 && rval < 32)) {
+ error(SHIFT_AMOUNT_OUT_OF_BOUNDS, right);
+ return n;
+ }
+
+ // Convert the numbers to ints
+ int lvalInt = (int) lval;
+ if (lvalInt != lval) {
+ error(FRACTIONAL_BITWISE_OPERAND, left);
+ return n;
+ }
+
+ int rvalInt = (int) rval;
+ if (rvalInt != rval) {
+ error(FRACTIONAL_BITWISE_OPERAND, right);
+ return n;
+ }
+
+ switch (n.getType()) {
+ case Token.LSH:
+ result = lvalInt << rvalInt;
+ break;
+ case Token.RSH:
+ result = lvalInt >> rvalInt;
+ break;
+ case Token.URSH:
+ // JavaScript handles zero shifts on signed numbers differently than
+ // Java as an Java int can not represent the unsigned 32-bit number
+ // where JavaScript can so use a long here.
+ long lvalLong = lvalInt & 0xffffffffL;
+ result = lvalLong >>> rvalInt;
+ break;
+ default:
+ throw new AssertionError("Unknown shift operator: " +
+ Node.tokenToName(n.getType()));
+ }
+
+ Node newNumber = Node.newNumber(result);
+ n.getParent().replaceChild(n, newNumber);
+ reportCodeChange();
+
+ return newNumber;
+ }
+
+ return n;
+ }
+
+ /**
+ * Try to fold comparison nodes, e.g ==
+ */
+ @SuppressWarnings("fallthrough")
+ private Node tryFoldComparison(Node n, Node left, Node right) {
+ if (!NodeUtil.isLiteralValue(left, false) ||
+ !NodeUtil.isLiteralValue(right, false)) {
+ // We only handle non-literal operands for LT and GT.
+ if (n.getType() != Token.GT && n.getType() != Token.LT) {
+ return n;
+ }
+ }
+
+ int op = n.getType();
+ boolean result;
+
+ // TODO(johnlenz): Use the JSType to compare nodes of different types.
+
+ boolean rightLiteral = NodeUtil.isLiteralValue(right, false);
+ boolean undefinedRight = ((Token.NAME == right.getType()
+ && right.getString().equals("undefined"))
+ || (Token.VOID == right.getType()
+ && NodeUtil.isLiteralValue(right.getFirstChild(), false)));
+ int lhType = getNormalizedNodeType(left);
+ int rhType = getNormalizedNodeType(right);
+ switch (lhType) {
+ case Token.VOID:
+ if (!NodeUtil.isLiteralValue(left.getFirstChild(), false)) {
+ return n;
+ } else if (!rightLiteral) {
+ return n;
+ } else {
+ result = compareToUndefined(right, op);
+ }
+ break;
+
+ case Token.NULL:
+ case Token.TRUE:
+ case Token.FALSE:
+ if (undefinedRight) {
+ result = compa
+...[truncated deterministically]...
+hange();
+
+ return newNode;
+ }
+
+ /**
+ * @return Translate NOT expressions into TRUE or FALSE when possible.
+ */
+ private int getNormalizedNodeType(Node n) {
+ int type = n.getType();
+ if (type == Token.NOT) {
+ TernaryValue value = NodeUtil.getPureBooleanValue(n);
+ switch (value) {
+ case TRUE:
+ return Token.TRUE;
+ case FALSE:
+ return Token.FALSE;
+ }
+ }
+ return type;
+ }
+
+ /**
+ * The result of the comparison as a Boolean or null if the
+ * result could not be determined.
+ */
+ private Boolean compareAsNumbers(int op, Node left, Node right) {
+ Double leftValue = NodeUtil.getNumberValue(left);
+ if (leftValue == null) {
+ return null;
+ }
+ Double rightValue = NodeUtil.getNumberValue(right);
+ if (rightValue == null) {
+ return null;
+ }
+
+ double lv = leftValue;
+ double rv = rightValue;
+
+ Boolean result;
+ switch (op) {
+ case Token.SHEQ:
+ case Token.EQ:
+ Preconditions.checkState(
+ left.getType() == Token.NUMBER && right.getType() == Token.NUMBER);
+ result = lv == rv;
+ break;
+ case Token.SHNE:
+ case Token.NE:
+ Preconditions.checkState(
+ left.getType() == Token.NUMBER && right.getType() == Token.NUMBER);
+ result = lv != rv;
+ break;
+ case Token.LE: result = lv <= rv; break;
+ case Token.LT: result = lv < rv; break;
+ case Token.GE: result = lv >= rv; break;
+ case Token.GT: result = lv > rv; break;
+ default:
+ return null; // don't handle that op
+ }
+ return result;
+ }

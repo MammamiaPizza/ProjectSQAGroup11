@@ -1,0 +1,271 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 7  Version: Collections-7b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-278
+Trigger failures:
+- org.apache.commons.collections.TestExtendedProperties::testKeySet2
+ --> java.util.NoSuchElementException
+ - org.apache.commons.collections.TestExtendedProperties::testKeySet3
+ --> java.util.NoSuchElementException
+ - org.apache.commons.collections.TestExtendedProperties::testKeySet4
+ --> junit.framework.ComparisonFailure: expected:<[c]> but was:<[b]>
+Modified: org.apache.commons.collections.ExtendedProperties
+
+Available API/signatures:
+[org.apache.commons.collections.ExtendedProperties | java]
+package org.apache.commons.collections;
+public class ExtendedProperties extends Hashtable {
+protected String file;
+protected String basePath;
+protected String fileSeparator = System.getProperty("file.separator");
+protected boolean isInitialized = false;
+protected static String include = "include";
+protected ArrayList keysAsListed = new ArrayList();
+protected final static String START_TOKEN="${";
+protected final static String END_TOKEN="}";
+protected String interpolate(String base) {
+protected String interpolateHelper(String base, List priorVariables) {
+private static String escape(String s) {
+private static String unescape(String s) {
+private static int countPreceding(String line, int index, char ch) {
+private static boolean endsWithSlash(String line) {
+static class PropertiesReader extends LineNumberReader {
+public PropertiesReader(Reader reader) {
+public String readProperty() throws IOException {
+static class PropertiesTokenizer extends StringTokenizer {
+public PropertiesTokenizer(String string) {
+public boolean hasMoreTokens() {
+public String nextToken() {
+public ExtendedProperties() {
+public ExtendedProperties(String file) throws IOException {
+public ExtendedProperties(String file, String defaultFile) throws IOException {
+public boolean isInitialized() {
+public String getInclude() {
+public void setInclude(String inc) {
+public void load(InputStream input) throws IOException {
+public synchronized void load(InputStream input, String enc) throws IOException {
+public Object getProperty(String key) {
+public void addProperty(String key, Object value) {
+private void addPropertyDirect(
+...[truncated deterministically]...
+lue) {
+public Short getShort(String key, Short defaultValue) {
+public int getInt(String name) {
+public int getInt(String name, int def) {
+public int getInteger(String key) {
+public int getInteger(String key, int defaultValue) {
+public Integer getInteger(String key, Integer defaultValue) {
+public long getLong(String key) {
+public long getLong(String key, long defaultValue) {
+public Long getLong(String key, Long defaultValue) {
+public float getFloat(String key) {
+public float getFloat(String key, float defaultValue) {
+public Float getFloat(String key, Float defaultValue) {
+public double getDouble(String key) {
+public double getDouble(String key, double defaultValue) {
+public Double getDouble(String key, Double defaultValue) {
+public static ExtendedProperties convertProperties(Properties props) {
+public void putAll(Map map) {
+
+Generated JUnit Test:
+package org.apache.commons.collections;
+
+import static org.hamcrest.Matchers.;
+import static org.junit.Assert.;
+import org.junit.Before;
+import org.junit.Test;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.Set;
+
+public class TestExtendedProperties {
+    private ExtendedProperties ep;
+
+ @Before
+ public void setUp() {
+     ep = new ExtendedProperties();
+ }
+
+ @Test
+ public void testKeySetEmpty() {
+     Set keySet = ep.keySet();
+     assertTrue(keySet.isEmpty());
+ }
+
+ @Test
+ public void testKeySetBasicOrder() {
+     ep.addProperty("b", "valb");
+     ep.addProperty("a", "vala");
+     ep.addProperty("c", "valc");
+     Iterator it = ep.keySet().iterator();
+     assertEquals("b", it.next());
+     assertEquals("a", it.next());
+     assertEquals("c", it.next());
+     assertFalse(it.hasNext());
+ }
+
+ @Test
+ public void testKeySetAfterDuplicateAddProperty() {
+     ep.addProperty("a", "1");
+     ep.addProperty("b", "2");
+     ep.addProperty("a", "3"); // duplicate key
+     ep.addProperty("c", "4");
+     Set keySet = ep.keySet();
+     assertEquals(3, ep.size());
+     assertEquals(3, keySet.size());
+     Iterator it = keySet.iterator();
+     assertEquals("a", it.next());
+     assertEquals("b", it.next());
+     assertEquals("c", it.next());
+     assertFalse(it.hasNext());
+ }
+
+ @Test
+ public void testKeySetAfterSetProperty() {
+     ep.addProperty("x", "1");
+     ep.setProperty("y", "2");
+     ep.setProperty("x", "3"); // overwrite
+     ep.addProperty("z", "4");
+     Iterator it = ep.keySet().iterator();
+     assertEquals("x", it.next());
+     assertEquals("y", it.next());
+     assertEquals("z", it.next());
+     assertFalse(it.hasNext());
+ }
+
+ @Test
+ public void testKeySetAfterClearProperty() {
+     ep.addProperty("a", "1");
+     ep.addProperty("b", "2");
+     ep.addProperty("c", "3");
+     ep.clearProperty("b");
+     Set keySet = ep.keySet();
+     assertEquals(2, ep.size());
+     assertEquals(2, keySet.size());
+     Iterator it = keySet.iterator();
+     assertEquals("a", it.next());
+     assertEquals("c", it.next());
+     assertFalse(it.hasNext());
+ }
+
+ @Test
+ public void testKeySetIteratorHasNextCorrectness() {
+     ep.addProperty("k1", "v1");
+     ep.addProperty("k2", "v2");
+     Iterator it = ep.keySet().iterator();
+     assertTrue(it.hasNext());
+     it.next();
+     assertTrue(it.hasNext());
+     it.next();
+     assertFalse(it.hasNext());
+     try {
+         it.next();
+         fail("Expected NoSuchElementException");
+     } catch (NoSuchElementException e) {
+         // expected
+     }
+ }
+
+ @Test
+ public void testKeySetAfterCombine() {
+     ExtendedProperties other = new ExtendedProperties();
+     other.addProperty("x", "1");
+     other.addProperty("y", "2");
+     ep.addProperty("a", "1");
+     ep.combine(other);
+     Set keySet = ep.keySet();
+     assertTrue(keySet.contains("a"));
+     assertTrue(keySet.contains("x"));
+     assertTrue(keySet.contains("y"));
+     assertEquals(3, keySet.size());
+ }
+
+ @Test
+ public void testKeySetAfterSubset() {
+     ep.addProperty("prefix.a", "1");
+     ep.addProperty("prefix.b", "2");
+     ep.addProperty("other.c", "3");
+     ExtendedProperties sub = ep.subset("prefix");
+     assertNotNull(sub);
+     Set keySet = sub.keySet();
+     assertEquals(2, keySet.size());
+     assertTrue(keySet.contains("a"));
+     assertTrue(keySet.contains("b"));
+ }
+
+ @Test
+ public void testGetKeysMatchesKeySet() {
+     ep.addProperty("one", "1");
+     ep.addProperty("two", "2");
+     Iterator keys = ep.getKeys();
+     Iterator keySetIter = ep.keySet().iterator();
+     while (keys.hasNext()) {
+         assertTrue(keySetIter.hasNext());
+         assertEquals(keys.next(), keySetIter.next());
+     }
+     assertFalse(keySetIter.hasNext());
+ }
+
+ @Test
+ public void testKeySetAfterLoad() throws IOException {
+     String props = "key1=value1\nkey2=value2\n";
+     InputStream is = new ByteArrayInputStream(props.getBytes("8859_1"));
+     ep.load(is);
+     Set keySet = ep.keySet();
+     assertEquals(2, keySet.size());
+     assertTrue(keySet.contains("key1"));
+     assertTrue(keySet.contains("key2"));
+ }
+
+ @Test
+ public void testKeySetAfterLoadDuplicateKeys() throws IOException {
+     String props = "dup=first\ndup=second\n";
+     InputStream is = new ByteArrayInputStream(props.getBytes("8859_1"));
+     ep.load(is);
+     Set keySet = ep.keySet();
+     assertEquals(1, keySet.size());
+     assertTrue(keySet.contains("dup"));
+ }
+
+ @Test
+ public void testKeySetAddThenRemoveThenAddAgain() {
+     ep.addProperty("a", "1");
+     ep.addProperty("b", "2");
+     ep.clearProperty("b");
+     ep.addProperty("b", "new");
+     Iterator it = ep.keySet().iterator();
+     assertEquals("a", it.next());
+     assertEquals("b", it.next());
+     assertFalse(it.hasNext());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Collections-7f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Collections-7f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Collections-7f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- commons-collections 3.3-SNAPSHOT --------
+prepare:
+ [mkdir] Created dir: /root/sqa-workspaces/Collections-7f-copilot/build
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Collections-7f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Collections-7f-copilot/.test_suite/org/apache/commons/collections/TestExtendedProperties.java:3: error: <identifier> expected
+ [javac] import static org.hamcrest.Matchers.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 21 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

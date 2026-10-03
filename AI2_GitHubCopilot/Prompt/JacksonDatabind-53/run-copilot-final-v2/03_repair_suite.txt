@@ -1,0 +1,262 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 53  Version: JacksonDatabind-53b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1215
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TypeRefinementForMap1215Test::testMapRefinement
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.jsontype.TypeRefinementForMap1215Test$HasUniqueId, problem: abstract types either need to be mapped to concrete types, have custom deserializer, or be instantiated with additional type information
+Modified: com.fasterxml.jackson.databind.type.TypeBindings, com.fasterxml.jackson.databind.type.TypeFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.TypeBindings | java]
+package com.fasterxml.jackson.databind.type;
+public class TypeBindings
+private final static TypeBindings EMPTY = new TypeBindings(NO_STRINGS, NO_TYPES, null);
+private TypeBindings(String[] names, JavaType[] types, String[] uvars)
+public static TypeBindings emptyBindings() {
+protected Object readResolve() {
+public static TypeBindings create(Class<?> erasedType, List<JavaType> typeList)
+public static TypeBindings create(Class<?> erasedType, JavaType[] types)
+throw new IllegalArgumentException("Can not create TypeBindings for class "+erasedType.getName()
++((types.length == 1) ? "" : "s")+": class expects "+names.length);
+public static TypeBindings create(Class<?> erasedType, JavaType typeArg1)
++" with 1 type parameter: class expects "+varLen);
+public static TypeBindings create(Class<?> erasedType, JavaType typeArg1, JavaType
+...[truncated deterministically]...
+public static TypeVariable<?>[] paramsFor1(Class<?> erasedType)
+if (erasedType == Collection.class) {
+if (erasedType == List.class) {
+if (erasedType == ArrayList.class) {
+if (erasedType == AbstractList.class) {
+if (erasedType == Iterable.class) {
+public static TypeVariable<?>[] paramsFor2(Class<?> erasedType)
+if (erasedType == Map.class) {
+if (erasedType == HashMap.class) {
+if (erasedType == LinkedHashMap.class) {
+
+[com.fasterxml.jackson.databind.type.TypeFactory | java]
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes" })
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static TypeBindings EMPTY_BINDINGS = TypeBindings.emptyBindings();
+priva
+...[truncated deterministically]...
+tic Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(CLS_INT);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(CLS_LONG);
+protected final static SimpleType CORE_TYPE_STRING = new Sim
+...[truncated deterministically]...
+== Map.class) {
+if (rawType == Collection.class) {
+if (rawType == AtomicReference.class) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+ import java.util.*;
+
+ import com.fasterxml.jackson.databind.JavaType;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for TypeBindings and TypeFactory focusing on Map type handling
+  * (related to Defects4J bug 53 / Jackson-databind issue 1215).
+  *
+  * Bug: Map type with abstract value type (e.g., Map<String, HasUniqueId>)
+  * failed during deserialization because TypeBindings for Map did not properly
+  * propagate type variables "K" and "V".
+  */
+ public class TypeBindingsMapTest {
+
+     // ---- Helpers ----
+
+     private static JavaType stringType() {
+         return TypeFactory.defaultInstance().constructType(String.class);
+     }
+
+     private static JavaType objectType() {
+         return TypeFactory.defaultInstance().constructType(Object.class);
+     }
+
+     private static JavaType mapType(JavaType key, JavaType value) {
+         return TypeFactory.defaultInstance().constructMapType(
+                 (Class<? extends Map>) Map.class, key, value);
+     }
+
+     // ---- Normal: Map type bindings contain K and V ----
+
+     @Test
+     public void testMapTypeBindingsHasKeyAndValue() {
+         JavaType mapT = mapType(stringType(), objectType());
+         TypeBindings bindings = mapT.getBindings();
+
+         assertEquals("Should have 2 type parameters", 2, bindings.size());
+
+         // Verify names
+         String name0 = bindings.getBoundName(0);
+         String name1 = bindings.getBoundName(1);
+         // Map has type variables {K, V}
+         assertTrue("First type parameter should be K or V",
+                 "K".equals(name0) || "V".equals(name0));
+         assertTrue("Second type parameter should be K or V",
+                 "K".equals(name1) || "V".equals(name1));
+         assertNotEquals(name0, name1);
+     }
+
+     @Test
+     public void testMapTypeBindingsGetBoundTypeForKey() {
+         JavaType key = stringType();
+         JavaType val = objectType();
+         JavaType mapT = mapType(key, val);
+         TypeBindings bindings = mapT.getBindings();
+
+         JavaType boundKey = bindings.findBoundType("K");
+         assertNotNull("K should be bound", boundKey);
+         assertEquals("K should resolve to String", key, boundKey);
+
+         JavaType boundVal = bindings.findBoundType("V");
+         assertNotNull("V should be bound", boundVal);
+         assertEquals("V should resolve to Object", val, boundVal);
+     }
+
+     @Test
+     public void testMapTypeBindingsWithAbstractValueType() {
+         // This is the bug-reproducing case: Map<String, HasUniqueId>
+         // where HasUniqueId is abstract. The bindings should still resolve V correctly.
+         JavaType key = stringType();
+         // For testing without the exact HasUniqueId class, use a known abstract
+         // supertype like Number as a proxy for "abstract value type"
+         JavaType val = TypeFactory.defaultInstance().constructType(Number.class);
+         JavaType mapT = mapType(key, val);
+         TypeBindings bindings = mapT.getBindings();
+
+         assertEquals(2, bindings.size());
+         JavaType boundV = bindings.findBoundType("V");
+         assertNotNull("V should be bound even for abstract value type", boundV);
+         assertEquals(val, boundV);
+     }
+
+     // ---- Normal: withUnboundVariable ----
+
+     @Test
+     public void testWithUnboundVariablePreservesExistingBindings() {
+         JavaType mapT = mapType(stringType(), objectType());
+         TypeBindings original = mapT.getBindings();
+
+         TypeBindings augmented = original.withUnboundVariable("X");
+
+         // Original bindings still accessible
+         assertNotNull(augmented.findBoundType("K"));
+         assertNotNull(augmented.findBoundType("V"));
+
+         // New unbound variable should return null (not bound)
+         assertNull(augmented.findBoundType("X"));
+
+         // Size should be larger
+         assertTrue(augmented.size() >= original.size());
+     }
+
+     @Test
+     public void testWithUnboundVariableDoesNotMutateOriginal() {
+         JavaType mapT = mapType(stringType(), objectType());
+         TypeBindings original = mapT.getBindings();
+         int originalSize = original.size();
+
+         TypeBindings augmented = original.withUnboundVariable("Z");
+
+         // Original unchanged
+         assertEquals(originalSize, original.size());
+         // Augmented has own state
+         assertTrue(augmented.size() >= originalSize + 1);
+     }
+
+     // ---- Normal: TypeBindings.create with Map erased type ----
+
+     @Test
+     public void testCreateWithMapClassAndTwoTypeArgs() {
+         JavaType key = stringType();
+         JavaType val = objectType();
+
+         TypeBindings bindings = TypeBindings.create(Map.class, key, val);
+
+         assertEquals(2, bindings.size());
+         assertEquals(key, bindings.findBoundType("K"));
+         assertEquals(val, bindings.findBoundType("V"));
+     }
+
+     @Test
+     public void testCreateWithMapClassAndTypeArray() {
+         JavaType key = stringType();
+         JavaType val = objectType();
+
+         TypeBindings bindings = TypeBindings.create(Map.class, new JavaType[]{key, val});
+
+         assertEquals(2, bindings.size());
+         assertEquals(key, bindings.findBoundType("K"));
+         assertEquals(val, bindings.findBoundType("V"));
+     }
+
+     @Test
+     public void testCreateIfNeededWithMapAndTwoArgs() {
+         JavaType key = stringType();
+         JavaType val = objectType();
+
+         TypeBindings bindings = TypeBindings.createIfNeeded(Map.class,
+                 new JavaType[]{key, val});
+
+         assertEquals(2, bindings.size());
+         assertNotNull(bindings.findBoundType("K"));
+         assertNotNull(bindings.findBoundType("V"));
+     }
+
+     // ---- Boundary: empty / single param / mismatch ----
+
+     @Test
+     public void testEmptyBindings() {
+         TypeBindings empty = TypeBindings.emptyBindings();
+         assertTrue(empty.isEmpty());
+         assertEquals(0, empty.size());
+         assertNull(empty.findBoundType("K"));
+     }
+
+     @Test
+     public void testCreateWithSingleParamForMapThrows() {
+         try {
+             TypeBindings.create(Map.class, stringType());
+             fail("Expected IllegalArgumentException for single param on Map (needs 2)");
+         } catch (IllegalArgumentException e) {
+             assertTrue(e.getMessage().contains("class expects"));
+         }
+     }
+
+     @Test
+     public void testCreateWithWrongNumberOfTypeArgsThrows() {
+         try {
+             TypeBindings.create(Map.class, new JavaType[]{stringType()});
+             fail("Expected IllegalArgumentException for 1 param on Map (needs 2)");
+         } catch (IllegalArgumentException e) {
+             assertTrue(e.getMessage().contains("class expects"));
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.type.TypeBindingsMapTest::testWithUnboundVariableDoesNotMutateOriginal
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.type.TypeBindingsMapTest::testWithUnboundVariableDoesNotMutateOriginal

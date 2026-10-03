@@ -1,0 +1,261 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 167  Version: Closure-167b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 783
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue783
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.jscomp.TypeCheckTest::testMissingProperty20
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.rhino.jstype.JSTypeTest::testRestrictedTypeGivenToBoolean
+ --> junit.framework.AssertionFailedError: Expected: ??
+Modified: com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter, com.google.javascript.rhino.jstype.JSType
+
+Available API/signatures:
+[com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter | java]
+package com.google.javascript.jscomp.type;
+public class SemanticReverseAbstractInterpreter
+@Override
+public TypePair apply(TypePair p) {
+private FlowScope caseIn(Node object, String propertyName, FlowScope blindScope) {
+private class RestrictByTrueInstanceOfResultVisitor
+protected JSType caseTopType(JSType type) {
+public JSType caseUnknownType() {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseUnionType(UnionType type) {
+public JSType caseFunctionType(FunctionType type) {
+private JSType applyCommonRestriction(JSType type) {
+private class RestrictByFalseInstanceOfResultVisitor
+
+[com.google.javascript.rhino.jstype.JSType | java]
+package com.google.javascript.rhino.jstype;
+public abstract class JSType implements Serializable {
+"Unknown class name";
+static final Comparator<JSType> ALPHA = new Comparator<JSType>() {
+@Override
+public int compare(JSType t1, JSType t2) {
+public static final int ENUMDECL = 1;
+public static final int NOT_ENUMDECL = 0;
+public JSDocInfo getJSDocInfo() {
+public String getDisplayName() {
+public boolean hasDisplayName() {
+public boolean isNoType() {
+public boolean isNoResolvedType() {
+public boolean isNoObjectType() {
+public final boolean isEmptyType() {
+public boolean isNumberObjectType() {
+public boolean isNumberValueType() {
+public boolean isFunctionPrototypeType() {
+public boolean isStringObjectType() {
+public boolean isStringValueType() {
+public final boolean isString() {
+public final boolean isNumber() {
+public boolean
+...[truncated deterministically]...
+esolved() {
+public boolean setValidator(Predicate<JSType> validator) {
+public static class TypePair {
+public final JSType typeA;
+public final JSType typeB;
+public TypePair(JSType typeA, JSType typeB) {
+public String toString() {
+public String toDebugHashCodeString() {
+public final String toAnnotationString() {
+abstract String toStringHelper(boolean forAnnotations);
+public void matchConstraint(JSType constraint) {}
+
+Generated JUnit Test:
+package com.google.javascript.jscomp.type;
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CodingConvention;
+import com.google.javascript.jscomp.CodingConventions;
+import com.google.javascript.rhino.jstype.*;
+import junit.framework.TestCase;
+
+/**
+
+ - Tests for the instanceOf type narrowing visitors in {@link SemanticReverseAbstractInterpreter},
+ - specifically the {@code RestrictByTrueInstanceOfResultVisitor} and
+ - {@code RestrictByFalseInstanceOfResultVisitor}, and their handling of various JSTypes.
+ - The tests target the bug where narrowed types produced the annotation string "??" instead
+ - of a meaningful type name.
+  */
+ public class SemanticReverseAbstractInterpreterTest extends TestCase {
+  private Compiler compiler;
+  private JSTypeRegistry registry;
+  @Override
+  protected void setUp() throws Exception {
+  super.setUp();
+  compiler = new Compiler();
+  registry = compiler.getTypeRegistry();
+  }
+  /**
+  - Reflectively creates an instance of the private inner class
+  - RestrictByTrueInstanceOfResultVisitor with the given instanceof target type.
+    */
+   private Visitor<JSType> createTrueVisitor(JSType instanceOfType) throws Exception {
+   Class<?> innerClass = Class.forName(
+       "com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter$RestrictByTrueInstanceO
+fResultVisitor");
+   java.lang.reflect.Constructor<?> ctor = innerClass.getDeclaredConstructor(
+       SemanticReverseAbstractInterpreter.class, JSType.class);
+   ctor.setAccessible(true);
+   CodingConvention convention = CodingConventions.getDefault();
+   SemanticReverseAbstractInterpreter interpreter =
+       new SemanticReverseAbstractInterpreter(convention, registry);
+   return (Visitor<JSType>) ctor.newInstance(interpreter, instanceOfType);
+   }
+  /**
+  - Reflectively creates an instance of the private inner class
+  - RestrictByFalseInstanceOfResultVisitor with the given instanceof target type.
+    */
+   private Visitor<JSType> createFalseVisitor(JSType instanceOfType) throws Exception {
+   Class<?> innerClass = Class.forName(
+       "com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter$RestrictByFalseInstance
+OfResultVisitor");
+   java.lang.reflect.Constructor<?> ctor = innerClass.getDeclaredConstructor(
+       SemanticReverseAbstractInterpreter.class, JSType.class);
+   ctor.setAccessible(true);
+   CodingConvention convention = CodingConventions.getDefault();
+   SemanticReverseAbstractInterpreter interpreter =
+       new SemanticReverseAbstractInterpreter(convention, registry);
+   return (Visitor<JSType>) ctor.newInstance(interpreter, instanceOfType);
+   }
+  // --- True visitor tests ----------------------------------------------------------------
+  public void testTrueVisitorOnUnknownType() throws Exception {
+      JSType unknown = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+      Visitor<JSType> trueVisitor =
+createTrueVisitor(registry.getNativeType(JSTypeNative.OBJECT_TYPE));
+      JSType result = unknown.visit(trueVisitor);
+      assertNotNull(result);
+      // Unknown narrowed by true instanceOf Object should be at least an Object,
+      // not a ?? annotation.
+      assertFalse("Annotation must not be '??'",
+              "??".equals(result.toAnnotationString()));
+      assertTrue(result.isObject());
+  }
+  public void testTrueVisitorOnTopType() throws Exception {
+      JSType all = registry.getNativeType(JSTypeNative.ALL_TYPE);
+      Visitor<JSType> trueVisitor =
+createTrueVisitor(registry.getNativeType(JSTypeNative.OBJECT_TYPE));
+      JSType result = all.visit(trueVisitor);
+      assertNotNull(result);
+      // All narrowed by true instanceOf Object should produce a meaningful type.
+      assertFalse("Annotation must not be '??'",
+              "??".equals(result.toAnnotationString()));
+      assertTrue(result.isObject());
+  }
+  public void testTrueVisitorOnUnionObjectNull() throws Exception {
+      JSType object = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+      JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+      JSType union = registry.createUnionType(object, nullType);
+      Visitor<JSType> trueVisitor = createTrueVisitor(object);
+      JSType result = union.visit(trueVisitor);
+      assertNotNull(result);
+      // union(Object, null) with true Object instanceof should yield Object.
+      assertTrue(result.isObject());
+      assertFalse(result.isNullType());
+      assertEquals("Object", result.toAnnotationString());
+  }
+  public void testTrueVisitorOnUnionFunctionUndefined() throws Exception {
+      JSType funcType = registry.getNativeType(JSTypeNative.FUNCTION_PROTOTYPE);
+      JSType undefined = registry.getNativeType(JSTypeNative.VOID_TYPE);
+      JSType union = registry.createUnionType(funcType, undefined);
+      Visitor<JSType> trueVisitor = createTrueVisitor(funcType);
+      JSType result = union.visit(trueVisitor);
+      assertNotNull(result);
+      // union(Function, undefined) with true Function instanceof should yield Function.
+      assertTrue(result.isFunctionType());
+      assertFalse("??".equals(result.toAnnotationString()));
+  }
+  // --- False visitor tests ---------------------------------------------------------------
+  public void testFalseVisitorOnUnknownType() throws Exception {
+      JSType unknown = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+      Visitor<JSType> falseVisitor =
+createFalseVisitor(registry.getNativeType(JSTypeNative.OBJECT_TYPE));
+      JSType result = unknown.visit(falseVisitor);
+      assertNotNull(result);
+      // Unknown with false instanceOf should not produce "??".
+      assertFalse("Annotation must not be '??'",
+              "??".equals(result.toAnnotationString()));
+  }
+  public void testFalseVisitorOnTopType() throws Exception {
+      JSType all = registry.getNativeType(JSTypeNative.ALL_TYPE);
+      Visitor<JSType> falseVisitor =
+createFalseVisitor(registry.getNativeType(JSTypeNative.OBJECT_TYPE));
+      JSType result = all.visit(falseVisitor);
+      assertNotNull(result);
+      // Top with false instanceOf should not produce "??".
+      assertFalse("Annotation must not be '??'",
+              "??".equals(result.toAnnotationString()));
+  }
+  public void testFalseVisitorOnUnionObjectNull() throws Exception {
+      JSType object = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+      JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+      JSType union = registry.createUnionType(object, nullType);
+      Visitor<JSType> falseVisitor = createFalseVisitor(object);
+      JSType result = union.visit(falseVisitor);
+      assertNotNull(result);
+      // false instanceOf Object on union(Object, null) should leave only null.
+      assertTrue(result.isNullType());
+      assertEquals("null", result.toAnnotationString());
+  }
+  public void testFalseVisitorOnUnionFunctionUndefined() throws Exception {
+      JSType funcType = registry.getNativeType(JSTypeNative.FUNCTION_PROTOTYPE);
+      JSType undefined = registry.getNativeType(JSTypeNative.VOID_TYPE);
+      JSType union = registry.createUnionType(funcType, undefined);
+      Visitor<JSType> falseVisitor = createFalseVisitor(funcType);
+      JSType result = union.visit(falseVisitor);
+      assertNotNull(result);
+      // false instanceOf Function on union(Function, undefined) should yield undefined.
+      assertTrue(result.isVoidType());
+      assertFalse("??".equals(result.toAnnotationString()));
+  }
+  public void testFalseVisitorOnIncompatibleType() throws Exception {
+      JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+      JSType numberInstance = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+      Visitor<JSType> falseVisitor = createFalseVisitor(numberInstance);
+      JSType result = nullType.visit(falseVisitor);
+      // null is already incompatible with Number, so it should remain null.
+      assertTrue(result.isNullType());
+      assertEquals("null", result.toAnnotationString());
+  }
+  // --- Edge case: nested union flattening (if applicable) --------------------------------
+  public void testTrueVisitorOnNestedUnion() throws Exception {
+      JSType number = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+      JSType string = registry.getNativeType(JSTypeNative.STRING_TYPE);
+      JSType innerUnion = registry.createUnionType(number, string);
+      JSType bool = registry.getNativeType(JSTypeNative.BOOLEAN_TYPE);
+      JSType outerUnion = registry.createUnionType(innerUnion, bool);
+      Visitor<JSType> trueVisitor = createTrueVisitor(number);
+      JSType result = outerUnion.visit(trueVisitor);
+      // Should narrow to number (the only compatible member).
+      assertTrue(result.isNumber());
+      assertEquals("number", result.toAnnotationString());
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-167f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-167f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-167f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-167f-copilot/.test_suite/com/google/javascript/jscomp/type/SemanticReverseAbstractInterpreterTest.java:32: error: unclosed string literal
+ [javac] "com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter$RestrictByTrueInstanceO
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

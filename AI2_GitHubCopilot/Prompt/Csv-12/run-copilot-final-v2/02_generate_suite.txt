@@ -1,0 +1,363 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Csv  Bug: 12  Version: Csv-12b
+JUnit: junit-4.11.jar  Build: Maven
+Target: org.apache.commons.csv.CSVFormat
+Modified: org.apache.commons.csv.CSVFormat
+Triggers: org.apache.commons.csv.CSVParserTest::testExcelHeaderCountLessThanData
+
+Bug/specification summary:
+Bug report: CSV-128
+Trigger failures:
+- org.apache.commons.csv.CSVParserTest::testExcelHeaderCountLessThanData
+ --> java.lang.IllegalArgumentException: The header contains a duplicate name: "" in [A, B, C, , ]
+Modified: org.apache.commons.csv.CSVFormat
+
+Prompt-01 test plan:
+TARGETS: CSVFormat.withHeader(String...), CSVFormat.validate(), CSVFormat.parse(Reader)
+TARGETS: Interaction of allowMissingColumnNames with duplicate header detection
+ORACLES: testExcelHeaderCountLessThanData expects no exception when header count < data
+ORACLES: Empty-string headers allowed when allowMissingColumnNames=true (not duplicates)
+CASES: header ["A","B","C","",""] with extra data column -> parse without exception
+CASES: header ["X","Y","X"] duplicate non-empty -> must throw IllegalArgumentException
+CASES: header [] parsing; all-empty header ["",""] (allowMissing=true); boundary large header
+RISKS: Buggy validate treats empty strings as duplicates; fix logic not visible; risk regression on
+non-empty dup
+RISKS: Excel default allowMissingColumnNames=true; need to confirm; RFC4180 may differ
+RISKS: Private validate() only indirectly testable; test must use parse() or public construction
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.csv.CSVFormat (java) =====
+/* API SIGNATURES */
+package org.apache.commons.csv;
+public final class CSVFormat implements Serializable {
+public static final CSVFormat RFC4180 = DEFAULT.withIgnoreEmptyLines(false);
+public static final CSVFormat EXCEL = DEFAULT.withIgnoreEmptyLines(false);
+private static boolean isLineBreak(final char c) {
+private static boolean isLineBreak(final Character c) {
+public static CSVFormat newFormat(final char delimiter) {
+final Set<String> dupCheck = new HashSet<String>();
+for (final String hdr : header) {
+@Override
+public boolean equals(final Object obj) {
+final CSVFormat other = (CSVFormat) obj;
+public String format(final Object... values) {
+final StringWriter out = new StringWriter();
+} catch (final IOException e) {
+public Character getCommentMarker() {
+public char getDelimiter() {
+public Character getEscapeCharacter() {
+public String[] getHeader() {
+public boolean getAllowMissingColumnNames() {
+public boolean getIgnoreEmptyLines() {
+public boolean getIgnoreSurroundingSpaces() {
+public String getNullString() {
+public Character getQuoteCharacter() {
+public QuoteMode getQuoteMode() {
+public String getRecordSeparator() {
+public boolean getSkipHeaderRecord() {
+public int hashCode()
+public boolean isCommentMarkerSet() {
+public boolean isEscapeCharacterSet() {
+public boolean isNullStringSet() {
+public boolean isQuoteCharacterSet() {
+public CSVParser parse(final Reader in) throws IOException {
+public CSVPrinter print(final Appendable out) throws IOException {
+public String toString() {
+final StringBuilder sb = new StringBuilder();
+private void validate() throws IllegalArgumentException {
+public CSVFormat withCommentMarker(final char commentMarker) {
+public CSVFormat withCommentMarker(final Character commentMarker) {
+public CSVFormat withDelimiter(final char delimiter) {
+public CSVFormat withEscape(final char escape) {
+public CSVFormat withEscape(final Character escape) {
+public CSVFormat withHeader(final String... header) {
+public CSVFormat withAllowMissingColumnNames(final boolean allowMissingColumnNames) {
+public CSVFormat withIgnoreEmptyLines(final boolean ignoreEmptyLines) {
+public CSVFormat withIgnoreSurroundingSpaces(final boolean ignoreSurroundingSpaces) {
+public CSVFormat withNullString(final String nullString) {
+public CSVFormat withQuote(final char quoteChar) {
+public CSVFormat withQuote(final Character quoteChar) {
+public CSVFormat withQuoteMode(final QuoteMode quoteModePolicy) {
+public CSVFormat withRecordSeparator(final char recordSeparator) {
+public CSVFormat withRecordSeparator(final String recordSeparator) {
+public CSVFormat withSkipHeaderRecord(final boolean skipHeaderRecord) {
+
+/* HEADER */
+package org.apache.commons.csv;
+import static org.apache.commons.csv.Constants.BACKSLASH;
+import static org.apache.commons.csv.Constants.COMMA;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.CRLF;
+import static org.apache.commons.csv.Constants.DOUBLE_QUOTE_CHAR;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.TAB;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Serializable;
+import java.io.StringWriter;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+/* METHOD CSVFormat */
+private CSVFormat(final char delimiter, final Character quoteChar,
+ final QuoteMode quoteMode, final Character commentStart,
+ final Character escape, final boolean ignoreSurroundingSpaces,
+ final boolean ignoreEmptyLines, final String recordSeparator,
+ final String nullString, final String[] header, final boolean skipHeaderRecord,
+ final boolean allowMissingColumnNames) {
+ if (isLineBreak(delimiter)) {
+ throw new IllegalArgumentException("The delimiter cannot be a line break");
+ }
+ this.delimiter = delimiter;
+ this.quoteCharacter = quoteChar;
+ this.quoteMode = quoteMode;
+ this.commentMarker = commentStart;
+ this.escapeCharacter = escape;
+ this.ignoreSurroundingSpaces = ignoreSurroundingSpaces;
+ this.allowMissingColumnNames = allowMissingColumnNames;
+ this.ignoreEmptyLines = ignoreEmptyLines;
+ this.recordSeparator = recordSeparator;
+ this.nullString = nullString;
+ if (header == null) {
+ this.header = null;
+ } else {
+ final Set<String> dupCheck = new HashSet<String>();
+ for (final String hdr : header) {
+ if (!dupCheck.add(hdr)) {
+ throw new IllegalArgumentException("The header contains a duplicate entry: '" + hdr + "' in " +
+ Arrays.toString(header));
+ }
+ }
+ this.header = header.clone();
+ }
+ this.skipHeaderRecord = skipHeaderRecord;
+ validate();
+ }
+
+/* METHOD withCommentMarker */
+public CSVFormat withCommentMarker(final Character commentMarker) {
+ if (isLineBreak(commentMarker)) {
+ throw new IllegalArgumentException("The comment start marker character cannot be a line break");
+ }
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withDelimiter */
+public CSVFormat withDelimiter(final char delimiter) {
+ if (isLineBreak(delimiter)) {
+ throw new IllegalArgumentException("The delimiter cannot be a line break");
+ }
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withEscape */
+public CSVFormat withEscape(final Character escape) {
+ if (isLineBreak(escape)) {
+ throw new IllegalArgumentException("The escape character cannot be a line break");
+ }
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escape,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withQuote */
+public CSVFormat withQuote(final Character quoteChar) {
+ if (isLineBreak(quoteChar)) {
+ throw new IllegalArgumentException("The quoteChar cannot be a line break");
+ }
+ return new CSVFormat(delimiter, quoteChar, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withHeader */
+public CSVFormat withHeader(final String... header) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withAllowMissingColumnNames */
+public CSVFormat withAllowMissingColumnNames(final boolean allowMissingColumnNames) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withIgnoreEmptyLines */
+public CSVFormat withIgnoreEmptyLines(final boolean ignoreEmptyLines) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withIgnoreSurroundingSpaces */
+public CSVFormat withIgnoreSurroundingSpaces(final boolean ignoreSurroundingSpaces) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withNullString */
+public CSVFormat withNullString(final String nullString) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withQuoteMode */
+public CSVFormat withQuoteMode(final QuoteMode quoteModePolicy) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteModePolicy, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withRecordSeparator */
+public CSVFormat withRecordSeparator(final String recordSeparator) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD withSkipHeaderRecord */
+public CSVFormat withSkipHeaderRecord(final boolean skipHeaderRecord) {
+ return new CSVFormat(delimiter, quoteCharacter, quoteMode, commentMarker, escapeCharacter,
+ ignoreSurroundingSpaces, ignoreEmptyLines, recordSeparator, nullString, header, skipHeaderRecord,
+ allowMissingColumnNames);
+ }
+
+/* METHOD newFormat */
+public static CSVFormat newFormat(final char delimiter) {
+ return new CSVFormat(delimiter, null, null, null, null, false, false, null, null, null, false, false);
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(final Object obj) {
+ if (this == obj) {
+ return true;
+ }
+ if (obj == null) {
+ return false;
+ }
+ if (getClass() != obj.getClass()) {
+ return false;
+ }
+
+ final CSVFormat other = (CSVFormat) obj;
+ if (delimiter != other.delimiter) {
+ return false;
+ }
+ if (quoteMode != other.quoteMode) {
+ return false;
+ }
+ if (quoteCharacter == null) {
+ if (other.quoteCharacter != null) {
+ return false;
+ }
+ } else if (!quoteCharacter.equals(other.quoteCharacter)) {
+ return false;
+ }
+ if (commentMarker == null) {
+ if (other.commentMarker != null) {
+ return false;
+ }
+ } else if (!commentMarker.equals(other.commentMarker)) {
+ return false;
+ }
+ if (escapeCharacter == null) {
+ if (other.escapeCharacter != null) {
+ return false;
+ }
+ } else if (!escapeCharacter.equals(other.escapeCharacter)) {
+ return false;
+ }
+ if (nullString == null) {
+ if (other.nullString != null) {
+ return false;
+ }
+ } else if (!nullString.equals(other.nullString)) {
+ return false;
+ }
+ if (!Arrays.equals(header, other.header)) {
+ return false;
+ }
+ if (ignoreSurroundingSpaces != other.ignoreSurroundingSpaces) {
+ return false;
+ }
+ if (ignoreEmptyLines != other.ignoreEmptyLines) {
+ return false;
+ }
+ if (skipHeaderRecord != other.skipHeaderRecord) {
+ return false;
+ }
+ if (recordSeparator == null) {
+ if (other.recordSeparator != null) {
+ return false;
+ }
+ } else if (!recordSeparator.equals(other.recordSeparator)) {
+ return false;
+ }
+ return true;
+ }
+
+/* METHOD format */
+public String format(final Object... values) {
+ final StringWriter out = new StringWriter();
+ try {
+ new CSVPrinter(out, this).printRecord(values);
+ return out.toString().trim();
+ } catch (final IOException e) {
+ // should not happen because a StringWriter does not do IO.
+ throw new IllegalStateException(e);
+ }
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ final StringBuilder sb = new StringBuilder();
+ sb.append("Delimiter=<").append(delimiter).append('>');
+ if (isEscapeCharacterSet()) {
+ sb.append(' ');
+ sb.append("Escape=<").append(escapeCharacter).append('>');
+ }
+ if (isQuoteCharacterSet()) {
+ sb.append(' ');
+ sb.append("QuoteChar=<").append(quoteCharacter).append('>');
+ }
+ if (isCommentMarkerSet()) {
+ sb.append(' ');
+ sb.append("CommentStart=<").append(commentMarker).append('>');
+ }
+ if (isNullStringSet()) {
+ sb.append(' ');
+ sb.append("NullString=<").append(nullString).append('>');
+ }
+ if(recordSeparator != null) {
+ sb.append(' ');
+ sb.append("RecordSeparator=<").append(recordSeparator).append('>');
+ }
+ if (getIgnoreEmptyLines()) {
+ sb.append(" EmptyLines:ignored");
+ }
+ if (getIgnoreSurroundingSpaces()) {
+ sb.append(" SurroundingSpaces:ignored");
+ }
+ sb.append(" SkipHeaderRecord:").append(skipHeaderRecord);
+ if (header != null) {
+ sb.append(' ');
+ sb.append("Header:").append(Arrays.toString(header));
+ }
+ return sb.toString();
+ }

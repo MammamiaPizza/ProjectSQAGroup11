@@ -1,0 +1,336 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 81  Version: Math-81b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-308
+Trigger failures:
+- org.apache.commons.math.linear.EigenDecompositionImplTest::testMath308
+ --> java.lang.ArrayIndexOutOfBoundsException: -1
+Modified: org.apache.commons.math.linear.EigenDecompositionImpl
+
+Available API/signatures:
+[org.apache.commons.math.linear.EigenDecompositionImpl | java]
+package org.apache.commons.math.linear;
+public class EigenDecompositionImpl implements EigenDecomposition {
+private boolean isSymmetric(final RealMatrix matrix) {
+final int rows = matrix.getRowDimension();
+final int columns = matrix.getColumnDimension();
+final double mij = matrix.getEntry(i, j);
+final double mji = matrix.getEntry(j, i);
+private void decompose() {
+public RealMatrix getV()
+public RealMatrix getD()
+public RealMatrix getVT()
+public double[] getRealEigenvalues()
+public double getRealEigenvalue(final int i)
+public double[] getImagEigenvalues()
+public double getImagEigenvalue(final int i)
+public RealVector getEigenvector(final int i)
+public double getDeterminant() {
+public DecompositionSolver getSolver() {
+private static class Solver implements DecompositionSolver {
+public double[] solve(final double[] b)
+final double[] vData = v.getDataRef();
+final double s = v.dotProduct(b) / realEigenvalues[i];
+public RealVector solve(final RealVector b)
+public RealMatrix solve(final RealMatrix b)
+final int nColB = b.getColumnDimension();
+public boolean isNonSingular() {
+public RealMatrix getInverse()
+final double[] vK = eigenvectors[k].getDataRef();
+private void transformToTridiagonal(final RealMatrix matrix) {
+private void computeGershgorinCircles() {
+private void findEigenvalues()
+for (final int end : splitIndices) {
+final double[] range = eigenvaluesRange(begin, n);
+final double oneFourth = 0.25 * (3 * range[0] + range[1]);
+final int oneFourthCount = countEigenValues(oneFourth, begin, n);
+final double threeFourth = 0.25 * (range[0] + 3 * range[1]);
+final int threeFourthCount =
+...[truncated deterministically]...
+margin = 2 * (tNorm * MathUtils.EPSILON * n + 2 * minPivot);
+final double middle = 0.5 * (left + right);
+private int countEigenValues(final double t, final int index, final int n) {
+private void ldlTDecomposition(final double lambda, final int index, final int n) {
+private void dqds(final int start, final int end) {
+private void dqd(final int start, final int end) {
+private void computeShiftIncrement(final int start, final int end, final int deflated) {
+final double gap1 = a2 - dN - ((gap2 > 0.0 && gap2 > b2) ? (b2 / gap2) * b2 : (b1 + b2));
+final double a2 = dMin1 / (1 + b2 * b2);
+final double a2 = dMin2 / (1 + b2 * b2);
+private void updateSigma(final double shift) {
+private void findEigenVectors() {
+final double absG = Math.abs(work[sixI] + d[i] * work[sixI + 9] / work[sixI + 10]);
+final double inv = 1.0 / Math.sqrt(n2);
+
+Generated JUnit Test:
+package org.apache.commons.math.linear;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class EigenDecompositionImplTest {
+
+ @Test
+ public void testMath308() {
+     // MATH-308: ArrayIndexOutOfBoundsException: -1
+     // Tridiagonal matrix with close eigenvalues exercising split/eigenvalue range logic
+     double[] main = {1.0, 2.0, 2.0, 3.0, 3.0};
+     double[] secondary = {0.5, 0.5, 0.5, 0.5};
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(main, secondary, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertNotNull(ev);
+     assertEquals(5, ev.length);
+     for (int i = 0; i < ev.length - 1; i++) {
+         assertTrue("Eigenvalues not non-increasing at " + i, ev[i] >= ev[i + 1]);
+     }
+ }
+
+ @Test
+ public void testMath308AlternateMatrix() {
+     // Alternate matrix to trigger MATH-308: symmetric with small off-diagonal
+     double[][] data = {
+         {1.0, 1.0e-6, 0.0, 0.0, 0.0},
+         {1.0e-6, 1.0, 1.0e-6, 0.0, 0.0},
+         {0.0, 1.0e-6, 1.0, 1.0e-6, 0.0},
+         {0.0, 0.0, 1.0e-6, 1.0, 1.0e-6},
+         {0.0, 0.0, 0.0, 1.0e-6, 1.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-15);
+     double[] ev = eigen.getRealEigenvalues();
+     assertNotNull(ev);
+     assertEquals(5, ev.length);
+ }
+
+ @Test
+ public void test3x3CloseDiagonal() {
+     // 3x3 matrix with close diagonal values [1, 2, 2]
+     double[][] data = {
+         {1.0, 0.5, 0.0},
+         {0.5, 2.0, 0.5},
+         {0.0, 0.5, 2.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(3, ev.length);
+     assertEquals(ev[0], eigen.getRealEigenvalue(0), 1e-15);
+     RealMatrix v = eigen.getV();
+     RealMatrix d = eigen.getD();
+     RealMatrix vt = eigen.getVT();
+     RealMatrix reconstructed = v.multiply(d).multiply(vt);
+     for (int i = 0; i < 3; i++) {
+         for (int j = 0; j < 3; j++) {
+             assertEquals(matrix.getEntry(i, j), reconstructed.getEntry(i, j), 1.0e-10);
+         }
+     }
+ }
+
+ @Test
+ public void test4x4EqualEigenvalueCountBoundaries() {
+     // 4x4 matrix exercising eigenvalue count boundaries in bisection
+     double[][] data = {
+         {2.0, 0.3, 0.0, 0.0},
+         {0.3, 2.0, 0.3, 0.0},
+         {0.0, 0.3, 2.0, 0.3},
+         {0.0, 0.0, 0.3, 2.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(4, ev.length);
+     for (int i = 0; i < ev.length - 1; i++) {
+         assertTrue(ev[i] >= ev[i + 1]);
+     }
+     assertEquals(4, eigen.getImagEigenvalues().length);
+     for (int i = 0; i < 4; i++) {
+         assertEquals(0.0, eigen.getImagEigenvalue(i), 1.0e-15);
+     }
+ }
+
+ @Test
+ public void testProcess3RowsBlockTrigger() {
+     // Matrix exercising process3RowsBlock with similar eigenvalues
+     double[] main = {10.0, 10.0, 10.0};
+     double[] secondary = {2.0, 2.0};
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(main, secondary, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(3, ev.length);
+     assertTrue(ev[0] >= ev[1]);
+     assertTrue(ev[1] >= ev[2]);
+     // Verify eigendecomposition accuracy: eigenvalues near 10, 10+2√2, 10-2√2
+     double sumEigenvalues = ev[0] + ev[1] + ev[2];
+     assertEquals(30.0, sumEigenvalues, 1.0e-8);
+ }
+
+ @Test
+ public void test1x1Identity() {
+     // Degenerate single-element matrix
+     double[][] data = {{7.0}};
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(1, ev.length);
+     assertEquals(7.0, ev[0], 1.0e-15);
+     assertEquals(7.0, eigen.getRealEigenvalue(0), 1.0e-15);
+     assertEquals(7.0, eigen.getDeterminant(), 1.0e-15);
+     assertTrue(eigen.isNonSingular());
+     RealVector evec = eigen.getEigenvector(0);
+     assertEquals(1.0, evec.getNorm(), 1.0e-10);
+ }
+
+ @Test
+ public void test2x2EqualDiagonal() {
+     // 2x2 with equal diagonal values exercises dqds degenerate path
+     double[][] data = {
+         {4.0, 1.0},
+         {1.0, 4.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(2, ev.length);
+     assertEquals(5.0, ev[0], 1.0e-10);
+     assertEquals(3.0, ev[1], 1.0e-10);
+ }
+
+ @Test
+ public void testEigenDecompositionReconstruction() {
+     // V * D * V^T should reconstruct the original symmetric matrix
+     double[][] data = {
+         {4.0, 1.0, 2.0},
+         {1.0, 3.0, 0.0},
+         {2.0, 0.0, 5.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     RealMatrix v = eigen.getV();
+     RealMatrix d = eigen.getD();
+     RealMatrix vt = eigen.getVT();
+     RealMatrix reconstructed = v.multiply(d).multiply(vt);
+     for (int i = 0; i < 3; i++) {
+         for (int j = 0; j < 3; j++) {
+             assertEquals(matrix.getEntry(i, j), reconstructed.getEntry(i, j), 1.0e-10);
+         }
+     }
+ }
+
+ @Test
+ public void testEigenvectorsOrthonormal() {
+     // V^T * V should equal the identity matrix
+     double[][] data = {
+         {4.0, 1.0, 2.0},
+         {1.0, 3.0, 0.0},
+         {2.0, 0.0, 5.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     RealMatrix vt = eigen.getVT();
+     RealMatrix v = eigen.getV();
+     RealMatrix identity = vt.multiply(v);
+     for (int i = 0; i < 3; i++) {
+         for (int j = 0; j < 3; j++) {
+             if (i == j) {
+                 assertEquals(1.0, identity.getEntry(i, j), 1.0e-10);
+             } else {
+                 assertEquals(0.0, identity.getEntry(i, j), 1.0e-10);
+             }
+         }
+     }
+ }
+
+ @Test(expected = InvalidMatrixException.class)
+ public void testNonSymmetricMatrixThrows() {
+     double[][] data = {
+         {1.0, 2.0},
+         {3.0, 4.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     new EigenDecompositionImpl(matrix, 1.0e-12);
+ }
+
+ @Test
+ public void testSplitToleranceBoundaries() {
+     // Large tolerance zeroes off-diagonals; small tolerance preserves them
+     double[][] data = {
+         {1.0, 0.5, 0.0, 0.0},
+         {0.5, 2.0, 0.5, 0.0},
+         {0.0, 0.5, 3.0, 0.5},
+         {0.0, 0.0, 0.5, 4.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     // Large tolerance: all off-diagonals zeroed
+     EigenDecompositionImpl eigenLarge = new EigenDecompositionImpl(matrix, 100.0);
+     double[] evLarge = eigenLarge.getRealEigenvalues();
+     assertEquals(4, evLarge.length);
+     // Small tolerance: off-diagonals preserved
+     EigenDecompositionImpl eigenSmall = new EigenDecompositionImpl(matrix, 1.0e-15);
+     double[] evSmall = eigenSmall.getRealEigenvalues();
+     assertEquals(4, evSmall.length);
+     assertTrue(evLarge[0] >= evLarge[1]);
+     assertTrue(evSmall[0] >= evSmall[1]);
+ }
+
+ @Test
+ public void testRepeatedEigenvalues() {
+     // Diagonal matrix with repeated eigenvalues
+     double[][] data = {
+         {3.0, 0.0, 0.0},
+         {0.0, 3.0, 0.0},
+         {0.0, 0.0, 5.0}
+     };
+     RealMatrix matrix = MatrixUtils.createRealMatrix(data);
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(matrix, 1.0e-12);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(3, ev.length);
+     assertEquals(5.0, ev[0], 1.0e-10);
+     assertEquals(3.0, ev[1], 1.0e-10);
+     assertEquals(3.0, ev[2], 1.0e-10);
+     assertEquals(45.0, eigen.getDeterminant(), 1.0e-10);
+     assertTrue(eigen.isNonSingular());
+ }
+
+ @Test
+ public void test2x2DegenerateSplit() {
+     // 2x2 tridiagonal with very small off-diagonal near splitTolerance boundary
+     double[] main = {5.0, 5.0};
+     double[] secondary = {1.0e-20};
+     EigenDecompositionImpl eigen = new EigenDecompositionImpl(main, secondary, 1.0e-14);
+     double[] ev = eigen.getRealEigenvalues();
+     assertEquals(2, ev.length);
+     // Both eigenvalues should be approximately 5.0
+     assertEquals(5.0, ev[0], 1.0e-8);
+     assertEquals(5.0, ev[1], 1.0e-8);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-81f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-81f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-81f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 2.1-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-81f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-81f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-81f-copilot/target/test-classes
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-81f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-81f-copilot/.test_suite/org/apache/commons/math/linear/EigenDecompositionImplTest.java:112: error: cannot find symbol
+ [javac] assertTrue(eigen.isNonSingular());
+ [javac] ^
+ [javac] symbol: method isNonSingular()
+ [javac] location: variable eigen of type EigenDecompositionImpl
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

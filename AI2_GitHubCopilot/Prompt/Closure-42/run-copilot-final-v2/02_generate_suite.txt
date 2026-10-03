@@ -1,0 +1,356 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 42  Version: Closure-42b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.parsing.IRFactory
+Modified: com.google.javascript.jscomp.parsing.IRFactory
+Triggers: com.google.javascript.jscomp.parsing.ParserTest::testForEach
+
+Bug/specification summary:
+Bug report: 644
+Trigger failures:
+- com.google.javascript.jscomp.parsing.ParserTest::testForEach
+ --> junit.framework.AssertionFailedError
+Modified: com.google.javascript.jscomp.parsing.IRFactory
+
+Prompt-01 test plan:
+TARGETS: IRFactory.transform for ForEachLoop nodes; justTransform; parseDirectives; isDirective
+handling "each".
+TARGETS: newNode, newStringNode, transformTokenType used for for-each loop components.
+ORACLES: ParserTest.testForEach expected Node type/children; AST structure per ECMA for-each spec.
+CASES: Basic for-each with statement; nested for-each; for-each inside for; with JSDoc; label.
+CASES: Boundary: empty body; variable declaration; destructuring; for-each as directive-like
+keyword.
+CASES: Error: missing body, missing "in", invalid iterator expression.
+RISKS: Single trigger test may miss for-each with "in" vs "of" semantic differences.
+RISKS: Bug could be confined to IRFactory.transform; other parse pathways (Block, Script) untested.
+RISKS: Incomplete coverage of reserved keyword interactions (e.g., "each" with "let", "const").
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.parsing.IRFactory (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.parsing;
+class IRFactory {
+private final Set<String> ALLOWED_DIRECTIVES = Sets.newHashSet("use strict");
+"class", "const", "enum", "export", "extends", "import", "super");
+"class", "const", "enum", "export", "extends", "import", "super",
+"implements", "interface", "let", "package", "private", "protected",
+"public", "static", "yield");
+private final Set<Comment> parsedComments = Sets.newHashSet();
+private Node createTemplateNode() {
+private void setFileOverviewJsDoc(Node irNode) {
+private Node transformBlock(AstNode node) {
+private void handleBlockComment(Comment comment) {
+private void handlePossibleFileOverviewJsDoc(Comment comment, Node irNode) {
+private JSDocInfo handleJsDoc(AstNode node, Node irNode) {
+private Node transform(AstNode node) {
+private Node transformNameAsString(Name node) {
+private Node transformNumberAsString(NumberLiteral literalNode) {
+private static String getStringValue(double value) {
+private void setSourceInfo(Node irNode, AstNode node) {
+private JsDocInfoParser createJsDocInfoParser(Comment node, Node irNode) {
+private void maybeSetLengthFrom(Node node, AstNode source) {
+private int position2charno(int position) {
+private Node justTransform(AstNode node) {
+private class TransformDispatcher extends TypeSafeDispatcher<Node> {
+private Node transformAsString(AstNode n) {
+@Override
+private void parseDirectives(Node node) {
+private boolean isDirective(Node n) {
+private boolean isReservedKeyword(String identifier) {
+private boolean validAssignmentTarget(Node target) {
+private static int transformTokenType(int token) {
+private Node newNode(int type) {
+private Node newNode(int type, Node child1) {
+private Node newNode(int type, Node child1, Node child2) {
+private Node newNode(int type, Node child1, Node child2, Node child3) {
+private Node newStringNode(String value) {
+private Node newStringNode(int type, String value) {
+private Node newNumberNode(Double value) {
+
+/* HEADER */
+package com.google.javascript.jscomp.parsing;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.head.ErrorReporter;
+import com.google.javascript.rhino.head.Token.CommentType;
+import com.google.javascript.rhino.head.ast.ArrayLiteral;
+import com.google.javascript.rhino.head.ast.Assignment;
+import com.google.javascript.rhino.head.ast.AstNode;
+import com.google.javascript.rhino.head.ast.AstRoot;
+import com.google.javascript.rhino.head.ast.Block;
+import com.google.javascript.rhino.head.ast.BreakStatement;
+import com.google.javascript.rhino.head.ast.CatchClause;
+import com.google.javascript.rhino.head.ast.Comment;
+import com.google.javascript.rhino.head.ast.ConditionalExpression;
+import com.google.javascript.rhino.head.ast.ContinueStatement;
+import com.google.javascript.rhino.head.ast.DoLoop;
+import com.google.javascript.rhino.head.ast.ElementGet;
+import com.google.javascript.rhino.head.ast.EmptyExpression;
+import com.google.javascript.rhino.head.ast.ExpressionStatement;
+import com.google.javascript.rhino.head.ast.ForInLoop;
+import com.google.javascript.rhino.head.ast.ForLoop;
+import com.google.javascript.rhino.head.ast.FunctionCall;
+import com.google.javascript.rhino.head.ast.FunctionNode;
+import com.google.javascript.rhino.head.ast.IfStatement;
+import com.google.javascript.rhino.head.ast.InfixExpression;
+import com.google.javascript.rhino.head.ast.KeywordLiteral;
+import com.google.javascript.rhino.head.ast.Label;
+import com.google.javascript.rhino.head.ast.LabeledStatement;
+import com.google.javascript.rhino.head.ast.Name;
+import com.google.javascript.rhino.head.ast.NewExpression;
+import com.google.javascript.rhino.head.ast.NumberLiteral;
+import com.google.javascript.rhino.head.ast.ObjectLiteral;
+import com.google.javascript.rhino.head.ast.ObjectProperty;
+import com.google.javascript.rhino.head.ast.ParenthesizedExpression;
+import com.google.javascript.rhino.head.ast.PropertyGet;
+import com.google.javascript.rhino.head.ast.RegExpLiteral;
+import com.google.javascript.rhino.head.ast.ReturnStatement;
+import com.google.javascript.rhino.head.ast.Scope;
+import com.google.javascript.rhino.head.ast.StringLiteral;
+import com.google.javascript.rhino.head.ast.SwitchCase;
+import com.google.javascript.rhino.head.ast.SwitchStatement;
+import com.google.javascript.rhino.head.ast.ThrowStatement;
+import com.google.javascript.rhino.head.ast.TryStatement;
+import com.google.javascript.rhino.head.ast.UnaryExpression;
+import com.google.javascript.rhino.head.ast.VariableDeclaration;
+import com.google.javascript.rhino.head.ast.VariableInitializer;
+import com.google.javascript.rhino.head.ast.WhileLoop;
+import com.google.javascript.rhino.head.ast.WithStatement;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import java.util.Set;
+class IRFactory {
+
+/* METHOD IRFactory */
+private IRFactory(String sourceString,
+ StaticSourceFile sourceFile,
+ Config config,
+ ErrorReporter errorReporter) {
+ this.sourceString = sourceString;
+ this.sourceFile = sourceFile;
+
+ // Sometimes this will be null in tests.
+ this.sourceName = sourceFile == null ? null : sourceFile.getName();
+
+ this.config = config;
+ this.errorReporter = errorReporter;
+ this.transformDispatcher = new TransformDispatcher();
+ // The template node properties are applied to all nodes in this transform.
+ this.templateNode = createTemplateNode();
+
+ switch (config.languageMode) {
+ case ECMASCRIPT3:
+ // Reserved words are handled by the Rhino parser.
+ reservedKeywords = null;
+ break;
+ case ECMASCRIPT5:
+ reservedKeywords = ES5_RESERVED_KEYWORDS;
+ break;
+ case ECMASCRIPT5_STRICT:
+ reservedKeywords = ES5_STRICT_RESERVED_KEYWORDS;
+ break;
+ default:
+ throw new IllegalStateException("unknown language mode");
+ }
+ }
+
+/* METHOD transformTree */
+public static Node transformTree(AstRoot node,
+ StaticSourceFile sourceFile,
+ String sourceString,
+ Config config,
+ ErrorReporter errorReporter) {
+ IRFactory irFactory = new IRFactory(sourceString, sourceFile,
+ config, errorReporter);
+ Node irNode = irFactory.transform(node);
+
+ if (node.getComments() != null) {
+ for (Comment comment : node.getComments()) {
+ if (comment.getCommentType() == CommentType.JSDOC &&
+ !irFactory.parsedComments.contains(comment)) {
+ irFactory.handlePossibleFileOverviewJsDoc(comment, irNode);
+ } else if (comment.getCommentType() == CommentType.BLOCK_COMMENT) {
+ irFactory.handleBlockComment(comment);
+ }
+ }
+ }
+
+ irFactory.setFileOverviewJsDoc(irNode);
+
+ return irNode;
+ }
+
+/* METHOD processAstRoot */
+@Override
+ Node processAstRoot(AstRoot rootNode) {
+ Node node = newNode(Token.SCRIPT);
+ for (com.google.javascript.rhino.head.Node child : rootNode) {
+ node.addChildToBack(transform((AstNode)child));
+ }
+ parseDirectives(node);
+ return node;
+ }
+
+/* METHOD processStringLiteral */
+@Override
+ Node processStringLiteral(StringLiteral literalNode) {
+ String value = literalNode.getValue();
+ Node n = newStringNode(value);
+ if (value.indexOf('\u000B') != -1) {
+ // NOTE(nicksantos): In JavaScript, there are 3 ways to
+ // represent a vertical tab: \v, \x0B, \u000B.
+ // The \v notation was added later, and is not understood
+ // on IE. So we need to preserve it as-is. This is really
+ // obnoxious, because we do not have a good way to represent
+ // how the original string was encoded without making the
+ // representation of strings much more complicated.
+ //
+ // To handle this, we look at the original source test, and
+ // mark the string as \v-encoded or not. If a string is
+ // \v encoded, then all the vertical tabs in that string
+ // will be encoded with a \v.
+ int start = literalNode.getAbsolutePosition();
+ int end = start + literalNode.
+...[truncated deterministically]...
+tBooleanProp(Node.SLASH_V, true);
+ }
+ }
+ return n;
+ }
+
+/* METHOD processIllegalToken */
+@Override
+ Node processIllegalToken(AstNode node) {
+ errorReporter.error(
+ "Unsupported syntax: " +
+ com.google.javascript.rhino.head.Token.typeToName(
+ node.getType()),
+ sourceName,
+ node.getLineno(), "", 0);
+ return newNode(Token.EMPTY);
+ }
+
+/* METHOD createJsDocInfoParser */
+private JsDocInfoParser createJsDocInfoParser(Comment node, Node irNode) {
+ String comment = node.getValue();
+ int lineno = node.getLineno();
+ int position = node.getAbsolutePosition();
+
+ // The JsDocInfoParser expects the comment without the initial '/**'.
+ int numOpeningChars = 3;
+ JsDocInfoParser jsdocParser =
+ new JsDocInfoParser(
+ new JsDocTokenStream(comment.substring(numOpeningChars),
+ lineno,
+ position2charno(position) + numOpeningChars),
+ node,
+ irNode,
+ config,
+ errorReporter);
+ jsdocParser.setFileLevelJsDocBuilder(fileLevelJsDocBuilder);
+ jsdocParser.setFileOverviewJSDocInfo(fileOverviewInfo);
+ jsdocParser.parse();
+ return jsdocParser;
+ }
+
+/* METHOD processGeneric */
+private Node processGeneric(
+ com.google.javascript.rhino.head.Node n) {
+ Node node = newNode(transformTokenType(n.getType()));
+ for (com.google.javascript.rhino.head.Node child : n) {
+ node.addChildToBack(transform((AstNode)child));
+ }
+ return node;
+ }
+
+/* METHOD processVariableDeclaration */
+@Override
+ Node processVariableDeclaration(VariableDeclaration declarationNode) {
+ if (!config.acceptConstKeyword && declarationNode.getType() ==
+ com.google.javascript.rhino.head.Token.CONST) {
+ processIllegalToken(declarationNode);
+ }
+
+ Node node = newNode(Token.VAR);
+ for (VariableInitializer child : declarationNode.getVariables()) {
+ node.addChildToBack(transform(child));
+ }
+ return node;
+ }
+
+/* METHOD transformTokenType */
+private static int transformTokenType(int token) {
+ switch (token) {
+ case com.google.javascript.rhino.head.Token.RETURN:
+ return Token.RETURN;
+ case com.google.javascript.rhino.head.Token.BITOR:
+ return Token.BITOR;
+ case com.google.javascript.rhino.head.Token.BITXOR:
+ return Token.BITXOR;
+ case com.google.javascript.rhino.head.Token.BITAND:
+ return Token.BITAND;
+ case com.google.javascript.rhino.head.Token.EQ:
+ return Token.EQ;
+ case com.google.javascript.rhino.head.Token.NE:
+ return Token.NE;
+ case com.google.javascript.rhino.head.Token.LT:
+ return Token.LT;
+ case com.google.javascript.rhino.head.Token.LE:
+ return Token.LE;
+ case com.google.javascript.rhino.head.Token.GT:
+ return Token.GT;
+ case com.google.javascript.rhino.head.Token.GE:
+ return Token.GE;
+ case com.google.javascript.rhino.head.Token.LSH:
+ return Token.LSH;
+ case com.google.javascript.rhino.head.Token.RSH:
+ return Token.RSH;
+ case com.google.javascript.rhino.head.Token.URSH:
+ return Token.URSH;
+ case com.google.javascript.rhino.head.Token.ADD:
+ return Token.ADD;
+ case com.google.javascript.rhino.head.Token.SUB:
+ return Token.SUB;
+ case com.google.javascript.rhino.head.Token.MUL:
+ return Token.MUL;
+ case com.google.javascript.rhino.head.Token.DIV:
+ return Token.DIV;
+ case com.google.javascript.rhino.head.Token.MOD:
+ return Token.MOD;
+ case com.google.javascript.rhino.head.Token.NOT:
+ return Token.NOT;
+ case com.google.javascript.rhino.head.Token.BITNOT:
+ return T
+...[truncated deterministically]...
+ipt.rhino.head.Token.BLOCK:
+ return Token.BLOCK;
+ case com.google.javascript.rhino.head.Token.LABEL:
+ return Token.LABEL;
+ case com.google.javascript.rhino.head.Token.EXPR_VOID:
+ case com.google.javascript.rhino.head.Token.EXPR_RESULT:
+ return Token.EXPR_RESULT;
+ case com.google.javascript.rhino.head.Token.SCRIPT:
+ return Token.SCRIPT;
+ case com.google.javascript.rhino.head.Token.GET:
+ return Token.GETTER_DEF;
+ case com.google.javascript.rhino.head.Token.SET:
+ return Token.SETTER_DEF;
+ case com.google.javascript.rhino.head.Token.CONST:
+ return Token.CONST;
+ case com.google.javascript.rhino.head.Token.DEBUGGER:
+ return Token.DEBUGGER;
+ }
+
+ // Token without name
+ throw new IllegalStateException(String.valueOf(token));
+ }

@@ -1,0 +1,211 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 75  Version: Jsoup-75b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 985
+Trigger failures:
+- org.jsoup.nodes.ElementTest::booleanAttributeOutput
+ --> junit.framework.AssertionFailedError: expected:<...mg src="foo" noshade[] nohref async autofo...> but was:<...mg src="foo" noshade[=""] nohref async autofo...>
+Modified: org.jsoup.nodes.Attributes
+
+Available API/signatures:
+[org.jsoup.nodes.Attributes | java]
+package org.jsoup.nodes;
+public class Attributes implements Iterable<Attribute>, Cloneable {
+protected static final String dataPrefix = "data-";
+private void checkCapacity(int minNewSize) {
+private static String[] copyOf(String[] orig, int size) {
+private int indexOfKeyIgnoreCase(String key) {
+static String checkNotNull(String val) {
+@param key the (case-sensitive) attribute key
+@return the attribute value if set; or empty string if not set (or a boolean attribute).
+@see #hasKey(String)
+public String get(String key) {
+public String getIgnoreCase(String key) {
+private void add(String key, String value) {
+public Attributes put(String key, String value) {
+public Attributes put(String key, boolean value) {
+@param attribute attribute with case sensitive key
+@return these attributes, for chaining
+public Attributes put(Attribute attribute) {
+private void remove(int index) {
+@param key attribute key to remove
+public void remove(String key) {
+public void removeIgnoreCase(String key) {
+@param key case-sensitive key to check for
+@return true if key exists, false otherwise
+public boolean hasKey(String key) {
+@param key key to check for
+public boolean hasKeyIgnoreCase(String key) {
+@return size
+public int size() {
+@param incoming attributes to add to these attributes.
+public void addAll(Attributes incoming) {
+public Iterator<Attribute> iterator() {
+@Override
+public boolean hasNext() {
+public Attribute next() {
+final Attribute attr = new Attribute(keys[i], vals[i], Attributes.this);
+public void remove() {
+@return an view of the attributes as an unmodifialbe List.
+public List<Attribute> asList() {
+new BooleanAttribute
+...[truncated deterministically]...
+s cannot be constructed.
+public String html() {
+final void html(final Appendable accum, final Document.OutputSettings out) throws IOException {
+public String toString() {
+public boolean equals(Object o) {
+public int hashCode() {
+public Attributes clone() {
+public void normalize() {
+private static class Dataset extends AbstractMap<String, String> {
+private Dataset(Attributes attributes) {
+public Set<Entry<String, String>> entrySet() {
+public String put(String key, String value) {
+private class EntrySet extends AbstractSet<Map.Entry<String, String>> {
+public Iterator<Map.Entry<String, String>> iterator() {
+private class DatasetIterator implements Iterator<Map.Entry<String, String>> {
+private Iterator<Attribute> attrIter = attributes.iterator();
+public Entry<String, String> next() {
+private static String dataKey(String key) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+import static org.junit.Assert.*;
+
+import java.util.Map;
+
+import org.junit.Test;
+
+public class AttributesTest {
+
+ @Test
+ public void booleanAttributeTrueNoEmptyValue() {
+     Attributes attrs = new Attributes();
+     attrs.put("src", "foo");
+     attrs.put("noshade", true);
+     String html = attrs.html();
+     assertTrue("Should contain noshade", html.contains("noshade"));
+     assertFalse("Should not contain noshade=\"\"", html.contains("noshade=\"\""));
+ }
+
+ @Test
+ public void booleanAttributeFalseNotPresent() {
+     Attributes attrs = new Attributes();
+     attrs.put("checked", false);
+     assertFalse(attrs.hasKey("checked"));
+     assertEquals(0, attrs.size());
+ }
+
+ @Test
+ public void getReturnsEmptyStringForBooleanTrue() {
+     Attributes attrs = new Attributes();
+     attrs.put("selected", true);
+     assertEquals("", attrs.get("selected"));
+ }
+
+ @Test
+ public void getReturnsEmptyStringForAbsentKey() {
+     Attributes attrs = new Attributes();
+     assertEquals("", attrs.get("nonexistent"));
+ }
+
+ @Test
+ public void mixedAttributesOutputCorrect() {
+     Attributes attrs = new Attributes();
+     attrs.put("src", "foo");
+     attrs.put("noshade", true);
+     attrs.put("async", true);
+     attrs.put("data-x", "val");
+     String html = attrs.html();
+     assertTrue(html.contains(" src=\"foo\""));
+     assertTrue(html.contains(" noshade"));
+     assertTrue(html.contains(" async"));
+     assertTrue(html.contains(" data-x=\"val\""));
+     assertFalse(html.contains("noshade=\"\""));
+     assertFalse(html.contains("async=\"\""));
+ }
+
+ @Test
+ public void booleanAttributeOverrideWithStringValue() {
+     Attributes attrs = new Attributes();
+     attrs.put("noshade", true);
+     attrs.put("noshade", "bar");
+     String html = attrs.html();
+     assertTrue(html.contains(" noshade=\"bar\""));
+     assertFalse(html.contains("noshade=\"\""));
+ }
+
+ @Test
+ public void normalAttributeWithValue() {
+     Attributes attrs = new Attributes();
+     attrs.put("src", "foo");
+     assertEquals(" src=\"foo\"", attrs.html());
+ }
+
+ @Test
+ public void attributeWithEmptyStringValue() {
+     Attributes attrs = new Attributes();
+     attrs.put("alt", "");
+     assertEquals(" alt=\"\"", attrs.html());
+ }
+
+ @Test
+ public void sizeAfterBooleanPut() {
+     Attributes attrs = new Attributes();
+     attrs.put("a", true);
+     assertEquals(1, attrs.size());
+     attrs.put("b", true);
+     assertEquals(2, attrs.size());
+     attrs.put("c", false);
+     assertEquals(2, attrs.size());
+ }
+
+ @Test
+ public void removeBooleanAttribute() {
+     Attributes attrs = new Attributes();
+     attrs.put("noshade", true);
+     attrs.remove("noshade");
+     assertFalse(attrs.hasKey("noshade"));
+     assertEquals(0, attrs.size());
+ }
+
+ @Test
+ public void booleanAttributeIteration() {
+     Attributes attrs = new Attributes();
+     attrs.put("noshade", true);
+     attrs.put("src", "foo");
+     boolean foundBoolean = false;
+     for (Attribute attr : attrs) {
+         if (attr.getKey().equals("noshade")) {
+             foundBoolean = true;
+             assertTrue(attr instanceof BooleanAttribute);
+             assertEquals("", attr.getValue());
+         }
+     }
+     assertTrue(foundBoolean);
+ }
+
+ @Test
+ public void dataAttributePreserved() {
+     Attributes attrs = new Attributes();
+     attrs.put("data-key", "value");
+     assertEquals(" data-key=\"value\"", attrs.html());
+     Map<String, String> dataset = attrs.dataset();
+     assertEquals("value", dataset.get("key"));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.AttributesTest::booleanAttributeIteration
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.AttributesTest::booleanAttributeIteration

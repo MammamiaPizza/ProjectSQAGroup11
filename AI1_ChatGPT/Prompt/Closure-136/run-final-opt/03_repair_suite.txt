@@ -1,0 +1,117 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 136  Version: Closure-136b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 103
+Trigger failures:
+- com.google.javascript.jscomp.InlineGettersTest::testIssue2508576_1
+ --> junit.framework.ComparisonFailure: expected:<[({a:alert,b:alert}).a("a")]> but was:<[]>
+ - com.google.javascript.jscomp.InlineGettersTest::testIssue2508576_3
+ --> java.lang.RuntimeException: INTERNAL COMPILER ERROR.
+ - com.google.javascript.jscomp.MethodCheckTest::testSeparateMethods
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_WRONG_ARGUMENT_COUNT. Function oneOrTwoArg2: called with 3 argument(s). All definitions of this function require at least 1 argument(s) and no more than 2 argument(s). at testcode line 1 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.RenameVarsTest::testDollarSignSuperExport2
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.MethodCompilerPass, com.google.javascript.jscomp.RenameVars
+
+Available API/signatures:
+[com.google.javascript.jscomp.MethodCompilerPass | java]
+package com.google.javascript.jscomp;
+abstract class MethodCompilerPass implements CompilerPass {
+final Set<String> externMethods = Sets.newHashSet();
+final Set<String> externMethodsWithoutSignatures = Sets.newHashSet();
+final Set<String> nonMethodProperties = Sets.newHashSet();
+interface SignatureStore {
+public void reset();
+public void removeSignature(String functionName);
+public void process(Node externs, Node root) {
+abstract Callback getActingCallback();
+abstract SignatureStore getSignatureStore();
+private void addPossibleSignature(String name, Node node, NodeTraversal t) {
+private void addSignature(String name, Node function, String fnSourceName) {
+private class GetExternMethods extends AbstractPostOrderCallback {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private class GatherSignatures extends AbstractPostOrderCallback {
+private void processPrototypeParent(NodeTraversal t, Node n) {
+
+[com.google.javascript.jscomp.RenameVars | java]
+package com.google.javascript.jscomp;
+final class RenameVars implements CompilerPass {
+private final ArrayList<Node> globalNameNodes = new ArrayList<Node>();
+private final ArrayList<Node> localNameNodes = new ArrayList<Node>();
+private final ArrayList<String> localTempNames = new ArrayList<String>();
+private final Set<String> externNames = new HashSet<String>();
+private final Map<String, String> renameMap = new HashMap<String, String>();
+class Assignment {
+@Nullable char[] reservedCharacters,
+@Nullable Set<String> reservedNames) {
+class ProcessVars extends AbstractPostOrderCallback {
+@Override
+public void visit(NodeTraversal t, Node n, Node parent) {
+public int compare(Assignment a1, Assignment a2) {
+public void process(Node externs, Node root) {
+private String getNewGlobalName(Node n) {
+private String getNewLocalName(Node n, int index) {
+private String getPseudoName(String s) {
+private void reusePreviouslyUsedVariableMap() {
+private void assignNames(Set<Assignment> varsToRename) {
+private void finalizeNameAssignment(Assignment a, String newName) {
+private boolean okToRenameVar(String name, boolean isLocal) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+
+public final class MethodCompilerPassRegressionTest extends CompilerTestCase {
+
+  @Override
+  protected CompilerPass getProcessor(Compiler compiler) {
+    return new InlineGetters(compiler, false);
+  }
+
+  @Test
+  public void testObjectLiteralPropertiesDoNotCauseSideEffectingCallToDisappear() {
+    testSame("({a:alert,b:alert}).a('a');");
+  }
+
+  @Test
+  public void testSingleObjectLiteralPropertyCallIsPreserved() {
+    testSame("({a:alert}).a('a');");
+  }
+
+  @Test
+  public void testObjectLiteralPropertiesAreHandledRegardlessOfPropertyOrder() {
+    testSame("({b:alert,a:alert}).a('a');");
+  }
+
+  @Test
+  public void testObjectLiteralGetterInliningCompletesWithoutCompilerError() {
+    test(
+        "({a:function(){return alert},b:function(){return alert}}).a()('a');",
+        "alert('a');");
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-136f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-136f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-136f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-136f-ai/.test_suite/com/google/javascript/jscomp/MethodCompilerPassRegressionTest.java:5: error: cannot find symbol
+ [javac] public final class MethodCompilerPassRegressionTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

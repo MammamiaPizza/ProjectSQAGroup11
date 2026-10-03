@@ -1,0 +1,280 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 16  Version: JacksonCore-16b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 296
+Trigger failures:
+- com.fasterxml.jackson.core.json.ParserSequenceTest::testInitialized
+ --> junit.framework.AssertionFailedError: expected:<2> but was:<3>
+Modified: com.fasterxml.jackson.core.util.JsonParserSequence
+
+Available API/signatures:
+[com.fasterxml.jackson.core.util.JsonParserSequence | java]
+package com.fasterxml.jackson.core.util;
+public class JsonParserSequence extends JsonParserDelegate
+protected final JsonParser[] _parsers;
+protected int _nextParser;
+protected JsonParserSequence(JsonParser[] parsers)
+public static JsonParserSequence createFlattened(JsonParser first, JsonParser second)
+@SuppressWarnings("resource")
+protected void addFlattenedActiveParsers(List<JsonParser> result)
+@Override
+public void close() throws IOException {
+public JsonToken nextToken() throws IOException, JsonParseException
+public int containedParsersCount() {
+protected boolean switchToNext()
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.util;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertNull;
+ import static org.junit.Assert.assertTrue;
+
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.List;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.JsonFactory;
+ import com.fasterxml.jackson.core.JsonParser;
+ import com.fasterxml.jackson.core.JsonToken;
+
+ public class JsonParserSequenceTest {
+
+     private final JsonFactory FACTORY = new JsonFactory();
+
+     private JsonParser parser(String json) throws IOException {
+         return FACTORY.createParser(json);
+     }
+
+     // --- core bug: count should match flattened leaf count -----------------
+
+     @Test
+     public void testFlattenedContainedParsersCount() throws IOException {
+         JsonParser p1 = parser("1");
+         JsonParser p2 = parser("2");
+         JsonParserSequence seq = JsonParserSequence.createFlattened(p1, p2);
+         // Bug triggers: expected 2, actual 3
+         assertEquals(2, seq.containedParsersCount());
+         seq.close();
+     }
+
+     // --- token ordering ----------------------------------------------------
+
+     @Test
+     public void testFlattenedTokenOrder() throws IOException {
+         JsonParser p1 = parser("[1,2]");   // tokens: [ , 1 , 2 , ]
+         JsonParser p2 = parser("true");   // token: true
+         JsonParserSequence seq = JsonParserSequence.createFlattened(p1, p2);
+
+         assertEquals(JsonToken.START_ARRAY, seq.nextToken());   // from p1
+         assertEquals(JsonToken.VALUE_NUMBER_INT, seq.nextToken()); // 1
+         assertEquals(JsonToken.VALUE_NUMBER_INT, seq.nextToken()); // 2
+         assertEquals(JsonToken.END_ARRAY, seq.nextToken());       // ]
+         assertEquals(JsonToken.VALUE_TRUE, seq.nextToken());      // from p2
+         assertNull(seq.nextToken());
+         seq.close();
+     }
+
+     // --- flattening with first argument being a sequence -------------------
+
+     @Test
+     public void testFlattenedWithFirstNested() throws IOException {
+         JsonParser p1 = parser("1");
+         JsonParser p2 = parser("2");
+         JsonParser p3 = parser("3");
+         JsonParserSequence inner = JsonParserSequence.createFlattened(p1, p2);
+         JsonParserSequence outer = JsonParserSequence.createFlattened(inner, p3);
+
+         assertEquals(3, outer.containedParsersCount());
+
+         JsonToken[] tokens = { JsonToken.VALUE_NUMBER_INT,
+                                JsonToken.VALUE_NUMBER_INT,
+                                JsonToken.VALUE_NUMBER_INT };
+         for (JsonToken expected : tokens) {
+             assertEquals(expected, outer.nextToken());
+         }
+         assertNull(outer.nextToken());
+         outer.close();
+     }
+
+     // --- flattening with second argument being a sequence ------------------
+
+     @Test
+     public void testFlattenedWithSecondNested() throws IOException {
+         JsonParser p1 = parser("1");
+         JsonParser p2 = parser("2");
+         JsonParser p3 = parser("3");
+         JsonParserSequence inner = JsonParserSequence.createFlattened(p2, p3);
+         JsonParserSequence outer = JsonParserSequence.createFlattened(p1, inner);
+
+         assertEquals(3, outer.containedParsersCount());
+
+         JsonToken[] tokens = { JsonToken.VALUE_NUMBER_INT,
+                                JsonToken.VALUE_NUMBER_INT,
+                                JsonToken.VALUE_NUMBER_INT };
+         for (JsonToken expected : tokens) {
+             assertEquals(expected, outer.nextToken());
+         }
+         assertNull(outer.nextToken());
+         outer.close();
+     }
+
+     // --- both arguments sequences ------------------------------------------
+
+     @Test
+     public void testFlattenedWithBothNested() throws IOException {
+         JsonParser p1 = parser("1"), p2 = parser("2");
+         JsonParser p3 = parser("3"), p4 = parser("4");
+         JsonParserSequence seq1 = JsonParserSequence.createFlattened(p1, p2);
+         JsonParserSequence seq2 = JsonParserSequence.createFlattened(p3, p4);
+         JsonParserSequence seq = JsonParserSequence.createFlattened(seq1, seq2);
+
+         assertEquals(4, seq.containedParsersCount());
+
+         for (int i = 0; i < 4; i++) {
+             assertEquals(JsonToken.VALUE_NUMBER_INT, seq.nextToken());
+         }
+         assertNull(seq.nextToken());
+         seq.close();
+     }
+
+     // --- deep nesting ------------------------------------------------------
+
+     @Test
+     public void testFlattenedDeepNesting() throws IOException {
+         JsonParser a = parser("1"), b = parser("2"), c = parser("3"), d = parser("4");
+         JsonParserSequence level1 = JsonParserSequence.createFlattened(a, b);
+         JsonParserSequence level2 = JsonParserSequence.createFlattened(level1, c);
+         JsonParserSequence root = JsonParserSequence.createFlattened(level2, d);
+
+         assertEquals(4, root.containedParsersCount());
+
+         for (int i = 0; i < 4; i++) {
+             assertEquals(JsonToken.VALUE_NUMBER_INT, root.nextToken());
+         }
+         assertNull(root.nextToken());
+         root.close();
+     }
+
+     // --- addFlattenedActiveParsers direct test -----------------------------
+
+     @Test
+     public void testAddFlattenedActiveParsersOnPlainSequence() throws IOException {
+         JsonParser p1 = parser("1");
+         JsonParser p2 = parser("2");
+         // construct via createFlattened (non-nested case) to get a sequence
+         JsonParserSequence seq = JsonParserSequence.createFlattened(p1, p2);
+
+         List<JsonParser> collected = new ArrayList<>();
+         seq.addFlattenedActiveParsers(collected);
+         assertEquals(2, collected.size());
+         seq.close();
+     }
+
+     @Test
+     public void testAddFlattenedActiveParsersAfterNesting() throws IOException {
+         JsonParser a = parser("a"), b = parser("b"), c = parser("c");
+         JsonParserSequence inner = JsonParserSequence.createFlattened(a, b);
+         JsonParserSequence outer = JsonParserSequence.createFlattened(inner, c);
+
+         List<JsonParser> collected = new ArrayList<>();
+         outer.addFlattenedActiveParsers(collected);
+         assertEquals(3, collected.size());
+         outer.close();
+     }
+
+     // --- exhaustion --------------------------------------------------------
+
+     @Test
+     public void testNextTokenReturnsNullAfterExhaustion() throws IOException {
+         JsonParser p1 = parser("1");
+         JsonParserSequence seq = JsonParserSequence.createFlattened(p1, parser("2"));
+         assertNotNull(seq.nextToken()); // 1
+         assertNotNull(seq.nextToken()); // 2
+         assertNull(seq.nextToken());
+         assertNull(seq.nextToken()); // still null
+         seq.close();
+     }
+
+     // --- close delegates ---------------------------------------------------
+
+     @Test
+     public void testCloseClosesAllDelegates() throws IOException {
+         // use custom parsers that track close call
+         CloseTrackingParser p1 = new CloseTrackingParser(parser("1"));
+         CloseTrackingParser p2 = new CloseTrackingParser(parser("2"));
+         JsonParserSequence seq = JsonParserSequence.createFlattened(p1, p2);
+
+         assertFalse(p1.closed);
+         assertFalse(p2.closed);
+         seq.close();
+         assertTrue(p1.closed);
+         assertTrue(p2.closed);
+     }
+
+     // --- switchToNext boundary ---------------------------------------------
+
+     @Test
+     public void testSwitchToNextReturnsFalseWhenNoMoreParsers() throws IOException {
+         JsonParser p1 = parser("1");
+         JsonParserSequence seq = JsonParserSequence.createFlattened(p1, parser("2"));
+
+         assertTrue(seq.switchToNext()); // moves to second
+         assertTrue(seq.switchToNext()); // moves beyond? actually there are only 2 parsers,
+delegate becomes second, then switchToNext moves to third? But there is no third, so returns false.
+         // adjust: after first switch, delegate=second. second switch should fail.
+         // So we need to verify: first call succeeds, second call fails.
+         assertFalse(seq.switchToNext());
+         seq.close();
+     }
+
+     // --- empty / no-token parser -------------------------------------------
+
+     @Test
+     public void testFlattenedWithEmptyParser() throws IOException {
+         JsonParser empty = parser(""); // no tokens
+         JsonParser p = parser("1");
+         JsonParserSequence seq = JsonParserSequence.createFlattened(empty, p);
+
+         assertEquals(JsonToken.VALUE_NUMBER_INT, seq.nextToken());
+         assertNull(seq.nextToken());
+         seq.close();
+     }
+
+     // --- helper -----------------------------------------------------------------
+
+     static class CloseTrackingParser extends JsonParserDelegate {
+         boolean closed;
+         CloseTrackingParser(JsonParser delegate) { super(delegate); }
+         @Override public void close() throws IOException {
+             super.close();
+             closed = true;
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonCore-16f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonCore-16f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonCore-16f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonCore-16f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonCore-16f-copilot/.test_suite/com/fasterxml/jackson/core/util/JsonParserSequenceTest.java:202: error: ';' expected
+ [javac] delegate becomes second, then switchToNext moves to third? But there is no third, so returns false.
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 17 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

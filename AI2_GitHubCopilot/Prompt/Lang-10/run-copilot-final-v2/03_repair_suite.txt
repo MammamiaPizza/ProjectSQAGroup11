@@ -1,0 +1,215 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 10  Version: Lang-10b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-831
+Trigger failures:
+- org.apache.commons.lang3.time.FastDateFormat_ParserTest::testLANG_831
+ --> junit.framework.AssertionFailedError: Parsed dates should be equal expected:<null> but was:<Mon Mar 02 21:00:00 PST 1970>
+ - org.apache.commons.lang3.time.FastDateParserTest::testLANG_831
+ --> junit.framework.AssertionFailedError: Expected FDF failure, but got Mon Mar 02 21:00:00 PST 1970 for [M E,3 Tue] using (\p{IsNd}++)\s*+(Fri|Friday|Mon|Monday|Sat|Saturday|Sun|Sunday|Thu|Thursday|Tue|Tuesday|Wed|Wednesday)
+Modified: org.apache.commons.lang3.time.FastDateParser
+
+Available API/signatures:
+[org.apache.commons.lang3.time.FastDateParser | java]
+package org.apache.commons.lang3.time;
+public class FastDateParser implements DateParser, Serializable {
+static final Locale JAPANESE_IMPERIAL = new Locale("ja","JP","JP");
+protected FastDateParser(String pattern, TimeZone timeZone, Locale locale) {
+private void init() {
+@Override
+public String getPattern() {
+public TimeZone getTimeZone() {
+public Locale getLocale() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+public Object parseObject(String source) throws ParseException {
+public Date parse(String source) throws ParseException {
+public Object parseObject(String source, ParsePosition pos) {
+public Date parse(String source, ParsePosition pos) {
+private static StringBuilder escapeRegex(StringBuilder regex, String value, boolean unquote) {
+private static class KeyValue {
+public String key;
+public int value;
+public KeyValue(String key, int value) {
+private static final Comparator<KeyValue> IGNORE_CASE_COMPARATOR = new Comparator<KeyValue> () {
+public int compare(KeyValue left, KeyValue right) {
+private String[] toArray(Map<String, Integer> era) {
+final String key = me.getKey();
+private static KeyValue[] createKeyValues(String[] longValues, String[] shortValues) {
+private static int count(String[] values) {
+private static int copy(KeyValue[] fieldKeyValues, int offset, String[] values) {
+private interface Strategy {
+private Strategy getStrategy(String formatField) {
+private static class CopyQuotedStrategy implements Strategy {
+public boolean isNumber() {
+pub
+...[truncated deterministically]...
+static final Strategy DAY_OF_MONTH_STRATEGY = new NumberStrategy(Calendar.DAY_OF_MONTH);
+private static final Strategy DAY_OF_WEEK_IN_MONTH_STRATEGY = new NumberStrategy(Calendar.DAY_OF_WEEK_IN_MONTH);
+private static final Strategy HOUR_OF_DAY_STRATEGY = new NumberStrategy(Calendar.HOUR_OF_DAY);
+private static final Strategy MODULO_HOUR_OF_DAY_STRATEGY = new NumberStrategy(Calendar.HOUR_OF_DAY) {
+private static final Strategy MODULO_HOUR_STRATEGY = new NumberStrategy(Calendar.HOUR) {
+private static final Strategy HOUR_STRATEGY = new NumberStrategy(Calendar.HOUR);
+private static final Strategy MINUTE_STRATEGY = new NumberStrategy(Calendar.MINUTE);
+private static final Strategy SECOND_STRATEGY = new NumberStrategy(Calendar.SECOND);
+private static final Strategy MILLISECOND_STRATEGY = new NumberStrategy(Calendar.MILLISECOND);
+
+Generated JUnit Test:
+package org.apache.commons.lang3.time;
+
+ import java.text.ParsePosition;
+ import java.util.Calendar;
+ import java.util.Date;
+ import java.util.Locale;
+ import java.util.TimeZone;
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for the LANG-831 bug: FastDateParser must enforce literal characters
+  * in the pattern and return null when they are missing in the input.
+  */
+ public class FastDateParserLiteralBugTest {
+
+     // ---- Bug-specific case ----
+
+     @Test
+     public void testMissingLiteralCommaReturnsNull() {
+         FastDateParser parser = new FastDateParser("M E,3 Tue", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         Date result = parser.parse("3 Tue", pos);
+         assertNull("Parsing without required comma should return null", result);
+     }
+
+     @Test
+     public void testValidPatternWithLiteralComma() {
+         FastDateParser parser = new FastDateParser("M E,3 Tue", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         Date result = parser.parse("3 Tue,3 Tue", pos);
+         assertNotNull("Parsing with literal comma should succeed", result);
+         assertEquals("Parser should consume entire input", 10, pos.getIndex());
+         Calendar cal = Calendar.getInstance();
+         cal.setTime(result);
+         assertEquals(Calendar.MARCH, cal.get(Calendar.MONTH));
+         assertEquals(Calendar.TUESDAY, cal.get(Calendar.DAY_OF_WEEK));
+     }
+
+     // ---- Quoted literal tests ----
+
+     @Test
+     public void testMissingQuotedLiteralFails() {
+         FastDateParser parser = new FastDateParser("yyyy'abc'", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNull("Should fail when literal is incomplete", parser.parse("1970ab", pos));
+         pos = new ParsePosition(0);
+         assertNull("Should fail when literal is completely absent", parser.parse("1970", pos));
+     }
+
+     @Test
+     public void testValidQuotedLiteral() {
+         FastDateParser parser = new FastDateParser("yyyy'abc'", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         Date result = parser.parse("1970abc", pos);
+         assertNotNull("Should parse when quoted literal is present", result);
+         Calendar cal = Calendar.getInstance();
+         cal.clear();
+         cal.set(Calendar.YEAR, 1970);
+         assertEquals("Year should be set to 1970", cal.getTime(), result);
+     }
+
+     @Test
+     public void testLiteralInMiddleOfPattern() {
+         FastDateParser parser = new FastDateParser("yyyy'-'MM'-'dd", TimeZone.getDefault(),
+Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNull("Should fail when literal dash is replaced by slash",
+                    parser.parse("1970/03/02", pos));
+         pos = new ParsePosition(0);
+         assertNotNull("Should succeed with literal dash",
+                       parser.parse("1970-03-02", pos));
+     }
+
+     // ---- Edge cases ----
+
+     @Test
+     public void testPatternWithOnlyLiteral() {
+         FastDateParser parser = new FastDateParser("'hello'", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         Date result = parser.parse("hello", pos);
+         assertNotNull("Should parse exact literal", result);
+         assertEquals("Should consume all characters", 5, pos.getIndex());
+         Calendar cal = Calendar.getInstance();
+         cal.clear();
+         assertEquals("Should produce epoch date", cal.getTime(), result);
+
+         pos = new ParsePosition(0);
+         assertNull("Should fail for partial literal", parser.parse("hell", pos));
+     }
+
+     @Test
+     public void testLiteralAfterField() {
+         FastDateParser parser = new FastDateParser("yyyy'AD'", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNull("Should fail when literal suffix doesn't match",
+                    parser.parse("1970BC", pos));
+     }
+
+     @Test
+     public void testTextStrategyWithMissingLiteral() {
+         FastDateParser parser = new FastDateParser("E', hello'", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNull("Should fail without comma literal", parser.parse("Tue hello", pos));
+         pos = new ParsePosition(0);
+         assertNotNull("Should succeed with comma literal", parser.parse("Tue, hello", pos));
+     }
+
+     @Test
+     public void testMultipleStrategiesWithLiteralBetween() {
+         FastDateParser parser = new FastDateParser("M','E", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNull("Should fail without comma", parser.parse("3Tue", pos));
+         pos = new ParsePosition(0);
+         assertNotNull("Should succeed with comma", parser.parse("3,Tue", pos));
+     }
+
+     @Test
+     public void testLiteralNumberFollowedByText() {
+         FastDateParser parser = new FastDateParser("'3'E", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNull("Should fail when literal number is missing", parser.parse("Tue", pos));
+         pos = new ParsePosition(0);
+         assertNotNull("Should succeed with literal number", parser.parse("3Tue", pos));
+     }
+
+     @Test
+     public void testLiteralWithEscapedQuote() {
+         FastDateParser parser = new FastDateParser("yyyy''MM", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         assertNotNull("Should parse with literal single quote", parser.parse("1970'03", pos));
+         pos = new ParsePosition(0);
+         assertNull("Should fail without literal quote", parser.parse("197003", pos));
+     }
+
+     @Test
+     public void testNullForInvalidInputPosition() {
+         FastDateParser parser = new FastDateParser("yyyy", TimeZone.getDefault(), Locale.US);
+         ParsePosition pos = new ParsePosition(0);
+         Date result = parser.parse("abcd", pos);
+         assertNull("Should return null for non-numeric input", result);
+         assertEquals("Position should not advance", 0, pos.getIndex());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.lang3.time.FastDateParserLiteralBugTest::testValidPatternWithLiteralComma
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.lang3.time.FastDateParserLiteralBugTest::testValidPatternWithLiteralComma

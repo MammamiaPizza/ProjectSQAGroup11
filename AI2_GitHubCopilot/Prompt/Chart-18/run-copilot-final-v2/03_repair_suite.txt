@@ -1,0 +1,236 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Chart  Bug: 18  Version: Chart-18b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.data.category.junit.DefaultCategoryDatasetTests::testBug1835955
+ --> java.lang.IndexOutOfBoundsException: Index: 0, Size: 0
+ - org.jfree.data.junit.DefaultKeyedValues2DTests::testRemoveColumnByKey
+ --> java.lang.IndexOutOfBoundsException: Index: 0, Size: 0
+ - org.jfree.data.junit.DefaultKeyedValuesTests::testRemoveValue
+ --> junit.framework.AssertionFailedError
+ - org.jfree.data.junit.DefaultKeyedValuesTests::testGetIndex2
+ --> junit.framework.AssertionFailedError: expected:<-1> but was:<0>
+Modified: org.jfree.data.DefaultKeyedValues, org.jfree.data.DefaultKeyedValues2D
+
+Available API/signatures:
+[org.jfree.data.DefaultKeyedValues | java]
+package org.jfree.data;
+public class DefaultKeyedValues implements KeyedValues,
+public DefaultKeyedValues() {
+public int getItemCount() {
+public Number getValue(int item) {
+public Comparable getKey(int index) {
+public int getIndex(Comparable key) {
+final Integer i = (Integer) this.indexMap.get(key);
+public List getKeys() {
+public Number getValue(Comparable key) {
+public void addValue(Comparable key, double value) {
+public void addValue(Comparable key, Number value) {
+public void setValue(Comparable key, double value) {
+public void setValue(Comparable key, Number value) {
+public void insertValue(int position, Comparable key, double value) {
+public void insertValue(int position, Comparable key, Number value) {
+private void rebuildIndex () {
+final Object key = this.keys.get(i);
+public void removeValue(int index) {
+public void removeValue(Comparable key) {
+public void clear() {
+public void sortByKeys(SortOrder order) {
+final int size = this.keys.size();
+public void sortByValues(SortOrder order) {
+public boolean equals(Object obj) {
+public int hashCode() {
+public Object clone() throws CloneNotSupportedException {
+
+[org.jfree.data.DefaultKeyedValues2D | java]
+package org.jfree.data;
+public class DefaultKeyedValues2D implements KeyedValues2D,
+public DefaultKeyedValues2D() {
+public DefaultKeyedValues2D(boolean sortRowKeys) {
+public int getRowCount() {
+public int getColumnCount() {
+public Number getValue(int row, int column) {
+public Comparable getRowKey(int row) {
+public int getRowIndex(Comparable key) {
+public List getRowKeys() {
+public Comparable getColumnKey(int column) {
+public int getColumnIndex(Comparable key) {
+public List getColumnKeys() {
+public Number getValue(Comparable rowKey, Comparable columnKey) {
+public void removeValue(Comparable rowKey, Comparable columnKey) {
+public void removeRow(int rowIndex) {
+public void removeRow(Comparable rowKey) {
+public void removeColumn(int columnIndex) {
+public void removeColumn(Comparable columnKey) {
+public void clear() {
+public boolean equals(Object o) {
+public int hashCode() {
+public Object clone() throws CloneNotSupportedException {
+
+Generated JUnit Test:
+import org.jfree.data.DefaultKeyedValues;
+ import org.jfree.data.DefaultKeyedValues2D;
+ import org.jfree.data.UnknownKeyException;
+ import org.junit.Before;
+ import org.junit.Test;
+
+ import java.util.List;
+
+ import static org.junit.Assert.*;
+
+ /**
+  * Regression tests for Defects4J Chart bug #18.
+  * Tests index consistency after removal operations in
+  * DefaultKeyedValues and DefaultKeyedValues2D.
+  */
+ public class Bug18Test {
+
+     private DefaultKeyedValues singleTable;
+     private DefaultKeyedValues2D twoDTable;
+
+     @Before
+     public void setUp() {
+         singleTable = new DefaultKeyedValues();
+         singleTable.addValue("A", 1);
+         singleTable.addValue("B", 2);
+         singleTable.addValue("C", 3);
+
+         twoDTable = new DefaultKeyedValues2D();
+         twoDTable.setValue(10, "R1", "C1");
+         twoDTable.setValue(20, "R1", "C2");
+         twoDTable.setValue(30, "R2", "C1");
+         twoDTable.setValue(40, "R2", "C2");
+     }
+
+     // ---------- DefaultKeyedValues tests ----------
+
+     @Test
+     public void testGetIndexAfterRemoveByIndex() {
+         singleTable.removeValue(0); // remove "A"
+         assertEquals("Index for removed key should be -1",
+                 -1, singleTable.getIndex("A"));
+         assertEquals("Next key should shift to index 0",
+                 0, singleTable.getIndex("B"));
+         assertEquals("Count should be 2", 2, singleTable.getItemCount());
+     }
+
+     @Test
+     public void testGetIndexAfterRemoveByComparable() {
+         singleTable.removeValue("B");
+         assertEquals(-1, singleTable.getIndex("B"));
+         assertEquals(0, singleTable.getIndex("A"));
+         assertEquals(1, singleTable.getIndex("C"));
+         assertEquals(2, singleTable.getItemCount());
+     }
+
+     @Test
+     public void testRemoveNonexistentKeyDoesNothing() {
+         int countBefore = singleTable.getItemCount();
+         singleTable.removeValue("NONEXIST");
+         assertEquals(countBefore, singleTable.getItemCount());
+         assertEquals(-1, singleTable.getIndex("NONEXIST"));
+     }
+
+     @Test
+     public void testRemoveFromEmpty() {
+         DefaultKeyedValues empty = new DefaultKeyedValues();
+         assertEquals(0, empty.getItemCount());
+         // remove by index on empty should throw IndexOutOfBoundsException
+         try {
+             empty.removeValue(0);
+             fail("Expected IndexOutOfBoundsException");
+         } catch (IndexOutOfBoundsException expected) {
+             // expected
+         }
+         // remove by comparable on empty should do nothing
+         empty.removeValue("key");
+         assertEquals(-1, empty.getIndex("key"));
+     }
+
+     @Test
+     public void testSequentialRemovalsThenGetIndex() {
+         singleTable.removeValue(0); // A
+         singleTable.removeValue(0); // B (now at index 0)
+         assertEquals("C should be at index 0", 0, singleTable.getIndex("C"));
+         assertEquals(-1, singleTable.getIndex("A"));
+         assertEquals(-1, singleTable.getIndex("B"));
+         assertEquals(1, singleTable.getItemCount());
+     }
+
+     @Test
+     public void testGetItemCountDecrementsAfterRemove() {
+         assertEquals(3, singleTable.getItemCount());
+         singleTable.removeValue("A");
+         assertEquals(2, singleTable.getItemCount());
+         singleTable.removeValue("C");
+         assertEquals(1, singleTable.getItemCount());
+     }
+
+     @Test
+     public void testKeysListExcludesRemovedKey() {
+         singleTable.removeValue("B");
+         List keys = singleTable.getKeys();
+         assertEquals(2, keys.size());
+         assertFalse(keys.contains("B"));
+         assertTrue(keys.contains("A"));
+         assertTrue(keys.contains("C"));
+     }
+
+     @Test
+     public void testRemoveLastRemainingKey() {
+         singleTable.removeValue("A");
+         singleTable.removeValue("B");
+         singleTable.removeValue(0); // now only C left at index 0, remove it
+         assertEquals(0, singleTable.getItemCount());
+         assertEquals(-1, singleTable.getIndex("C"));
+         assertTrue(singleTable.getKeys().isEmpty());
+     }
+
+     // ---------- DefaultKeyedValues2D tests ----------
+
+     @Test
+     public void testRemoveColumnThenGetColumnIndex() {
+         twoDTable.removeColumn("C1");
+         assertEquals(-1, twoDTable.getColumnIndex("C1"));
+         assertEquals(0, twoDTable.getColumnIndex("C2"));
+         assertEquals(1, twoDTable.getColumnCount());
+     }
+
+     @Test
+     public void testRemoveRowThenGetRowIndex() {
+         twoDTable.removeRow("R1");
+         assertEquals(-1, twoDTable.getRowIndex("R1"));
+         assertEquals(0, twoDTable.getRowIndex("R2"));
+         assertEquals(1, twoDTable.getRowCount());
+     }
+
+     @Test
+     public void testRemoveColumnDecrementsCount() {
+         assertEquals(2, twoDTable.getColumnCount());
+         twoDTable.removeColumn("C2");
+         assertEquals(1, twoDTable.getColumnCount());
+     }
+
+     @Test
+     public void testRemoveRowAfterAddRowKeepsIndicesConsistent() {
+         twoDTable.setValue(50, "R3", "C1");
+         twoDTable.removeRow("R2");
+         assertEquals(-1, twoDTable.getRowIndex("R2"));
+         assertEquals(0, twoDTable.getRowIndex("R1"));
+         assertEquals(1, twoDTable.getRowIndex("R3"));
+         assertEquals(2, twoDTable.getRowCount());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - Bug18Test::testRemoveNonexistentKeyDoesNothing
+ - Bug18Test::testRemoveFromEmpty
+
+Failing generated tests: Bug18Test::testRemoveFromEmpty, Bug18Test::testRemoveNonexistentKeyDoesNothing

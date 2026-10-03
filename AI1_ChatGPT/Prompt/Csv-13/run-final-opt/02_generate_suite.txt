@@ -1,0 +1,397 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Csv  Bug: 13  Version: Csv-13b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.csv.CSVFormat, org.apache.commons.csv.CSVPrinter
+Modified: org.apache.commons.csv.CSVFormat, org.apache.commons.csv.CSVPrinter
+Triggers: org.apache.commons.csv.CSVPrinterTest::testMySqlNullOutput, org.apache.commons.csv.CSVPrinterTest::testMySqlNullStringDefault
+
+Bug/specification summary:
+Bug report: CSV-168
+Trigger failures:
+- org.apache.commons.csv.CSVPrinterTest::testMySqlNullOutput
+ --> junit.framework.AssertionFailedError: expected:<"NULL" [NULL]
+ - org.apache.commons.csv.CSVPrinterTest::testMySqlNullStringDefault
+ --> junit.framework.AssertionFailedError: expected:<\N> but was:<null>
+Modified: org.apache.commons.csv.CSVFormat, org.apache.commons.csv.CSVPrinter
+
+Prompt-01 test plan:
+TARGETS: CSVFormat.MYSQL null-string configuration and CSVFormat.withNullString(String)
+TARGETS: CSVPrinter.print(Object) null handling; printRecord(Object...) field output
+ORACLES: Trigger testMySqlNullStringDefault expects MYSQL null output as \N, not "null"
+ORACLES: Trigger testMySqlNullOutput supplies expected output for configured null-string behavior
+CASES: Print a null value with CSVFormat.MYSQL default null string
+CASES: Print null beside non-null fields to verify delimiter/record formatting is preserved
+CASES: Print null after MYSQL.withNullString(...) and verify configured representation
+RISKS: Null output may be converted through String.valueOf, producing literal "null"
+RISKS: Context omits full source and exact custom-null expected string from the trigger assertion
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.csv.CSVFormat (java) =====
+/* API SIGNATURES */
+package org.apache.commons.csv;
+public final class CSVFormat implements Serializable {
+public static enum Predefined {
+private Predefined(final CSVFormat format) {
+public CSVFormat getFormat() {
+public static final CSVFormat RFC4180 = DEFAULT.withIgnoreEmptyLines(false);
+public static final CSVFormat EXCEL = DEFAULT.withIgnoreEmptyLines(false).withAllowMissingColumnNames();
+public static final CSVFormat TDF = DEFAULT.withDelimiter(TAB).withIgnoreSurroundingSpaces();
+public static final CSVFormat MYSQL = DEFAULT.withDelimiter(TAB).withEscape(BACKSLASH).withIgnoreEmptyLines(false)
+private static boolean isLineBreak(final char c) {
+private static boolean isLineBreak(final Character c) {
+public static CSVFormat newFormat(final char delimiter) {
+public static CSVFormat valueOf(final String format) {
+private String[] toStringArray(final Object[] values) {
+@Override
+public boolean equals(final Object obj) {
+final CSVFormat other = (CSVFormat) obj;
+public String format(final Object... values) {
+final StringWriter out = new StringWriter();
+} catch (final IOException e) {
+public Character getCommentMarker() {
+public char getDelimiter() {
+public Character getEscapeCharacter() {
+public String[] getHeader() {
+public String[] getHeaderComments() {
+public boolean getAllowMissingColumnNames() {
+public boolean getIgnoreEmptyLine
+...[truncated deterministically]...
+at withIgnoreSurroundingSpaces(final boolean ignoreSurroundingSpaces) {
+public CSVFormat withIgnoreHeaderCase() {
+public CSVFormat withIgnoreHeaderCase(final boolean ignoreHeaderCase) {
+public CSVFormat withNullString(final String nullString) {
+public CSVFormat withQuote(final char quoteChar) {
+public CSVFormat withQuote(final Character quoteChar) {
+public CSVFormat withQuoteMode(final QuoteMode quoteModePolicy) {
+public CSVFormat withRecordSeparator(final char recordSeparator) {
+public CSVFormat withRecordSeparator(final String recordSeparator) {
+public CSVFormat withSkipHeaderRecord() {
+public CSVFormat withSkipHeaderRecord(final boolean skipHeaderRecord) {
+
+/* HEADER */
+package org.apache.commons.csv;
+import static org.apache.commons.csv.Constants.BACKSLASH;
+import static org.apache.commons.csv.Constants.COMMA;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.CRLF;
+import static org.apache.commons.csv.Constants.DOUBLE_QUOTE_CHAR;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.TAB;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Serializable;
+import java.io.StringWriter;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+/* METHOD CSVFormat */
+private CSVFormat(final char delimiter, final Character quoteChar, final QuoteMode quoteMode,
+ final Character commentStart, final Character escape, final boolean ignoreSurroundingSpaces,
+ final boolean ignoreEmptyLines, final String recordSeparator, final String nullString,
+ final Object[] headerComments, final String[] header, final boolean skipHeaderRecord,
+ final boolean allowMissingColumnNames, final boolean ignoreHeaderCase) {
+ this.delimiter = delimiter;
+ this.quoteCharacter = quoteChar;
+ this.quoteMode = quoteMode;
+ this.commentMarker = commentStart;
+ this.escapeCharacter = escape;
+ this.ignoreSurroundingSpaces = ignoreSurroundingSpaces;
+ this.allowMissingColumnNames = allowMissingColumnNames;
+ this.ignoreEmptyLines = ignoreEmptyLines;
+ this.recordSeparator = recordSeparator;
+ this.nullString = nullString;
+ this.headerComments = toStringArray(headerComments);
+ this.header = header == null ? null : header.clone();
+ this.skipHeaderRecord = skipHeaderRecord;
+ this.ignoreHeaderCase = ignoreHeaderCase;
+ validate();
+ }
+
+/* METHOD newFormat */
+public static CSVFormat newFormat(final char delimiter) {
+ return new CSVFormat(delimiter, null, null, null, null, false, false, null, null, null, null, false, false, false);
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(final Object obj) {
+ if (this == obj) {
+ return true;
+ }
+ if (obj == null) {
+ return false;
+ }
+ if (getClass() != obj.getClass()) {
+ return false;
+ }
+
+ final CSVFormat other = (CSVFormat) obj;
+ if (delimiter != other.delimiter) {
+ return false;
+ }
+ if (quoteMode != other.quoteMode) {
+ return false;
+ }
+ if (quoteCharacter == null) {
+ if (other.quoteCharacter != null) {
+ return false;
+ }
+ } else if (!quoteCharacter.equals(other.quoteCharacter)) {
+ return false;
+ }
+ if (commentMarker == null) {
+ if (other.commentMarker != null) {
+ return false;
+ }
+ } else if (!commentMarker.equals(other.commentMarker)) {
+ return false;
+ }
+ if (escapeCharacter == null) {
+ if (other.escapeCharacter != null) {
+ return false;
+ }
+ } else if (!escapeCharacter.equals(other.escapeCharacter)) {
+ return false;
+ }
+ if (nullString == null) {
+ if (other.nullString != null) {
+ return false;
+ }
+ } else if (!nullString.equals(other.nullString)) {
+ return false;
+ }
+ if (!Arrays.equals(header, other.header)) {
+ return false;
+ }
+ if (ignoreSurroundingSpaces != other.ignoreSurroundingSpaces) {
+ return false;
+ }
+ if (ignoreEmptyLines != other.ignoreEmptyLines) {
+ return false;
+ }
+ if (skipHeaderRecord != other.skipHeaderRecord) {
+ return false;
+ }
+ if (recordSeparator == null) {
+ if (other.recordSeparator != null) {
+ return false;
+ }
+ } else if (!recordSeparator.equals(other.recordSeparator)) {
+ return false;
+ }
+ return true;
+ }
+
+/* METHOD format */
+public String format(final Object... values) {
+ final StringWriter out = new StringWriter();
+ try {
+ new CSVPrinter(out, this).printRecord(values);
+ return out.toString().trim();
+ } catch (final IOException e) {
+ // should not happen because a StringWriter does not do IO.
+ throw new IllegalStateException(e);
+ }
+ }
+
+===== org.apache.commons.csv.CSVPrinter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.csv;
+public final class CSVPrinter implements Flushable, Closeable {
+/** True if we just began a new record. */
+public CSVPrinter(final Appendable out, final CSVFormat format) throws IOException {
+for (final String line : format.getHeaderComments()) {
+@Override
+public void close() throws IOException {
+public void flush() throws IOException {
+public Appendable getOut() {
+public void print(final Object value) throws IOException {
+final String nullString = format.getNullString();
+private void print(final Object object, final CharSequence value, final int offset, final int len)
+private void printAndEscape(final CharSequence value, final int offset, final int len) throws IOException {
+final char delim = format.getDelimiter();
+final char escape = format.getEscapeCharacter().charValue();
+private void printAndQuote(final Object object, final CharSequence value, final int offset, final int len)
+final char delimChar = format.getDelimiter();
+final char quoteChar = format.getQuoteCharacter().charValue();
+final char c = value.charAt(pos);
+public void printComment(final String comment) throws IOException {
+final char c = comment.charAt(i);
+public void println() throws IOException {
+final String recordSeparator = format.getRecordSeparator();
+public void printRecord(final Iterable<?> values) throws IOException {
+for (final Object value : values) {
+public void printRecord(final Object... values) throws IOException {
+public void printRecords(final Iterable<?> values) throws IOException {
+public void printRecords(final Object... values) throws IOException {
+public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+final int columnCount = resultSet.getMetaData().getColumnCount();
+
+/* HEADER */
+package org.apache.commons.csv;
+import static org.apache.commons.csv.Constants.COMMENT;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.SP;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+/* METHOD CSVPrinter */
+public CSVPrinter(final Appendable out, final CSVFormat format) throws IOException {
+ Assertions.notNull(out, "out");
+ Assertions.notNull(format, "format");
+
+ this.out = out;
+ this.format = format;
+ // TODO: Is it a good idea to do this here instead of on the first call to a print method?
+ // It seems a pain to have to track whether the header has already been printed or not.
+ if (format.getHeaderComments() != null) {
+ for (final String line : format.getHeaderComments()) {
+ if (line != null) {
+ this.printComment(line);
+ }
+ }
+ }
+ if (format.getHeader() != null && !format.getSkipHeaderRecord()) {
+ this.printRecord((Object[]) format.getHeader());
+ }
+ }
+
+/* METHOD print */
+public void print(final Object value) throws IOException {
+ // null values are considered empty
+ String strValue;
+ if (value == null) {
+ final String nullString = format.getNullString();
+ strValue = nullString == null ? Constants.EMPTY : nullString;
+ } else {
+ strValue = value.toString();
+ }
+ this.print(value, strValue, 0, strValue.length());
+ }
+
+/* METHOD println */
+public void println() throws IOException {
+ final String recordSeparator = format.getRecordSeparator();
+ if (recordSeparator != null) {
+ out.append(recordSeparator);
+ }
+ newRecord = true;
+ }
+
+/* METHOD close */
+@Override
+ public void close() throws IOException {
+ if (out instanceof Closeable) {
+ ((Closeable) out).close();
+ }
+ }
+
+/* METHOD flush */
+@Override
+ public void flush() throws IOException {
+ if (out instanceof Flushable) {
+ ((Flushable) out).flush();
+ }
+ }
+
+/* METHOD getOut */
+public Appendable getOut() {
+ return this.out;
+ }
+
+/* METHOD printComment */
+public void printComment(final String comment) throws IOException {
+ if (!format.isCommentMarkerSet()) {
+ return;
+ }
+ if (!newRecord) {
+ println();
+ }
+ out.append(format.getCommentMarker().charValue());
+ out.append(SP);
+ for (int i = 0; i < comment.length(); i++) {
+ final char c = comment.charAt(i);
+ switch (c) {
+ case CR:
+ if (i + 1 < comment.length() && comment.charAt(i + 1) == LF) {
+ i++;
+ }
+ //$FALL-THROUGH$ break intentionally excluded.
+ case LF:
+ println();
+ out.append(format.getCommentMarker().charValue());
+ out.append(SP);
+ break;
+ default:
+ out.append(c);
+ break;
+ }
+ }
+ println();
+ }
+
+/* METHOD printRecord */
+public void printRecord(final Iterable<?> values) throws IOException {
+ for (final Object value : values) {
+ print(value);
+ }
+ println();
+ }
+
+/* METHOD printRecord */
+public void printRecord(final Object... values) throws IOException {
+ for (final Object value : values) {
+ print(value);
+ }
+ println();
+ }
+
+/* METHOD printRecords */
+public void printRecords(final Iterable<?> values) throws IOException {
+ for (final Object value : values) {
+ if (value instanceof Object[]) {
+ this.printRecord((Object[]) value);
+ } else if (value instanceof Iterable) {
+ this.printRecord((Iterable<?>) value);
+ } else {
+ this.printRecord(value);
+ }
+ }
+ }
+
+/* METHOD printRecords */
+public void printRecords(final Object... values) throws IOException {
+ for (final Object value : values) {
+ if (value instanceof Object[]) {
+ this.printRecord((Object[]) value);
+ } else if (value instanceof Iterable) {
+ this.printRecord((Iterable<?>) value);
+ } else {
+ this.printRecord(value);
+ }
+ }
+ }
+
+/* METHOD printRecords */
+public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+ final int columnCount = resultSet.getMetaData().getColumnCount();
+ while (resultSet.next()) {
+ for (int i = 1; i <= columnCount; i++) {
+ print(resultSet.getObject(i));
+ }
+ println();
+ }
+ }

@@ -1,0 +1,153 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 42  Version: Compress-42b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-379
+Trigger failures:
+- org.apache.commons.compress.archivers.zip.ZipArchiveEntryTest::isUnixSymlinkIsFalseIfMoreThanOneFlagIsSet
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.compress.archivers.zip.UnixStat, org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.zip.UnixStat | java]
+package org.apache.commons.compress.archivers.zip;
+public interface UnixStat {
+
+[org.apache.commons.compress.archivers.zip.ZipArchiveEntry | java]
+package org.apache.commons.compress.archivers.zip;
+public class ZipArchiveEntry extends java.util.zip.ZipEntry
+public static final int PLATFORM_UNIX = 3;
+public static final int PLATFORM_FAT = 0;
+public static final int CRC_UNKNOWN = -1;
+private GeneralPurposeBit gpb = new GeneralPurposeBit();
+public ZipArchiveEntry(final String name) {
+public ZipArchiveEntry(final java.util.zip.ZipEntry entry) throws ZipException {
+final byte[] extra = entry.getExtra();
+public ZipArchiveEntry(final ZipArchiveEntry entry) throws ZipException {
+final GeneralPurposeBit other = entry.getGeneralPurposeBit();
+protected ZipArchiveEntry() {
+public ZipArchiveEntry(final File inputFile, final String entryName) {
+@Override
+public Object clone() {
+final ZipArchiveEntry e = (ZipArchiveEntry) super.clone();
+public int getMethod() {
+public void setMeth
+...[truncated deterministically]...
+ic boolean equals(final Object obj) {
+final ZipArchiveEntry other = (ZipArchiveEntry) obj;
+final String myName = getName();
+final String otherName = other.getName();
+public void setVersionMadeBy(final int versionMadeBy) {
+public void setVersionRequired(final int versionRequired) {
+public int getVersionRequired() {
+public int getVersionMadeBy() {
+public int getRawFlag() {
+public void setRawFlag(final int rawFlag) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.zip;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for ZipArchiveEntry.isUnixSymlink() related to bug COMPRESS-379.
+  * The bug causes isUnixSymlink() to return true when multiple Unix file type
+  * flags are set, rather than requiring exactly the symlink flag.
+  */
+ public class ZipArchiveEntryTest {
+
+     /**
+      * Helper that creates a ZipArchiveEntry and sets its Unix mode.
+      */
+     private static ZipArchiveEntry createEntry(int mode) {
+         ZipArchiveEntry entry = new ZipArchiveEntry("test");
+         entry.setUnixMode(mode);
+         return entry;
+     }
+
+     @Test
+     public void isUnixSymlinkIsFalseIfMoreThanOneFlagIsSet() {
+         // symlink + regular file type bit: must be false
+         ZipArchiveEntry entry = createEntry(UnixStat.LINK_FLAG | UnixStat.FILE_FLAG);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithOnlySymlinkFlag() {
+         // exactly symlink flag set -> true
+         ZipArchiveEntry entry = createEntry(UnixStat.LINK_FLAG);
+         assertTrue(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithSymlinkAndDirectory() {
+         ZipArchiveEntry entry = createEntry(UnixStat.LINK_FLAG | UnixStat.DIR_FLAG);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithNoSymlinkFlag() {
+         // a plain file, no symlink bit
+         ZipArchiveEntry entry = createEntry(UnixStat.FILE_FLAG);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithZeroMode() {
+         ZipArchiveEntry entry = createEntry(0);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithOnlyPermissions() {
+         // permission bits only, no type bits -> false
+         ZipArchiveEntry entry = createEntry(0755);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithAllTypeBitsExceptSymlink() {
+         ZipArchiveEntry entry = createEntry(UnixStat.FILE_FLAG | UnixStat.DIR_FLAG);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithSymlinkAndPermissions() {
+         // symlink flag plus typical permissions is a valid symlink -> true
+         ZipArchiveEntry entry = createEntry(UnixStat.LINK_FLAG | 0777);
+         assertTrue(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithSymlinkAndUnknownTypeBit() {
+         // symlink flag + another high bit (not a recognized type flag) -> false
+         int unknownFlag = 0010000; // typical FIFO flag
+         ZipArchiveEntry entry = createEntry(UnixStat.LINK_FLAG | unknownFlag);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithRegularFileAndDirectory() {
+         ZipArchiveEntry entry = createEntry(UnixStat.FILE_FLAG | UnixStat.DIR_FLAG);
+         assertFalse(entry.isUnixSymlink());
+     }
+
+     @Test
+     public void isUnixSymlinkWithSymlinkAndStickyBit() {
+         // symlink flag + permission bits including sticky bit -> still only one type flag -> true
+         ZipArchiveEntry entry = createEntry(UnixStat.LINK_FLAG | 01777);
+         assertTrue(entry.isUnixSymlink());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.compress.archivers.zip.ZipArchiveEntryTest::isUnixSymlinkIsFalseIfMoreThanOneFlagIsSet
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.compress.archivers.zip.ZipArchiveEntryTest::isUnixSymlinkIsFalseIfMoreThanOneFlagIsSet

@@ -1,0 +1,329 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 21  Version: Jsoup-21b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.select.CombiningEvaluator, org.jsoup.select.QueryParser
+Modified: org.jsoup.select.CombiningEvaluator, org.jsoup.select.QueryParser
+Triggers: org.jsoup.select.SelectorTest::handlesCommasInSelector, org.jsoup.select.SelectorTest::mixCombinatorGroup
+
+Bug/specification summary:
+Bug report: 179
+Trigger failures:
+- org.jsoup.select.SelectorTest::handlesCommasInSelector
+ --> java.util.regex.PatternSyntaxException: Unclosed character class near index 3
+ - org.jsoup.select.SelectorTest::mixCombinatorGroup
+ --> junit.framework.AssertionFailedError: expected:<2> but was:<3>
+Modified: org.jsoup.select.CombiningEvaluator, org.jsoup.select.QueryParser
+
+Prompt-01 test plan:
+TARGETS: QueryParser.parse (main entry), combinator, consumeSubQuery; CombiningEvaluator.Or.add;
+byAttribute for attr selectors containing commas
+ORACLES: existing test assertions (e.g., element count=2, no PatternSyntaxException); Jsoup
+semantic: comma is OR union of selectors
+CASES: normal: "div, p" → union; boundary: "[attr=a,b]", combined combinators "+ , >"; error:
+leading/trailing comma, unclosed brackets
+RISKS: regex-based split may break on commas inside [attr=val]; grouping of combinators after commas
+may yield wrong element count
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.select.CombiningEvaluator (java) =====
+package org.jsoup.select;
+
+import org.jsoup.helper.StringUtil;
+import org.jsoup.nodes.Element;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * Base combining (and, or) evaluator.
+ */
+abstract class CombiningEvaluator extends Evaluator {
+ final List<Evaluator> evaluators;
+
+ CombiningEvaluator() {
+ super();
+ evaluators = new ArrayList<Evaluator>();
+ }
+
+ CombiningEvaluator(Collection<Evaluator> evaluators) {
+ this();
+ this.evaluators.addAll(evaluators);
+ }
+
+ static final class And extends CombiningEvaluator {
+ And(Collection<Evaluator> evaluators) {
+ super(evaluators);
+ }
+
+ And(Evaluator... evaluators) {
+ this(Arrays.asList(evaluators));
+ }
+
+ @Override
+ public boolean matches(Element root, Element node) {
+ for (Evaluator s : evaluators) {
+ if (!s.matches(root, node))
+ return false;
+ }
+ return true;
+ }
+
+ @Override
+ public String toString() {
+ return StringUtil.join(evaluators, " ");
+ }
+ }
+
+ static final class Or extends CombiningEvaluator {
+ /**
+ * Create a new Or evaluator. The initial evaluators are ANDed together and used as the first clause of the OR.
+ * @param evaluators initial OR clause (these are wrapped into an AND evaluator).
+ */
+ Or(Collection<Evaluator> evaluators) {
+ super();
+ if (evaluators.size() > 1)
+ this.evaluators.add(new And(evaluators));
+ else // 0 or 1
+ this.evaluators.addAll(evaluators);
+ }
+
+ public void add(Evaluator e) {
+ evaluators.add(e);
+ }
+
+ @Override
+ public boolean matches(Element root, Element node) {
+ for (Evaluator s : evaluators) {
+ if (s.matches(root, node))
+ return true;
+ }
+ return false;
+ }
+
+ @Override
+ public String toString() {
+ return String.format(":or%s", evaluators);
+ }
+ }
+}
+
+===== org.jsoup.select.QueryParser (java) =====
+/* API SIGNATURES */
+package org.jsoup.select;
+class QueryParser {
+private List<Evaluator> evals = new ArrayList<Evaluator>();
+private QueryParser(String query) {
+public static Evaluator parse(String query) {
+} else { // E.class, E#id, E[attr] etc. AND
+private void combinator(char combinator) {
+private String consumeSubQuery() {
+private void findElements() {
+private void byId() {
+private void byClass() {
+private void byTag() {
+private void byAttribute() {
+private void allElements() {
+private void indexLessThan() {
+private void indexGreaterThan() {
+private void indexEquals() {
+private int consumeIndex() {
+private void has() {
+private void contains(boolean own) {
+private void matches(boolean own) {
+private void not() {
+
+/* HEADER */
+package org.jsoup.select;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.parser.TokenQueue;
+class QueryParser {
+
+/* METHOD QueryParser */
+private QueryParser(String query) {
+ this.query = query;
+ this.tq = new TokenQueue(query);
+ }
+
+/* METHOD parse */
+public static Evaluator parse(String query) {
+ QueryParser p = new QueryParser(query);
+ return p.parse();
+ }
+
+/* METHOD parse */
+Evaluator parse() {
+ tq.consumeWhitespace();
+
+ if (tq.matchesAny(combinators)) { // if starts with a combinator, use root as elements
+ evals.add(new StructuralEvaluator.Root());
+ combinator(tq.consume());
+ } else {
+ findElements();
+ }
+
+ while (!tq.isEmpty()) {
+ // hierarchy and extras
+ boolean seenWhite = tq.consumeWhitespace();
+
+ if (tq.matchChomp(",")) {
+ CombiningEvaluator.Or or = new CombiningEvaluator.Or(evals);
+ evals.clear();
+ evals.add(or);
+ while (!tq.isEmpty()) {
+ String subQuery = tq.chompTo(",");
+ or.add(parse(subQuery));
+ }
+ } else if (tq.matchesAny(combinators)) {
+ combinator(tq.consume());
+ } else if (seenWhite) {
+ combinator(' ');
+ } else { // E.class, E#id, E[attr] etc. AND
+ findElements(); // take next el, #. etc off queue
+ }
+ }
+
+ if (evals.size() == 1)
+ return evals.get(0);
+
+ return new CombiningEvaluator.And(evals);
+ }
+
+/* METHOD combinator */
+private void combinator(char combinator) {
+ tq.consumeWhitespace();
+ String subQuery = consumeSubQuery(); // support multi > childs
+ Evaluator e;
+
+ if (evals.size() == 1)
+ e = evals.get(0);
+ else
+ e = new CombiningEvaluator.And(evals);
+ evals.clear();
+ Evaluator f = parse(subQuery);
+
+ if (combinator == '>')
+ evals.add(new CombiningEvaluator.And(f, new StructuralEvaluator.ImmediateParent(e)));
+ else if (combinator == ' ')
+ evals.add(new CombiningEvaluator.And(f, new StructuralEvaluator.Parent(e)));
+ else if (combinator == '+')
+ evals.add(new CombiningEvaluator.And(f, new StructuralEvaluator.ImmediatePreviousSibling(e)));
+ else if (combinator == '~')
+ evals.add(new CombiningEvaluator.And(f, new StructuralEvaluator.PreviousSibling(e)));
+ else
+ throw new Selector.SelectorParseException("Unknown combinator: " + combinator);
+ }
+
+/* METHOD findElements */
+private void findElements() {
+ if (tq.matchChomp("#"))
+ byId();
+ else if (tq.matchChomp("."))
+ byClass();
+ else if (tq.matchesWord())
+ byTag();
+ else if (tq.matches("["))
+ byAttribute();
+ else if (tq.matchChomp("*"))
+ allElements();
+ else if (tq.matchChomp(":lt("))
+ indexLessThan();
+ else if (tq.matchChomp(":gt("))
+ indexGreaterThan();
+ else if (tq.matchChomp(":eq("))
+ indexEquals();
+ else if (tq.matches(":has("))
+ has();
+ else if (tq.matches(":contains("))
+ contains(false);
+ else if (tq.matches(":containsOwn("))
+ contains(true);
+ else if (tq.matches(":matches("))
+ matches(false);
+ else if (tq.matches(":matchesOwn("))
+ matches(true);
+ else if (tq.matches(":not("))
+ not();
+ else // unhandled
+ throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, tq.remainder());
+
+ }
+
+/* METHOD consumeIndex */
+private int consumeIndex() {
+ String indexS = tq.chompTo(")").trim();
+ Validate.isTrue(StringUtil.isNumeric(indexS), "Index must be numeric");
+ return Integer.parse
+...[truncated deterministically]...
+/* METHOD consumeSubQuery */
+private String consumeSubQuery() {
+ StringBuilder sq = new StringBuilder();
+ while (!tq.isEmpty()) {
+ if (tq.matches("("))
+ sq.append("(").append(tq.chompBalanced('(', ')')).append(")");
+ else if (tq.matches("["))
+ sq.append("[").append(tq.chompBalanced('[', ']')).append("]");
+ else if (tq.matchesAny(combinators))
+ break;
+ else
+ sq.append(tq.consume());
+ }
+ return sq.toString();
+ }
+
+/* METHOD byTag */
+private void byTag() {
+ String tagName = tq.consumeElementSelector();
+ Validate.notEmpty(tagName);
+
+ // namespaces: if element name is "abc:def", selector must be "abc|def", so flip:
+ if (tagName.contains("|"))
+ tagName = tagName.replace("|", ":");
+
+ evals.add(new Evaluator.Tag(tagName.trim().toLowerCase()));
+ }
+
+/* METHOD byAttribute */
+private void byAttribute() {
+ TokenQueue cq = new TokenQueue(tq.chompBalanced('[', ']')); // content queue
+ String key = cq.consumeToAny("=", "!=", "^=", "$=", "*=", "~="); // eq, not, start, end, contain, match, (no val)
+ Validate.notEmpty(key);
+ cq.consumeWhitespace();
+
+ if (cq.isEmpty()) {
+ if (key.startsWith("^"))
+ evals.add(new Evaluator.AttributeStarting(key.substring(1)));
+ else
+ evals.add(new Evaluator.Attribute(key));
+ } else {
+ if (cq.matchChomp("="))
+ evals.add(new Evaluator.AttributeWithValue(key, cq.remainder()));
+
+ else if (cq.matchChomp("!="))
+ evals.add(new Evaluator.AttributeWithValueNot(key, cq.remainder()));
+
+ else if (cq.matchChomp("^="))
+ evals.add(new Evaluator.AttributeWithValueStarting(key, cq.remainder()));
+
+ else if (cq.matchChomp("$="))
+ evals.add(new Evaluator.AttributeWithValueEnding(key, cq.remainder()));
+
+ else if (cq.matchChomp("*="))
+ evals.add(new Evaluator.AttributeWithValueContaining(key, cq.remainder()));
+
+ else if (cq.matchChomp("~="))
+ evals.add(new Evaluator.AttributeWithValueMatching(key, Pattern.compile(cq.remainder())));
+ else
+ throw new Selector.SelectorParseException("Could not parse attribute query '%s': unexpected token at '%s'", query, cq.remainder());
+ }
+ }

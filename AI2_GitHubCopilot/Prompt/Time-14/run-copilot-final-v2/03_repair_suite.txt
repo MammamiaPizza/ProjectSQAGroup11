@@ -1,0 +1,250 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 14  Version: Time-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 151
+Trigger failures:
+- org.joda.time.TestMonthDay_Basics::testPlusMonths_int_negativeFromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testMinusDays_int_negativeFromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testPlusMonths_int_fromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testPlusMonths_int_negativeEndOfMonthAdjust
+ --> junit.framework.AssertionFailedError: expected:<--02-29> but was:<--02-28>
+ - org.joda.time.TestMonthDay_Basics::testMinusMonths_int_endOfMonthAdjust
+ --> junit.framework.AssertionFailedError: expected:<--02-29> but was:<--02-28>
+ - org.joda.time.TestMonthDay_Basics::te
+...[truncated deterministically]...
+omLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testMinusMonths_int_fromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testPlusDays_int_fromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+Modified: org.joda.time.chrono.BasicMonthOfYearDateTimeField
+
+Available API/signatures:
+[org.joda.time.chrono.BasicMonthOfYearDateTimeField | java]
+package org.joda.time.chrono;
+class BasicMonthOfYearDateTimeField extends ImpreciseDateTimeField {
+public boolean isLenient() {
+public int get(long instant) {
+public long add(long instant, int months) {
+public long add(long instant, long months) {
+public int[] add(ReadablePartial partial, int fieldIndex, int[] values, int valueToAdd) {
+public long addWrapField(long instant, int months) {
+public long getDifferenceAsLong(long minuendInstant, long subtrahendInstant) {
+public long set(long instant, int month) {
+public DurationField getRangeDurationField() {
+public boolean isLeap(long instant) {
+public int getLeapAmount(long instant) {
+public DurationField getLeapDurationField() {
+public int getMinimumValue() {
+public int getMaximumValue() {
+public long roundFloor(long instant) {
+public long remainder(long instant) {
+private Object readResolve() {
+
+Generated JUnit Test:
+package org.joda.time.chrono;
+
+ import org.joda.time.DateTimeFieldType;
+ import org.joda.time.IllegalFieldValueException;
+ import org.joda.time.MonthDay;
+ import org.joda.time.chrono.gj.GJChronology;
+ import org.junit.Before;
+ import org.junit.Test;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+
+ /**
+  * Tests for BasicMonthOfYearDateTimeField.add(ReadablePartial, int, int[], int) —
+  * the month arithmetic on MonthDay partials that validates day-of-month.
+  *
+  * Bug 151 (Time-14): adding/subtracting months from a leap-day (Feb 29)
+  * incorrectly throws IllegalFieldValueException or produces wrong result
+  * when the target month is not February.
+  */
+ public class TestBasicMonthOfYearDateTimeFieldAddPartial {
+
+     private GJChronology chrono;
+
+     @Before
+     public void setUp() {
+         chrono = GJChronology.getInstanceUTC();
+     }
+
+     // --- Helper to get MonthDay as [month, day] values array ---
+     private int[] monthDayValues(int month, int day) {
+         return new int[] {month, day};
+     }
+
+     // --- Helper to invoke add on the month field of a MonthDay ---
+     private MonthDay addMonthsToMonthDay(int month, int day, int valueToAdd) {
+         int[] values = monthDayValues(month, day);
+         int[] result = chrono.monthOfYear().add(
+                 MonthDay.ZERO,  // partial shape; actual values come from values array
+                 0,              // fieldIndex for month
+                 values,
+                 valueToAdd);
+         return new MonthDay(result[0], result[1]);
+     }
+
+     // ========================================================================
+     // CORE BUG REPRODUCTIONS: Feb 29 ± N months where target month has >= 29 days
+     // ========================================================================
+
+     /**
+      * Bug: plusMonths(-1) from 2020-02-29 should yield 2020-01-29, not throw.
+      * Target January has 31 days, so 29 is valid.
+      */
+     @Test
+     public void testFeb29_minus1Month_toJanuary() {
+         MonthDay result = addMonthsToMonthDay(2, 29, -1);
+         assertEquals(new MonthDay(1, 29), result);
+     }
+
+     /**
+      * Bug: plusMonths(1) from 2020-02-29 should yield 2020-03-29.
+      * Target March has 31 days, so 29 is valid.
+      */
+     @Test
+     public void testFeb29_plus1Month_toMarch() {
+         MonthDay result = addMonthsToMonthDay(2, 29, 1);
+         assertEquals(new MonthDay(3, 29), result);
+     }
+
+     /**
+      * Bug: plusMonths(-2) from 2020-02-29 should yield 2019-12-29.
+      */
+     @Test
+     public void testFeb29_minus2Months_toDecember() {
+         MonthDay result = addMonthsToMonthDay(2, 29, -2);
+         assertEquals(new MonthDay(12, 29), result);
+     }
+
+     /**
+      * Bug: plusMonths(-14) from 2020-02-29 should yield 2019-01-29.
+      * Crossing year boundary with negative offset, target January has 31 days.
+      */
+     @Test
+     public void testFeb29_minus14Months_crossesYear() {
+         MonthDay result = addMonthsToMonthDay(2, 29, -14);
+         assertEquals(new MonthDay(12, 29), result); // 2020-02 minus 14 = 2018-12
+     }
+
+     // ========================================================================
+     // END-OF-MONTH ADJUSTMENT: last-day-of-month → last-day-of-target-month
+     // ========================================================================
+
+     /**
+      * From a leap Feb 29 (last day of month), adding 12 months goes to a non-leap Feb.
+      * The 29th is not valid, so it should clamp to Feb 28.
+      */
+     @Test
+     public void testFeb29_plus12Months_toNonLeapFeb_clampsTo28() {
+         MonthDay result = addMonthsToMonthDay(2, 29, 12);
+         assertEquals(new MonthDay(2, 28), result);
+     }
+
+     /**
+      * Jan 31 + 1 month → Feb 28 (non-leap target, end-of-month adjustment).
+      */
+     @Test
+     public void testJan31_plus1Month_clampsToFeb28() {
+         MonthDay result = addMonthsToMonthDay(1, 31, 1);
+         assertEquals(new MonthDay(2, 28), result);
+     }
+
+     /**
+      * Jan 31 + 1 month with a leap-year offset (adding 60 months to cross leap years).
+      * The end-of-month clamping should still work.
+      */
+     @Test
+     public void testEndOfMonth_adjustsToLastDayOfTarget() {
+         // Aug 31 + 1 month → Sep 30
+         MonthDay result = addMonthsToMonthDay(8, 31, 1);
+         assertEquals(new MonthDay(9, 30), result);
+     }
+
+     // ========================================================================
+     // DAY BOUNDARY CROSSING VIA MINUS_DAYS / PLUS_DAYS THROUGH MONTH ADD
+     // ========================================================================
+
+     /**
+      * Indirectly test via month arithmetic: adding -1 month to March 29
+      * should yield Feb 28 (non-leap clamping).
+      */
+     @Test
+     public void testMar29_minus1Month_clampsToFeb28() {
+         MonthDay result = addMonthsToMonthDay(3, 29, -1);
+         assertEquals(new MonthDay(2, 28), result);
+     }
+
+     /**
+      * March 31 - 1 month → Feb 28 (end-of-month adjustment from 31-in-March to Feb).
+      */
+     @Test
+     public void testMar31_minus1Month_clampsToFeb28() {
+         MonthDay result = addMonthsToMonthDay(3, 31, -1);
+         assertEquals(new MonthDay(2, 28), result);
+     }
+
+     // ========================================================================
+     // ZERO AND LARGE OFFSETS
+     // ========================================================================
+
+     /**
+      * Adding zero months should return the identical values array.
+      */
+     @Test
+     public void testAddZeroMonths_noChange() {
+         MonthDay result = addMonthsToMonthDay(2, 29, 0);
+         assertEquals(new MonthDay(2, 29), result);
+     }
+
+     /**
+      * Large offset: Feb 28 + 48 months → 4 years later, still Feb 28.
+      */
+     @Test
+     public void testFeb28_plus48Months_sameDay() {
+         MonthDay result = addMonthsToMonthDay(2, 28, 48);
+         assertEquals(new MonthDay(2, 28), result);
+     }
+
+     /**
+      * Large negative offset: Dec 31 - 36 months → Dec 31 three years earlier.
+      */
+     @Test
+     public void testDec31_minus36Months_sameDay() {
+         MonthDay result = addMonthsToMonthDay(12, 31, -36);
+         assertEquals(new MonthDay(12, 31), result);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Time-14f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Time-14f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Time-14f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- joda-time 2.1 --------
+getjunit:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Time-14f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Time-14f-copilot/.test_suite/org/joda/time/chrono/TestBasicMonthOfYearDateTimeFieldAddPartial.java:6: error: package org.joda.time.chrono.gj does not exist
+ [javac] import org.joda.time.chrono.gj.GJChronology;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 13 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

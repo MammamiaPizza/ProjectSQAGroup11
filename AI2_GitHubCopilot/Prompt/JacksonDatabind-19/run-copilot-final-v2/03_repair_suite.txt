@@ -1,0 +1,183 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 19  Version: JacksonDatabind-19b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 810
+Trigger failures:
+- com.fasterxml.jackson.databind.convert.TestMapConversions::testMapToProperties
+ --> junit.framework.ComparisonFailure: expected:<129> but was:<null>
+ - com.fasterxml.jackson.databind.deser.TestMapDeserialization::testReadProperties
+ --> junit.framework.ComparisonFailure: expected:<123> but was:<null>
+ - com.fasterxml.jackson.databind.type.TestTypeFactory::testProperties
+ --> junit.framework.AssertionFailedError: expected same:<class java.lang.String> was not:<class java.lang.Object>
+Modified: com.fasterxml.jackson.databind.type.TypeFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.TypeFactory | java]
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes", "unchecked"})
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static SimpleType CORE_TYPE_STRING = new SimpleType(String.class);
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(Boolean.TYPE);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(Integer.TYPE);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(Long.TYPE);
+protected final LRUMap<ClassKey, JavaType> _typeCache = new LRUMap<ClassKey, JavaType>(16, 100);
+protected transient HierarchicType _cachedHashMapType;
+protected transient HierarchicType _cachedArrayListType;
+protected final TypeModifier[] _modifiers;
+protected final TypeParser _parser;
+private TypeFactory() {
+protected TypeFactory(TypeParser p, TypeModifier[] mods) {
+public TypeFactory withModifier(TypeModifier mod)
+public static TypeFactory defaultInstance() { return instance; }
+public void clearCache() {
+public static JavaType unknownType() {
+public static Class<?> rawClass(Type t) {
+public JavaType constructSpecializedType(JavaType baseType, Class<?> subclass)
+|| Map.class.isAssignableFrom(subclass)
+|| Collection.class.isAssignableFrom(subclass)) {
+public JavaType constructFromCanonical(String canonical) throws IllegalArgumentException
+public JavaType[] findTypeParameters(JavaType type, Class<?> expType)
+/* Otherwise need to go through type-erased class. This may miss cases where
+public JavaType[] findTypeParameters(Class<?> clz, Class<?> expType) {
+public JavaType[] findTypeParam
+...[truncated deterministically]...
+iableName, TypeBindings bindings)
+protected JavaType _unknownType() {
+return new SimpleType(Object.class);
+protected HierarchicType _findSuperTypeChain(Class<?> subtype, Class<?> supertype)
+protected HierarchicType _findSuperClassChain(Type currentType, Class<?> target)
+protected HierarchicType _findSuperInterfaceChain(Type currentType, Class<?> target)
+if (raw == HashMap.class) {
+if (target == Map.class) {
+if (raw == ArrayList.class) {
+if (target == List.class) {
+protected HierarchicType _doFindSuperInterfaceChain(HierarchicType current, Class<?> target)
+protected synchronized HierarchicType _hashMapSuperInterfaceChain(HierarchicType current)
+_doFindSuperInterfaceChain(base, Map.class);
+protected synchronized HierarchicType _arrayListSuperInterfaceChain(HierarchicType current)
+_doFindSuperInterfaceChain(base, List.class);
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+import java.util.*;
+
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TypeFactoryPropertiesTest
+{
+    private final TypeFactory tf = TypeFactory.defaultInstance();
+
+ @Test
+ public void testPropertiesKeyAndValueType() {
+     JavaType type = tf.constructType(Properties.class);
+     assertTrue(type.isMapLikeType());
+     assertEquals(String.class, type.getKeyType().getRawClass());
+     assertEquals(String.class, type.getContentType().getRawClass());
+ }
+
+ @Test
+ public void testFindTypeParametersPropertiesClass() {
+     JavaType[] params = tf.findTypeParameters(Properties.class, Map.class);
+     assertNotNull(params);
+     assertEquals(2, params.length);
+     assertEquals(String.class, params[0].getRawClass());
+     assertEquals(String.class, params[1].getRawClass());
+ }
+
+ @Test
+ public void testFindTypeParametersPropertiesFromType() {
+     JavaType type = tf.constructType(Properties.class);
+     JavaType[] params = tf.findTypeParameters(type, Map.class);
+     assertNotNull(params);
+     assertEquals(2, params.length);
+     assertEquals(String.class, params[0].getRawClass());
+     assertEquals(String.class, params[1].getRawClass());
+ }
+
+ @Test
+ public void testConstructSpecializedTypePropertiesFromHashtable() {
+     JavaType base = tf.constructType(Hashtable.class);
+     JavaType specialized = tf.constructSpecializedType(base, Properties.class);
+     assertTrue(specialized.isMapLikeType());
+     assertEquals(String.class, specialized.getKeyType().getRawClass());
+     assertEquals(String.class, specialized.getContentType().getRawClass());
+ }
+
+ @Test
+ public void testConstructSpecializedTypePropertiesFromObject() {
+     JavaType base = tf.constructType(Object.class);
+     JavaType specialized = tf.constructSpecializedType(base, Properties.class);
+     assertTrue(specialized.isMapLikeType());
+     assertEquals(String.class, specialized.getKeyType().getRawClass());
+     assertEquals(String.class, specialized.getContentType().getRawClass());
+ }
+
+ @Test
+ public void testConstructSpecializedTypeSameClass() {
+     JavaType base = tf.constructType(Properties.class);
+     JavaType specialized = tf.constructSpecializedType(base, Properties.class);
+     assertSame(base, specialized);
+ }
+
+ @Test
+ public void testConvertMapToProperties() throws Exception {
+     Map<String, Object> map = new HashMap<String, Object>();
+     map.put("x", 129);
+     map.put("y", 123);
+     ObjectMapper mapper = new ObjectMapper();
+     Properties props = mapper.convertValue(map, Properties.class);
+     assertNotNull(props);
+     assertEquals("129", props.getProperty("x"));
+     assertEquals("123", props.getProperty("y"));
+ }
+
+ @Test
+ public void testReadPropertiesFromJson() throws Exception {
+     ObjectMapper mapper = new ObjectMapper();
+     Properties props = mapper.readValue("{\"x\":123}", Properties.class);
+     assertEquals("123", props.getProperty("x"));
+ }
+
+ @Test
+ public void testPropertiesCacheConsistency() {
+     JavaType type1 = tf.constructType(Properties.class);
+     JavaType type2 = tf.constructType(Properties.class);
+     assertSame(type1, type2);
+     assertEquals(String.class, type1.getKeyType().getRawClass());
+     assertEquals(String.class, type1.getContentType().getRawClass());
+ }
+
+ @Test
+ public void testPropertiesSubclass() {
+     class MyProperties extends Properties { }
+     JavaType type = tf.constructType(MyProperties.class);
+     assertTrue(type.isMapLikeType());
+     assertEquals(String.class, type.getKeyType().getRawClass());
+     assertEquals(String.class, type.getContentType().getRawClass());
+ }
+
+ @Test
+ public void testPropertiesNotSimpleType() {
+     JavaType type = tf.constructType(Properties.class);
+     assertFalse(type instanceof SimpleType);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - com.fasterxml.jackson.databind.type.TypeFactoryPropertiesTest::testConstructSpecializedTypePropertiesFromHashtable
+ - com.fasterxml.jackson.databind.type.TypeFactoryPropertiesTest::testPropertiesSubclass
+ - com.fasterxml.jackson.databind.type.TypeFactoryPropertiesTest::testFindTypeParametersPropertiesClass
+Failing generated tests: com.fasterxml.jackson.databind.type.TypeFactoryPropertiesTest::testConstructSpecializedTypePropertiesFromHashtable, com.fasterxml.jackson.databind.type.TypeFactoryPropertiesTest::testFindTypeParametersPropertiesClass, com.fasterxml.jackson.databind.type.TypeFactoryPropertiesTest::testPropertiesSubclass

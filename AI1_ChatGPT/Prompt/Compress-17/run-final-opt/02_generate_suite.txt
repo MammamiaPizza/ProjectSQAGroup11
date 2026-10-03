@@ -1,0 +1,432 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 17  Version: Compress-17b
+JUnit: junit-4.10.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.tar.TarUtils
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+Triggers: org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::testCompress197
+
+Bug/specification summary:
+Bug report: COMPRESS-197
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::testCompress197
+ --> junit.framework.AssertionFailedError: COMPRESS-197: Error detected parsing the header
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+
+Prompt-01 test plan:
+TARGETS: TarUtils.parseOctal, especially binary/base-256 values in TAR numeric header fields.
+ORACLES: TarArchiveInputStreamTest::testCompress197 must parse its header without the reported error.
+CASES: Valid ASCII octal fields; positive and negative base-256 values; smallest fitting field lengths.
+CASES: Boundary values at octal/base-256 representation limits and leading padding/sign bytes.
+CASES: Invalid numeric bytes should retain parseOctal's existing rejection behavior.
+RISKS: No failing TAR fixture or exact expected parsed values are provided in this context.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.tar.TarUtils (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.tar;
+public class TarUtils {
+static final ZipEncoding FALLBACK_ENCODING = new ZipEncoding() {
+public boolean canEncode(String name) { return true; }
+public ByteBuffer encode(String name) {
+final int length = name.length();
+public String decode(byte[] buffer) {
+/** Private constructor to prevent instantiation of this utility class. */
+private TarUtils(){
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+final boolean negative = buffer[offset] == (byte) 0xff;
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+public static String parseName(byte[] buffer, final int offset, final int length) {
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+final int limit = b.limit();
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+final int bits = (length - 1) * 8;
+final byte[] b = val.toByteArray();
+final byte fill = (byte) (negative ? 0xff : 0);
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static long computeCheckSum(final byte[] buf) {
+public static boolean verifyCheckSum(byte[] header) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.tar;
+import static org.apache.commons.compress.archivers.tar.TarConstants.CHKSUMLEN;
+import static org.apache.commons.compress.archivers.tar.TarConstants.CHKSUM_OFFSET;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import org.apache.commons.compress.archivers.zip.ZipEncoding;
+import org.apache.commons.compress.archivers.zip.ZipEncodingHelper;
+public class TarUtils {
+
+/* METHOD TarUtils */
+private TarUtils(){
+ }
+
+/* METHOD verifyCheckSum */
+public static boolean verifyCheckSum(byte[] header) {
+ long storedSum = 0;
+ long unsignedSum = 0;
+ long signedSum = 0;
+
+ int digits = 0;
+ for (int i = 0; i < header.length; i++) {
+ byte b = header[i];
+ if (CHKSUM_OFFSET <= i && i < CHKSUM_OFFSET + CHKSUMLEN) {
+ if ('0' <= b && b <= '7' && digits++ < 6) {
+ storedSum = storedSum * 8 + b - '0';
+ } else if (digits > 0) {
+ digits = 6; // only look at the first octal digit sequence
+ }
+ b = ' ';
+ }
+ unsignedSum += 0xff & b;
+ signedSum += b;
+ }
+
+ return storedSum == unsignedSum || storedSum == signedSum
+ || storedSum > unsignedSum; // COMPRESS-177
+ }
+
+/* METHOD parseOctal */
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+ long result = 0;
+ int end = offset + length;
+ int start = offset;
+
+ if (length < 2){
+ throw new IllegalArgumentException("Length "+length+" must be at least 2");
+ }
+
+ if (buffer[start] == 0) {
+ return 0L;
+ }
+
+ // Skip leading spaces
+ while (start < end){
+ if (buffer[start] == ' '){
+ start++;
+ } else {
+ break;
+ }
+ }
+
+ // Must have trailing NUL or space
+ byte trailer;
+ trailer = buffer[end-1];
+ if (trailer == 0 || trailer == ' '){
+ end--;
+ } else {
+ throw new IllegalArgumentException(
+ exceptionMessage(buffer, offset, length, end-1, trailer));
+ }
+ // May have additional NULs or spaces
+ trailer = buffer[end - 1];
+ if (trailer == 0 || trailer == ' '){
+ end--;
+ }
+
+ for ( ;start < end; start++) {
+ final byte currentByte = buffer[start];
+ // CheckStyle:MagicNumber OFF
+ if (currentByte < '0' || currentByte > '7'){
+ throw new IllegalArgumentException(
+ exceptionMessage(buffer, offset, length, start, currentByte));
+ }
+ result = (result << 3) + (currentByte - '0'); // convert from ASCII
+ // CheckStyle:MagicNumber ON
+ }
+
+ return result;
+ }
+
+/* METHOD formatUnsignedOctalString */
+public static void formatUnsignedOctalString(final long value, byte[] buffer,
+ final int offset, final int length) {
+ int remaining = length;
+ remaining--;
+ if (value == 0) {
+ buffer[offset + remaining--] = (byte) '0';
+ } else {
+ long val = value;
+ for (; remaining >= 0 && val != 0; --remaining) {
+ // CheckStyle:MagicNumber OFF
+ buffer[offset + remaining] = (byte) ((byte) '0' + (byte) (val & 7));
+ val = val >>> 3;
+ // CheckStyle:MagicNumber ON
+ }
+ if (val != 0){
+ throw new IllegalArgumentException
+ (value+"="+Long.toOctalString(value)+ " will not fit in octal number buffer of length "+length);
+ }
+ }
+
+ for (; remaining >= 0; --remaining) { // leading zeros
+ buffer[offset + remaining] = (byte) '0';
+ }
+ }
+
+/* METHOD formatLongOctalOrBinaryBytes */
+public static int formatLongOctalOrBinaryBytes(
+ final long value, byte[] buf, final int offset, final int length) {
+
+ // Check whether we are dealing with UID/GID or SIZE field
+ final long maxAsOctalChar = length == TarConstants.UIDLEN ? TarConstants.MAXID : TarConstants.MAXSIZE;
+
+ final boolean negative = value < 0;
+ if (!negative && value <= maxAsOctalChar) { // OK to store as octal chars
+ return formatLongOctalBytes(value, buf, offset, length);
+ }
+
+ if (length < 9) {
+ formatLongBinary(value, buf, offset, length, negative);
+ }
+ formatBigIntegerBinary(value, buf, offset, length, negative);
+
+ buf[offset] = (byte) (negative ? 0xff : 0x80);
+ return offset + length;
+ }
+
+/* METHOD canEncode */
+public boolean canEncode(String name) { return true; }
+
+/* METHOD encode */
+public ByteBuffer encode(String name) {
+ final int length = name.length();
+ byte[] buf = new byte[length];
+
+ // copy until end of input or output is reached.
+ for (int i = 0; i < length; ++i) {
+ buf[i] = (byte) name.charAt(i);
+ }
+ return ByteBuffer.wrap(buf);
+ }
+
+/* METHOD decode */
+public String decode(byte[] buffer) {
+ final int length = buffer.length;
+ StringBuffer result = new StringBuffer(length);
+
+ for (int i = 0; i < length; ++i) {
+ byte b = buffer[i];
+ if (b == 0) { // Trailing null
+ break;
+ }
+ result.append((char) (b & 0xFF)); // Allow for sign-extension
+ }
+
+ return result.toString();
+ }
+
+/* METHOD parseOctalOrBinary */
+public static long parseOctalOrBinary(final byte[] buffer, final int offset,
+ final int length) {
+
+ if ((buffer[offset] & 0x80) == 0) {
+ return parseOctal(buffer, offset, length);
+ }
+ final boolean negative = buffer[offset] == (byte) 0xff;
+ if (length < 9) {
+ return parseBinaryLong(buffer, offset, length, negative);
+ }
+ return parseBinaryBigInteger(buffer, offset, length, negative);
+ }
+
+/* METHOD parseBoolean */
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+ return buffer[offset] == 1;
+ }
+
+/* METHOD parseName */
+public static String parseName(byte[] buffer, final int offset, final int length) {
+ try {
+ return parseName(buffer, offset, length, DEFAULT_ENCODING);
+ } catch (IOException ex) {
+ try {
+ return parseName(buffer, offset, length, FALLBACK_ENCODING);
+ } catch (IOException ex2) {
+ // impossible
+ throw new RuntimeException(ex2);
+ }
+ }
+ }
+
+/* METHOD parseName */
+public static String parseName(byte[] buffer, final int offset,
+ final int length,
+ final ZipEncoding encoding)
+ throws IOException {
+
+ int len = length;
+ for (; len > 0; len--) {
+ if (buffer[offset + len - 1] != 0) {
+ break;
+ }
+ }
+ if (len > 0) {
+ byte[] b = new byte[len];
+ System.arraycopy(buffer, offset, b, 0, len);
+ return encoding.decode(b);
+ }
+ return "";
+ }
+
+/* METHOD formatNameBytes */
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+ try {
+ return formatNameBytes(name, buf, offset, length, DEFAULT_ENCODING);
+ } catch (IOException ex) {
+ try {
+ return formatNameBytes(name, buf, offset, length,
+ FALLBACK_ENCODING);
+ } catch (IOException ex2) {
+ // impossible
+ throw new RuntimeException(ex2);
+ }
+ }
+ }
+
+/* METHOD formatNameBytes */
+public static int formatNameBytes(String name, byte[] buf, final int offset,
+ final int length,
+ final ZipEncoding encoding)
+ throws IOException {
+ int len = name.length();
+ ByteBuffer b = encoding.encode(name);
+ while (b.limit() > length && len > 0) {
+ b = encoding.encode(name.substring(0, --len));
+ }
+ final int limit = b.limit();
+ System.arraycopy(b.array(), b.arrayOffset(), buf, offset, limit);
+
+ // Pad any remaining output bytes with NUL
+ for (int i = limit; i < length; ++i) {
+ buf[offset + i] = 0;
+ }
+
+ return offset + length;
+ }
+
+/* METHOD formatOctalBytes */
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+
+ int idx=length-2; // For space and trailing null
+ formatUnsignedOctalString(value, buf, offset, idx);
+
+ buf[offset + idx++] = (byte) ' '; // Trailing space
+ buf[offset + idx] = 0; // Trailing null
+
+ return offset + length;
+ }
+
+/* METHOD formatLongOctalBytes */
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+
+ int idx=length-1; // For space
+
+ formatUnsignedOctalString(value, buf, offset, idx);
+ buf[offset + idx] = (byte) ' '; // Trailing space
+
+ return offset + length;
+ }
+
+/* METHOD formatCheckSumOctalBytes */
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+
+ int idx=length-2; // for NUL and space
+ formatUnsignedOctalString(value, buf, offset, idx);
+
+ buf[offset + idx++] = 0; // Trailing null
+ buf[offset + idx] = (byte) ' '; // Trailing space
+
+ return offset + length;
+ }
+
+/* METHOD computeCheckSum */
+public static long computeCheckSum(final byte[] buf) {
+ long sum = 0;
+
+ for (int i = 0; i < buf.length; ++i) {
+ sum += BYTE_MASK & buf[i];
+ }
+
+ return sum;
+ }
+
+/* METHOD parseBinaryLong */
+private static long parseBinaryLong(final byte[] buffer, final int offset,
+ final int length,
+ final boolean negative) {
+ if (length >= 9) {
+ throw new IllegalArgumentException("At offset " + offset + ", "
+ + length + " byte binary number"
+ + " exceeds maximum signed long"
+ + " value");
+ }
+ long val = 0;
+ for (int i = 1; i < length; i++) {
+ val = (val << 8) + (buffer[offset + i] & 0xff);
+ }
+ if (negative) {
+ // 2's complement
+ val--;
+ val ^= ((long) Math.pow(2, (length - 1) * 8) - 1);
+ }
+ return negative ? -val : val;
+ }
+
+ private static long parseBinaryBigInteger(final byte[] buffer,
+ final int offset,
+ final int length,
+ final boolean negative) {
+ byte[] remainder = new byte[length - 1];
+ System.arraycopy(buffer, offset + 1, remainder, 0, length - 1);
+ BigInteger val = new BigInteger(remainder);
+ if (negative) {
+ // 2's complement
+ val = val.add(BigInteger.valueOf(-1)).not();
+ }
+ if (val.bitLength() > 63) {
+ throw new IllegalArgumentException("At offset " + offset + ", "
+ + length + " byte binary number"
+ + " exceeds maximum signed long"
+ + " value");
+ }
+ return negative ? -val.longValue() : val.longValue();
+ }
+
+/* METHOD exceptionMessage */
+private static String exceptionMessage(byte[] buffer, final int offset,
+ final int length, int current, final byte currentByte) {
+ String string = new String(buffer, offset, length); // TODO default charset?
+ string=string.replaceAll("\0", "{NUL}"); // Replace NULs to allow string to be printed
+ final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+ return s;
+ }
+
+/* METHOD formatLongBinary */
+private static void formatLongBinary(final long value, byte[] buf,
+ final int offset, final int length,
+ final boolean negative) {
+ final int bits = (length - 1) * 8;
+ final long max = 1l << bits;
+ long val = Math.abs(value);
+ if (val >= max) {
+ throw new IllegalArgumentException("Value " + value +
+ " is too large for " + length + " byte field.");
+ }
+ if (negative) {
+ val ^= max - 1;
+ val |= 0xff << bits;
+ val++;
+ }
+ for (int i = offset + length - 1; i >= offset; i--) {
+ buf[i] = (byte) val;
+ val >>= 8;
+ }
+ }

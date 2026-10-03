@@ -1,0 +1,339 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 1  Version: Mockito-1b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 188
+Trigger failures:
+- org.mockito.internal.invocation.InvocationMatcherTest::should_capture_arguments_when_args_count_does_NOT_match
+ --> java.lang.UnsupportedOperationException
+ - org.mockito.internal.util.reflection.FieldInitializerTest::can_instantiate_class_with_parameterized_constructor
+ --> java.lang.UnsupportedOperationException
+ - org.mockito.internal.util.reflection.ParameterizedConstructorInstantiatorTest::should_report_failure_if_constructor_throws_exception
+ --> java.lang.UnsupportedOperationException
+ - org.mockito.internal.util.reflection.ParameterizedConstructorInstantiatorTest::should_fail_if_an_argument_instance_type_do_not_match_wanted_type
+ --> java.lang.UnsupportedOperationException
+ - org.mockito.internal.util.reflection.ParameterizedConstructorInstantiatorTest::should_instantiate_type_with_vararg_constructor
+ --> java.lang.UnsupportedOperationException
+...[truncated deterministically]...
+on
+ - org.mockitousage.stubbing.BasicStubbingTest::should_evaluate_latest_stubbing_first
+ --> java.lang.UnsupportedOperationException
+ - org.mockitousage.stubbing.DeprecatedStubbingTest::shouldEvaluateLatestStubbingFirst
+ --> java.lang.UnsupportedOperationException
+ - org.mockitousage.verification.VerificationInOrderMixedWithOrdiraryVerificationTest::shouldUseEqualsToVerifyMethodVarargs
+ --> java.lang.UnsupportedOperationException
+Modified: org.mockito.internal.invocation.InvocationMatcher
+
+Available API/signatures:
+[org.mockito.internal.invocation.InvocationMatcher | java]
+package org.mockito.internal.invocation;
+@SuppressWarnings("unchecked")
+public class InvocationMatcher implements DescribedInvocation, CapturesArgumensFromInvocation, Serializable {
+public InvocationMatcher(Invocation invocation, List<Matcher> matchers) {
+public InvocationMatcher(Invocation invocation) {
+public Method getMethod() {
+public Invocation getInvocation() {
+public List<Matcher> getMatchers() {
+public String toString() {
+public boolean matches(Invocation actual) {
+private boolean safelyArgumentsMatch(Object[] actualArgs) {
+public boolean hasSimilarMethod(Invocation candidate) {
+final boolean methodNameEquals = wantedMethodName.equals(currentMethodName);
+final boolean isUnverified = !candidate.isVerified();
+final boolean mockIsTheSame = getInvocation().getMock() == candidate.getMock();
+final boolean methodEquals = hasSameMethod(candidate);
+final boolean overloadedButSameArgs = !methodEquals && safelyArgumentsMatch(candidate.getArguments());
+public boolean hasSameMethod(Invocation candidate) {
+public Location getLocation() {
+public void captureArgumentsFrom(Invocation invocation) {
+((CapturesArguments) m).captureFrom(invocation.getArgumentAt(position, Object.class));
+private boolean isVarargMatcher(Matcher matcher) {
+private boolean isVariableArgument(Invocation invocation, int position) {
+public static List<InvocationMatcher> createFrom(List<Invocation> invocations) {
+
+Generated JUnit Test:
+package org.mockito.internal.invocation;
+
+ import static org.junit.Assert.*;
+
+ import java.lang.reflect.Method;
+ import java.util.*;
+
+ import org.hamcrest.Matcher;
+ import org.junit.Test;
+ import org.mockito.internal.matchers.CapturesArguments;
+ import org.mockito.internal.matchers.VarargMatcher;
+ import org.mockito.invocation.Invocation;
+ import org.mockito.invocation.Location;
+
+ public class InvocationMatcherTest {
+
+     /* ---------- Helper stubs ---------- */
+
+     private static Invocation createInvocation(final Object mock, final Method method,
+                                                final Object[] rawArguments) {
+         return new Invocation() {
+             @Override public Object getMock() { return mock; }
+             @Override public Method getMethod() { return method; }
+             @Override public Object[] getArguments() { return rawArguments; }
+             @Override public Object getRawArguments() { return rawArguments; }
+             @Override public boolean isVerified() { return false; }
+             @Override public int getSequenceNumber() { return 0; }
+             @Override public Location getLocation() { return null; }
+             @Override public Object getArgumentAt(int index, Class<?> clazz) {
+                 return rawArguments[index];
+             }
+             @Override public void markVerified() { }
+             @Override public boolean isIgnoredForVerification() { return false; }
+             @Override public void ignoreForVerification() { }
+         };
+     }
+
+     private static class CapturesArgumentsMatcher implements Matcher<Object>, CapturesArguments {
+         private final List<Object> captured = new ArrayList<Object>();
+         @Override public boolean matches(Object item) { return true; }
+         @Override public void captureFrom(Object argument) { captured.add(argument); }
+         public List<Object> getCaptured() { return captured; }
+     }
+
+     private static class VarargCapturesMatcher implements Matcher<Object>, CapturesArguments,
+VarargMatcher {
+         private final List<Object> captured = new ArrayList<Object>();
+         @Override public boolean matches(Object item) { return true; }
+         @Override public void captureFrom(Object argument) { captured.add(argument); }
+         public List<Object> getCaptured() { return captured; }
+     }
+
+     private static class AlwaysTrueMatcher implements Matcher<Object> {
+         @Override public boolean matches(Object item) { return true; }
+     }
+
+     public static class SampleMethods {
+         public void nonVararg(String a, String b) {}
+         public void vararg(String... args) {}
+         public void overloaded(String s) {}
+         public void overloaded(Object o) {}
+     }
+
+     private static Method varargMethod() throws NoSuchMethodException {
+         return SampleMethods.class.getMethod("vararg", String[].class);
+     }
+
+     private static Method nonVarargMethod() throws NoSuchMethodException {
+         return SampleMethods.class.getMethod("nonVararg", String.class, String.class);
+     }
+
+     private static Method overloadedStringMethod() throws NoSuchMethodException {
+         return SampleMethods.class.getMethod("overloaded", String.class);
+     }
+
+     private static Method overloadedObjectMethod() throws NoSuchMethodException {
+         return SampleMethods.class.getMethod("overloaded", Object.class);
+     }
+
+     /* ---------- captureArgumentsFrom tests ---------- */
+
+     @Test
+     public void shouldCaptureArgumentsForNonVarargMethod() throws Exception {
+         Invocation invocation = createInvocation(new Object(), nonVarargMethod(),
+                 new Object[]{"a", "b"});
+         CapturesArgumentsMatcher m1 = new CapturesArgumentsMatcher();
+         CapturesArgumentsMatcher m2 = new CapturesArgumentsMatcher();
+         InvocationMatcher im = new InvocationMatcher(invocation, Arrays.<Matcher>asList(m1, m2));
+
+         im.captureArgumentsFrom(invocation);
+
+         assertEquals(Arrays.asList("a"), m1.getCaptured());
+         assertEquals(Arrays.asList("b"), m2.getCaptured());
+     }
+
+     @Test
+     public void shouldCaptureVarargsWhenVarargMatcherIsUsed() throws Exception {
+         // rawArguments: last element is the vararg array
+         Object[] rawArgs = new Object[]{new String[]{"x", "y"}};
+         Invocation invocation = createInvocation(new Object(), varargMethod(), rawArgs);
+         VarargCapturesMatcher varargMatcher = new VarargCapturesMatcher();
+         InvocationMatcher im = new InvocationMatcher(invocation,
+                 Arrays.<Matcher>asList(varargMatcher));
+
+         // Buggy version throws UnsupportedOperationException here
+         im.captureArgumentsFrom(invocation);
+
+         // When fixed, the vararg matcher should have captured both vararg elements
+         assertEquals(Arrays.asList("x", "y"), varargMatcher.getCaptured());
+     }
+
+     @Test
+     public void shouldCaptureVarargsAsArrayWhenNoVarargMatcherUsed() throws Exception {
+         // rawArguments: last element is the vararg array
+         String[] varargArray = new String[]{"hello"};
+         Object[] rawArgs = new Object[]{varargArray};
+         Invocation invocation = createInvocation(new Object(), varargMethod(), rawArgs);
+         CapturesArgumentsMatcher matcher = new CapturesArgumentsMatcher();
+         InvocationMatcher im = new InvocationMatcher(invocation,
+                 Arrays.<Matcher>asList(matcher));
+
+         // Buggy version throws UnsupportedOperationException
+         im.captureArgumentsFrom(invocation);
+
+         // When fixed, the non-vararg matcher should capture the raw array itself
+         assertEquals(Arrays.<Object>asList(varargArray), matcher.getCaptured());
+     }
+
+     @Test
+     public void shouldNotThrowWhenArgsCountDoesNotMatchMatchersForVarargs() throws Exception {
+         // rawArgs has only 1 element (the vararg array), but we supply 2 matchers
+         Object[] rawArgs = new Object[]{new String[]{"a", "b"}};
+         Invocation invocation = createInvocation(new Object(), varargMethod(), rawArgs);
+         CapturesArgumentsMatcher m1 = new CapturesArgumentsMatcher();
+         CapturesArgumentsMatcher m2 = new CapturesArgumentsMatcher();
+         InvocationMatcher im = new InvocationMatcher(invocation,
+                 Arrays.<Matcher>asList(m1, m2));
+
+         // Buggy version throws UnsupportedOperationException regardless of match count
+         try {
+             im.captureArgumentsFrom(invocation);
+             // if we reach here, the bug is fixed; we don't assert capture because
+             // behaviour for mismatched counts is undefined, but it must not throw
+         } catch (UnsupportedOperationException e) {
+             fail("Bug: captureArgumentsFrom threw UnsupportedOperationException for varargs");
+         }
+     }
+
+     /* ---------- matches tests ---------- */
+
+     @Test
+     public void shouldMatchWhenSameMockSameMethodAndArguments() throws Exception {
+         Object mock = new Object();
+         Invocation inv = createInvocation(mock, nonVarargMethod(),
+                 new Object[]{"a", "b"});
+         InvocationMatcher im = new InvocationMatcher(inv,
+                 Arrays.<Matcher>asList(new AlwaysTrueMatcher(), new AlwaysTrueMatcher()));
+
+         assertTrue(im.matches(inv));
+     }
+
+     @Test
+     public void shouldNotMatchWhenMocksDiffer() throws Exception {
+         Invocation inv1 = createInvocation(new Object(), nonVarargMethod(),
+                 new Object[]{"a", "b"});
+         Invocation inv2 = createInvocation(new Object(), nonVarargMethod(),
+                 new Object[]{"a", "b"});
+         InvocationMatcher im = new InvocationMatcher(inv1,
+                 Arrays.<Matcher>asList(new AlwaysTrueMatcher(), new AlwaysTrueMatcher()));
+
+         assertFalse(im.matches(inv2));
+     }
+
+     @Test
+     public void shouldNotMatchWhenArgumentsDiffer() throws Exception {
+         Object mock = new Object();
+         Invocation inv1 = createInvocation(mock, nonVarargMethod(),
+                 new Object[]{"a", "b"});
+         Invocation inv2 = createInvocation(mock, nonVarargMethod(),
+                 new Object[]{"x", "y"});
+         // matchers that check equality: for "a" and "b"
+         Matcher<String> eqA = new org.hamcrest.core.IsEqual<String>("a");
+         Matcher<String> eqB = new org.hamcrest.core.IsEqual<String>("b");
+         @SuppressWarnings("unchecked")
+         List<Matcher> matchers = Arrays.<Matcher>asList(eqA, eqB);
+         InvocationMatcher im = new InvocationMatcher(inv1, matchers);
+
+         assertFalse(im.matches(inv2));
+     }
+
+     /* ---------- hasSameMethod tests ---------- */
+
+     @Test
+     public void hasSameMethodShouldReturnTrueForIdenticalSignature() throws Exception {
+         Invocation inv = createInvocation(new Object(), nonVarargMethod(), null);
+         InvocationMatcher im = new InvocationMatcher(inv);
+
+         assertTrue(im.hasSameMethod(inv));
+     }
+
+     @Test
+     public void hasSameMethodShouldReturnFalseForDifferentParameterTypes() throws Exception {
+         Invocation inv1 = createInvocation(new Object(), nonVarargMethod(), null);
+         Invocation inv2 = createInvocation(new Object(), overloadedObjectMethod(), null);
+         InvocationMatcher im = new InvocationMatcher(inv1);
+
+         assertFalse(im.hasSameMethod(inv2));
+     }
+
+     @Test
+     public void hasSameMethodShouldReturnFalseForSameNameButDifferentParamCount() throws Exception
+{
+         Invocation inv1 = createInvocation(new Object(), nonVarargMethod(), null);
+         Invocation inv2 = createInvocation(new Object(), varargMethod(), null);
+         InvocationMatcher im = new InvocationMatcher(inv1);
+
+         assertFalse(im.hasSameMethod(inv2));
+     }
+
+     /* ---------- hasSimilarMethod tests ---------- */
+
+     @Test
+     public void hasSimilarMethodShouldReturnTrueForSameUnverifiedInvocation() throws Exception {
+         Invocation inv = createInvocation(new Object(), nonVarargMethod(), null);
+         InvocationMatcher im = new InvocationMatcher(inv);
+
+         assertTrue(im.hasSimilarMethod(inv));
+     }
+
+     @Test
+     public void hasSimilarMethodShouldReturnFalseForOverloadedButSameArguments() throws Exception {
+         Object mock = new Object();
+         // overloaded(Object) and overloaded(String) have same args when called with "x"
+         Invocation inv1 = createInvocation(mock, overloadedStringMethod(),
+                 new Object[]{"x"});
+         Invocation inv2 = createInvocation(mock, overloadedObjectMethod(),
+                 new Object[]{"x"});
+         InvocationMatcher im = new InvocationMatcher(inv1);
+
+         assertFalse(im.hasSimilarMethod(inv2));
+     }
+
+     /* ---------- createFrom test ---------- */
+
+     @Test
+     public void createFromShouldReturnMatchingNumberOfMatchers() throws Exception {
+         Invocation inv = createInvocation(new Object(), nonVarargMethod(), null);
+         List<Invocation> invocations = Arrays.asList(inv, inv, inv);
+
+         List<InvocationMatcher> result = InvocationMatcher.createFrom(invocations);
+
+         assertEquals(3, result.size());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Mockito-1f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Mockito-1f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Mockito-1f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [exec] 
+ [exec] Deprecated Gradle features were used in this build, making it incompatible with Gradle 5.0.
+ [exec] Use '--warning-mode all' to show the individual deprecation warnings.
+ [exec] See https://docs.gradle.org/4.9/userguide/command_line_interface.html#sec:command_line_warnings
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Mockito-1f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Mockito-1f-copilot/.test_suite/org/mockito/internal/invocation/InvocationMatcherTest.java:21: error: <anonymous org.mockito.internal.invocation.InvocationMatcherTest$1> is not abstract and does not override abstract method markStubbed(StubInfo) in Invocation
+ [javac] return new Invocation() {
+ [javac] ^
+ [javac] /root/sqa-workspaces/Mockito-1f-copilot/.test_suite/org/mockito/internal/invocation/InvocationMatcherTest.java:126: warning: non-varargs call of varargs method with inexact argument type for last parameter;
+ [javac] assertEquals(Arrays.<Object>asList(varargArray), matcher.getCaptured());
+ [javac] ^
+ [javac] cast to Object for a varargs call
+ [javac] cast to Object[] for a non-varargs call and to suppress this warning
+ [javac] 1 error
+ [javac] 1 warning
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 150 minutes 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

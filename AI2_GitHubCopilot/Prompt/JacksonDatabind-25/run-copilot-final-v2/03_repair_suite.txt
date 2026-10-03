@@ -1,0 +1,213 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 25  Version: JacksonDatabind-25b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 890
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestArrayDeserialization::testByteArrayTypeOverride890
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not deserialize Class [B (of type array) as a Bean
+Modified: com.fasterxml.jackson.databind.deser.BasicDeserializerFactory, com.fasterxml.jackson.databind.deser.DeserializerCache, com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase, com.fasterxml.jackson.databind.module.SimpleAbstractTypeResolver
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BasicDeserializerFactory | java]
+package com.fasterxml.jackson.databind.deser;
+@SuppressWarnings("serial")
+public abstract class BasicDeserializerFactory
+private final static Class<?> CLASS_OBJECT = Object.class;
+private final static Class<?> CLASS_STRING = String.class;
+private final static Class<?> CLASS_CHAR_BUFFER = CharSequence.class;
+private final static Class<?> CLASS_ITERABLE = Iterable.class;
+private final static Class<?> CLASS_MAP_ENTRY = Map.Entry.class;
+protected final static PropertyName UNWRAPPED_CREATOR_PARAM_NAME = new PropertyName("@JsonUnwrapped");
+@SuppressWarnings("rawtypes")
+_mapFallbacks.put(Map.class.getName(), LinkedHashMap.class);
+_mapFallbacks.put(ConcurrentMap.class.getName(), ConcurrentHashMap.class);
+_mapFallbacks.put(SortedMap.class.getName(), TreeMap.class);
+_mapFallbacks.put(java.util.Navig
+...[truncated deterministically]...
+cReference.class.isAssignableFrom(rawType)) {
+CollectionType ct = tf.constructCollectionType(Collection.class, elemType);
+if (rawType == TokenBuffer.class) {
+protected JavaType _findRemappedType(DeserializationConfig config, Class<?> rawType) throws JsonMappingException {
+@SuppressWarnings({ "unchecked" })
+protected AnnotatedMethod _findJsonValueFor(DeserializationConfig config, JavaType enumType)
+
+[com.fasterxml.jackson.databind.deser.DeserializerCache | java]
+package com.fasterxml.jackson.databind.deser;
+public final class DeserializerCache
+public DeserializerCache() { }
+public int cachedDeserializersCount() {
+public void flushCachedDeserializers() {
+protected JsonDeserializer<Object> _findCachedDeserializer(JavaType type)
+synchronized (_incomple
+...[truncated deterministically]...
+rializationContext ctxt, Object typeId)
+throw ctxt.mappingException("No (native) type id found when one was expected for polymorphic type handling");
+
+[com.fasterxml.jackson.databind.module.SimpleAbstractTypeResolver | java]
+package com.fasterxml.jackson.databind.module;
+public class SimpleAbstractTypeResolver
+protected final HashMap<ClassKey,Class<?>> _mappings = new HashMap<ClassKey,Class<?>>();
+public <T> SimpleAbstractTypeResolver addMapping(Class<T> superType, Class<? extends T> subType)
+throw new IllegalArgumentException("Can not add mapping from class to itself");
+throw new IllegalArgumentException("Can not add mapping from class "+superType.getName()
+@Override
+public JavaType findTypeMapping(DeserializationConfig config, JavaType type)
+public JavaType resolveAbstractType(DeserializationConfig config, JavaType type)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.module.SimpleAbstractTypeResolver;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+
+import static org.junit.Assert.*;
+
+/**
+
+ - Tests verifying that abstract type mappings to array types work correctly
+ - and do not produce "Can not deserialize Class ... (of type array) as a Bean"
+ - JsonMappingException (bug 890 / issue 25).
+  */
+ public class TestAbstractTypeToArrayDeserializationBug25 {
+  // Abstract types for testing
+  static abstract class ByteArrayHolder { }
+  static abstract class IntArrayHolder { }
+  static abstract class MultiDimByteArrayHolder { }
+  static abstract class ListHolder { }
+  private ObjectMapper mapperWithMapping(Class<?> abstractType, Class<?> concreteType) {
+  SimpleModule module = new SimpleModule("test");
+  module.addAbstractTypeMapping(abstractType, concreteType);
+  ObjectMapper mapper = new ObjectMapper();
+  mapper.registerModule(module);
+  return mapper;
+  }
+  @Test
+  public void testByteArrayMapping() throws Exception {
+  ObjectMapper mapper = mapperWithMapping(ByteArrayHolder.class, byte[].class);
+  // Base64 encoded "test"
+  String json = ""dGVzdA=="";
+  ByteArrayHolder holder = mapper.readValue(json, ByteArrayHolder.class);
+  assertNotNull(holder);
+  assertTrue(holder instanceof byte[]);
+  byte[] data = (byte[]) holder;
+  assertArrayEquals(new byte[] { 't', 'e', 's', 't' }, data);
+  }
+  @Test
+  public void testArrayListMapping() throws Exception {
+  ObjectMapper mapper = mapperWithMapping(ListHolder.class, ArrayList.class);
+  String json = "[1, 2, 3]";
+  ListHolder holder = mapper.readValue(json, ListHolder.class);
+  assertNotNull(holder);
+  assertTrue(holder instanceof ArrayList);
+  ArrayList<?> list = (ArrayList<?>) holder;
+  assertEquals(3, list.size());
+  }
+  @Test
+  public void testIntArrayMapping() throws Exception {
+  ObjectMapper mapper = mapperWithMapping(IntArrayHolder.class, int[].class);
+  String json = "[10, 20, 30]";
+  IntArrayHolder holder = mapper.readValue(json, IntArrayHolder.class);
+  assertNotNull(holder);
+  assertTrue(holder instanceof int[]);
+  int[] arr = (int[]) holder;
+  assertArrayEquals(new int[] { 10, 20, 30 }, arr);
+  }
+  @Test
+  public void testMultiDimByteArrayMapping() throws Exception {
+  ObjectMapper mapper = mapperWithMapping(MultiDimByteArrayHolder.class, byte[][].class);
+  // Two inner arrays of base64 strings
+  String json = "[ ["YQ==", "Yg=="], ["Yw=="] ]";
+  MultiDimByteArrayHolder holder = mapper.readValue(json, MultiDimByteArrayHolder.class);
+  assertNotNull(holder);
+  assertTrue(holder instanceof byte[][]);
+  byte[][] data = (byte[][]) holder;
+  assertEquals(2, data.length);
+  assertArrayEquals(new byte[] { 'a', 'b' }, data[0]);
+  assertArrayEquals(new byte[] { 'c' }, data[1]);
+  }
+  @Test(expected = JsonMappingException.class)
+  public void testByteArrayMappingForNonArrayLikeJsonFails() throws Exception {
+  // If input is not a base64 string, deserialization should fail,
+  // but the buggy code would throw "as a Bean" before even trying; fixed code
+  // will properly try to deserialize as byte[] from string and fail with
+  // a different exception (maybe InvalidFormatException).
+  ObjectMapper mapper = mapperWithMapping(ByteArrayHolder.class, byte[].class);
+  String brokenBase64 = "{"foo":"bar"}";
+  mapper.readValue(brokenBase64, ByteArrayHolder.class);
+  }
+  @Test(expected = IllegalArgumentException.class)
+  public void testAddMappingRejectsNonAbstract() {
+  new SimpleModule("test").addAbstractTypeMapping(String.class, String.class);
+  }
+  @Test(expected = IllegalArgumentException.class)
+  public void testAddMappingRejectsSelfMapping() {
+  // Map an abstract class to itself should be rejected
+  new SimpleModule("test").addAbstractTypeMapping(ByteArrayHolder.class, ByteArrayHolder.class);
+  }
+  @Test(expected = IllegalArgumentException.class)
+  public void testAddMappingRejectsIncompatibleSubtype() {
+  // Try to map an abstract class to a subclass that is not actually a subtype
+  new SimpleModule("test").addAbstractTypeMapping(ByteArrayHolder.class, Integer.class);
+  }
+  @Test
+  public void testAbstractTypeResolverResolvesNullWithoutConfiguredMapping() throws Exception {
+  // Without any abstract type mapping, the default resolveAbstractType should return null
+  SimpleAbstractTypeResolver resolver = new SimpleAbstractTypeResolver();
+  ObjectMapper mapper = new ObjectMapper();
+  assertNull(resolver.resolveAbstractType(mapper.getDeserializationConfig(),
+          mapper.constructType(ByteArrayHolder.class)));
+  }
+  @Test
+  public void testAbstractTypeResolverUesMapping() throws Exception {
+  SimpleAbstractTypeResolver resolver = new SimpleAbstractTypeResolver();
+  resolver.addMapping(ByteArrayHolder.class, byte[].class);
+  ObjectMapper mapper = new ObjectMapper();
+  com.fasterxml.jackson.databind.JavaType resolved = resolver.resolveAbstractType(
+          mapper.getDeserializationConfig(), mapper.constructType(ByteArrayHolder.class));
+  assertNotNull(resolved);
+  assertEquals(byte[].class, resolved.getRawClass());
+  }
+  @Test
+  public void testNoBeanDeserializerForArrayDefaultImpl() throws Exception {
+  // Similar to the core bug: ensure that when a type info defaultImpl is a byte[],
+  // the deserialization does not fail with "as a Bean"
+  // We simulate by mapping an abstract type to byte[] and deserializing a valid base64 payload.
+  ObjectMapper mapper = mapperWithMapping(ByteArrayHolder.class, byte[].class);
+  String json = ""aGVsbG8="";
+  ByteArrayHolder result = mapper.readValue(json, ByteArrayHolder.class);
+  assertNotNull(result);
+  assertTrue("Expected byte[], got " + result.getClass(), result instanceof byte[]);
+  assertArrayEquals("hello".getBytes("UTF-8"), (byte[]) result);
+  }
+
+}
+```
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-25f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-25f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-25f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-25f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-25f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/TestAbstractTypeToArrayDeserializationBug25.java:38: error: ';' expected
+ [javac] String json = ""dGVzdA=="";
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 34 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

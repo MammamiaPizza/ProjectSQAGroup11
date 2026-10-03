@@ -1,0 +1,220 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Time  Bug: 10  Version: Time-10b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.joda.time.base.BaseSingleFieldPeriod
+Modified: org.joda.time.base.BaseSingleFieldPeriod
+Triggers: org.joda.time.TestDays::testFactory_daysBetween_RPartial_MonthDay, org.joda.time.TestMonths::testFactory_monthsBetween_RPartial_MonthDay
+
+Bug/specification summary:
+Bug report: 22
+Trigger failures:
+- org.joda.time.TestDays::testFactory_daysBetween_RPartial_MonthDay
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonths::testFactory_monthsBetween_RPartial_MonthDay
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+Modified: org.joda.time.base.BaseSingleFieldPeriod
+
+Prompt-01 test plan:
+TARGETS: BaseSingleFieldPeriod.between(ReadablePartial, ReadablePartial, ReadablePeriod).
+ORACLES: Existing TestDays/TestMonths MonthDay daysBetween/monthsBetween trigger expectations.
+CASES: MonthDay containing day 29 where an intervening/non-leap year has February 28.
+CASES: Verify daysBetween and monthsBetween return normally for MonthDay partials, not IllegalFieldValueException.
+CASES: Normal MonthDay partial pairs and boundary February day 28/29 combinations.
+RISKS: Partial chronology resolution may construct an invalid February 29 while computing field differences.
+RISKS: Context exposes only BaseSingleFieldPeriod; concrete factory APIs inferred solely from named triggers.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.joda.time.base.BaseSingleFieldPeriod (java) =====
+/* API SIGNATURES */
+package org.joda.time.base;
+public abstract class BaseSingleFieldPeriod
+protected static int between(ReadableInstant start, ReadableInstant end, DurationFieldType field) {
+protected static int between(ReadablePartial start, ReadablePartial end, ReadablePeriod zeroInstance) {
+protected static int standardPeriodIn(ReadablePeriod period, long millisPerUnit) {
+protected BaseSingleFieldPeriod(int period) {
+protected int getValue() {
+protected void setValue(int value) {
+public abstract DurationFieldType getFieldType();
+public abstract PeriodType getPeriodType();
+public int size() {
+public DurationFieldType getFieldType(int index) {
+public int getValue(int index) {
+public int get(DurationFieldType type) {
+public boolean isSupported(DurationFieldType type) {
+public Period toPeriod() {
+public MutablePeriod toMutablePeriod() {
+public boolean equals(Object period) {
+public int hashCode() {
+public int compareTo(BaseSingleFieldPeriod other) {
+
+/* HEADER */
+package org.joda.time.base;
+import java.io.Serializable;
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeUtils;
+import org.joda.time.DurationField;
+import org.joda.time.DurationFieldType;
+import org.joda.time.MutablePeriod;
+import org.joda.time.Period;
+import org.joda.time.PeriodType;
+import org.joda.time.ReadableInstant;
+import org.joda.time.ReadablePartial;
+import org.joda.time.ReadablePeriod;
+import org.joda.time.chrono.ISOChronology;
+import org.joda.time.field.FieldUtils;
+
+/* METHOD BaseSingleFieldPeriod */
+protected BaseSingleFieldPeriod(int period) {
+ super();
+ iPeriod = period;
+ }
+
+/* METHOD between */
+protected static int between(ReadablePartial start, ReadablePartial end, ReadablePeriod zeroInstance) {
+ if (start == null || end == null) {
+ throw new IllegalArgumentException("ReadablePartial objects must not be null");
+ }
+ if (start.size() != end.size()) {
+ throw new IllegalArgumentException("ReadablePartial objects must have the same set of fields");
+ }
+ for (int i = 0, isize = start.size(); i < isize; i++) {
+ if (start.getFieldType(i) != end.getFieldType(i)) {
+ throw new IllegalArgumentException("ReadablePartial objects must have the same set of fields");
+ }
+ }
+ if (DateTimeUtils.isContiguous(start) == false) {
+ throw new IllegalArgumentException("ReadablePartial objects must be contiguous");
+ }
+ Chronology chrono = DateTimeUtils.getChronology(start.getChronology()).withUTC();
+ int[] values = chrono.get(zeroInstance, chrono.set(start, 0L), chrono.set(end, 0L));
+ return values[0];
+ }
+
+/* METHOD compareTo */
+public int compareTo(BaseSingleFieldPeriod other) {
+ if (other.getClass() != getClass()) {
+ throw new ClassCastException(getClass() + " cannot be compared to " + other.getClass());
+ }
+ int otherValue = other.getValue();
+ int thisValue = getValue();
+ if (thisValue > otherValue) {
+ return 1;
+ }
+ if (thisValue < otherValue) {
+ return -1;
+ }
+ return 0;
+ }
+
+/* METHOD between */
+protected static int between(ReadableInstant start, ReadableInstant end, DurationFieldType field) {
+ if (start == null || end == null) {
+ throw new IllegalArgumentException("ReadableInstant objects must not be null");
+ }
+ Chronology chrono = DateTimeUtils.getInstantChronology(start);
+ int amount = field.getField(chrono).getDifference(end.getMillis(), start.getMillis());
+ return amount;
+ }
+
+/* METHOD standardPeriodIn */
+protected static int standardPeriodIn(ReadablePeriod period, long millisPerUnit) {
+ if (period == null) {
+ return 0;
+ }
+ Chronology iso = ISOChronology.getInstanceUTC();
+ long duration = 0L;
+ for (int i = 0; i < period.size(); i++) {
+ int value = period.getValue(i);
+ if (value != 0) {
+ DurationField field = period.getFieldType(i).getField(iso);
+ if (field.isPrecise() == false) {
+ throw new IllegalArgumentException(
+ "Cannot convert period to duration as " + field.getName() +
+ " is not precise in the period " + period);
+ }
+ duration = FieldUtils.safeAdd(duration, FieldUtils.safeMultiply(field.getUnitMillis(), value));
+ }
+ }
+ return FieldUtils.safeToInt(duration / millisPerUnit);
+ }
+
+/* METHOD getValue */
+protected int getValue() {
+ return iPeriod;
+ }
+
+/* METHOD setValue */
+protected void setValue(int value) {
+ iPeriod = value;
+ }
+
+/* METHOD getFieldType */
+public DurationFieldType getFieldType(int index) {
+ if (index != 0) {
+ throw new IndexOutOfBoundsException(String.valueOf(index));
+ }
+ return getFieldType();
+ }
+
+/* METHOD getValue */
+public int getValue(int index) {
+ if (index != 0) {
+ throw new IndexOutOfBoundsException(String.valueOf(index));
+ }
+ return getValue();
+ }
+
+/* METHOD get */
+public int get(DurationFieldType type) {
+ if (type == getFieldType()) {
+ return getValue();
+ }
+ return 0;
+ }
+
+/* METHOD equals */
+public boolean equals(Object period) {
+ if (this == period) {
+ return true;
+ }
+ if (period instanceof ReadablePeriod == false) {
+ return false;
+ }
+ ReadablePeriod other = (ReadablePeriod) period;
+ return (other.getPeriodType() == getPeriodType() && other.getValue(0) == getValue());
+ }
+
+/* METHOD hashCode */
+public int hashCode() {
+ int total = 17;
+ total = 27 * total + getValue();
+ total = 27 * total + getFieldType().hashCode();
+ return total;
+ }
+
+/* METHOD size */
+public int size() {
+ return 1;
+ }
+
+/* METHOD isSupported */
+public boolean isSupported(DurationFieldType type) {
+ return (type == getFieldType());
+ }
+
+/* METHOD toPeriod */
+public Period toPeriod() {
+ return Period.ZERO.withFields(this);
+ }
+
+/* METHOD toMutablePeriod */
+public MutablePeriod toMutablePeriod() {
+ MutablePeriod period = new MutablePeriod();
+ period.add(this);
+ return period;
+ }

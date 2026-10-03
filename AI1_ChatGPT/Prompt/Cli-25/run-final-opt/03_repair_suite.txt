@@ -1,0 +1,149 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 25  Version: Cli-25b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-162
+Trigger failures:
+- org.apache.commons.cli.bug.BugCLI162Test::testLongLineChunkingIndentIgnored
+ --> junit.framework.ComparisonFailure: Long arguments did not split as expected expected:<...
+Modified: org.apache.commons.cli.HelpFormatter
+
+Available API/signatures:
+[org.apache.commons.cli.HelpFormatter | java]
+package org.apache.commons.cli;
+public class HelpFormatter
+public static final int DEFAULT_WIDTH = 74;
+public static final int DEFAULT_LEFT_PAD = 1;
+public static final int DEFAULT_DESC_PAD = 3;
+public static final String DEFAULT_SYNTAX_PREFIX = "usage: ";
+public static final String DEFAULT_OPT_PREFIX = "-";
+public static final String DEFAULT_LONG_OPT_PREFIX = "--";
+public static final String DEFAULT_ARG_NAME = "arg";
+public int defaultWidth = DEFAULT_WIDTH;
+public int defaultLeftPad = DEFAULT_LEFT_PAD;
+public int defaultDescPad = DEFAULT_DESC_PAD;
+public String defaultSyntaxPrefix = DEFAULT_SYNTAX_PREFIX;
+public String defaultNewLine = System.getProperty("line.separator");
+public String defaultOptPrefix = DEFAULT_OPT_PREFIX;
+public String defaultLongOptPrefix = DEFAULT_LONG_OPT_PREFIX;
+public String defaultArgName = DEFAULT_ARG_NAME;
+protected Comparator optionComparator = new OptionComparator();
+public void setWidth(int width)
+public int getWidth()
+public void setLeftPadding(int padding)
+public int getLeftPadding()
+public void setDescPadding(int padding)
+public int getDescPadding()
+public void setSyntaxPrefix(String prefix)
+public String getSyntaxPrefix()
+public void setNewLine(String newline)
+public String getNewLine()
+public void setOptPrefix(String prefix)
+public String getOptPrefix()
+public void setLongOptPrefix(String prefix)
+public String getLongOptPrefix()
+public void setArgName(String name)
+public String getArgName()
+public Comparator getOptionComparator()
+public void setOptionComparator(Comparator comparator)
+public void printHelp(String cmdLineSyntax, Options options)
+public void p
+...[truncated deterministically]...
+OptionGroup group)
+private static void appendOption(final StringBuffer buff, final Option option, final boolean required)
+public void printUsage(PrintWriter pw, int width, String cmdLineSyntax)
+public void printWrapped(PrintWriter pw, int width, String text)
+public void printWrapped(PrintWriter pw, int width, int nextLineTabStop, String text)
+protected StringBuffer renderOptions(StringBuffer sb, int width, Options options, int leftPad, int descPad)
+final String lpad = createPadding(leftPad);
+final String dpad = createPadding(descPad);
+final String padding = createPadding(nextLineTabStop);
+protected int findWrapPos(String text, int width, int startPos)
+protected String createPadding(int len)
+protected String rtrim(String s)
+private static class OptionComparator implements Comparator
+public int compare(Object o1, Object o2)
+
+Generated JUnit Test:
+package org.apache.commons.cli.bug;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.cli.HelpFormatter;
+
+public class HelpFormatterCLI162Test extends TestCase {
+
+    public void testLongUnbrokenTextIsChunkedAndContinuationIsIndented() {
+        HelpFormatter formatter = new HelpFormatter();
+        formatter.setNewLine("\n");
+
+        StringWriter output = new StringWriter();
+        PrintWriter writer = new PrintWriter(output);
+
+        formatter.printWrapped(writer, 10, 3, "abcdefghijklmnopqrst");
+        writer.flush();
+
+        assertEquals("abcdefghij\n   klmnopq\n   rst" + System.getProperty("line.separator"),
+                output.toString());
+    }
+
+    public void testLongArgumentAfterInitialWordUsesWidthIncludingIndentation() {
+        HelpFormatter formatter = new HelpFormatter();
+        formatter.setNewLine("\n");
+
+        StringWriter output = new StringWriter();
+        PrintWriter writer = new PrintWriter(output);
+
+        formatter.printWrapped(writer, 10, 3, "word 1234567890123 end");
+        writer.flush();
+
+        assertEquals("word\n   1234567\n   890123\n   end"
+                + System.getProperty("line.separator"), output.toString());
+    }
+
+    public void testExactWidthAndOneCharacterOverWidthHaveExpectedChunks() {
+        HelpFormatter formatter = new HelpFormatter();
+        formatter.setNewLine("\n");
+
+        StringWriter exactOutput = new StringWriter();
+        formatter.printWrapped(new PrintWriter(exactOutput), 10, 2, "0123456789");
+
+        StringWriter overOutput = new StringWriter();
+        formatter.printWrapped(new PrintWriter(overOutput), 10, 2, "0123456789X");
+
+        assertEquals("0123456789" + System.getProperty("line.separator"),
+                exactOutput.toString());
+        assertEquals("0123456789\n  X" + System.getProperty("line.separator"),
+                overOutput.toString());
+    }
+
+    public void testWhitespaceAtWrapBoundaryIsPreferredOverSplittingWord() {
+        HelpFormatter formatter = new HelpFormatter();
+        formatter.setNewLine("\n");
+
+        StringWriter output = new StringWriter();
+        PrintWriter writer = new PrintWriter(output);
+
+        formatter.printWrapped(writer, 10, 0, "alpha beta gamma");
+        writer.flush();
+
+        assertEquals("alpha beta\ngamma" + System.getProperty("line.separator"),
+                output.toString());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.cli.bug.HelpFormatterCLI162Test::testLongUnbrokenTextIsChunkedAndContinuationIsIndented
+ - org.apache.commons.cli.bug.HelpFormatterCLI162Test::testExactWidthAndOneCharacterOverWidthHaveExpectedChunks
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.apache.commons.cli.bug.HelpFormatterCLI162Test::testExactWidthAndOneCharacterOverWidthHaveExpectedChunks, org.apache.commons.cli.bug.HelpFormatterCLI162Test::testLongUnbrokenTextIsChunkedAndContinuationIsIndented

@@ -1,0 +1,431 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 173  Version: Closure-173b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+Triggers: com.google.javascript.jscomp.CodePrinterTest::testPrint, com.google.javascript.jscomp.CodePrinterTest::testIssue1062, com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxTest::testAssocitivity
+
+Bug/specification summary:
+Bug report: 1062
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testPrint
+ --> junit.framework.ComparisonFailure: expected:<var a,b,c;a||[(b||c);a*(b*c);a|(b|c)]> but was:<var a,b,c;a||[b||c;a*b*c;a|b|c]>
+ - com.google.javascript.jscomp.CodePrinterTest::testIssue1062
+ --> junit.framework.ComparisonFailure: expected:<3*[(4%3*5)]> but was:<3*[4%3*5]>
+ - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxTest::testAssocitivity
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+
+Prompt-01 test plan:
+TARGETS: CodeGenerator.addExpr (precedence-based paren insertion),
+PeepholeSubstituteAlternateSyntax.optimizeSubtree (paren-safety during folds)
+ORACLES: expected strings from testPrint, testIssue1062, testAssocitivity failures
+CASES: binary ops (||, , |, %) inside array literal (e.g., 3[4%3*5], a||[b||c]), nested
+same-precedence ops, non-assoc edge
+RISKS: limited insight into internal precedence/context mapping; only visible failure examples;
+other operator combos (&&, /) may be untested
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CodeGenerator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CodeGenerator {
+private final Map<String, String> escapedJsStrings = Maps.newHashMap();
+private CodeGenerator(CodeConsumer consumer) {
+static CodeGenerator forCostEstimation(CodeConsumer consumer) {
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+private void addJsString(Node n) {
+private String jsString(String s, boolean useSlashV) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Charsets;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.CompilerOptions.LanguageMode;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.util.Map;
+class CodeGenerator {
+
+/* METHOD CodeGenerator */
+CodeGenerator(
+ CodeConsumer consumer,
+ CompilerOptions options) {
+ cc = consumer;
+
+ Charset outputCharset = options.getOutputCharset();
+ if (outputCharset == null || outputCharset == Charsets.US_ASCII) {
+ // If we want our default (pretending to be UTF-8, but escaping anything
+ // outside of straight ASCII), then don't use the encoder, but
+ // just special-case the code. This keeps the normal path through
+ // the code identical to how it's been for years.
+ this.outputCharsetEncoder = null;
+ } else {
+ this.outputCharsetEncoder = outputCharset.newEncoder();
+ }
+ this.preferSingleQuotes = options.preferSingleQuotes;
+ this.trustedStrings = options.trustedStrings;
+ this.languageMode = options.getLanguageOut();
+ }
+
+/* METHOD CodeGenerator */
+private CodeGenerator(CodeConsumer consumer) {
+ cc = consumer;
+ outputCharsetEncoder = null;
+ preferSingleQuotes = false;
+ trustedStrings = true;
+ languageMode = LanguageMode.ECMASCRIPT5;
+ }
+
+/* METHOD tagAsStrict */
+public void tagAsStrict() {
+ add("'use strict';");
+ }
+
+/* METHOD identifierEscape */
+static String identifierEscape(String s) {
+ // First check if escaping is needed at all -- in most cases it isn't.
+ if (NodeUtil.isLatin(s)) {
+ return s;
+ }
+
+ // Now going through the string to escape non-Latin characters if needed.
+ StringBuilder sb = new StringBuilder();
+ for (int i = 0; i < s.length(); i++) {
+ char c = s.charAt(i);
+ // Identifiers should always go to Latin1/ ASCII characters because
+ // different browser's rules for valid identifier characters are
+ // crazy.
+ if (c > 0x1F && c < 0x7F) {
+ sb.append(c);
+ } else {
+ appendHexJavaScriptRepresentation(sb, c);
+ }
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ StringBuilder sb, char c) {
+ try {
+ appendHexJavaScriptRepresentation(c, sb);
+ } catch (IOException ex) {
+ // StringBuilder does not throw IOException.
+ throw new RuntimeException(ex);
+ }
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ int codePoint, Appendable out)
+ throws IOException {
+ if (Character.isSupplementaryCodePoint(codePoint)) {
+ // Handle supplementary Unicode values which are not representable in
+ // JavaScript. We deal with these by escaping them as two 4B sequences
+ // so that they will round-trip properly when sent from Java to JavaScript
+ // and back.
+ char[] surrogates = Character.toChars(codePoint);
+ appendHexJav
+...[truncated deterministically]...
+n(surrogates[1], out);
+ return;
+ }
+ out.append("\\u")
+ .append(HEX_CHARS[(codePoint >>> 12) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 8) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 4) & 0xf])
+ .append(HEX_CHARS[codePoint & 0xf]);
+ }
+
+/* METHOD forCostEstimation */
+static CodeGenerator forCostEstimation(CodeConsumer consumer) {
+ return new CodeGenerator(consumer);
+ }
+
+/* METHOD getSimpleNumber */
+static double getSimpleNumber(String s) {
+ if (isSimpleNumber(s)) {
+ try {
+ long l = Long.parseLong(s);
+ if (l < NodeUtil.MAX_POSITIVE_INTEGER_NUMBER) {
+ return l;
+ }
+ } catch (NumberFormatException e) {
+ // The number was too long to parse. Fall through to NaN.
+ }
+ }
+ return Double.NaN;
+ }
+
+/* METHOD addArrayList */
+void addArrayList(Node firstInList) {
+ boolean lastWasEmpty = false;
+ for (Node n = firstInList; n != null; n = n.getNext()) {
+ if (n != firstInList) {
+ cc.listSeparator();
+ }
+ addExpr(n, 1, Context.OTHER);
+ lastWasEmpty = n.isEmpty();
+ }
+
+ if (lastWasEmpty) {
+ cc.listSeparator();
+ }
+ }
+
+/* METHOD add */
+void add(Node n, Context context) {
+ if (!cc.continueProcessing()) {
+ return;
+ }
+
+ int type = n.getType();
+ String opstr = NodeUtil.opToStr(type);
+ int childCount = n.getChildCount();
+ Node first = n.getFirstChild();
+ Node last = n.getLastChild();
+
+ // Handle all binary operators
+ if (opstr != null && first != last) {
+ Preconditions.checkState(
+ childCount == 2,
+ "Bad binary operator \"%s\": expected 2 arguments but got %s",
+ opstr, childCount);
+ int p = NodeUtil.precedence(type);
+
+ // For right-hand-side of operations, only pass context if it's
+ // the IN_FOR_INIT_CLAUSE one.
+ Context rhsContext = getContextForNoInOper
+...[truncated deterministically]...
+he same AST as the code we parse back.
+ // NEG is a weird case because Rhino parses "- -2" as "2".
+ if (n.getFirstChild().isNumber()) {
+ cc.addNumber(-n.getFirstChild().getDouble());
+ } else {
+ cc.addOp(NodeUtil.opToStrNoFail(type), false);
+ addExpr(first, NodeUtil.precedence(type), Context.OTHER);
+ }
+
+ break;
+ }
+
+===== com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class PeepholeSubstituteAlternateSyntax
+private static final int STRING_SPLIT_OVERHEAD = ".split('.')".length();
+@Override
+@SuppressWarnings("fallthrough")
+public Node optimizeSubtree(Node node) {
+private Node tryFoldSimpleFunctionCall(Node n) {
+private Node tryFoldImmediateCallToBoundFunction(Node n) {
+private void addParameterAfter(Node parameterList, Node after) {
+private Node trySplitComma(Node n) {
+private Node tryReplaceUndefined(Node n) {
+private Node tryReduceReturn(Node n) {
+private Node tryFoldStandardConstructors(Node n) {
+private Node tryFoldLiteralConstructor(Node n) {
+private static enum FoldArrayAction {
+private static FoldArrayAction isSafeToFoldArrayConstructor(Node arg) {
+private Node tryFoldRegularExpressionConstructor(Node n) {
+private Node reduceTrueFalse(Node n) {
+private Node tryMinimizeArrayLiteral(Node n) {
+private Node tryMinimizeStringArrayLiteral(Node n) {
+private static String pickDelimiter(String[] strings) {
+private static final Pattern REGEXP_FLAGS_RE = Pattern.compile("^[gmi]*$");
+private static boolean areValidRegexpFlags(String flags) {
+private boolean areSafeFlagsToFold(String flags) {
+private static Node makeForwardSlashBracketSafe(Node n) {
+static boolean containsUnicodeEscape(String s) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
+import com.google.javascript.jscomp.CodingConvention.Bind;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.regex.Pattern;
+class PeepholeSubstituteAlternateSyntax
+
+/* METHOD PeepholeSubstituteAlternateSyntax */
+PeepholeSubstituteAlternateSyntax(boolean late) {
+ this.late = late;
+ }
+
+/* METHOD optimizeSubtree */
+@Override
+ @SuppressWarnings("fallthrough")
+ public Node optimizeSubtree(Node node) {
+ switch(node.getType()) {
+ case Token.TRUE:
+ case Token.FALSE:
+ return reduceTrueFalse(node);
+
+ case Token.NEW:
+ node = tryFoldStandardConstructors(node);
+ if (!node.isCall()) {
+ return node;
+ }
+ // Fall through on purpose because tryFoldStandardConstructors() may
+ // convert a NEW node into a CALL node
+ case Token.CALL:
+ Node result = tryFoldLiteralConstructor(node);
+ if (result == node) {
+ result = tryFoldSimpleFunctionCall(node);
+ if (result == node) {
+ result = tryFoldImmediateCallToBoundFunction(node);
+ }
+ }
+ return result;
+
+ case Token.RETURN:
+ return tryReduceReturn(node);
+
+ case Token.COMMA:
+ return trySplitComma(node);
+
+ case Token.NAME:
+ return tryReplaceUndefined(node);
+
+ case Token.ARRAYLIT:
+ return tryMinimizeArrayLiteral(node);
+
+ default:
+ return node; //Nothing changed
+ }
+ }
+
+/* METHOD trySplitComma */
+private Node trySplitComma(Node n) {
+ if (late) {
+ return n;
+ }
+ Node parent = n.getParent();
+ Node left = n.getFirstChild();
+ Node right = n.getLastChild();
+
+ if (parent.isExprResult()
+ && !parent.getParent().isLabel()) {
+ // split comma
+ n.detachChildren();
+ // Replace the original expression with the left operand.
+ parent.replaceChild(n, left);
+ // Add the right expression afterward.
+ Node newStatement = IR.exprResult(right);
+ newStatement.copyInformationFrom(n);
+
+ //This modifies outside the subtree, which is not
+ //desirable in a peephole optimization.
+ parent.getParent().addChildAfter(newStatement, parent);
+ reportCodeChange();
+ return left;
+ } else {
+ return n;
+ }
+ }
+
+/* METHOD reduceTrueFalse */
+private Node reduceTrueFalse(Node n) {
+ if (late) {
+ Node not = IR.not(IR.number(n.isTrue() ? 0 : 1));
+ not.copyInformationFromForTree(n);
+ n.getParent().replaceChild(n, not);
+ reportCodeChange();
+ return not;
+ }
+ return n;
+ }
+
+/* METHOD tryMinimizeStringArrayLiteral */
+private Node tryMinimizeStringArrayLiteral(Node n) {
+ if (!late) {
+ return n;
+ }
+
+ int numElements = n.getChildCount();
+ // We save two bytes per element.
+ int saving = numElements * 2 - STRING_SPLIT_OVERHEAD;
+ if (saving <= 0) {
+ return n;
+ }
+
+ String[] strings = new String[n.getChildCount()];
+ int idx = 0;
+ for (Node cur = n.getFirstChild(); cur != null; cur = cur.getNext()) {
+ strings[idx++] = cur.getString();
+ }
+
+ // These delimiters are chars that appears a lot in the program therefore
+ // probably have a small Huffman encoding.
+ String delimiter = pickDelimiter(strings);
+ if (delimiter != null) {
+ String template = Joiner.on(delimiter).join(strings);
+ Node call = IR.call(
+ IR.getprop(
+ IR.string(template),
+ IR.string("split")),
+ IR.string("" + delimiter));
+ call.copyInformationFromForTree(n);
+ n.getParent().replaceChild(n, call);
+ reportCodeChange();
+ return call;
+ }
+ return n;
+ }
+
+/* METHOD tryFoldImmediateCallToBoundFunction */
+private Node tryFoldImmediateCallToBoundFunction(Node n) {
+ // Rewriting "(fn.bind(a,b))()" to "fn.call(a,b)" makes it inlinable
+ Preconditions.checkState(n.isCall());
+ Node callTarget = n.getFirstChild();
+ Bind bind = getCodingConvention().describeFunctionBind(callTarget, false);
+ if (bind != null) {
+ // replace the call target
+ bind.target.detachFromParent();
+ n.replaceChild(callTarget, bind.target);
+ callTarget = bind.target;
+
+ // push the parameters
+ addParameterAfter(bind.parameters, callTarget);
+
+ // add the this value before the parameters if necessary
+ if (bind.thisValue != null && !NodeUtil.isUndefined(bind.thisValue)) {
+ // rewrite from "fn(a, b)" to "fn.call(thisValue, a, b)"
+ Node newCallTarget = IR.getprop(
+ callTarget.cloneTree(),
+ IR.string("call").srcref(callTarget));
+ n.replaceChild(callTarget, newCallTarget);
+ n.addChildAfter(bind.thisValue.cloneTree(), newCallTarget);
+ n.putBooleanProp(Node.FREE_CALL, false);
+ } else {
+ n.putBooleanProp(Node.FREE_CALL, true);
+ }
+ reportCodeChange();
+ }
+ return n;
+ }

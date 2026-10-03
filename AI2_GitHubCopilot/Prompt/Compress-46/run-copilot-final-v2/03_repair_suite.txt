@@ -1,0 +1,219 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 46  Version: Compress-46b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-416
+Trigger failures:
+- org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testGettersSetters
+ --> junit.framework.AssertionFailedError: Time too big for 32 bits!
+Modified: org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestamp
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestamp | java]
+package org.apache.commons.compress.archivers.zip;
+public class X5455_ExtendedTimestamp implements ZipExtraField, Cloneable, Serializable {
+private static final ZipShort HEADER_ID = new ZipShort(0x5455);
+public static final byte MODIFY_TIME_BIT = 1;
+public static final byte ACCESS_TIME_BIT = 2;
+public static final byte CREATE_TIME_BIT = 4;
+public X5455_ExtendedTimestamp() {}
+@Override
+public ZipShort getHeaderId() {
+public ZipShort getLocalFileDataLength() {
+public ZipShort getCentralDirectoryLength() {
+public byte[] getLocalFileDataData() {
+final byte[] data = new byte[getLocalFileDataLength().getValue()];
+public byte[] getCentralDirectoryData() {
+final byte[] centralData = new byte[getCentralDirectoryLength().getValue()];
+final byte[] localData = getLocalFileDataData();
+private void reset() {
+public void setFlags(final byte flags) {
+public byte getFlags() { return flags; }
+public boolean isBit0_modifyTimePresent() { return bit0_modifyTimePresent; }
+public boolean isBit1_accessTimePresent() { return bit1_accessTimePresent; }
+public boolean isBit2_createTimePresent() { return bit2_createTimePresent; }
+public ZipLong getModifyTime() { return modifyTime; }
+public ZipLong getAccessTime() { return accessTime; }
+public ZipLong getCreateTime() { return createTime; }
+public Date getModifyJavaTime() {
+public Date getAccessJavaTime() {
+private static Date zipLongToDate(ZipLong unixTime) {
+public Date getCreateJavaTime() {
+public void setModifyTime(final ZipLong l) {
+public void setAccessTime(final ZipLong l) {
+public void setCreateTime(final ZipLong l) {
+public void setModifyJavaTime(final Date d) { setModifyTime(dateToZipLong(d)); }
+public void setAccessJavaTime(final Date d) { setAccessTime(dateToZipLong(d)); }
+public void setCreateJavaTime(final Date d) { setCreateTime(dateToZipLong(d)); }
+private static ZipLong dateToZipLong(final Date d) {
+private static ZipLong unixTimeToZipLong(long l) {
+public String toString() {
+final StringBuilder buf = new StringBuilder();
+final Date m = getModifyJavaTime();
+final Date a = getAccessJavaTime();
+final Date c = getCreateJavaTime();
+public Object clone() throws CloneNotSupportedException {
+public boolean equals(final Object o) {
+final X5455_ExtendedTimestamp xf = (X5455_ExtendedTimestamp) o;
+public int hashCode() {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.zip;
+
+ import java.util.Date;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for {@link X5455_ExtendedTimestamp}, covering COMPRESS-416
+  * (unsigned 32-bit timestamps must not be rejected).
+  */
+ public class X5455_ExtendedTimestampTest {
+
+     @Test
+     public void testNormalModifyTimeRoundTrip() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         Date input = new Date(1_500_000_000_000L); // some normal date
+         ext.setModifyJavaTime(input);
+         Date result = ext.getModifyJavaTime();
+         assertEquals("modifyTime round-trip", input, result);
+     }
+
+     @Test
+     public void testModifyTimeUnsigned32Safe() {
+         // seconds value just inside unsigned 32-bit range (0xFFFFFFFE)
+         long millis = 0xFFFFFFFEL * 1000L;
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         ext.setModifyJavaTime(new Date(millis));
+         assertEquals(new Date(millis), ext.getModifyJavaTime());
+     }
+
+     @Test
+     public void testModifyTimeExactlyUnsigned32Max() {
+         // maximum unsigned 32-bit seconds
+         long millis = 0xFFFFFFFFL * 1000L;
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         ext.setModifyJavaTime(new Date(millis));
+         assertEquals(new Date(millis), ext.getModifyJavaTime());
+     }
+
+     @Test
+     public void testModifyTimeBeyondUnsigned32DoesNotThrow() {
+         // date far beyond 32-bit; must not throw IllegalArgumentException
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         try {
+             ext.setModifyJavaTime(new Date(Long.MAX_VALUE));
+         } catch (IllegalArgumentException e) {
+             if (e.getMessage().contains("Time too big for 32 bits")) {
+                 fail("Must not reject timestamps > 32-bit maximum");
+             }
+             // other IAE may be acceptable, but the bug message is forbidden
+         }
+         // retrieval may wrap, but should not crash
+         assertNotNull(ext.getModifyJavaTime());
+     }
+
+     @Test
+     public void testZeroFlagsThenModifyTime() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         ext.setFlags((byte) 0);
+         // flags = 0 -> no modify bit set, modifyTime internal is null
+         assertNull(ext.getModifyJavaTime());
+         // now set a time; this should auto-set the bit
+         Date input = new Date(1_600_000_000_000L);
+         ext.setModifyJavaTime(input);
+         assertTrue(ext.isBit0_modifyTimePresent());
+         assertEquals(input, ext.getModifyJavaTime());
+     }
+
+     @Test
+     public void testSetModifyTimeNullClearsBit() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         ext.setModifyJavaTime(new Date(1_500_000_000_000L));
+         assertTrue(ext.isBit0_modifyTimePresent());
+         ext.setModifyTime(null);
+         assertFalse(ext.isBit0_modifyTimePresent());
+         assertNull(ext.getModifyJavaTime());
+     }
+
+     @Test
+     public void testAccessTimeRoundTrip() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         Date input = new Date(1_800_000_000_000L);
+         ext.setAccessJavaTime(input);
+         assertEquals(input, ext.getAccessJavaTime());
+     }
+
+     @Test
+     public void testCreateTimeRoundTrip() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         Date input = new Date(0x7FFFFFFF_000L); // 2038-01-19
+         ext.setCreateJavaTime(input);
+         assertEquals(input, ext.getCreateJavaTime());
+     }
+
+     @Test
+     public void testSetAccessJavaTimeNullClearsAccess() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         ext.setAccessJavaTime(new Date());
+         assertNotNull(ext.getAccessJavaTime());
+         ext.setAccessJavaTime(null);
+         assertNull(ext.getAccessJavaTime());
+         assertFalse(ext.isBit1_accessTimePresent());
+     }
+
+     @Test
+     public void testParseLocalFileDataRoundTrip() throws Exception {
+         X5455_ExtendedTimestamp out = new X5455_ExtendedTimestamp();
+         Date modify = new Date(0xFFFFFFFFL * 1000L);
+         Date access = new Date(0x80000000L * 1000L);  // signed 32-bit boundary
+         out.setModifyJavaTime(modify);
+         out.setAccessJavaTime(access);
+
+         byte[] data = out.getLocalFileDataData();
+         X5455_ExtendedTimestamp in = new X5455_ExtendedTimestamp();
+         in.parseFromLocalFileData(data, 0, data.length);
+
+         assertEquals(modify, in.getModifyJavaTime());
+         assertEquals(access, in.getAccessJavaTime());
+     }
+
+     @Test
+     public void testEqualityAndHashCode() throws CloneNotSupportedException {
+         X5455_ExtendedTimestamp ext1 = new X5455_ExtendedTimestamp();
+         ext1.setModifyJavaTime(new Date(1_500_000_000_000L));
+         ext1.setAccessJavaTime(new Date(1_600_000_000_000L));
+
+         X5455_ExtendedTimestamp ext2 = (X5455_ExtendedTimestamp) ext1.clone();
+         assertEquals(ext1, ext2);
+         assertEquals(ext1.hashCode(), ext2.hashCode());
+
+         // different flags -> not equal
+         ext2.setFlags((byte) 0);
+         ext2.setModifyJavaTime(new Date(1_500_000_000_000L));
+         assertNotEquals(ext1, ext2);
+
+         // null time vs non-null
+         ext2.setFlags((byte) X5455_ExtendedTimestamp.MODIFY_TIME_BIT);
+         ext2.setModifyTime(null);
+         assertNotEquals(ext1, ext2);
+     }
+
+     @Test
+     public void testHexHeaderId() {
+         X5455_ExtendedTimestamp ext = new X5455_ExtendedTimestamp();
+         assertEquals(0x5455, ext.getHeaderId().getValue());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testParseLocalFileDataRoundTrip
+ - org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testModifyTimeUnsigned32Safe
+ - org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testModifyTimeExactlyUnsigned32Max
+Failing generated tests: org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testCreateTimeRoundTrip, org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testModifyTimeBeyondUnsigned32DoesNotThrow, org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testModifyTimeExactlyUnsigned32Max, org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testModifyTimeUnsigned32Safe, org.apache.commons.compress.archivers.zip.X5455_ExtendedTimestampTest::testParseLocalFileDataRoundTrip

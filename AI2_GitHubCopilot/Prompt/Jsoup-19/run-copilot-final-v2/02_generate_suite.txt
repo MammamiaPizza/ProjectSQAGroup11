@@ -1,0 +1,402 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 19  Version: Jsoup-19b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.safety.Whitelist
+Modified: org.jsoup.safety.Whitelist
+Triggers: org.jsoup.safety.CleanerTest::handlesCustomProtocols
+
+Bug/specification summary:
+Bug report: 127
+Trigger failures:
+- org.jsoup.safety.CleanerTest::handlesCustomProtocols
+ --> junit.framework.AssertionFailedError: expected:<<img [src="cid:12345" />
+Modified: org.jsoup.safety.Whitelist
+
+Prompt-01 test plan:
+TARGETS: Whitelist.addProtocols() and testValidProtocol() for custom URL protocol handling in src
+attributes
+ORACLES: CleanerTest::handlesCustomProtocols expects cleaned HTML to preserve "cid:12345" in img src
+CASES: Normal: add single protocol (cid) for img src; Boundary: multiple protocols, :all tag
+wildcard, preserveRelativeLinks interaction; Error: protocol value missing colon, no protocols added
+RISKS: Only testValidProtocol internal logic is testable via Cleaner; typed-value matching may
+silently drop custom protocols
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.safety.Whitelist (java) =====
+/* API SIGNATURES */
+package org.jsoup.safety;
+@author Jonathan Hedley
+public class Whitelist {
+@return whitelist
+public static Whitelist none() {
+public static Whitelist simpleText() {
+public static Whitelist basic() {
+public static Whitelist basicWithImages() {
+public static Whitelist relaxed() {
+@see #basic()
+@see #basicWithImages()
+@see #simpleText()
+@see #relaxed()
+public Whitelist() {
+@param tags tag names to allow
+@return this (for chaining)
+public Whitelist addTags(String... tags) {
+<code>addAttributes(":all", "class")</code>.
+@param tag The tag the attributes are for
+@param keys List of valid attributes for the tag
+public Whitelist addAttributes(String tag, String... keys) {
+@param tag The tag the enforced attribute is for
+@param key The attribute key
+@param value The enforced attribute value
+public Whitelist addEnforcedAttribute(String tag, String key, String value) {
+public Whitelist preserveRelativeLinks(boolean preserve) {
+@param tag Tag the URL protocol is for
+@param key Attribute key
+@param protocols List of valid protocols
+@return this, for chaining
+public Whitelist addProtocols(String tag, String key, String... protocols) {
+private boolean testValidProtocol(Element el, Attribute attr, Set<Protocol> protocols) {
+static class TagName extends TypedValue {
+static TagName valueOf(String value) {
+static class AttributeKey extends TypedValue {
+static AttributeKey valueOf(String value) {
+static class AttributeValue extends TypedValue {
+static AttributeValue valueOf(String value) {
+static class Protocol extends TypedValue {
+static Protocol valueOf(String value) {
+abstract static class TypedValue {
+@Override
+public int hashCode() {
+public boolean equals(Object obj) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.safety;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.Element;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+public class Whitelist {
+
+/* METHOD Whitelist */
+public Whitelist() {
+ tagNames = new HashSet<TagName>();
+ attributes = new HashMap<TagName, Set<AttributeKey>>();
+ enforcedAttributes = new HashMap<TagName, Map<AttributeKey, AttributeValue>>();
+ protocols = new HashMap<TagName, Map<AttributeKey, Set<Protocol>>>();
+ preserveRelativeLinks = false;
+ }
+
+/* METHOD basicWithImages */
+public static Whitelist basicWithImages() {
+ return basic()
+ .addTags("img")
+ .addAttributes("img", "align", "alt", "height", "src", "title", "width")
+ .addProtocols("img", "src", "http", "https")
+ ;
+ }
+
+/* METHOD relaxed */
+public static Whitelist relaxed() {
+ return new Whitelist()
+ .addTags(
+ "a", "b", "blockquote", "br", "caption", "cite", "code", "col",
+ "colgroup", "dd", "div", "dl", "dt", "em", "h1", "h2", "h3", "h4", "h5", "h6",
+ "i", "img", "li", "ol", "p", "pre", "q", "small", "strike", "strong",
+ "sub", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u",
+ "ul")
+
+ .addAttributes("a", "href", "title")
+ .addAttributes("blockquote", "cite")
+ .addAttributes("col", "span", "width")
+ .addAttributes("colgroup", "span", "width")
+ .addAttributes("img", "align", "alt", "height", "src", "title", "width")
+ .addAttributes("ol", "start", "type")
+ .addAttributes("q", "cite")
+ .addAttributes("table", "summary", "width")
+ .addAttributes("td", "abbr", "axis", "colspan", "rowspan", "width")
+ .addAttributes(
+ "th", "abbr", "axis", "colspan", "rowspan", "scope",
+ "width")
+ .addAttributes("ul", "type")
+
+ .addProtocols("a", "href", "ftp", "http", "https", "mailto")
+ .addProtocols("blockquote", "cite", "http", "https")
+ .addProtocols("img", "src", "http", "https")
+ .addProtocols("q", "cite", "http", "https")
+ ;
+ }
+
+/* METHOD Links */
+<p/>
+ Links (<code>a</code> elements) can point to <code>http, https, ftp, mailto</code>, and have an enforced
+ <code>rel=nofollow</code> attribute.
+ <p/>
+ Does not allow images.
+
+ @return whitelist
+ */
+ public static Whitelist basic() {
+ return new Whitelist()
+ .addTags(
+ "a", "b", "blockquote", "br", "cite", "code", "dd", "dl", "dt", "em",
+ "i", "li", "ol", "p", "pre", "q", "small", "strike", "strong", "sub",
+ "sup", "u", "ul")
+
+ .addAttributes("a", "href")
+ .addAttributes("blockquote", "cite")
+ .addAttributes("q", "cite")
+
+ .addProtocols("a", "href", "ftp", "http", "https", "mailto")
+ .addProtocols("blockquote", "cite", "http", "https")
+ .addProtocols("cite", "cite", "http", "https")
+
+ .addEnforcedAttribute("a", "rel", "nofollow")
+ ;
+
+ }
+
+/* METHOD addTags */
+public Whitelist addTags(String... tags) {
+ Validate.notNull(tags);
+
+ for (String tagName : tags) {
+ Validate.notEmpty(tagName);
+ tagNames.add(TagName.valueOf(tagName));
+ }
+ return this;
+ }
+
+/* METHOD addAttributes */
+<code>addAttributes(":all", "class")</code>.
+
+ @param tag The tag the attributes are for
+ @param keys List of valid attributes for the tag
+ @return this (for chaining)
+ */
+ public Whitelist addAttributes(String tag, String... keys) {
+ Validate.notEmpty(tag);
+ Validate.notNull(keys);
+
+ TagName tagName = TagName.valueOf(tag);
+ Set<AttributeKey> attributeSet = new HashSet<AttributeKey>();
+ for (String key : keys) {
+ Validate.notEmpty(key);
+ attributeSet.add(AttributeKey.valueOf(key));
+ }
+ if (attributes.containsKey(tagName)) {
+ Set<AttributeKey> currentSet = attributes.get(tagName);
+ currentSet.addAll(attributeSet);
+ } else {
+ attributes.put(tagName, attributeSet);
+ }
+ return this;
+ }
+
+/* METHOD addEnforcedAttribute */
+public Whitelist addEnforcedAttribute(String tag, String key, String value) {
+ Validate.notEmpty(tag);
+ Validate.notEmpty(key);
+ Validate.notEmpty(value);
+
+ TagName tagName = TagName.valueOf(tag);
+ AttributeKey attrKey = AttributeKey.valueOf(key);
+ AttributeValue attrVal = AttributeValue.valueOf(value);
+
+ if (enforcedAttributes.containsKey(tagName)) {
+ enforcedAttributes.get(tagName).put(attrKey, attrVal);
+ } else {
+ Map<AttributeKey, AttributeValue> attrMap = new HashMap<AttributeKey, AttributeValue>();
+ attrMap.put(attrKey, attrVal);
+ enforcedAttributes.put(tagName, attrMap);
+ }
+ return this;
+ }
+
+/* METHOD addProtocols */
+public Whitelist addProtocols(String tag, String key, String... protocols) {
+ Validate.notEmpty(tag);
+ Validate.notEmpty(key);
+ Validate.notNull(protocols);
+
+ TagName tagName = TagName.valueOf(tag);
+ AttributeKey attrKey = AttributeKey.valueOf(key);
+ Map<AttributeKey, Set<Protocol>> attrMap;
+ Set<Protocol> protSet;
+
+ if (this.protocols.containsKey(tagName)) {
+ attrMap = this.protocols.get(tagName);
+ } else {
+ attrMap = new HashMap<AttributeKey, Set<Protocol>>();
+ this.protocols.put(tagName, attrMap);
+ }
+ if (attrMap.containsKey(attrKey)) {
+ protSet = attrMap.get(attrKey);
+ } else {
+ protSet = new HashSet<Protocol>();
+ attrMap.put(attrKey, protSet);
+ }
+ for (String protocol : protocols) {
+ Validate.notEmpty(protocol);
+ Protocol prot = Protocol.valueOf(protocol);
+ protSet.add(prot);
+ }
+ return this;
+ }
+
+/* METHOD none */
+public static Whitelist none() {
+ return new Whitelist();
+ }
+
+/* METHOD simpleText */
+public static Whitelist simpleText() {
+ return new Whitelist()
+ .addTags("b", "em", "i", "strong", "u")
+ ;
+ }
+
+/* METHOD preserveRelativeLinks */
+public Whitelist preserveRelativeLinks(boolean preserve) {
+ preserveRelativeLinks = preserve;
+ return this;
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ final int prime = 31;
+ int result = 1;
+ result = prime * result + ((value == null) ? 0 : value.hashCode());
+ return result;
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object obj) {
+ if (this == obj) return true;
+ if (obj == null) return false;
+ if (getClass() != obj.getClass()) return false;
+ TypedValue other = (TypedValue) obj;
+ if (value == null) {
+ if (other.value != null) return false;
+ } else if (!value.equals(other.value)) return false;
+ return true;
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return value;
+ }
+
+/* METHOD testValidProtocol */
+private boolean testValidProtocol(Element el, Attribute attr, Set<Protocol> protocols) {
+ // try to resolve relative urls to abs, and optionally update the attribute so output html has abs.
+ // rels without a baseuri get removed
+ String value = el.absUrl(attr.getKey());
+ if (!preserveRelativeLinks)
+ attr.setValue(value);
+ 
+ for (Protocol protocol : protocols) {
+ String prot = protocol.toString() + ":";
+ if (value.toLowerCase().startsWith(prot)) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+/* METHOD TypedValue */
+TypedValue(String value) {
+ Validate.notNull(value);
+ this.value = value;
+ }
+
+/* METHOD isSafeTag */
+boolean isSafeTag(String tag) {
+ return tagNames.contains(TagName.valueOf(tag));
+ }
+
+/* METHOD isSafeAttribute */
+boolean isSafeAttribute(String tagName, Element el, Attribute attr) {
+ TagName tag = TagName.valueOf(tagName);
+ AttributeKey key = AttributeKey.valueOf(attr.getKey());
+
+ if (attributes.containsKey(tag)) {
+ if (attributes.get(tag).contains(key)) {
+ if (protocols.containsKey(tag)) {
+ Map<AttributeKey, Set<Protocol>> attrProts = protocols.get(tag);
+ // ok if not defined protocol; otherwise test
+ return !attrProts.containsKey(key) || testValidProtocol(el, attr, attrProts.get(key));
+ } else { // attribute found, no protocols defined, so OK
+ return true;
+ }
+ }
+ } else { // no attributes defined for tag, try :all tag
+ return !tagName.equals(":all") && isSafeAttribute(":all", el, attr);
+ }
+ return false;
+ }
+
+/* METHOD getEnforcedAttributes */
+Attributes getEnforcedAttributes(String tagName) {
+ Attributes attrs = new Attributes();
+ TagName tag = TagName.valueOf(tagName);
+ if (enforcedAttributes.containsKey(tag)) {
+ Map<AttributeKey, AttributeValue> keyVals = enforcedAttributes.get(tag);
+ for (Map.Entry<AttributeKey, AttributeValue> entry : keyVals.entrySet()) {
+ attrs.put(entry.getKey().toString(), entry.getValue().toString());
+ }
+ }
+ return attrs;
+ }
+
+/* METHOD TagName */
+TagName(String value) {
+ super(value);
+ }
+
+/* METHOD valueOf */
+static TagName valueOf(String value) {
+ return new TagName(value);
+ }
+
+/* METHOD AttributeKey */
+AttributeKey(String value) {
+ super(value);
+ }
+
+/* METHOD valueOf */
+static AttributeKey valueOf(String value) {
+ return new AttributeKey(value);
+ }
+
+/* METHOD AttributeValue */
+AttributeValue(String value) {
+ super(value);
+ }
+
+/* METHOD valueOf */
+static AttributeValue valueOf(String value) {
+ return new AttributeValue(value);
+ }
+
+/* METHOD Protocol */
+Protocol(String value) {
+ super(value);
+ }
+
+/* METHOD valueOf */
+static Protocol valueOf(String value) {
+ return new Protocol(value);
+ }

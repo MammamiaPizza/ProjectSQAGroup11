@@ -1,0 +1,453 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 49  Version: Jsoup-49b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.Node
+Modified: org.jsoup.nodes.Node
+Triggers: org.jsoup.nodes.ElementTest::appendMustCorrectlyMoveChildrenInsideOneParentElement
+
+Bug/specification summary:
+Bug report: 689
+Trigger failures:
+- org.jsoup.nodes.ElementTest::appendMustCorrectlyMoveChildrenInsideOneParentElement
+ --> junit.framework.AssertionFailedError: expected:<...><div3>Check</div3><[div4></div4><div1></div1><div2></div2><]/body>> but was:<...><div3>Check</div3><[]/body>>
+Modified: org.jsoup.nodes.Node
+
+Prompt-01 test plan:
+TARGETS: Node.wrap, Node.addChildren(index,Node...), reparentChild, removeChild
+ORACLES: outerHtml output; child ordering/missing children; parent==null after removal
+CASES: moving children among same parent (append); wrap+unwrap preserving text order
+RISKS: no spec on siblingIndex updates; incomplete API list for reparent/reindex internals
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Node (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public abstract class Node implements Cloneable {
+private static final List<Node> EMPTY_NODES = Collections.emptyList();
+@param baseUri base URI
+@param attributes attributes (not null, but may be empty)
+protected Node(String baseUri, Attributes attributes) {
+protected Node(String baseUri) {
+protected Node() {
+@return node name
+public abstract String nodeName();
+public String attr(String attributeKey) {
+public Attributes attributes() {
+public Node attr(String attributeKey, String attributeValue) {
+public boolean hasAttr(String attributeKey) {
+public Node removeAttr(String attributeKey) {
+@return base URI
+public String baseUri() {
+@param baseUri base URI to set
+public void setBaseUri(final String baseUri) {
+public void head(Node node, int depth) {
+public void tail(Node node, int depth) {
+public String absUrl(String attributeKey) {
+@param index index of child node
+@return the child node at this index. Throws a {@code IndexOutOfBoundsException} if the index is out of bounds.
+public Node childNode(int index) {
+@return list of children. If no children, returns an empty list.
+public List<Node> childNodes() {
+public List<Node> childNodesCopy() {
+public final int childNodeSize() {
+protected Node[] childNodesAsArray() {
+@return parent node; or null if no parent.
+public Node parent() {
+public final Node parentNode() {
+public Document ownerDocument() {
+public void remove() {
+public Node before(String html) {
+public Node before(Node node) {
+public Node after(String html) {
+public Node after(Node node) {
+private void addSiblingHtml(int index, String html) {
+@param html HTML to wrap around this element, e.g. {@code <div class="head"></div>}. Can be arbitrarily deep.
+@return this node, for chaining.
+public Node wrap(String html) {
+public Node unwrap() {
+private Element getDeepChild(Element el) {
+public void replaceWith(Node in) {
+protected void setParentNode(Node parentNode) {
+protected void replaceChild(Node out, Node in) {
+protected void removeChild(Node out) {
+protected void addChildren(Node... children) {
+protected void addChildren(int index, Node... children) {
+protected void ensureChildNodes() {
+protected void reparentChild(Node child) {
+private void reindexChildren(int start) {
+@return node siblings. If the node has no parent, returns an empty list.
+public List<Node> siblingNodes() {
+@return next sibling, or null if this is the last sibling
+public Node nextSibling() {
+@return the previous sibling, or null if this is the first sibling
+public Node previousSibling() {
+public int siblingIndex() {
+protected void setSiblingIndex(int siblingIndex) {
+public Node traverse(NodeVisitor nodeVisitor) {
+@return HTML
+public String outerHtml() {
+protected void outerHtml(StringBuilder accum) {
+@param accum accumulator to place HTML into
+abstract void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out);
+abstract void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out);
+@Override
+public String toString() {
+protected void indent(StringBuilder accum, int depth, Document.OutputSettings out) {
+public boolean equals(Object o) {
+public int hashCode() {
+public Node clone() {
+protected Node doClone(Node parent) {
+private static class OuterHtmlVisitor implements NodeVisitor {
+
+/* HEADER */
+package org.jsoup.nodes;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.parser.Parser;
+import org.jsoup.select.NodeTraversor;
+import org.jsoup.select.NodeVisitor;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+
+/* METHOD Node */
+protected Node(String baseUri, Attributes attributes) {
+ Validate.notNull(baseUri);
+ Validate.notNull(attributes);
+ 
+ childNodes = EMPTY_NODES;
+ this.baseUri = baseUri.trim();
+ this.attributes = attributes;
+ }
+
+/* METHOD Node */
+protected Node(String baseUri) {
+ this(baseUri, new Attributes());
+ }
+
+/* METHOD Node */
+protected Node() {
+ childNodes = EMPTY_NODES;
+ attributes = null;
+ }
+
+/* METHOD node */
+include this node (a node is not a sibling of itself).
+ @return node siblings. If the node has no parent, returns an empty list.
+ */
+ public List<Node> siblingNodes() {
+ if (parentNode == null)
+ return Collections.emptyList();
+
+ List<Node> nodes = parentNode.childNodes;
+ List<Node> siblings = new ArrayList<Node>(nodes.size() - 1);
+ for (Node node: nodes)
+ if (node != this)
+ siblings.add(node);
+ return siblings;
+ }
+
+/* METHOD doClone */
+protected Node doClone(Node parent) {
+ Node clone;
+
+ try {
+ clone = (Node) super.clone();
+ } catch (CloneNotSupportedException e) {
+ throw new RuntimeException(e);
+ }
+
+ clone.parentNode = parent; // can be null, to create an orphan split
+ clone.siblingIndex = parent == null ? 0 : siblingIndex;
+ clone.attributes = attributes != null ? attributes.clone() : null;
+ clone.baseUri = baseUri;
+ clone.childNodes = new ArrayList<Node>(childNodes.size());
+
+ for (Node child: childNodes)
+ clone.childNodes.add(child);
+
+ return clone;
+ }
+
+/* METHOD absUrl */
+public String absUrl(String attributeKey) {
+ Validate.notEmpty(attributeKey);
+
+ if (!hasAttr(attributeKey)) {
+ return ""; // nothing to make absolute with
+ } else {
+ return StringUtil.resolve(baseUri, attr(attributeKey));
+ }
+ }
+
+/* METHOD wrap */
+public Node wrap(String html) {
+ Validate.notEmpty(html);
+
+ Element context = parent() instanceof Element ? (Element) parent() : null;
+ List<Node> wrapChildren = Parser.parseFragment(html, context, baseUri());
+ Node wrapNode = wrapChildren.get(0);
+ if (wrapNode == null || !(wrapNode instanceof Element)) // nothing to wrap with; noop
+ return null;
+
+ Element wrap = (Element) wrapNode;
+ Element deepest = getDeepChild(wrap);
+ parentNode.replaceChild(this, wrap);
+ deepest.addChildren(this);
+
+ // remainder (unbalanced wrap, like <div></div><p></p> -- The <p> is remainder
+ if (wrapChildren.size() > 0) {
+ for (int i = 0; i < wrapChildren.size(); i++) {
+ Node remainder = wrapChildren.get(i);
+ remainder.parentNode.removeChild(remainder);
+ wrap.appendChild(remainder);
+ }
+ }
+ return this;
+ }
+
+/* METHOD nextSibling */
+public Node nextSibling() {
+ if (parentNode == null)
+ return null; // root
+ 
+ final List<Node> siblings = parentNode.childNodes;
+ final int index = siblingIndex+1;
+ if (siblings.size() > index)
+ return siblings.get(index);
+ else
+ return null;
+ }
+
+/* METHOD attr */
+public String attr(String attributeKey) {
+ Validate.notNull(attributeKey);
+
+ if (attributes.hasKey(attributeKey))
+ return attributes.get(attributeKey);
+ else if (attributeKey.toLowerCase().startsWith("abs:"))
+ return absUrl(attributeKey.substring("abs:".length()));
+ else return "";
+ }
+
+/* METHOD hasAttr */
+public boolean hasAttr(String attributeKey) {
+ Validate.notNull(attributeKey);
+
+ if (attributeKey.startsWith("abs:")) {
+ String key = attributeKey.substring("abs:".length());
+ if (attributes.hasKey(key) && !absUrl(key).equals(""))
+ return true;
+ }
+ return attributes.hasKey(attributeKey);
+ }
+
+/* METHOD removeAttr */
+public Node removeAttr(String attributeKey) {
+ Validate.notNull(attributeKey);
+ attributes.remove(attributeKey);
+ return this;
+ }
+
+/* METHOD setBaseUri */
+public void setBaseUri(final String baseUri) {
+ Validate.notNull(baseUri);
+
+ traverse(new NodeVisitor() {
+ public void head(Node node, int depth) {
+ node.baseUri = baseUri;
+ }
+
+ public void tail(Node node, int depth) {
+ }
+ });
+ }
+
+/* METHOD childNodes */
+public List<Node> childNodes() {
+ return Collections.unmodifiableList(childNodes);
+ }
+
+/* METHOD childNodesCopy */
+public List<Node> childNodesCopy() {
+ List<Node> children = new ArrayList<Node>(childNodes.size());
+ for (Node node : childNodes) {
+ children.add(node.clone());
+ }
+ return children;
+ }
+
+/* METHOD unwrap */
+public Node unwrap() {
+ Validate.notNull(parentNode);
+
+ Node firstChild = childNodes.size() > 0 ? childNodes.get(0) : null;
+ parentNode.addChildren(siblingIndex, this.childNodesAsArray());
+ this.remove();
+
+ return firstChild;
+ }
+
+/* METHOD replaceChild */
+protected void replaceChild(Node out, Node in) {
+ Validate.isTrue(out.parentNode == this);
+ Validate.notNull(in);
+ if (in.parentNode != null)
+ in.parentNode.removeChild(in);
+ 
+ final int index = out.siblingIndex;
+ childNodes.set(index, in);
+ in.parentNode = this;
+ in.setSiblingIndex(index);
+ out.parentNode = null;
+ }
+
+/* METHOD removeChild */
+protected void removeChild(Node out) {
+ Validate.isTrue(out.parentNode == this);
+ final int index = out.siblingIndex;
+ childNodes.remove(index);
+ reindexChildren(index);
+ out.parentNode = null;
+ }
+
+/* METHOD addChildren */
+protected void addChildren(int index, Node... children) {
+ Validate.noNullElements(children);
+ ensureChildNodes();
+ for (int i = children.length - 1; i >= 0; i--) {
+ Node in = children[i];
+ reparentChild(in);
+ childNodes.add(index, in);
+ }
+ reindexChildren(index);
+ }
+
+/* METHOD ensureChildNodes */
+protected void ensureChildNodes() {
+ if (childNodes == EMPTY_NODES) {
+ childNodes = new ArrayList<Node>(4);
+ }
+ }
+
+/* METHOD previousSibling */
+public Node previousSibling() {
+ if (parentNode == null)
+ return null; // root
+
+ if (siblingIndex > 0)
+ return parentNode.childNodes.get(siblingIndex-1);
+ else
+ return null;
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object o) {
+ if (this == o) return true;
+ if (o == null || getClass() != o.getClass()) return false;
+
+ Node node = (Node) o;
+
+ if (childNodes != null ? !childNodes.equals(node.childNodes) : node.childNodes != null) return false;
+ return !(attributes != null ? !attributes.equals(node.attributes) : node.attributes != null);
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ int result = childNodes != null ? childNodes.hashCode() : 0;
+ result = 31 * result + (attributes != null ? attributes.hashCode() : 0);
+ return result;
+ }
+
+/* METHOD clone */
+@Override
+ public Node clone() {
+ Node thisClone = doClone(null); // splits for orphan
+
+ // Queue up nodes that need their children cloned (BFS).
+ LinkedList<Node> nodesToProcess = new LinkedList<Node>();
+ nodesToProcess.add(thisClone);
+
+ while (!nodesToProcess.isEmpty()) {
+ Node currParent = nodesToProcess.remove();
+
+ for (int i = 0; i < currParent.childNodes.size(); i++) {
+ Node childClone = currParent.childNodes.get(i).doClone(currParent);
+ currParent.childNodes.set(i, childClone);
+ nodesToProcess.add(childClone);
+ }
+ }
+
+ return thisClone;
+ }
+
+/* METHOD attr */
+public Node attr(String attributeKey, String attributeValue) {
+ attributes.put(attributeKey, attributeValue);
+ return this;
+ }
+
+/* METHOD traverse */
+traverse(new NodeVisitor() {
+ public void head(Node node, int depth) {
+ node.baseUri = baseUri;
+ }
+
+ public void tail(Node node, int depth) {
+ }
+ }
+
+/* METHOD head */
+public void head(Node node, int depth) {
+ node.baseUri = baseUri;
+ }
+
+/* METHOD childNode */
+public Node childNode(int index) {
+ return childNodes.get(index);
+ }
+
+/* METHOD childNodeSize */
+public final int childNodeSize() {
+ return childNodes.size();
+ }
+
+/* METHOD childNodesAsArray */
+protected Node[] childNodesAsArray() {
+ return childNodes.toArray(new Node[childNodeSize()]);
+ }
+
+/* METHOD remove */
+public void remove() {
+ Validate.notNull(parentNode);
+ parentNode.removeChild(this);
+ }
+
+/* METHOD before */
+public Node before(Node node) {
+ Validate.notNull(node);
+ Validate.notNull(parentNode);
+
+ parentNode.addChildren(siblingIndex, node);
+ return this;
+ }
+
+/* METHOD after */
+public Node after(Node node) {
+ Validate.notNull(node);
+ Validate.notNull(parentNode);
+
+ parentNode.addChildren(siblingIndex + 1, node);
+ return this;
+ }

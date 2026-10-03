@@ -1,0 +1,294 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 19  Version: JxPath-19b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: JXPATH-125
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.AliasedNamespaceIterationTest::testIterateJDOM
+ --> junit.framework.AssertionFailedError: Evaluating pointer iterator </a:doc/a:elem> expected:<[/a:doc[1]/a:elem[1], /a:doc[1]/a:elem[2]]> but was:<[/a:doc[1]/a:elem[1], /a:doc[1]/a:elem[1]]>
+ - org.apache.commons.jxpath.ri.model.AliasedNamespaceIterationTest::testIterateDOM
+ --> junit.framework.AssertionFailedError: Evaluating pointer iterator </a:doc/a:elem> expected:<[/a:doc[1]/a:elem[1], /a:doc[1]/a:elem[2]]> but was:<[/a:doc[1]/a:elem[1], /a:doc[1]/a:elem[1]]>
+Modified: org.apache.commons.jxpath.ri.model.dom.DOMNodePointer, org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.model.dom.DOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.dom;
+public class DOMNodePointer extends NodePointer {
+public DOMNodePointer(Node node, Locale locale) {
+public DOMNodePointer(Node node, Locale locale, String id) {
+public DOMNodePointer(NodePointer parent, Node node) {
+public boolean testNode(NodeTest test) {
+public static boolean testNode(Node node, NodeTest test) {
+private static boolean equalStrings(String s1, String s2) {
+public QName getName() {
+public String getNamespaceURI() {
+public NodeIterator attributeIterator(QName name) {
+public NodePointer namespacePointer(String prefix) {
+public NodeIterator namespaceIterator() {
+public synchronized NamespaceResolver getNamespaceResolver() {
+public String getNamespaceURI(String prefix) {
+public String getDefaultNamespaceURI() {
+public Object getBaseValue() {
+public Object getImme
+...[truncated deterministically]...
+te int getRelativePositionOfTextNode() {
+private int getRelativePositionOfPI() {
+public int hashCode() {
+public boolean equals(Object object) {
+public static String getPrefix(Node node) {
+public static String getLocalName(Node node) {
+public static String getNamespaceURI(Node node) {
+public Object getValue() {
+private String stringValue(Node node) {
+public Pointer getPointerByID(JXPathContext context, String id) {
+
+[org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.jdom;
+public class JDOMNodePointer extends NodePointer {
+public JDOMNodePointer(Object node, Locale locale) {
+public JDOMNodePointer(Object node, Locale locale, String id) {
+public JDOMNodePointer(NodePoint
+...[truncated deterministically]...
+{
+private static String getNamespaceURI(Object node) {
+public synchronized NamespaceResolver getNamespaceResolver() {
+public String getNamespaceURI(String prefix) {
+public Object getBaseValue() {
+public boolean isCollection() {
+public int getLength() {
+public boolean isLeaf() {
+public QName getName() {
+public Object getImmediateNode() {
+public Object getValue() {
+public void s
+...[truncated deterministically]...
+space ns) {
+private static Element nodeParent(Object node) {
+public NodePointer createAttribute(JXPathContext context, QName name) {
+public void remove() {
+public String asPath() {
+private int getRelativePositionByQName() {
+private int getRelativePositionOfElement() {
+private int getRelativePositionOfTextNode() {
+private int getRelativePositionOfPI() {
+public int hashCode() {
+public boolean equals(Object object) {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model;
+
+ import java.io.ByteArrayInputStream;
+ import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Locale;
+
+ import javax.xml.parsers.DocumentBuilder;
+ import javax.xml.parsers.DocumentBuilderFactory;
+
+ import junit.framework.TestCase;
+
+ import org.apache.commons.jxpath.JXPathContext;
+ import org.apache.commons.jxpath.Pointer;
+ import org.apache.commons.jxpath.ri.model.dom.DOMNodePointer;
+ import org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer;
+ import org.jdom.input.SAXBuilder;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.Element;
+ import org.w3c.dom.Node;
+ import org.w3c.dom.NodeList;
+
+ /**
+  * Tests for aliased namespace iteration bug JXPATH-125.
+  */
+ public class AliasedNamespaceIterationTest extends TestCase {
+
+     private static final String NS_URI = "http://example.com/a";
+     private static final String PREFIX = "a";
+
+     // --- DOM tests ---
+
+     public void testIterateDOM_TwoElements() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/><a:elem/></a:doc>";
+         Document doc = parseDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem")';
+         List paths = collectPaths(it);
+         assertEquals(2, paths.size());
+         assertEquals("/a:doc[1]/a:elem[1]", paths.get(0));
+         assertEquals("/a:doc[1]/a:elem[2]", paths.get(1));
+     }
+
+     public void testIterateDOM_SingleElement() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/></a:doc>";
+         Document doc = parseDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem");
+         List paths = collectPaths(it);
+         assertEquals(1, paths.size());
+         assertEquals("/a:doc[1]/a:elem[1]", paths.get(0));
+     }
+
+     public void testIterateDOM_NoElements() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'/>";
+         Document doc = parseDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem");
+         assertFalse(it.hasNext());
+     }
+
+     public void testIterateDOM_DeeplyNested() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'>"
+                    + "  <a:child>"
+                    + "    <a:elem/>"
+                    + "    <a:elem/>"
+                    + "  </a:child>"
+                    + "</a:doc>";
+         Document doc = parseDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:child/a:elem");
+         List paths = collectPaths(it);
+         assertEquals(2, paths.size());
+         assertEquals("/a:doc[1]/a:child[1]/a:elem[1]", paths.get(0));
+         assertEquals("/a:doc[1]/a:child[1]/a:elem[2]", paths.get(1));
+     }
+
+     public void testIterateDOM_ThreeElements() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/><a:elem/><a:elem/></a:doc>";
+         Document doc = parseDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem")';
+         List paths = collectPaths(it);
+         assertEquals(3, paths.size());
+         assertEquals("/a:doc[1]/a:elem[1]", paths.get(0));
+         assertEquals("/a:doc[1]/a:elem[2]", paths.get(1));
+         assertEquals("/a:doc[1]/a:elem[3]", paths.get(2));
+     }
+
+     public void testIterateDOM_MixedSiblings() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'>"
+                    + "  <a:elem/>"
+                    + "  <b:other xmlns:b='http://other.com'/>"
+                    + "  <a:elem/>"
+                    + "</a:doc>";"
+         Document doc = parseDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem")';
+         List paths = collectPaths(it);
+         assertEquals(2, paths.size());
+         assertEquals("/a:doc[1]/a:elem[1]", paths.get(0));
+         assertEquals("/a:doc[1]/a:elem[2]", paths.get(1));
+     }
+
+     // --- JDOM tests ---
+
+     public void testIterateJDOM_TwoElements() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/><a:elem/></a:doc>";
+         org.jdom.Document doc = parseJDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem")';
+         List paths = collectPaths(it);
+         assertEquals(2, paths.size());
+         assertEquals("/a:doc[1]/a:elem[1]", paths.get(0));
+         assertEquals("/a:doc[1]/a:elem[2]", paths.get(1));
+     }
+
+     public void testIterateJDOM_SingleElement() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/></a:doc>";
+         org.jdom.Document doc = parseJDOM(xml);
+         JXPathContext ctx = JXPathContext.newContext(doc);
+         ctx.registerNamespace(PREFIX, NS_URI);
+         Iterator it = ctx.iteratePointers("/a:elem")';
+         List paths = collectPaths(it);
+         assertEquals(1, paths.size());
+         assertEquals("/a:doc[1]/a:elem[1]", paths.get(0));
+     }
+
+     // --- Direct asPath tests (without JXPathContext) targeting getRelativePositionByQName ---
+
+     public void testAsPathForChildren_RelativePosition_DOM() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/><a:elem/></a:doc>";
+         Document doc = parseDOM(xml);
+         Element root = doc.getDocumentElement();
+         DOMNodePointer rootPtr = new DOMNodePointer(root, Locale.getDefault());
+
+         NodeList elems = root.getElementsByTagNameNS(NS_URI, "elem");
+         assertEquals(2, elems.getLength());
+
+         DOMNodePointer child1 = new DOMNodePointer(rootPtr, elems.item(0));
+         DOMNodePointer child2 = new DOMNodePointer(rootPtr, elems.item(1));
+
+         assertEquals("/a:doc[1]/a:elem[1]", child1.asPath());
+         assertEquals("/a:doc[1]/a:elem[2]", child2.asPath());
+     }
+
+     public void testAsPathForChildren_RelativePosition_JDOM() throws Exception {
+         String xml = "<a:doc xmlns:a='" + NS_URI + "'><a:elem/><a:elem/></a:doc>";
+         org.jdom.Document doc = parseJDOM(xml);
+         org.jdom.Element root = doc.getRootElement();
+         JDOMNodePointer rootPtr = new JDOMNodePointer(root, Locale.getDefault());
+
+         java.util.List children = root.getChildren();
+         assertEquals(2, children.size());
+
+         Object child1 = children.get(0);
+         Object child2 = children.get(1);
+
+         JDOMNodePointer ptr1 = new JDOMNodePointer(rootPtr, child1);
+         JDOMNodePointer ptr2 = new JDOMNodePointer(rootPtr, child2);
+
+         assertEquals("/a:doc[1]/a:elem[1]", ptr1.asPath());
+         assertEquals("/a:doc[1]/a:elem[2]", ptr2.asPath());
+     }
+
+     // --- helpers ---
+
+     private Document parseDOM(String xml) throws Exception {
+         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+         factory.setNamespaceAware(true);
+         DocumentBuilder builder = factory.newDocumentBuilder();
+         return builder.parse(new ByteArrayInputStream(xml.getBytes("UTF-8")));
+     }
+
+     private org.jdom.Document parseJDOM(String xml) throws Exception {
+         SAXBuilder builder = new SAXBuilder();
+         return builder.build(new ByteArrayInputStream(xml.getBytes("UTF-8")));
+     }
+
+     private List collectPaths(Iterator it) {
+         List paths = new ArrayList();
+         while (it.hasNext()) {
+             Pointer pointer = (Pointer) it.next();
+             paths.add(pointer.asPath());
+         }
+         return paths;
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JxPath-19f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JxPath-19f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JxPath-19f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JxPath-19f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JxPath-19f-copilot/.test_suite/org/apache/commons/jxpath/ri/model/AliasedNamespaceIterationTest.java:39: error: unclosed character literal
+ [javac] Iterator it = ctx.iteratePointers("/a:elem")';
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 13 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

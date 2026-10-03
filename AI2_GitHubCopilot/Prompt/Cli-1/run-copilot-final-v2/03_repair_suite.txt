@@ -1,0 +1,227 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 1  Version: Cli-1b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: CLI-13
+Trigger failures:
+- org.apache.commons.cli.bug.BugCLI13Test::testCLI13
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.cli.CommandLine
+
+Available API/signatures:
+[org.apache.commons.cli.CommandLine | java]
+package org.apache.commons.cli;
+public class CommandLine {
+private List args = new LinkedList();
+private Map options = new HashMap();
+private Map names = new HashMap();
+private Map hashcodeMap = new HashMap();
+public boolean hasOption(String opt)
+public boolean hasOption(char opt)
+public Object getOptionObject(String opt)
+public Object getOptionObject(char opt)
+public String getOptionValue(String opt)
+public String getOptionValue(char opt)
+public String[] getOptionValues(String opt)
+public String[] getOptionValues(char opt)
+public String getOptionValue(String opt, String defaultValue)
+public String getOptionValue(char opt, String defaultValue)
+public String[] getArgs()
+public List getArgList()
+public String toString() {
+public Iterator iterator()
+public Option[] getOptions()
+
+Generated JUnit Test:
+package org.apache.commons.cli.bug;
+
+import java.lang.reflect.Method;
+import junit.framework.TestCase;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.Option;
+
+/**
+
+ - Tests for {@link CommandLine} covering the public API and exercising
+ - the bug related to CLI-13: getOptionValue may return incorrect values
+ - for options that are set with arguments, especially for long options
+ - and the default-value fallback.
+  */
+ public class BugCLI13Test extends TestCase {
+  private CommandLine cmd;
+  private Option optA;   // short, with argument
+  private Option optB;   // short, no argument (flag)
+  private Option optC;   // short + long, with argument
+  private Option optD;   // long only, with argument
+  protected void setUp() throws Exception {
+  // Create Option objects representing different configurations
+  optA = new Option("a", true, "option a");
+  optA.addValue("valueA");
+  optB = new Option("b", false, "option b");
+  optC = new Option("c", "long-c", true, "option c");
+  optC.addValue("valueC");
+  optD = new Option((String) null, "long-d", true, "option d");
+  optD.addValue("valueD");
+  // Build a CommandLine via reflection to avoid relying on the parser
+  cmd = newCommandLine();
+  // Add options using the package-private addOption method
+  addOption(cmd, optA);
+  addOption(cmd, optB);
+  addOption(cmd, optC);
+  addOption(cmd, optD);
+  }
+  // ---- hasOption -----------------------------------------------------------
+  public void testHasOption() {
+  assertTrue(cmd.hasOption("a"));
+  assertTrue(cmd.hasOption('a'));
+  assertTrue(cmd.hasOption("b"));
+  assertTrue(cmd.hasOption("long-c"));
+  assertTrue(cmd.hasOption("long-d"));
+  assertFalse(cmd.hasOption("z"));
+  assertFalse(cmd.hasOption('z'));
+  assertFalse(cmd.hasOption(""));
+  }
+  // ---- getOptionValue (String) --------------------------------------------
+  public void testGetOptionValueAbsent() {
+  // absent option returns null
+  assertNull(cmd.getOptionValue("z"));
+  }
+  public void testGetOptionValuePresentWithArg() {
+  // option with argument returns the argument
+  assertEquals("valueA", cmd.getOptionValue("a"));
+  }
+  public void testGetOptionValuePresentNoArg() {
+  // option present but no argument returns null
+  assertNull(cmd.getOptionValue("b"));
+  }
+  public void testLongOptionValue() {
+  // long-only option with argument
+  assertEquals("valueD", cmd.getOptionValue("long-d"));
+  // also test the char variant on a long-only option (should work if we use the string version)
+  // char variant delegates to String version, so char->String conversion
+  }
+  public void testGetOptionValueChar() {
+  assertEquals("valueA", cmd.getOptionValue('a'));
+  assertNull(cmd.getOptionValue('b'));
+  assertNull(cmd.getOptionValue('z'));
+  }
+  public void testGetOptionValueWithDefault() {
+  // option absent -> default
+  assertEquals("default", cmd.getOptionValue("z", "default"));
+  // option present with arg -> actual value, not default
+  assertEquals("valueA", cmd.getOptionValue("a", "default"));
+  // option present no arg -> according to contract: if option is set and has no argument,
+  // it returns defaultValue (because specification says "otherwise defaultValue").
+  assertEquals("default", cmd.getOptionValue("b", "default"));
+  }
+  // ---- getOptionValues ----------------------------------------------------
+  public void testGetOptionValuesAbsent() {
+  assertNull(cmd.getOptionValues("z"));
+  }
+  public void testGetOptionValuesPresent() {
+  String[] values = cmd.getOptionValues("a");
+  assertNotNull(values);
+  assertEquals(1, values.length);
+  assertEquals("valueA", values[0]);
+  }
+  // ---- getOptionObject ----------------------------------------------------
+  public void testGetOptionObjectAbsent() {
+  assertNull(cmd.getOptionObject("z"));
+  }
+  public void testGetOptionObjectPresent() {
+  // Need a type for the value. Use String.class.
+  optA.setType(String.class);
+  // The Option was already added to cmd, so we need to update it in the map?
+  // Remove and re-add to ensure the updated Option is used.
+  cmd.getOptions(); // no-op
+  // Instead, we can create a new CommandLine with the typed option to avoid mutation issues.
+  // However, to test getOptionObject, we need the option in the map with the type set.
+  // We'll build a fresh test here.
+  try {
+      CommandLine localCmd = newCommandLine();
+      Option typedOpt = new Option("x", true, "typed option");
+      typedOpt.addValue("typedValue");
+      typedOpt.setType(String.class);
+      addOption(localCmd, typedOpt);
+      // getOptionObject should return the value casted (String)
+      Object obj = localCmd.getOptionObject("x");
+      assertNotNull(obj);
+      assertEquals("typedValue", obj);
+  } catch (Exception e) {
+      fail("Reflection error: " + e.getMessage());
+  }
+  }
+  // ---- getArgs / getArgList ------------------------------------------------
+  public void testGetArgsEmpty() {
+  assertEquals(0, cmd.getArgs().length);
+  assertTrue(cmd.getArgList().isEmpty());
+  }
+  // ---- iterator / getOptions ----------------------------------------------
+  public void testGetOptions() {
+  Option[] opts = cmd.getOptions();
+  assertEquals(4, opts.length);
+  }
+  public void testIterator() {
+  int count = 0;
+  java.util.Iterator it = cmd.iterator();
+  while (it.hasNext()) {
+      it.next();
+      count++;
+  }
+  assertEquals(4, count);
+  }
+  // ---- edge cases ---------------------------------------------------------
+  public void testNullAndEmptyOpt() {
+  try {
+      cmd.getOptionValue((String) null);
+      // should not throw NPE; if it returns null it is acceptable.
+      // The implementation may throw NPE; we can tolerate either.
+  } catch (NullPointerException expected) {
+      // acceptable
+  }
+  assertNull(cmd.hasOption("") ? null : null);
+  // empty string: hasOption should return false
+  assertFalse(cmd.hasOption(""));
+  assertNull(cmd.getOptionValue(""));
+  }
+  // ---- helpers ------------------------------------------------------------
+  private CommandLine newCommandLine() throws Exception {
+  // Use reflection to instantiate because constructor is package-private
+  Class clazz = CommandLine.class;
+  java.lang.reflect.Constructor ctor = clazz.getDeclaredConstructor(new Class[0]);
+  ctor.setAccessible(true);
+  return (CommandLine) ctor.newInstance(new Object[0]);
+  }
+  private void addOption(CommandLine commandLine, Option option) throws Exception {
+  Method addOption = CommandLine.class.getDeclaredMethod("addOption", Option.class);
+  addOption.setAccessible(true);
+  addOption.invoke(commandLine, option);
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-1f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-1f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Cli-1f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [get] To: /root/sqa-workspaces/Cli-1f-copilot/target/lib/junit/jars/junit-3.8.1.jar
+ [get] Error getting file:/root/defects4j/framework/projects/lib/junit-4.12.jar to /root/sqa-workspaces/Cli-1f-copilot/target/lib/junit/jars/junit-3.8.1.jar
+get-dep-junit.jar:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-1f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-1f-copilot/.test_suite/org/apache/commons/cli/bug/BugCLI13Test.java:24: error: addValue(String) is not public in Option; cannot be accessed from outside package
+ [javac] optA.addValue("valueA");
+ [javac] ^
+ [javac] Note: /root/sqa-workspaces/Cli-1f-copilot/.test_suite/org/apache/commons/cli/bug/BugCLI13Test.java uses unchecked or unsafe operations.
+ [javac] Note: Recompile with -Xlint:unchecked for details.
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

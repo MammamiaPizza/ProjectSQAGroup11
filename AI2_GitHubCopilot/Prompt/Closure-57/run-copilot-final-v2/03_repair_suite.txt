@@ -1,0 +1,156 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 57  Version: Closure-57b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 530
+Trigger failures:
+- com.google.javascript.jscomp.ClosureCodingConventionTest::testRequire
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: foo
+Modified: com.google.javascript.jscomp.ClosureCodingConvention
+
+Available API/signatures:
+[com.google.javascript.jscomp.ClosureCodingConvention | java]
+package com.google.javascript.jscomp;
+public class ClosureCodingConvention extends DefaultCodingConvention {
+@Override
+public SubclassRelationship getClassesDefinedByCall(Node callNode) {
+private SubclassType typeofClassDefiningName(Node callName) {
+public boolean isSuperClassReference(String propertyName) {
+private boolean endsWithPrototype(Node qualifiedName) {
+public String extractClassNameIfProvide(Node node, Node parent){
+public String extractClassNameIfRequire(Node node, Node parent){
+public String getExportPropertyFunction() {
+public String getExportSymbolFunction() {
+public List<String> identifyTypeDeclarationCall(Node n) {
+public String getAbstractMethodName() {
+public String getSingletonGetterClassName(Node callNode) {
+public String getGlobalObject() {
+public boolean isPropertyTestFunction(Node call) {
+public boolean isOptionalParameter(Node parameter) {
+public boolean isVarArgsParameter(Node parameter) {
+public boolean isPrivate(String name) {
+public Collection<AssertionFunctionSpec> getAssertionFunctions() {
+public Bind describeFunctionBind(Node n) {
+private Node safeNext(Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.javascript.rhino.Node;
+ import com.google.javascript.rhino.Token;
+ import junit.framework.TestCase;
+
+ public class ClosureCodingConventionTest extends TestCase {
+
+     private final ClosureCodingConvention convention = new ClosureCodingConvention();
+
+     public void testGoogRequireValidStringArgument() {
+         assertEquals("a.B", extractRequire("goog.require", "a.B", Token.STRING));
+     }
+
+     public void testGoogProvideCalledViaRequire() {
+         assertNull(extractRequire("goog.provide", "a.B", Token.STRING));
+     }
+
+     public void testUnqualifiedRequire() {
+         assertNull(extractRequire("require", "foo", Token.STRING));
+     }
+
+     public void testDifferentNamespaceRequire() {
+         assertNull(extractRequire("x.y.require", "foo", Token.STRING));
+     }
+
+     public void testGoogRequireNoArguments() {
+         Node callee = createGetProp("goog", "require");
+         Node call = new Node(Token.CALL);
+         call.addChildToBack(callee);
+         Node expr = new Node(Token.EXPR_RESULT);
+         expr.addChildToBack(call);
+         assertNull(convention.extractClassNameIfRequire(call, expr));
+     }
+
+     public void testGoogRequireNonStringArgument() {
+         // Bug 530: extractClassNameIfRequire must return null for non‑string arguments.
+         assertNull(extractRequire("goog.require", "foo", Token.NAME));
+     }
+
+     public void testGoogRequireNullParent() {
+         Node callee = createGetProp("goog", "require");
+         Node call = new Node(Token.CALL);
+         call.addChildToBack(callee);
+         call.addChildToBack(Node.newString(Token.STRING, "a.B"));
+         assertNull(convention.extractClassNameIfRequire(call, null));
+     }
+
+     public void testGoogRequireWithNonExprParent() {
+         Node callee = createGetProp("goog", "require");
+         Node call = new Node(Token.CALL);
+         call.addChildToBack(callee);
+         call.addChildToBack(Node.newString(Token.STRING, "a.B"));
+         Node block = new Node(Token.BLOCK);
+         assertNull(convention.extractClassNameIfRequire(call, block));
+     }
+
+     public void testGoogRequireWithMultipleArguments() {
+         Node callee = createGetProp("goog", "require");
+         Node arg1 = Node.newString(Token.STRING, "a.B");
+         Node arg2 = Node.newString(Token.STRING, "c.D");
+         Node call = new Node(Token.CALL);
+         call.addChildToBack(callee);
+         call.addChildToBack(arg1);
+         call.addChildToBack(arg2);
+         Node expr = new Node(Token.EXPR_RESULT);
+         expr.addChildToBack(call);
+         // First argument is used.
+         assertEquals("a.B", convention.extractClassNameIfRequire(call, expr));
+     }
+
+     public void testGoogRequireWithNullFirstChild() {
+         Node call = new Node(Token.CALL);
+         call.addChildToBack(Node.newString(Token.STRING, "a.B"));
+         Node expr = new Node(Token.EXPR_RESULT);
+         expr.addChildToBack(call);
+         assertNull(convention.extractClassNameIfRequire(call, expr));
+     }
+
+     // -------------------------------------------------------------------------
+     // Helper methods
+     // -------------------------------------------------------------------------
+
+     private String extractRequire(String qualifiedName, String argValue, int argType) {
+         String[] parts = qualifiedName.split("\\.");
+         Node callee;
+         if (parts.length == 2) {
+             callee = createGetProp(parts[0], parts[1]);
+         } else {
+             callee = Node.newString(Token.NAME, parts[0]);
+         }
+         Node arg = Node.newString(argType, argValue);
+         Node call = new Node(Token.CALL);
+         call.addChildToBack(callee);
+         call.addChildToBack(arg);
+         Node expr = new Node(Token.EXPR_RESULT);
+         expr.addChildToBack(call);
+         return convention.extractClassNameIfRequire(call, expr);
+     }
+
+     private Node createGetProp(String objectName, String propertyName) {
+         Node obj = Node.newString(Token.NAME, objectName);
+         Node prop = Node.newString(Token.STRING, propertyName);
+         Node getprop = new Node(Token.GETPROP);
+         getprop.addChildToBack(obj);
+         getprop.addChildToBack(prop);
+         return getprop;
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.google.javascript.jscomp.ClosureCodingConventionTest::testGoogRequireNullParent
+
+Extract test suite......................................................... OK
+Failing generated tests: com.google.javascript.jscomp.ClosureCodingConventionTest::testGoogRequireNullParent

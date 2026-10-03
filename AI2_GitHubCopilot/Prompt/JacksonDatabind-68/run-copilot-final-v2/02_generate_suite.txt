@@ -1,0 +1,339 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 68  Version: JacksonDatabind-68b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.BeanDeserializerBase
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerBase
+Triggers: com.fasterxml.jackson.databind.struct.SingleValueAsArrayTest::testSuccessfulDeserializationOfObjectWithChainedArrayCreators, com.fasterxml.jackson.databind.struct.SingleValueAsArrayTest::testWithSingleString
+
+Bug/specification summary:
+Bug report: 1421
+Trigger failures:
+- com.fasterxml.jackson.databind.struct.SingleValueAsArrayTest::testSuccessfulDeserializationOfObjectWithChainedArrayCreators
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.struct.SingleValueAsArrayTest$Messages: no suitable constructor found, can not deserialize from Object value (missing default constructor or creator, or perhaps need to add/enable type information?)
+ - com.fasterxml.jackson.databind.struct.SingleValueAsArrayTest::testWithSingleString
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.struct.SingleValueAsArrayTest$Bean1421B: no String-argument constructor/factory method to deserialize from String value ('test2')
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerBase
+
+Prompt-01 test plan:
+TARGETS: BeanDeserializerBase.resolve() logic for setting
+_arrayDelegateDeserializer/_delegateDeserializer from @JsonCreator annotations.
+TARGETS: deserializeFromArray(), deserializeFromString() handling when delegate/array-delegate
+exists.
+ORACLES: Jackson spec: DELEGATING mode creator must deserialize from array/string if single arg
+matches.
+CASES: Object with @JsonCreator(DELEGATING) on array-arg ctor; JSON array → verify object created
+without exception.
+CASES: Object with @JsonCreator(DELEGATING) on String-arg ctor; JSON string → verify object created.
+CASES: Empty JSON array with array-arg creator → verify behavior (may succeed with empty list or
+fail).
+CASES: Missing suitable creator for input type → JsonMappingException with "no suitable constructor
+found".
+RISKS: Cannot inspect actual patch; may miss regressions in other creator/delegate precedence
+scenarios.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.BeanDeserializerBase (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser;
+public abstract class BeanDeserializerBase
+protected final static PropertyName TEMP_PROPERTY_NAME = new PropertyName("#temporary-name");
+final protected JavaType _beanType;
+final protected JsonFormat.Shape _serializationShape;
+protected final ValueInstantiator _valueInstantiator;
+protected JsonDeserializer<Object> _delegateDeserializer;
+protected JsonDeserializer<Object> _arrayDelegateDeserializer;
+protected PropertyBasedCreator _propertyBasedCreator;
+protected boolean _nonStandardCreation;
+protected boolean _vanillaProcessing;
+final protected BeanPropertyMap _beanProperties;
+final protected ValueInjector[] _injectables;
+protected SettableAnyProperty _anySetter;
+final protected Set<String> _ignorableProps;
+final protected boolean _ignoreAllUnknown;
+final protected boolean _needViewProcesing;
+final protected Map<String, SettableBeanProperty> _backRefs;
+protected transient HashMap<ClassKey, JsonDeserializer<Object>> _subDeserializers;
+protected UnwrappedPropertyHandler _unwrappedPropertyHandler;
+protected ExternalTypeHandler _externalTypeIdHandler;
+protected final ObjectIdReader _objectIdReader;
+protected BeanDeserializerBase(BeanDeserializerBase src) {
+protected BeanDeserializerBase(BeanDeserializerBase src, boolean ignoreAllUnknown)
+protected BeanDeserializerBase(BeanDeserializerBase src, NameTransformer unwrapper)
+public BeanDeserializerBase(BeanDeserializerBase src, ObjectIdReader oir)
+public BeanDeserializerBase(BeanDeserializerBase src, Set<String> ignorableProps)
+protected BeanDeserializerBase(BeanDeserializerBase src, BeanPropertyMap beanProps)
+@Override
+public abstract JsonDeserializer<Object> unwrappingDeserializer(NameTransformer unwrapper);
+public abstract BeanDeserializerBase withObjectIdReader(ObjectIdReader oir);
+public abstract BeanDeserializerBase withIgnorableProperties(Set<String> ignorableProps);
+public BeanDeserializerBase withBeanProperties(BeanPropertyMap props) {
+protected abstract BeanDeserializerBase asArrayDeserializer();
+public void resolve(DeserializationContext ctxt)
+final AnnotationIntrospector intr = ctxt.getAnnotationIntrospector();
+final AnnotatedMember accessor = (property == null || intr == null)
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) {
+idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+/* Should we encounter a property that has non-static inner-class
+public boolean isCachable() { return true; }
+public Class<?> handledType() {
+public ObjectIdReader getObjectIdReader() {
+public boolean hasProperty(String propertyName) {
+public boolean hasViews() {
+public int getPropertyCount() {
+public
+...[truncated deterministically]...
+rser p, DeserializationContext ctxt) throws IOException
+"abstract type (need to add/enable type information?)");
+@SuppressWarnings("incomplete-switch")
+public Object deserializeFromNumber(JsonParser p, DeserializationContext ctxt)
+public Object deserializeFromString(JsonParser p, DeserializationContext ctxt) throws IOException
+public Object deserializeFromDouble(JsonParser p, DeserializationContext ctxt) throws IOException
+public Object deserializeFromBoolean(JsonParser p, DeserializationContext ctxt) throws IOException
+public Object deserializeFromArray(JsonParser p, DeserializationContext ctxt) throws IOException
+final Object value = deserialize(p, ctxt);
+public Object deserializeFromEmbedded(JsonParser p, DeserializationContext ctxt)
+protected void injectValues(DeserializationContext ctxt, Object bean)
+@SuppressWarnings("resource")
+synchronized (this) {
+public void wrapAndThrow(Throwable t, Object bean, String fieldName, DeserializationContext ctxt)
+@Deprecated // since 2.4, not used by core Jackson; only relevant for arrays/Collections
+public void wrapAndThrow(Throwable t, Object bean, int index, DeserializationContext ctxt) throws IOException {
+private Throwable throwOrReturnThrowable(Throwable t, DeserializationContext ctxt)
+protected Object wrapInstantiationProblem(Throwable t, DeserializationContext ctxt)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser;
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.annotation.ObjectIdResolver;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.JsonParser.NumberType;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.impl.*;
+import com.fasterxml.jackson.databind.deser.std.StdDelegatingDeserializer;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import com.fasterxml.jackson.databind.exc.IgnoredPropertyException;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+import com.fasterxml.jackson.databind.type.ClassKey;
+import com.fasterxml.jackson.databind.util.*;
+
+/* METHOD BeanDeserializerBase */
+protected BeanDeserializerBase(BeanDeserializerBuilder builder,
+ BeanDescription beanDesc,
+ BeanPropertyMap properties, Map<String, SettableBeanProperty> backRefs,
+ Set<String> ignorableProps, boolean ignoreAllUnknown,
+ boolean hasViews)
+ {
+ super(beanDesc.getType());
+
+ AnnotatedClass ac = beanDesc.getClassInfo();
+ _classAnnotations = ac.getAnnotations(); 
+ _beanType = beanDesc.getType();
+ _valueInstantiator = builder.getValueInstantiator();
+ 
+ _beanProperties = properties;
+ _backRefs = backRefs;
+ _ignorableProps = ignorableProps;
+ _ignoreAllUnknown = ignoreAllUnknown;
+
+ _anySetter = builder.getAnySetter();
+ List<ValueInjector> injectables = builder.getInjectables();
+ _injectables = (injectables == null || injectables.isEmpty()) ? null
+ : injectables.toArray(new ValueInjector[injectables.size()]);
+ _objectIdReader = builder.getObjectIdReader();
+ _nonStandardCreation = (_unwrappedPropertyHandler != null)
+ || _valueInstantiator.canCreateUsingDelegate()
+ || _valueInstantiator.canCreateUsingArrayDelegate() // new in 2.7
+ || _valueInstantiator.canCreateFromObjectWith()
+ || !_valueInstantiator.canCreateUsingDefault()
+ ;
+
+ // Any transformation we may need to apply?
+ JsonFormat.Value format = beanDesc.findExpectedFormat(null);
+ _serializationShape = (format == null) ? null : format.getShape();
+
+ _needViewProcesing = hasViews;
+ _vanillaProcessing = !_nonStandardCreation
+ && (_injectables == null)
+ && !_needViewProcesing
+ // also, may need to reorder stuff if we expect Object Id:
+ && (_objectIdReader == null)
+ ;
+ }
+
+/* METHOD BeanDeserializerBase */
+public BeanDeserializerBase(BeanDeserializerBase src, Set<String> ignorableProps)
+ {
+ super(src._beanType);
+ 
+ _classAnnotations = src._classAnnotations;
+ _beanType = src._beanType;
+ 
+ _valueInstantiator = src._valueInstantiator;
+ _delegateDeserializer = src._delegateDeserializer;
+ _propertyBasedCreator = src._propertyBasedCreator;
+ 
+ _backRefs = src._backRefs;
+ _ignorableProps = ignorableProps;
+ _ignoreAllUnknown = src._ignoreAllUnknown;
+ _anySetter = src._anySetter;
+ _injectables = src._injectables;
+ 
+ _nonStandardCreation = src._nonStandardCreation;
+ _unwrappedPropertyHandler = src._unwrappedPropertyHandler;
+ _needViewProcesing = src._needViewProcesing;
+ _serializationShape = src._serializationShape;
+
+ _vanillaProcessing = src._vanillaProcessing;
+ _objectIdReader = src._objectIdReader;
+
+ // 01-May-2016, tatu: [databind#1217]: Remove properties from mapping,
+ // to avoid them being deserialized
+ _beanProperties = src._beanProperties.withoutProperties(ignorableProps);
+ }
+
+/* METHOD deserializeFromObjectUsingNonDefault */
+protected Object deserializeFromObjectUsingNonDefault(JsonParser p,
+ De
+...[truncated deterministically]...
+.deserialize(p, ctxt));
+ }
+ if (_propertyBasedCreator != null) {
+ return _deserializeUsingPropertyBased(p, ctxt);
+ }
+ // should only occur for abstract types...
+ if (_beanType.isAbstract()) {
+ return ctxt.handleMissingInstantiator(handledType(), p,
+ "abstract type (need to add/enable type information?)");
+ }
+ return ctxt.handleMissingInstantiator(_beanType.getRawClass(), p,
+ "no suitable constructor found, can not deserialize from Object value (missing default constructor or creator, or perhaps need to add/enable type information?)");
+ }
+
+/* METHOD BeanDeserializerBase */
+protected BeanDeserializerBase(BeanDeserializerBase src, boolean ignoreAllUnknown)
+ {
+ super(src._beanType);
+ 
+ _classAnnotations = src._classAnnotations;
+ _beanType = src._beanType;
+ 
+ _valueInstantiator = src._valueInstantiator;
+ _delegateDeserializer = src._delegateDeserializer;
+ _propertyBasedCreator = src._propertyBasedCreator;
+ 
+ _beanProperties = src._beanProperties;
+ _backRefs = src._backRefs;
+ _ignorableProps = src._ignorableProps;
+ _ignoreAllUnknown = ignoreAllUnknown;
+ _anySetter = src._anySetter;
+ _injectables = src._injectables;
+ _objectIdReader = src._objectIdReader;
+ 
+ _nonStandardCreation = src._nonStandardCreation;
+ _unwrappedPropertyHandler = src._unwrappedPropertyHandler;
+ _needViewProcesing = src._needViewProcesing;
+ _serializationShape = src._serializationShape;
+
+ _vanillaProcessing = src._vanillaProcessing;
+ }
+
+/* METHOD BeanDeserializerBase */
+protected BeanDeserializerBase(BeanDeserializerBase src, NameTransformer unwrapper)
+ {
+ super(src._beanType);
+
+ _classAnnotations = src._classAnnotations;
+ _beanType = src._beanType;
+ 
+ _valueInstantiator = src._valueInstantiator;
+ _delegateDeserializer = src._delegateDeserializer;
+ _propertyBasedCreator = src._propertyBasedCreator;
+
+ _backRefs = src._backRefs;
+ _ignorableProps = src._ignorableProps;
+ _ignoreAllUnknown = (unwrapper != null) || src._ignoreAllUnknown;
+ _anySetter = src._anySetter;
+ _injectables = src._injectables;
+ _objectIdReader = src._objectIdReader;
+
+ _nonStandardCreation = src._nonStandardCreation;
+ UnwrappedPropertyHandler uph = src._unwrappedPropertyHandler;
+
+ if (unwrapper != null) {
+ // delegate further unwraps, if any
+ if (uph != null) { // got handler, delegate
+ uph = uph.renameAll(unwrapper);
+ }
+ // and handle direct unwrapping as well:
+ _beanProperties = src._beanProperties.renameAll(unwrapper);
+ } else {
+ _beanProperties = src._beanProperties;
+ }
+ _unwrappedPropertyHandler = uph;
+ _needViewProcesing = src._needViewProcesing;
+ _serializationShape = src._serializationShape;
+
+ // probably adds a twist, so:
+ _vanillaProcessing = false;
+ }
+
+/* METHOD BeanDeserializerBase */
+public BeanDeserializerBase(BeanDeserializerBase src, ObjectIdReader oir)
+ {
+ super(src._beanType);
+ 
+ _classAnnotations = src._classAnnotations;
+ _beanType = src._beanType;
+ 
+ _valueInstantiator = src._valueInstantiator;
+ _delegateDeserializer = src._delegateDeserializer;
+ _propertyBasedCreator = src._propertyBasedCreator;
+ 
+ _backRefs = src._backRefs;
+ _ignorableProps = src._ignorableProps;
+ _ignoreAllUnknown = src._ignoreAllUnknown;
+ _anySetter = src._anySetter;
+ _injectables = src._injectables;
+ 
+ _nonStandardCreation = src._nonStandardCreation;
+ _unwrappedPropertyHandler = src._unwrappedPropertyHandler;
+ _needViewProcesing = src._needViewProcesing;
+ _serializationShape = src._serializationShape;
+
+ // then actual changes:
+ _objectIdReader = oir;
+
+ if (oir == null) {
+ _beanProperties = src._beanProperties;
+ _vanillaProcessing = src._vanillaPro
+...[truncated deterministically]...
+// fully count on this? May need to revisit in future; seems to hold for now.
+ for (int i = 0, len = creatorProps.length; i < len; ++i) {
+ if (creatorProps[i] == origProp) {
+ creatorProps[i] = prop;
+ break;
+ }
+ // ... as per above, it is possible we'd need to add this as fallback
+ // if (but only if) identity check fails?
+ /*
+ if (creatorProps[i].getName().equals(prop.getName())) {
+ creatorProps[i] = prop;
+ break;
+ }
+ */
+ }
+ }

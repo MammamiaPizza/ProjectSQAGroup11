@@ -1,0 +1,112 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 3  Version: Compress-3b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-64
+Trigger failures:
+- org.apache.commons.compress.archivers.ArchiveOutputStreamTest::testFinish
+ --> junit.framework.AssertionFailedError: After putArchive should follow closeArchive
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarArchiveOutputStream | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveOutputStream extends ArchiveOutputStream {
+public static final int LONGFILE_ERROR = 0;
+public static final int LONGFILE_TRUNCATE = 1;
+public static final int LONGFILE_GNU = 2;
+protected final TarBuffer buffer;
+public TarArchiveOutputStream(OutputStream os) {
+public TarArchiveOutputStream(OutputStream os, int blockSize) {
+public TarArchiveOutputStream(OutputStream os, int blockSize, int recordSize) {
+public void setLongFileMode(int longFileMode) {
+public void finish() throws IOException {
+public void close() throws IOException {
+public int getRecordSize() {
+public void putArchiveEntry(ArchiveEntry archiveEntry) throws IOException {
+final byte[] nameBytes = entry.getName().getBytes(); // TODO is it correct to use the default charset here?
+public void closeArchiveEntry() throws IOException {
+public void write(byte[] wBuf, int wOffset, int numToWrite) throws IOException {
+private void writeEOFRecord() throws IOException {
+public void flush() throws IOException {
+public ArchiveEntry createArchiveEntry(File inputFile, String entryName)
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import junit.framework.TestCase;
+
+public class TarArchiveOutputStreamFinishTest extends TestCase {
+
+    public void testFinishRejectsUnclosedEntry() throws Exception {
+        TarArchiveOutputStream archive =
+            new TarArchiveOutputStream(new ByteArrayOutputStream(), 512, 512);
+        TarArchiveEntry entry = new TarArchiveEntry("unfinished.txt");
+        entry.setSize(0);
+
+        archive.putArchiveEntry(entry);
+
+        try {
+            archive.finish();
+            fail("finish must reject an archive containing an unclosed entry");
+        } catch (IOException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    public void testCloseRejectsUnclosedEntry() throws Exception {
+        TarArchiveOutputStream archive =
+            new TarArchiveOutputStream(new ByteArrayOutputStream(), 512, 512);
+        TarArchiveEntry entry = new TarArchiveEntry("unfinished.txt");
+        entry.setSize(0);
+
+        archive.putArchiveEntry(entry);
+
+        try {
+            archive.close();
+            fail("close must reject an archive containing an unclosed entry");
+        } catch (IOException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    public void testFinishSucceedsAfterEntryIsClosed() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        TarArchiveOutputStream archive =
+            new TarArchiveOutputStream(output, 512, 512);
+        TarArchiveEntry entry = new TarArchiveEntry("file.txt");
+        entry.setSize(1);
+
+        archive.putArchiveEntry(entry);
+        archive.write(new byte[] { 42 });
+        archive.closeArchiveEntry();
+        archive.finish();
+
+        assertEquals(2048, output.size());
+    }
+
+    public void testFinishWritesTwoEndOfArchiveRecordsWhenNoEntriesExist()
+        throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        TarArchiveOutputStream archive =
+            new TarArchiveOutputStream(output, 512, 512);
+
+        archive.finish();
+
+        assertEquals(1024, output.size());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamFinishTest::testFinishWritesTwoEndOfArchiveRecordsWhenNoEntriesExist
+ - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamFinishTest::testFinishSucceedsAfterEntryIsClosed
+
+Failing generated tests: org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamFinishTest::testFinishSucceedsAfterEntryIsClosed, org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamFinishTest::testFinishWritesTwoEndOfArchiveRecordsWhenNoEntriesExist

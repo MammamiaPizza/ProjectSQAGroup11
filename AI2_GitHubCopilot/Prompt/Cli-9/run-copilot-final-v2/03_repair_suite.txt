@@ -1,0 +1,138 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 9  Version: Cli-9b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: CLI-149
+Trigger failures:
+- org.apache.commons.cli.OptionsTest::testMissingOptionsException
+ --> junit.framework.ComparisonFailure: expected:<... required options: f[, ]x> but was:<... required options: f[]x>
+ - org.apache.commons.cli.ParseRequiredTest::testMissingRequiredOptions
+ --> junit.framework.ComparisonFailure: Incorrect exception message expected:<... required options: b[, ]c> but was:<... required options: b[]c>
+Modified: org.apache.commons.cli.Parser
+
+Available API/signatures:
+[org.apache.commons.cli.Parser | java]
+package org.apache.commons.cli;
+public abstract class Parser implements CommandLineParser {
+protected CommandLine cmd;
+protected void setOptions(final Options options) {
+protected Options getOptions() {
+protected List getRequiredOptions() {
+public CommandLine parse(Options options, String[] arguments)
+protected void processProperties(Properties properties)
+protected void checkRequiredOptions()
+public void processArgs(Option opt, ListIterator iter)
+protected void processOption(String arg, ListIterator iter)
+final Option opt = getOptions().getOption(arg);
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Tests the MissingOptionException message produced by Parser.checkRequiredOptions()
+  * to ensure that multiple missing required options are separated by ", ".
+  * Regression test for CLI-149.
+  */
+ public class CheckRequiredOptionsMessageTest extends TestCase {
+
+     private Options options;
+     private Parser parser;
+
+     protected void setUp() {
+         options = new Options();
+         parser = new BasicParser();
+     }
+
+     /** Single missing required option produces message without "s" and without separator. */
+     public void testSingleMissingRequiredOptionMessage() {
+         options.addOption(OptionBuilder.isRequired().create('f'));
+         try {
+             parser.parse(options, new String[0]);
+             fail("MissingOptionException expected");
+         } catch (MissingOptionException e) {
+             assertEquals("Missing required option: f", e.getMessage());
+         }
+     }
+
+     /** Two missing required options must have ", " between them. */
+     public void testTwoMissingRequiredOptionsMessageHasSeparator() {
+         options.addOption(OptionBuilder.isRequired().create('a'));
+         options.addOption(OptionBuilder.isRequired().create('b'));
+         try {
+             parser.parse(options, new String[0]);
+             fail("MissingOptionException expected");
+         } catch (MissingOptionException e) {
+             String msg = e.getMessage();
+             assertTrue("Message must contain comma-space separator",
+                     msg.startsWith("Missing required options: ") && msg.contains(", "));
+         }
+     }
+
+     /** Three missing required options also use ", " between each. */
+     public void testThreeMissingRequiredOptionsMessageHasSeparators() {
+         options.addOption(OptionBuilder.isRequired().create('x'));
+         options.addOption(OptionBuilder.isRequired().create('y'));
+         options.addOption(OptionBuilder.isRequired().create('z'));
+         try {
+             parser.parse(options, new String[0]);
+             fail("MissingOptionException expected");
+         } catch (MissingOptionException e) {
+             String msg = e.getMessage();
+             assertTrue("Message must contain two comma-space separators",
+                     msg.indexOf(", ") != msg.lastIndexOf(", "));
+         }
+     }
+
+     /** No exception when all required options are supplied. */
+     public void testNoMissingRequiredOptionsNoException() {
+         options.addOption(OptionBuilder.isRequired().create('p'));
+         try {
+             CommandLine cl = parser.parse(options, new String[] { "-p" });
+             assertNotNull(cl);
+             assertTrue(cl.hasOption("p"));
+         } catch (ParseException e) {
+             fail("No exception expected when required option is provided");
+         }
+     }
+
+     /** Message for a single required option group? (verifies no regression). */
+     public void testOptionGroupRequiredMessageFormat() {
+         OptionGroup group = new OptionGroup();
+         group.addOption(OptionBuilder.create('a'));
+         group.addOption(OptionBuilder.create('b'));
+         group.setRequired(true);
+         options.addOptionGroup(group);
+         try {
+             parser.parse(options, new String[0]);
+             fail("MissingOptionException expected");
+         } catch (MissingOptionException e) {
+             // The group itself becomes a required item; separator logic still applies
+             // This test just ensures the code path does not break
+             assertNotNull(e.getMessage());
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-9f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-9f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Cli-9f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+ [mkdir] Created dir: /root/sqa-workspaces/Cli-9f-copilot/target
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-9f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-9f-copilot/.test_suite/org/apache/commons/cli/CheckRequiredOptionsMessageTest.java:24: error: unreported exception ParseException; must be caught or declared to be thrown
+ [javac] parser.parse(options, new String[0]);
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

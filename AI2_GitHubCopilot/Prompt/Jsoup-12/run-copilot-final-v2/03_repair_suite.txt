@@ -1,0 +1,203 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 12  Version: Jsoup-12b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 52
+Trigger failures:
+- org.jsoup.select.SelectorTest::testByAttributeRegexCombined
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query '=x|y]': unexpected token at '=x|y]'
+Modified: org.jsoup.select.Selector
+
+Available API/signatures:
+[org.jsoup.select.Selector | java]
+package org.jsoup.select;
+<tr><td><code>.class</code></td><td>elements with a class name of "class"</td><td><code>div.left</code>, <code>.result</code></td></tr>
+<tr><td><code>:not(<em>selector</em>)</code></td><td>elements that do not match the <em>selector</em>. See also {@link Elements#not(String)}</td><code>div:not(.logo)</code> finds all divs that do not have the "logo" class</td></tr>
+@see Element#select(String)
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Selector {
+private Selector(String query, Element root) {
+@param query CSS selector
+@param root root element to descend into
+@return matching elements, empty if not
+public static Elements select(String query, Element root) {
+@param roots root elements to descend into
+public static Elements select(String query, Iterable<Element> roots) {
+private Elements select() {
+} else { // E.class, E#id, E[attr] etc. AND
+private void combinator(char combinator) {
+private Elements findElements() {
+private void addElements(Collection<Element> add) {
+private void intersectElements(Collection<Element> intersect) {
+private Elements byId() {
+private Elements byClass() {
+private Elements byTag() {
+private Elements byAttribute() {
+private Elements allElements() {
+private Elements indexLessThan() {
+private Elements indexGreaterThan() {
+private Elements indexEquals() {
+private int consumeIndex() {
+private Elements has() {
+private Elements contains(boolean own) {
+private Elements matches(boolean own) {
+private Elements not() {
+private static Elements filterForChildren(Collection<Element> parents, Collection<Element> candidates) {
+private static Elements filterForDescendants(Collection<Element> parents, Collection<Element> candidates) {
+private static Elements filterForParentsOfDescendants(Collection<Element> parents, Collection<Element> children) {
+private static Elements filterForAdjacentSiblings(Collection<Element> elements, Collection<Element> candidates) {
+private static Elements filterForGeneralSiblings(Collection<Element> elements, Collection<Element> candidates) {
+private static Elements filterForSelf(Collection<Element> parents, Collection<Element> candidates) {
+static Elements filterOut(Collection<Element> elements, Collection<Element> outs) {
+public static class SelectorParseException extends IllegalStateException {
+public SelectorParseException(String msg, Object... params) {
+
+Generated JUnit Test:
+package org.jsoup.select;
+
+ import static org.junit.Assert.*;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.Element;
+ import org.jsoup.select.Elements;
+ import org.junit.Before;
+ import org.junit.Test;
+
+ public class SelectorTest {
+
+     private Document doc;
+
+     @Before
+     public void setUp() {
+         String html = "<html><body>"
+                 + "<div id='1' attr='x|y'>A</div>"
+                 + "<div id='2' attr='x'>B</div>"
+                 + "<div id='3' attr='alpha'>C</div>"
+                 + "<div id='4' attr='alpha|beta'>D</div>"
+                 + "<div id='5' attr='beta'>E</div>"
+                 + "<div id='6' attr='start-mid|end'>F</div>"
+                 + "<div id='7' attr='x|'>G</div>"
+                 + "<div id='8' attr='|y'>H</div>"
+                 + "<div id='9' attr='orphan'>I</div>"
+                 + "<span id='10' attr='x|y'>J</span>"
+                 + "</body></html>";
+         doc = Jsoup.parse(html);
+     }
+
+     @Test
+     public void testByAttributeExactMatchWithPipe() {
+         // [attr='x|y'] should match element with literal "x|y"
+         Elements els = doc.select("[attr='x|y']");
+         assertEquals(2, els.size()); // div#1 and span#10
+         assertEquals("1", els.first().id());
+     }
+
+     @Test
+     public void testByAttributeNotEqualWithPipe() {
+         // valid != selector where value contains |
+         Elements els = doc.select("[attr!='x|y']");
+         assertTrue(els.size() > 0);
+         for (Element el : els) {
+             assertFalse("x|y".equals(el.attr("attr")));
+         }
+     }
+
+     @Test
+     public void testByAttributeStartingWithPipeInValue() {
+         // ^= with | inside the value
+         Elements els = doc.select("[attr^='alpha|']");
+         assertEquals(1, els.size());
+         assertEquals("4", els.first().id());
+     }
+
+     @Test
+     public void testByAttributeEndingWithPipeInValue() {
+         // $= with | inside the value
+         Elements els = doc.select("[attr$='|beta']");
+         assertEquals(1, els.size());
+         assertEquals("4", els.first().id());
+     }
+
+     @Test
+     public void testByAttributeContainingPipe() {
+         // *= with pipe in substring
+         Elements els = doc.select("[attr*='|']");
+         assertEquals(4, els.size()); // ids: 1, 4, 7, 8
+     }
+
+     @Test
+     public void testByAttributeRegexMatchWithPipe() {
+         // ~= interpret value as regex: "x|y" matches "x" or "y"
+         Elements els = doc.select("[attr~=x|y]");
+         assertEquals(3, els.size()); // ids 1, 2, 10 (x|y, x, x|y)
+         assertTrue(els.stream().anyMatch(e -> "2".equals(e.id())));
+     }
+
+     @Test
+     public void testByAttributeRegexPipeAtStart() {
+         // regex starting with |
+         Elements els = doc.select("[attr~=|y]");
+         assertEquals(3, els.size()); // ids 1 (x|y), 8 (|y), 10 (x|y)
+         assertTrue(els.stream().anyMatch(e -> "8".equals(e.id())));
+     }
+
+     @Test
+     public void testByAttributeRegexPipeAtEnd() {
+         // regex ending with |
+         Elements els = doc.select("[attr~=x|]");
+         assertEquals(2, els.size()); // ids 1 (x|y), 7 (x|)
+         assertTrue(els.stream().anyMatch(e -> "7".equals(e.id())));
+     }
+
+     @Test
+     public void testByAttributeRegexWithConsecutivePipes() {
+         // regex contains ||
+         Elements els = doc.select("[attr~=x||b]");
+         // none of the test data match, but parsing must succeed
+         assertEquals(0, els.size());
+     }
+
+     @Test
+     public void testByAttributeRegexCombined() {
+         // the original trigger test: attribute regex combined with tag and descendant
+         Elements els = doc.select("div[attr~=x|y]");
+         assertEquals(2, els.size()); // only divs with id 1 and 2
+     }
+
+     @Test
+     public void testByAttributeRegexWithDescendantCombinator() {
+         // ensure descendant combinator does not break pipe parsing
+         Elements els = doc.select("body [attr~=x|y]");
+         assertEquals(3, els.size()); // both div and span inside body
+     }
+
+     @Test
+     public void testByAttributeRegexAndAnotherAttribute() {
+         // chaining attribute selectors: [attr~=x|y][id] should find elements with both an id and
+matching attr
+         Elements els = doc.select("[attr~=x|y][id]");
+         assertEquals(3, els.size()); // ids 1,2,10
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-12f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-12f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-12f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-12f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-12f-copilot/.test_suite/org/jsoup/select/SelectorTest.java:123: error: ';' expected
+ [javac] matching attr
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

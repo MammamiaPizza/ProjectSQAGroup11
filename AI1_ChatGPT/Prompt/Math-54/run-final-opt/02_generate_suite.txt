@@ -1,0 +1,547 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 54  Version: Math-54b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.dfp.Dfp
+Modified: org.apache.commons.math.dfp.Dfp
+Triggers: org.apache.commons.math.dfp.DfpTest::testIssue567
+
+Bug/specification summary:
+Bug report: MATH-567
+Trigger failures:
+- org.apache.commons.math.dfp.DfpTest::testIssue567
+ --> junit.framework.AssertionFailedError: expected:<0.0> but was:<-Infinity>
+Modified: org.apache.commons.math.dfp.Dfp
+
+Prompt-01 test plan:
+TARGETS: Dfp.nextAfter(Dfp), especially transitions involving zero, sign, and infinities. 
+ORACLES: Existing DfpTest::testIssue567 expects 0.0 rather than -Infinity. 
+CASES: nextAfter from negative finite values toward zero; assert returned Dfp string/value is 0.0. 
+CASES: Boundary near zero and direction changes around signed zero, if constructible through public factories. 
+CASES: nextAfter with infinite operands/directions; verify only established API classification behavior. 
+RISKS: Constructors with DfpField are protected; tests need existing field/test infrastructure. 
+RISKS: No fixed-version comparison or full MATH-567 specification is available.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.dfp.Dfp (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.dfp;
+public class Dfp implements FieldElement<Dfp> {
+public static final int RADIX = 10000;
+public static final int MIN_EXP = -32767;
+public static final int MAX_EXP = 32768;
+public static final int ERR_SCALE = 32760;
+public static final byte FINITE = 0;
+public static final byte INFINITE = 1;
+public static final byte SNAN = 2;
+public static final byte QNAN = 3;
+protected int[] mant;
+protected byte sign;
+protected int exp;
+protected byte nans;
+protected Dfp(final DfpField field) {
+protected Dfp(final DfpField field, byte x) {
+protected Dfp(final DfpField field, int x) {
+protected Dfp(final DfpField field, long x) {
+protected Dfp(final DfpField field, double x) {
+public Dfp(final Dfp d) {
+protected Dfp(final DfpField field, final String s) {
+final char[] striped = new char[getRadixDigits() * rsize + offset * 2];
+protected Dfp(final DfpField field, final byte sign, final byte nans) {
+public Dfp newInstance() {
+public Dfp newInstance(final byte x) {
+public Dfp newInstance(final int x) {
+public Dfp newInstance(final long x) {
+public Dfp newInstance(final double x) {
+public Dfp newInstance(final Dfp d) {
+final Dfp result = newInstance(getZero());
+public Dfp newInstance(final String s) {
+public Dfp newInstance(final byte sig, final byte code) {
+public DfpField getField() {
+public int getRadixDigits() {
+public Dfp getZero() {
+public Dfp getOne() {
+public Dfp getTwo() {
+protected void shiftLeft() {
+protected void shiftRight() {
+protected int align(int e) {
+public boolean lessThan(final Dfp x) {
+public boolean greaterThan(final Dfp x) {
+public boolean isInfinite() {
+public boolean isNaN() {
+@Override
+public boolean equals(final Object other) {
+final Dfp x = (Dfp) other;
+public int hashCode() {
+public boolean unequal(final Dfp x) {
+private static int compare(final Dfp a, final Dfp b) {
+public Dfp rint() {
+public Dfp floor() {
+public Dfp ceil() {
+public Dfp remainder(final Dfp d) {
+final Dfp result = this.subtract(this.divide(d).rint().multiply(d));
+protected Dfp trunc(final DfpField.RoundingMode rmode) {
+final Dfp half = newInstance("0.5");
+public int intValue() {
+public int log10K() {
+public Dfp power10K(final int e) {
+public int log10() {
+public Dfp power10(final int e) {
+protected int complement(int extra) {
+public Dfp add(final Dfp x) {
+final int excp = result.round(lostdigit);
+final int excp = result.round(aextradigit + bextradigit);
+public Dfp negate() {
+public Dfp subtract(final Dfp x) {
+protected int round(int n) {
+public Dfp multiply(final Dfp x) {
+public Dfp multiply(final int x) {
+public Dfp divide(Dfp divisor) {
+final int r = (dm * trial) + rh;
+final int r = ((RADIX-1) - remainder[i]) + dividend[i] + rh;
+public Dfp divide(int divisor) {
+final int excp = result.round(rl * RADIX / divisor); // do the rounding
+public Dfp sqrt() {
+public String toString() {
+protected String dfp2sci() {
+protected String dfp2string() {
+public Dfp dotrap(int type, String what, Dfp oper, Dfp result) {
+protected Dfp trap(int type, String what, Dfp oper, Dfp def, Dfp result) {
+public int classify() {
+public static Dfp copysign(final Dfp x, final Dfp y) {
+public Dfp nextAfter(final Dfp x) {
+public double toDouble() {
+public double[] toSplitDouble() {
+
+/* HEADER */
+package org.apache.commons.math.dfp;
+import java.util.Arrays;
+import org.apache.commons.math.FieldElement;
+public class Dfp implements FieldElement<Dfp> {
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field, double x) {
+
+ // initialize as if 0
+ mant = new int[field.getRadixDigits()];
+ sign = 1;
+ exp = 0;
+ nans = FINITE;
+ this.field = field;
+
+ long bits = Double.doubleToLongBits(x);
+ long mantissa = bits & 0x000fffffffffffffL;
+ int exponent = (int) ((bits & 0x7ff0000000000000L) >> 52) - 1023;
+
+ if (exponent == -1023) {
+ // Zero or sub-normal
+ if (x == 0) {
+ // make sure 0 has the right sign
+ return;
+ }
+
+ exponent++;
+
+ // Normalize the subnormal number
+ while ( (mantissa & 0x0010000000000000L) == 0) {
+ exponent--;
+ mantissa <<= 1;
+ }
+ mantissa &= 0x000fffffffffffffL;
+ }
+
+ if (exponent == 1024) {
+ // infinity or NAN
+ if (x != x) {
+ sign = (byte) 1;
+ nans = QNAN;
+ } else if (x < 0) {
+ sign = (byte) -1;
+ nans = INFINITE;
+ } else {
+ sign = (byte) 1;
+ nans = INFINITE;
+ }
+ return;
+ }
+
+ Dfp xdfp = new Dfp(field, mantissa);
+ xdfp = xdfp.divide(new Dfp(field, 4503599627370496l)).add(field.getOne()); // Divide by 2^52, then add one
+ xdfp = xdfp.multiply(DfpMath.pow(field.getTwo(), exponent));
+
+ if ((bits & 0x8000000000000000L) != 0) {
+ xdfp = xdfp.negate();
+ }
+
+ System.arraycopy(xdfp.mant, 0, mant, 0, mant.length);
+ sign = xdfp.sign;
+ exp = xdfp.exp;
+ nans = xdfp.nans;
+
+ }
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field, final String s) {
+
+ // initialize as if 0
+ mant = new int[field.getRadixDigits()];
+ sign = 1;
+ exp = 0;
+ nans = FINITE;
+ this.field = field;
+
+ boolean decimalFound = false;
+ final int rsize = 4; // size of radix in decimal digits
+ final int offset = 4; // Starting offset into Striped
+ final char[] striped = new char[getRadixDigits() * rsize + offset * 2];
+
+ // Check some special cases
+ if (s.equals(POS_INFINITY_STRING)) {
+ sign = (byte) 1;
+ nans = INFINITE;
+ return;
+ }
+
+ if (s.equals(NEG_INFINITY_STRING)) {
+ sign = (byte) -1;
+ nans = INFINITE;
+ return;
+ }
+
+ if (s.equals(NAN_STRING)) {
+ sign = (byte) 1;
+ nans = QNAN;
+ return;
+ }
+
+ // Check for scientific notation
+ int p = s.indexOf("e");
+ if (p == -1) { // try upper case?
+ p = s.indexOf("E");
+ }
+
+ final String fpdecimal;
+ int sciexp = 0;
+ if (p != -1) {
+ // scientific notation
+ fpdecimal = s.substring(0, p);
+ String fpexp = s.substring(p+1);
+ boolean negative = false;
+
+ for (int i=0; i<fpexp.length(); i++)
+ {
+ if (fpexp.charAt(i) == '-')
+ {
+ negative = true;
+ continue;
+ }
+ if (fpexp.charAt(i) >= '0' && fpexp.charAt(i) <= '9')
+ sciexp = sciexp * 10 + fpexp.charAt(i) - '0';
+ }
+
+ if (negative) {
+ sciexp = -sciexp;
+ }
+ } else {
+ // normal case
+ fpdecimal = s;
+ }
+
+ // If there is a minus sign in the number then it is negative
+ if (fpdecimal.indexOf("-") != -1) {
+ sign = -1;
+ }
+
+ // First off, find all of the leading zeros, trailing zeros, and significant digits
+ p = 0;
+
+ // Move p to first significant digit
+ int decimalPos = 0;
+ for (;;) {
+ if (fpdecimal.charAt(p) >= '1' && fpdecimal.charAt(p) <= '9') {
+ break;
+ }
+
+ if (decimalFound && fpdecimal.charAt(p) == '0') {
+ decimalPos--;
+ }
+
+ if (fpdecimal.charAt(p) == '.') {
+ decimalFound = true;
+ }
+
+ p++;
+
+ if (p == fpdecimal.length()) {
+ break;
+ }
+ }
+
+ // Copy the string onto Stripped
+ int q = offset;
+ striped[0] = '0';
+ striped[1] = '0';
+ striped[2] = '0';
+ striped[3] = '0';
+ int significantDigits=0;
+ for(;;) {
+ if (p == (fpdecimal.length())) {
+ break;
+ }
+
+ // Don't want to run pass the end of the array
+ if (q == mant.length*rsize+offset+1) {
+ break;
+ }
+
+ if (fpdecimal.charAt(p) == '.') {
+ decimalFound = true;
+ decimalPos = significantDigits;
+ p++;
+ continue;
+ }
+
+ if (fpdecimal.charAt(p) < '0' || fpdecimal.charAt(p) > '9') {
+ p++;
+ continue;
+ }
+
+ striped[q] = fpdecimal.charAt(p);
+ q++;
+ p++;
+ significantDigits++;
+ }
+
+ // If the decimal point has been found then get rid of trailing zeros.
+ if (decimalFound && q != offset) {
+ for (;;) {
+ q--;
+ if (q == offset) {
+ break;
+ }
+ if (striped[q] == '0') {
+ significantDigits--;
+ } else {
+ break;
+ }
+ }
+ }
+
+ // special case of numbers like "0.00000"
+ if (decimalFound && significantDigits == 0) {
+ decimalPos = 0;
+ }
+
+ // Implicit decimal point at end of number if not present
+ if (!decimalFound) {
+ decimalPos = q-offset;
+ }
+
+ // Find the number of significant trailing zeros
+ q = offset; // set q to point to first sig digit
+ p = significantDigits-1+offset;
+
+ int trailingZeros = 0;
+ while (p > q) {
+ if (striped[p] != '0') {
+ break;
+ }
+ trailingZeros++;
+ p--;
+ }
+
+ // Make sure the decimal is on a mod 10000 boundary
+ int i = ((rsize * 100) - decimalPos - sciexp % rsize) % rsize;
+ q -= i;
+ decimalPos += i;
+
+ // Make the mantissa length right by adding zeros at the end if necessary
+...[truncated deterministically]...
+it = 0;
+ boolean inexact = false;
+
+ int diff = exp - e;
+
+ int adiff = diff;
+ if (adiff < 0) {
+ adiff = -adiff;
+ }
+
+ if (diff == 0) {
+ return 0;
+ }
+
+ if (adiff > (mant.length + 1)) {
+ // Special case
+ Arrays.fill(mant, 0);
+ exp = e;
+
+ field.setIEEEFlagsBits(DfpField.FLAG_INEXACT);
+ dotrap(DfpField.FLAG_INEXACT, ALIGN_TRAP, this, this);
+
+ return 0;
+ }
+
+ for (int i = 0; i < adiff; i++) {
+ if (diff < 0) {
+ /* Keep track of loss -- only signal inexact after losing 2 digits.
+ * the first lost digit is returned to add() and may be incorporated
+ * into the result.
+ */
+ if (lostdigit != 0) {
+ inexact = true;
+ }
+
+ lostdigit = mant[0];
+
+ shiftRight();
+ } else {
+ shiftLeft();
+ }
+ }
+
+ if (inexact) {
+ field.setIEEEFlagsBits(DfpField.FLAG_INEXACT);
+ dotrap(DfpField.FLAG_INEXACT, ALIGN_TRAP, this, this);
+ }
+
+ return lostdigit;
+
+ }
+
+ /** Check if instance is less than x.
+ * @param x number to check instance against
+ * @return true if instance is less than x and neither are NaN, false otherwise
+ */
+ public boolean lessThan(final Dfp x) {
+
+ // make sure we don't mix number with different precision
+ if (field.getRadixDigits() != x.field.getRadixDigits()) {
+ field.setIEEEFlagsBits(DfpField.FLAG_INVALID);
+ final Dfp result = newInstance(getZero());
+ result.nans = QNAN;
+ dotrap(DfpField.FLAG_INVALID, LESS_THAN_TRAP, x, result);
+ return false;
+ }
+
+ /* if a nan is involved, signal invalid and return false */
+ if (isNaN() || x.isNaN()) {
+ field.setIEEEFlagsBits(DfpField.FLAG_INVALID);
+ dotrap(DfpField.FLAG_INVALID, LESS_THAN_TRAP, x, newInstance(getZero()));
+ return false;
+ }
+
+ return compare(this, x) < 0;
+ }
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field) {
+ mant = new int[field.getRadixDigits()];
+ sign = 1;
+ exp = 0;
+ nans = FINITE;
+ this.field = field;
+ }
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field, long x) {
+
+ // initialize as if 0
+ mant = new int[field.getRadixDigits()];
+ nans = FINITE;
+ this.field = field;
+
+ boolean isLongMin = false;
+ if (x == Long.MIN_VALUE) {
+ // special case for Long.MIN_VALUE (-9223372036854775808)
+ // we must shift it before taking its absolute value
+ isLongMin = true;
+ ++x;
+ }
+
+ // set the sign
+ if (x < 0) {
+ sign = -1;
+ x = -x;
+ } else {
+ sign = 1;
+ }
+
+ exp = 0;
+ while (x != 0) {
+ System.arraycopy(mant, mant.length - exp, mant, mant.length - 1 - exp, exp);
+ mant[mant.length - 1] = (int) (x % RADIX);
+ x /= RADIX;
+ exp++;
+ }
+
+ if (isLongMin) {
+ // remove the shift added for Long.MIN_VALUE
+ // we know in this case that fixing the last digit is sufficient
+ for (int i = 0; i < mant.length - 1; i++) {
+ if (mant[i] != 0) {
+ mant[i]++;
+ break;
+ }
+ }
+ }
+ }
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field, final byte sign, final byte nans) {
+ this.field = field;
+ this.mant = new int[field.getRadixDigits()];
+ this.sign = sign;
+ this.exp = 0;
+ this.nans = nans;
+ }
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field, byte x) {
+ this(field, (long) x);
+ }
+
+/* METHOD Dfp */
+protected Dfp(final DfpField field, int x) {
+ this(field, (long) x);
+ }
+
+/* METHOD Dfp */
+public Dfp(final Dfp d) {
+ mant = d.mant.clone();
+ sign = d.sign;
+ exp = d.exp;
+ nans = d.nans;
+ field = d.field;
+ }
+
+/* METHOD lessThan */
+public boolean lessThan(final Dfp x) {
+
+ // make sure we don't mix number with different precision
+ if (field.getRadixDigits() != x.field.getRadixDigits()) {
+ field.setIEEEFlagsBits(DfpField.FLAG_INVALID);
+ final Dfp result = newInstance(getZero());
+ result.nans = QNAN;
+ dotrap(DfpField.FLAG_INVALID, LESS_THAN_TRAP, x, result);
+ return false;
+ }
+
+ /* if a nan is involved, signal invalid and return false */
+ if (isNaN() || x.isNaN()) {
+ field.setIEEEFlagsBits(DfpField.FLAG_INVALID);
+ dotrap(DfpField.FLAG_INVALID, LESS_THAN_TRA
+...[truncated deterministically]...
+/* if a nan is involved, signal invalid and return false */
+ if (isNaN() || x.isNaN()) {
+ field.setIEEEFlagsBits(DfpField.FLAG_INVALID);
+ dotrap(DfpField.FLAG_INVALID, GREATER_THAN_TRAP, x, newInstance(getZero()));
+ return false;
+ }
+
+ return compare(this, x) > 0;
+ }

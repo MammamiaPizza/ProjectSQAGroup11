@@ -1,0 +1,397 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 114  Version: Closure-114b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.NameAnalyzer
+Modified: com.google.javascript.jscomp.NameAnalyzer
+Triggers: com.google.javascript.jscomp.NameAnalyzerTest::testAssignWithCall
+
+Bug/specification summary:
+Bug report: 1085
+Trigger failures:
+- com.google.javascript.jscomp.NameAnalyzerTest::testAssignWithCall
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.NameAnalyzer
+
+Prompt-01 test plan:
+TARGETS: NameAnalyzer.process; assignment/call reference analysis and side-effect-preserving replacements.
+TARGETS: FindReferences simplification and getRhsSubexpressions/replaceWithRhs behavior for assignment expressions.
+ORACLES: Existing NameAnalyzerTest.testAssignWithCall assertion is the only stated expected-result source.
+CASES: Assignment whose RHS is a call; verify analysis preserves the call when simplifying/removing assignment.
+CASES: Assignment-with-call in a top-level expression versus a value consumed by its parent.
+CASES: Nested assignment/call expressions and RHS subexpressions requiring replacement collapse.
+RISKS: Removing/replacing an assignment may incorrectly discard call side effects or alter expression value.
+RISKS: No assertion details, input JavaScript, or intended transformed output are provided.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.NameAnalyzer (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+final class NameAnalyzer implements CompilerPass {
+private final Map<String, JsName> allNames = Maps.newTreeMap();
+private static final int PROTOTYPE_SUFFIX_LEN = ".prototype".length();
+/** Function class name */
+private final Set<String> externalNames = Sets.newHashSet();
+private final List<RefNode> refNodes = Lists.newArrayList();
+private final Map<String, AliasSet> aliases = Maps.newHashMap();
+private static class AliasSet {
+private static enum RefType {
+private static class ReferencePropagationCallback
+@Override
+private static class NameInformation {
+/** Name of the prototype class, i.e. "a" if name is "a.prototype.b" */
+/** Name of the super class of name */
+/** Whether this is a call that only affects the class definition */
+private static class JsName implements Comparable<JsName> {
+public String toString() {
+public int compareTo(JsName rhs) {
+interface RefNode {
+private class JsNameRefNode implements RefNode {
+@SuppressWarnings("unused")
+public JsName name() {
+public void remove() {
+private class PrototypeSetNode extends JsNameRefNode {
+@Override public void remove() {
+private abstract class SpecialReferenceNode implements RefNode {
+private class ClassDefiningFunctionNode extends SpecialReferenceNode {
+private class InstanceOfCheckNode extends SpecialReferenceNode {
+private class ProcessExternals extends AbstractPostOrderCallback {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private class FindDependencyScopes extends AbstractPostOrderCallback {
+private void recordConsumers(NodeTraversal t, Node n, Node recordNode) {
+private void recordAssignment(NodeTraversal t, Node n, Node recordNode) {
+private void recordDepScope(Node node, NameInformation name) {
+private class HoistVariableAndFunctionDeclarations
+private class FindDeclarationsAndSetters extends AbstractPostOrderCallback {
+private void recordSet(String name, Node node) {
+private void recordWriteOnProperties(String parentName) {
+public boolean apply(Node input) {
+private class FindReferences implements Callback {
+private void addAllChildren(Node n) {
+private void addSimplifiedChildren(Node n) {
+private void addSimplifiedExpression(Node n, Node parent) {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+private void recordAliases(List<NameInformation> referers) {
+private boolean maybeHiddenAlias(Node n) {
+private class NodeAccumulator
+public boolean classDefiningCallsHaveSideEffects() {
+public void keepSubTree(Node original) {
+public void keepSimplifiedShortCircuitExpression(Node original) {
+private class RemoveListener implements AstChangeProxy.ChangeListener {
+public void nodeRemoved(Node n) {
+public void process(Node externs, Node root) {
+private void recordAlias(String fromName, String toName) {
+private void appendListItem(StringBuilder sb, String text) {
+private String nameLink(String name) {
+private String nameAnchor(String name) {
+private JsName getName(String name, boolean canCreate) {
+private void createName(String name) {
+private void referenceAliases() {
+private void referenceParentNames() {
+private NameInformation createNameInformation(NodeTraversal t, Node n) {
+private boolean isExternallyReferenceable(Scope scope, String name) {
+private List<NameInformation> getDependencyScope(Node n) {
+private void calculateReferences() {
+private enum TriState {
+private int countOf(TriState isClass, TriState referenced) {
+private List<Node> getSideEffectNodes(Node n) {
+private void replaceWithRhs(Node parent, Node n) {
+private void replaceTopLevelExpressionWithRhs(Node parent, Node n) {
+private boolean valueConsumedByParent(Node n, Node parent) {
+private Node collapseReplacements(List<Node> replacements) {
+private List<Node> getRhsSubexpressions(Node n) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.LinkedListMultimap;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.CodingConvention.SubclassRelationship;
+import com.google.javascript.jscomp.GatherSideEffectSubexpressionsCallback.GetReplacementSideEffectSubexpressions;
+import com.google.javascript.jscomp.GatherSideEffectSubexpressionsCallback.SideEffectAccumulator;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.Callback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.jscomp.graph.DiGraph;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphEdge;
+import com.google.javascript.jscomp.graph.FixedPointGraphTraversal;
+import com.google.javascript.jscomp.graph.FixedPointGraphTraversal.EdgeCallback;
+import com.google.javascript.jscomp.graph.LinkedDirectedGraph;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/* METHOD NameAnalyzer */
+NameAnalyzer(AbstractCompiler compiler, boolean removeUnreferenced) {
+ this.compiler = compiler;
+ this.removeUnreferenced = removeUnreferenced;
+ this.globalNames = DEFAULT_GLOBAL_NAMES;
+ this.changeProxy = new AstChangeProxy();
+ }
+
+/* METHOD nodeRemoved */
+@Override
+ public void nodeRemoved(Node n) {
+ compiler.reportCodeChange();
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ NodeTraversal.traverse(compiler, externs, new ProcessExternals());
+ NodeTraversal.traverse(compiler, root, new FindDependencyScopes());
+ NodeTraversal.traverse(
+ compiler, root, new HoistVariableAndFunctionDeclarations());
+ NodeTraversal.traverse(compiler, root, new FindDeclarationsAndSetters());
+ NodeTraversal.traverse(compiler, root, new FindReferences());
+
+ // Create bi-directional references between parent names and their
+ // descendants. This may create new names.
+ referenceParentNames();
+
+ // If we modify the property of an alias, make sure that modification
+ // gets reflected in the original object.
+ referenceAliases();
+
+ calculateReferences();
+
+ if (removeUnreferenced) {
+ removeUnreferenced();
+ }
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ StringBuilder out = new StringBuilder();
+ out.append(name);
+
+ if (prototypeNames.size() > 0) {
+ out.append(" (CLASS)\n");
+ out.append(" - FUNCTIONS: ");
+ Iterator<String> pIter = prototypeNames.iterator();
+ while (pIter.hasNext()) {
+ out.append(pIter.next());
+ if (pIter.hasNext()) {
+ out.append(", ");
+ }
+ }
+ }
+
+ return out.toString();
+ }
+
+/* METHOD compareTo */
+@Override
+ public int compareTo(JsName rhs) {
+ return this.name.compareTo(rhs.name);
+ }
+
+/* METHOD remove */
+@Override
+ public void remove() {
+ // Setters have VAR, FUNCTION, or ASSIGN parent nodes. CALL parent
+ // nodes are global refs, and are handled later in this function.
+ Node containingNode = parent.getParent();
+ switch (parent.getType()) {
+ case Token.VAR:
+ Preconditions.checkState(parent.hasOneChild());
+ replaceWithRhs(containingNode, parent);
+ break;
+ case Token.FUNCTION:
+ replaceWithRhs(containingNode, parent);
+ break;
+ case Token.ASSIGN:
+ if (containingNode.isExprResult()) {
+ replaceWithRhs(containingNode.getParent(), containingNode);
+ } else {
+ replaceWithRhs(containingNode, parent);
+ }
+ break;
+ case Token.OBJECTLIT:
+ // TODO(nicksantos): Come up with a way to remove this.
+ // If we remove object lit keys, then we will need to also
+ // create dependency scopes for them.
+ break;
+ }
+ }
+
+/* METHOD remove */
+@Override
+ public void remove() {
+ Preconditions.checkState(node.isCall());
+ Node parent = getParent();
+ if (parent.isExprResult()) {
+ changeProxy.removeChild(getGramps(), parent);
+ } else {
+ changeProxy.replaceWith(parent, node, IR.voidNode(IR.number(0)));
+ }
+ }
+
+/* METHOD shouldTraverse */
+@Override
+ public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+ if (parent == null) {
+ return true;
+ }
+
+ // Gather the list of nodes that either have side effects, are
+ // arguments to function calls with side effects or are used in
+ // control structure predicates. These names are always
+ // referenced when the enclosing function is called.
+ if (n.isFor()) {
+ if (!NodeUtil.isForIn(n)) {
+ Node decl = n.getFirstChild();
+ Node pred = decl.getNext();
+ Node step = pred.getNext();
+ addSimplifiedExpression(decl, n);
+ addSimplifiedExpression(pred, n);
+ addSimplifiedExpression(step, n);
+ } else { // n.getChildCount() == 3
+ Node decl = n.getFirstChild();
+ Node iter = decl.getNext();
+ addAllChildren(decl);
+ addAllChildren(iter);
+ }
+ }
+
+ if (parent.isVar() ||
+ parent.isExprResult() ||
+ parent.isReturn() ||
+ parent.isThrow()) {
+ addSimplifiedExpression(n, parent);
+ }
+
+ if ((parent.isIf() ||
+ parent.isWhile() ||
+ parent.isWith() ||
+ parent.isSwitch() ||
+ parent.isCase()) &&
+ parent.getFirstChild() == n) {
+ addAllChildren(n);
+ }
+
+ if (parent.isDo() && parent.getLastChild() == n) {
+ addAllChildren(n);
+ }
+
+ return true;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (!(n.isName() || (NodeUtil.isGet(n) && !parent.isGetProp()))) {
+ // This is not a simple or qualified name.
+ return;
+ }
+
+ NameInformation nameInfo = createNameInformation(t, n);
+ if (nameInfo == null) {
+ // The name is not a global name
+ return;
+ }
+
+ if (nameInfo.onlyAffectsClassDef) {
+ if (nameInfo.superclass != null) {
+ recordReference(
+ nameInfo.name, nameInfo.superclass, RefType.INHERITANCE);
+ }
+
+ // Make sure that we record a reference to the function that does
+ // the inheritance, so that the inherits() function itself does
+ // not get stripped.
+ String nodeName = n.getQualifiedName();
+ if (nodeName != null) {
+ recordReference(
+ nameInfo.name, nodeName, RefType.REGULAR);
+ }
+
+ return;
+ }
+
+ if (parent.isInstanceOf() &&
+ parent.getLastChild() == n &&
+ // Don't cover GETELEMs with a global root node.
+ n.isQualifiedName()) {
+ JsName checkedClass = getName(nameInfo.name, true);
+ refNodes.add(new InstanceOfCheckNode(checkedClass, n));
+ checkedClass.hasInstanceOfReference = true;
+ return;
+ }
+
+ // Determine which name might be potentially referring to this one by
+ // looking up the nearest enclosing dependency scope. It's unnecessary to
+ // determine all enclosing dependency scopes because this callback should
+ // create a chain of references between them.
+ List<NameInformation> referers = getDependencyScope(n);
+ if (referers.isEmpty()) {
+ maybeRecordReferenceOrAlias(t, n, parent, nameInfo, null);
+ } else {
+ for (NameInformation referring : referers) {
+ maybeRecordReferenceOrAlias(t, n, parent, nameInfo, referring);
+ }
+ recordAliases(referers);
+ }
+ }
+
+/* METHOD traverseEdge */
+@Override
+ public boolean traverseEdge(JsName from,
+ RefType callSite,
+ JsName to) {
+ if (from.referenced && !to.referenced) {
+ to.referenced = true;
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD name */
+@Override
+ public JsName name() {
+ return name;
+ }
+
+/* METHOD name */
+@Override
+ public JsName name() {
+ return name;
+ }
+
+/* METHOD remove */
+@Override
+ public void remove() {
+ changeProxy.replaceWith(getGramps(), getParent(), IR.falseNode());
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ NameInformation ns = null;
+ if (NodeUtil.isVarDeclaration(n)) {
+ ns = createNameInformation(t, n);
+ } else if (NodeUtil.isFunctionDeclaration(n)) {
+ ns = createNameInformation(t, n.getFirstChild());
+ }
+ if (ns != null) {
+ JsName jsName = getName(ns.name, true);
+ jsName.externallyDefined = true;
+ externalNames.add(ns.name);
+ }
+ }

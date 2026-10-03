@@ -1,0 +1,322 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 4  Version: Closure-4b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.rhino.jstype.NamedType
+Modified: com.google.javascript.rhino.jstype.NamedType
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testImplementsExtendsLoop, com.google.javascript.jscomp.TypeCheckTest::testImplementsLoop, com.google.javascript.jscomp.TypeCheckTest::testConversionFromInterfaceToRecursiveConstructor
+
+Bug/specification summary:
+Bug report: 873
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testImplementsExtendsLoop
+ --> junit.framework.AssertionFailedError: unexpected warning(s) : JSC_IMPLEMENTS_NON_INTERFACE. can only implement interfaces at [testcode] line 2 : 29, JSC_IMPLEMENTS_NON_INTERFACE. can only implement interfaces at [testcode] line 3 : 26 expected:<1> but was:<2>
+ - com.google.javascript.jscomp.TypeCheckTest::testImplementsLoop
+ --> junit.framework.AssertionFailedError: expected:<[Parse error. Cycle detected in inheritance chain of type T]> but was:<[can only implement interfaces]>
+ - com.google.javascript.jscomp.TypeCheckTest::testConversionFromInterfaceToRecursiveConstructor
+ --> java.lang.StackOverflowError
+Modified: com.google.javascript.rhino.jstype.NamedType
+
+Prompt-01 test plan:
+TARGETS: NamedType resolution/cycle handling via getReferencedType and handleTypeCycle.
+TARGETS: NamedType validator behavior via setValidator during recursive type resolution.
+ORACLES: Trigger TypeCheckTest expected diagnostics and warning counts are the result source.
+CASES: Implements loop should report inheritance-cycle parse error, not "can only implement interfaces".
+CASES: Extends/implements loop should avoid the extra JSC_IMPLEMENTS_NON_INTERFACE warning.
+CASES: Interface-to-recursive-constructor conversion must terminate without StackOverflowError.
+RISKS: Private cycle helpers require exercising NamedType through compiler/type-check integration.
+RISKS: Available context omits constructors/resolution entry points and exact diagnostic assertion APIs.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.rhino.jstype.NamedType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+class NamedType extends ProxyObjectType {
+@Override
+private void finishPropertyContinuations() {
+public JSType getReferencedType() {
+public String getReferenceName() {
+public boolean hasReferenceName() {
+public boolean isNominalType() {
+public int hashCode() {
+private void handleTypeCycle(ErrorReporter t) {
+private void checkEnumElementCycle(ErrorReporter t) {
+public boolean setValidator(Predicate<JSType> validator) {
+private static final class PropertyContinuation {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import java.util.List;
+class NamedType extends ProxyObjectType {
+
+/* METHOD NamedType */
+NamedType(JSTypeRegistry registry, String reference,
+ String sourceName, int lineno, int charno) {
+ super(registry, registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE));
+
+ Preconditions.checkNotNull(reference);
+ this.reference = reference;
+ this.sourceName = sourceName;
+ this.lineno = lineno;
+ this.charno = charno;
+ }
+
+/* METHOD commit */
+void commit(ObjectType target) {
+ target.defineProperty(
+ propertyName, type, inferred, propertyNode);
+ }
+
+/* METHOD handleTypeCycle */
+private void handleTypeCycle(ErrorReporter t) {
+ setReferencedType(
+ registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE));
+ t.warning("Cycle detected in inheritance chain of type " + reference,
+ sourceName, lineno, charno);
+ setResolvedTypeInternal(getReferencedType());
+ }
+
+/* METHOD resolveInternal */
+@Override
+ JSType resolveInternal(ErrorReporter t, StaticScope<JSType> enclosing) {
+ // TODO(user): Investigate whether it is really necessary to keep two
+ // different mechanisms for resolving named types, and if so, which order
+ // makes more sense. Now, resolution via registry is first in order to
+ // avoid triggering the warnings built into the resolution via properties.
+ boolean resolved = resolveViaRegistry(t, enclosing);
+ if (detectImplicitPrototypeCycle()) {
+ handleTypeCycle(t);
+ }
+
+ if (resolved) {
+ super.resolveInternal(t, enclosing);
+ finishPropertyContinuations();
+ return registry.isLastGeneration() ?
+ getReferencedType() : this;
+ }
+
+ resolveViaProperties(t, enclosing);
+ if (detectImplicitPrototypeCycle()) {
+ handleTypeCycle(t);
+ }
+
+ super.resolveInternal(t, enclosing);
+ if (isResolved()) {
+ finishPropertyContinuations();
+ }
+ return registry.isLastGeneration() ?
+ getReferencedType() : this;
+ }
+
+/* METHOD setValidator */
+@Override
+ public boolean setValidator(Predicate<JSType> validator) {
+ // If the type is already resolved, we can validate it now. If
+ // the type has not been resolved yet, we need to wait till its
+ // resolved before we can validate it.
+ if (this.isResolved()) {
+ return super.setValidator(validator);
+ } else {
+ this.validator = validator;
+ return true;
+ }
+ }
+
+/* METHOD handleUnresolvedType */
+private void handleUnresolvedType(
+ ErrorReporter t, boolean ignoreForwardReferencedTypes) {
+ if (registry.isLastGeneration()) {
+ boolean isForwardDeclared =
+ ignoreForwardReferencedTypes &&
+ registry.isForwardDeclaredType(reference);
+ if (!isForwardDeclared && registry.isLastGeneration()) {
+ t.warning("Bad type annotation. Unknown type " + reference,
+ sourceName, lineno, charno);
+ } else {
+ setReferencedType(
+ registry.getNativeObjectType(
+ JSTypeNative.NO_RESOLVED_TYPE));
+
+ if (registry.isLastGeneration() && validator != null) {
+ validator.apply(getReferencedType());
+ }
+ }
+
+ setResolvedTypeInternal(getReferencedType());
+ } else {
+ setResolvedTypeInternal(this);
+ }
+ }
+
+/* METHOD getReferencedType */
+public JSType getReferencedType() {
+ return getReferencedTypeInternal();
+ }
+
+/* METHOD lookupViaProperties */
+private JSType lookupViaProperties( ErrorReporter t,
+ StaticScope<JSType> enclosing) {
+ String[] componentNames = reference.split("\\.", -1);
+ if (componentNames[0].length() == 0) {
+ return null;
+ }
+ StaticSlot<JSType> slot = enclosing.getSlot(componentNames[0]);
+ if (slot == null) {
+ return null;
+ }
+ // If the first component has a type of 'Unknown', then any type
+ // names using it should be regarded as silently 'Unknown' rather than be
+ // noisy about it.
+ JSType slotType = slot.getType();
+ if (slotType == null || slotType.isAllType() || slotType.isNoType()) {
+ return null;
+ }
+ JSType value = getTypedefType(t, slot, componentNames[0]);
+ if (value == null) {
+ return null;
+ }
+
+ // resolving component by component
+ for (int i = 1; i < componentNames.length; i++) {
+ ObjectType parentClass = ObjectType.cast(value);
+ if (parentClass == null) {
+ return null;
+ }
+ if (componentNames[i].length() == 0) {
+ return null;
+ }
+ value = parentClass.getPropertyType(componentNames[i]);
+ }
+ return value;
+ }
+
+/* METHOD setReferencedAndResolvedType */
+private void setReferencedAndResolvedType(JSType type, ErrorReporter t,
+ StaticScope<JSType> enclosing) {
+ if (validator != null) {
+ validator.apply(type);
+ }
+ setReferencedType(type);
+ checkEnumElementCycle(t);
+ setResolvedTypeInternal(getReferencedType());
+ }
+
+/* METHOD checkEnumElementCycle */
+private void checkEnumElementCycle(ErrorReporter t) {
+ JSType referencedType = getReferencedType();
+ if (referencedType instanceof EnumElementType &&
+ ((EnumElementType) referencedType).getPrimitiveType() == this) {
+ handleTypeCycle(t);
+ }
+ }
+
+/* METHOD isNominalType */
+@Override
+ public boolean isNominalType() {
+ return true;
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ return reference.hashCode();
+ }
+
+/* METHOD resolveViaRegistry */
+private boolean resolveViaRegistry(
+ ErrorReporter t, StaticScope<JSType> enclosing) {
+ JSType type = registry.getType(reference);
+ if (type != null) {
+ setReferencedAndResolvedType(type, t, enclosing);
+ return true;
+ }
+ return false;
+ }
+
+/* METHOD getTypedefType */
+JSType getTypedefType(ErrorReporter t, StaticSlot<JSType> slot, String name) {
+ JSType type = slot.getType();
+ if (type != null) {
+ return type;
+ }
+ handleUnresolvedType(t, true);
+ return null;
+ }
+
+/* METHOD getReferenceName */
+@Override
+ public String getReferenceName() {
+ return reference;
+ }
+
+/* METHOD hasReferenceName */
+@Override
+ public boolean hasReferenceName() {
+ return true;
+ }
+
+/* METHOD defineProperty */
+@Override
+ boolean defineProperty(String propertyName, JSType type,
+ boolean inferred, Node propertyNode) {
+ if (!isResolved()) {
+ // If this is an unresolved object type, we need to save all its
+ // properties and define them when it is resolved.
+ if (propertyContinuations == null) {
+ propertyContinuations = Lists.newArrayList();
+ }
+ propertyContinuations.add(
+ new PropertyContinuation(
+ propertyName, type, inferred, propertyNode));
+ return true;
+ } else {
+ return super.defineProperty(
+ propertyName, type, inferred, propertyNode);
+ }
+ }
+
+/* METHOD finishPropertyContinuations */
+private void finishPropertyContinuations() {
+ ObjectType referencedObjType = getReferencedObjTypeInternal();
+ if (referencedObjType != null && !referencedObjType.isUnknownType()) {
+ if (propertyContinuations != null) {
+ for (PropertyContinuation c : propertyContinuations) {
+ c.commit(this);
+ }
+ }
+ }
+ propertyContinuations = null;
+ }
+
+/* METHOD isNamedType */
+@Override
+ boolean isNamedType() {
+ return true;
+ }
+
+/* METHOD PropertyContinuation */
+private PropertyContinuation(
+ String propertyName,
+ JSType type,
+ boolean inferred,
+ Node propertyNode) {
+ this.propertyName = propertyName;
+ this.type = type;
+ this.inferred = inferred;
+ this.propertyNode = propertyNode;
+ }
+
+/* METHOD toStringHelper */
+@Override
+ String toStringHelper(boolean forAnnotations) {
+ return reference;
+ }

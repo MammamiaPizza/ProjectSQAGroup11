@@ -1,0 +1,203 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 64  Version: JacksonDatabind-64b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.PropertyBuilder
+Modified: com.fasterxml.jackson.databind.ser.PropertyBuilder
+Triggers: com.fasterxml.jackson.databind.filter.JsonIncludeTest::testIssue1351
+
+Bug/specification summary:
+Bug report: 1417
+Trigger failures:
+- com.fasterxml.jackson.databind.filter.JsonIncludeTest::testIssue1351
+ --> junit.framework.ComparisonFailure: expected:<{[]}> but was:<{["str":null]}>
+Modified: com.fasterxml.jackson.databind.ser.PropertyBuilder
+
+Prompt-01 test plan:
+TARGETS: PropertyBuilder default-value resolution for String properties under inclusion filtering 
+ORACLES: JsonIncludeTest.testIssue1351 expects "{}" rather than "{\"str\":null}" 
+CASES: Serialize the trigger bean/property with null String value and its configured inclusion 
+CASES: Cover normal non-null String serialization if exercised by the same inclusion path 
+RISKS: Default-bean creation/access failures may affect property-default comparison 
+RISKS: Context lacks the trigger bean annotations/configuration and exact modified implementation
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ser.PropertyBuilder (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser;
+public class PropertyBuilder
+final protected SerializationConfig _config;
+final protected BeanDescription _beanDesc;
+final protected AnnotationIntrospector _annotationIntrospector;
+protected Object _defaultBean;
+final protected JsonInclude.Value _defaultInclusion;
+final protected boolean _useRealPropertyDefaults;
+public PropertyBuilder(SerializationConfig config, BeanDescription beanDesc)
+public Annotations getClassAnnotations() {
+@SuppressWarnings("deprecation")
+protected JavaType findSerializationType(Annotated a, boolean useStaticTyping, JavaType declaredType)
+throw new IllegalArgumentException("Illegal concrete-type annotation for method '"+a.getName()+"': class "+serClass.getName()+" not a super-type of (declared) class "+rawDeclared.getName());
+protected Object getDefaultBean()
+/* If we can fix access rights, we should; otherwise non-public
+@Deprecated // since 2.8.5
+protected Object getDefaultValue(JavaType type)
+if (cls == String.class) {
+protected Object _throwWrapped(Exception e, String propName, Object defaultBean)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.util.*;
+public class PropertyBuilder
+
+/* METHOD PropertyBuilder */
+public PropertyBuilder(SerializationConfig config, BeanDescription beanDesc)
+ {
+ _config = config;
+ _beanDesc = beanDesc;
+ // 08-Sep-2016, tatu: This gets tricky, with 3 levels of definitions:
+ // (a) global default inclusion
+ // (b) per-type default inclusion (from annotation or config overrides;
+ // latter having precedence
+ // Cc) per-property override
+ //
+ // and not only requiring merging, but also considering special handling
+ // for NON_DEFAULT in case of (b) (vs (a) or (c))
+ JsonInclude.Value inclPerType = JsonInclude.Value.merge(
+ beanDesc.findPropertyInclusion(JsonInclude.Value.empty()),
+ config.getDefaultPropertyInclusion(beanDesc.getBeanClass(),
+ JsonInclude.Value.empty()));
+ _defaultInclusion = JsonInclude.Value.merge(config.getDefaultPropertyInclusion(),
+ inclPerType);
+ _useRealPropertyDefaults = inclPerType.getValueInclusion() == JsonInclude.Include.NON_DEFAULT;
+ _annotationIntrospector = _config.getAnnotationIntrospector();
+ }
+
+/* METHOD getDefaultBean */
+protected Object getDefaultBean()
+ {
+ Object def = _defaultBean;
+ if (def == null) {
+ /* If we can fix access rights, we should; otherwise non-public
+ * classes or default constructor will prevent instantiation
+ */
+ def = _beanDesc.instantiateBean(_config.canOverrideAccessModifiers());
+ if (def == null) {
+ // 06-Nov-2015, tatu: As per [databind#998], do not fail.
+ /*
+ Class<?> cls = _beanDesc.getClassInfo().getAnnotated();
+ throw new IllegalArgumentException("Class "+cls.getName()+" has no default constructor; can not instantiate default bean value to support 'properties=JsonSerialize.Inclusion.NON_DEFAULT' annotation");
+ */
+
+ // And use a marker
+ def = NO_DEFAULT_MARKER;
+ }
+ _defaultBean = def;
+ }
+ return (def == NO_DEFAULT_MARKER) ? null : _defaultBean;
+ }
+
+/* METHOD findSerializationType */
+protected JavaType findSerializationType(Annotated a, boolean useStaticTyping, JavaType declaredType)
+ throws JsonMappingException
+ {
+ JavaType secondary = _annotationIntrospector.refineSerializationType(_config, a, declaredType);
+
+ // 11-Oct-2015, tatu: As of 2.7, not 100% sure following checks are needed. But keeping
+ // for now, just in case
+ if (secondary != declaredType) {
+ Class<?> serClass = secondary.getRawClass();
+ // Must be a super type to be usable
+ Class<?> rawDeclared = declaredType.getRawClass();
+ if (serClass.isAssignableFrom(rawDeclared)) {
+ ; // fine as is
+ } else {
+ /* 18-Nov-2010, tatu: Related to fixing [JACKSON-416], an issue with such
+ * check is that for deserialization more specific type makes sense;
+ * and for serialization more generic. But alas JAXB uses but a single
+ * annotation to do both... Hence, we must just discard type, as long as
+ * types are related
+ */
+ if (!rawDeclared.isAssignableFrom(serClass)) {
+ throw new IllegalArgumentException("Illegal concrete-type annotation for method '"+a.getName()+"': class "+serClass.getName()+" not a super-type of (declared) class "+rawDeclared.getName());
+ }
+ /* 03-Dec-2010, tatu: Actually, ugh, we may need to further relax this
+ * and actually accept subtypes too for serialization. Bit dangerous in theory
+ * but need to trust user here...
+ */
+ }
+ useStaticTyping = true;
+ declaredType = secondary;
+ }
+ // If using static typing, declared type is known to be the type...
+ JsonSerialize.Typing typing = _annotationIntrospector.findSerializationTyping(a);
+ if ((typing != null) && (typing != JsonSerialize.Typing.DEFAULT_TYPING)) {
+ useStaticTyping = (typing == JsonSerialize.Typing.STATIC);
+ }
+ if (useStaticTyping) {
+ // 11-Oct-2015, tatu: Make sure JavaType also "knows" static-ness...
+ return declaredType.withStaticTyping();
+ 
+ }
+ return null;
+ }
+
+/* METHOD getDefaultValue */
+protected Object getDefaultValue(JavaType type)
+ {
+ // 06-Nov-2015, tatu: Returning null is fine for Object types; but need special
+ // handling for primitives since they are never passed as nulls.
+ Class<?> cls = type.getRawClass();
+
+ Class<?> prim = ClassUtil.primitiveType(cls);
+ if (prim != null) {
+ return ClassUtil.defaultValue(prim);
+ }
+ if (type.isContainerType() || type.isReferenceType()) {
+ return JsonInclude.Include.NON_EMPTY;
+ }
+ if (cls == String.class) {
+ return "";
+ }
+ return null;
+ }
+
+/* METHOD _throwWrapped */
+protected Object _throwWrapped(Exception e, String propName, Object defaultBean)
+ {
+ Throwable t = e;
+ while (t.getCause() != null) {
+ t = t.getCause();
+ }
+ if (t instanceof Error) throw (Error) t;
+ if (t instanceof RuntimeException) throw (RuntimeException) t;
+ throw new IllegalArgumentException("Failed to get property '"+propName+"' of default "+defaultBean.getClass().getName()+" instance");
+ }
+
+/* METHOD getPropertyDefaultValue */
+protected Object getPropertyDefaultValue(String name, AnnotatedMember member,
+ JavaType type)
+ {
+ Object defaultBean = getDefaultBean();
+ if (defaultBean == null) {
+ return getDefaultValue(type);
+ }
+ try {
+ return member.getValue(defaultBean);
+ } catch (Exception e) {
+ return _throwWrapped(e, name, defaultBean);
+ }
+ }
+
+/* METHOD getClassAnnotations */
+public Annotations getClassAnnotations() {
+ return _beanDesc.getClassAnnotations();
+ }

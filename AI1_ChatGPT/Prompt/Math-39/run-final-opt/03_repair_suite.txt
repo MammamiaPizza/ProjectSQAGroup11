@@ -1,0 +1,121 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 39  Version: Math-39b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-727
+Trigger failures:
+- org.apache.commons.math.ode.nonstiff.DormandPrince853IntegratorTest::testTooLargeFirstStep
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator
+
+Available API/signatures:
+[org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator | java]
+package org.apache.commons.math.ode.nonstiff;
+public abstract class EmbeddedRungeKuttaIntegrator
+public abstract int getOrder();
+public double getSafety() {
+public void setSafety(final double safety) {
+@Override
+public void integrate(final ExpandableStatefulODE equations, final double t)
+final boolean forward = t > equations.getTime();
+final double[] y0 = equations.getCompleteState();
+final double[] y = y0.clone();
+final double[] yTmp = y0.clone();
+final RungeKuttaStepInterpolator interpolator = (RungeKuttaStepInterpolator) prototype.copy();
+final boolean nextIsLast = forward ? (nextT >= t) : (nextT <= t);
+final boolean filteredNextIsLast = forward ? (filteredNextT >= t) : (filteredNextT <= t);
+public double getMinReduction() {
+public void setMinReduction(final double minReduction) {
+public double getMaxGrowth() {
+public void setMaxGrowth(final double maxGrowth) {
+
+Generated JUnit Test:
+package org.apache.commons.math.ode.nonstiff;
+
+import static org.junit.Assert.assertEquals;
+
+import org.apache.commons.math.ode.ExpandableStatefulODE;
+import org.apache.commons.math.ode.FirstOrderDifferentialEquations;
+import org.junit.Test;
+
+public class EmbeddedRungeKuttaIntegratorTest {
+
+    private static final class UnitRateEquation implements FirstOrderDifferentialEquations {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    }
+
+    private ExpandableStatefulODE equation(double time, double state) {
+        ExpandableStatefulODE equations = new ExpandableStatefulODE(new UnitRateEquation());
+        equations.setTime(time);
+        equations.setPrimaryState(new double[] { state });
+        return equations;
+    }
+
+    private DormandPrince853Integrator integratorWithLargeFirstStep() {
+        DormandPrince853Integrator integrator =
+                new DormandPrince853Integrator(0.1, 0.5, 1.0e-12, 1.0e-12);
+        integrator.setInitialStepSize(0.5);
+        integrator.setMinReduction(0.001);
+        integrator.setMaxGrowth(0.001);
+        return integrator;
+    }
+
+    @Test
+    public void testTooLargeFirstStepIsTrimmedToForwardTarget() {
+        ExpandableStatefulODE equations = equation(0.0, 0.0);
+
+        integratorWithLargeFirstStep().integrate(equations, 0.51);
+
+        assertEquals(0.51, equations.getTime(), 1.0e-12);
+        assertEquals(0.51, equations.getCompleteState()[0], 1.0e-12);
+    }
+
+    @Test
+    public void testTooLargeFirstStepIsTrimmedToBackwardTarget() {
+        ExpandableStatefulODE equations = equation(1.0, 1.0);
+
+        integratorWithLargeFirstStep().integrate(equations, 0.49);
+
+        assertEquals(0.49, equations.getTime(), 1.0e-12);
+        assertEquals(0.49, equations.getCompleteState()[0], 1.0e-12);
+    }
+
+    @Test
+    public void testTargetAtEndOfInitialStepIsReachedExactly() {
+        ExpandableStatefulODE equations = equation(0.0, 0.0);
+
+        integratorWithLargeFirstStep().integrate(equations, 0.5);
+
+        assertEquals(0.5, equations.getTime(), 1.0e-12);
+        assertEquals(0.5, equations.getCompleteState()[0], 1.0e-12);
+    }
+
+    @Test
+    public void testNormalForwardIntegrationReachesRequestedTimeAndState() {
+        DormandPrince853Integrator integrator =
+                new DormandPrince853Integrator(1.0e-8, 1.0, 1.0e-12, 1.0e-12);
+        ExpandableStatefulODE equations = equation(0.0, 0.0);
+
+        integrator.integrate(equations, 0.75);
+
+        assertEquals(0.75, equations.getTime(), 1.0e-12);
+        assertEquals(0.75, equations.getCompleteState()[0], 1.0e-12);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegratorTest::testTooLargeFirstStepIsTrimmedToBackwardTarget
+ - org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegratorTest::testTooLargeFirstStepIsTrimmedToForwardTarget
+
+Failing generated tests: org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegratorTest::testTooLargeFirstStepIsTrimmedToBackwardTarget, org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegratorTest::testTooLargeFirstStepIsTrimmedToForwardTarget

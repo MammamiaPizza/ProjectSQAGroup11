@@ -1,0 +1,329 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Cli  Bug: 28  Version: Cli-28b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.apache.commons.cli.Parser
+Modified: org.apache.commons.cli.Parser
+Triggers: org.apache.commons.cli.ValueTest::testPropertyOptionFlags
+
+Bug/specification summary:
+Bug report: CLI-201
+Trigger failures:
+- org.apache.commons.cli.ValueTest::testPropertyOptionFlags
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.cli.Parser
+
+Prompt-01 test plan:
+TARGETS: Parser.parse(options,args,properties[,stopAtNonOption]) and protected processProperties(Properties).
+ORACLES: Existing trigger ValueTest.testPropertyOptionFlags is the expected-result source.
+CASES: Property-backed option flags with absent command-line arguments; verify resulting CommandLine option state.
+CASES: Properties containing true/false-like values for configured flag options, per trigger behavior.
+CASES: Command-line option versus property value precedence, if exposed by parse result.
+RISKS: Parser is abstract; tests require an existing concrete Parser implementation.
+RISKS: No option/value semantics beyond CLI-201 trigger are provided; avoid assuming property coercion rules.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.cli.Parser (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli;
+public abstract class Parser implements CommandLineParser
+protected CommandLine cmd;
+protected void setOptions(final Options options)
+protected Options getOptions()
+protected List getRequiredOptions()
+protected abstract String[] flatten(Options opts, String[] arguments, boolean stopAtNonOption) throws ParseException;
+public CommandLine parse(Options options, String[] arguments) throws ParseException
+public CommandLine parse(Options options, String[] arguments, Properties properties) throws ParseException
+public CommandLine parse(Options options, String[] arguments, boolean stopAtNonOption) throws ParseException
+public CommandLine parse(Options options, String[] arguments, Properties properties, boolean stopAtNonOption)
+protected void processProperties(Properties properties)
+protected void checkRequiredOptions() throws MissingOptionException
+public void processArgs(Option opt, ListIterator iter) throws ParseException
+protected void processOption(String arg, ListIterator iter) throws ParseException
+
+/* HEADER */
+package org.apache.commons.cli;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Properties;
+
+/* METHOD parse */
+public CommandLine parse(Options options, String[] arguments, Properties properties, boolean stopAtNonOption)
+ throws ParseException
+ {
+ // clear out the data in options in case it's been used before (CLI-71)
+ for (Iterator it = options.helpOptions().iterator(); it.hasNext();)
+ {
+ Option opt = (Option) it.next();
+ opt.clearValues();
+ }
+ 
+ // clear the data from the groups
+ for (Iterator it = options.getOptionGroups().iterator(); it.hasNext();)
+ {
+ OptionGroup group = (OptionGroup) it.next();
+ group.setSelected(null);
+ } 
+
+ // initialise members
+ setOptions(options);
+
+ cmd = new CommandLine();
+
+ boolean eatTheRest = false;
+
+ if (arguments == null)
+ {
+ arguments = new String[0];
+ }
+
+ List tokenList = Arrays.asList(flatten(getOptions(), arguments, stopAtNonOption));
+
+ ListIterator iterator = tokenList.listIterator();
+
+ // process each flattened token
+ while (iterator.hasNext())
+ {
+ String t = (String) iterator.next();
+
+ // the value is the double-dash
+ if ("--".equals(t))
+ {
+ eatTheRest = true;
+ }
+
+ // the value is a single dash
+ else if ("-".equals(t))
+ {
+ if (stopAtNonOption)
+ {
+ eatTheRest = true;
+ }
+ else
+ {
+ cmd.addArg(t);
+ }
+ }
+
+ // the value is an option
+ else if (t.startsWith("-"))
+ {
+ if (stopAtNonOption && !getOptions().hasOption(t))
+ {
+ eatTheRest = true;
+ cmd.addArg(t);
+ }
+ else
+ {
+ processOption(t, iterator);
+ }
+ }
+
+ // the value is an argument
+ else
+ {
+ cmd.addArg(t);
+
+ if (stopAtNonOption)
+ {
+ eatTheRest = true;
+ }
+ }
+
+ // eat the remaining tokens
+ if (eatTheRest)
+ {
+ while (iterator.hasNext())
+ {
+ String str = (String) iterator.next();
+
+ // ensure only one double-dash is added
+ if (!"--".equals(str))
+ {
+ cmd.addArg(str);
+ }
+ }
+ }
+ }
+
+ processProperties(properties);
+ checkRequiredOptions();
+
+ return cmd;
+ }
+
+ /**
+ * Sets the values of Options using the values in <code>properties</code>.
+ *
+ * @param properties The value properties to be processed.
+ */
+ protected void processProperties(Properties properties)
+ {
+ if (properties == null)
+ {
+ return;
+ }
+
+ for (Enumeration e = properties.propertyNames(); e.hasMoreElements();)
+ {
+ String option = e.nextElement().toString();
+
+ if (!cmd.hasOption(option))
+ {
+ Option opt = getOptions().getOption(option);
+
+ // get the value from the properties instance
+ String value = properties.getProperty(option);
+
+ if (opt.hasArg())
+ {
+ if (opt.getValues() == null || opt.getValues().length == 0)
+ {
+ try
+ {
+ opt.addValueForProcessing(value);
+ }
+ catch (RuntimeException exp)
+ {
+ // if we cannot add the value don't worry about it
+ }
+
+/* METHOD setOptions */
+protected void setOptions(final Options options)
+ {
+ this.options = options;
+ this.requiredOptions = new ArrayList(options.getRequiredOptions());
+ }
+
+/* METHOD getRequiredOptions */
+protected List getRequiredOptions()
+ {
+ return requiredOptions;
+ }
+
+/* METHOD flatten */
+protected abstract String[] flatten(Options opts, String[] arguments, boolean stopAtNonOption) throws ParseException;
+
+ /**
+ * Parses the specified <code>arguments</code> based
+ * on the specifed {@link Options}
+
+/* METHOD processArgs */
+public void processArgs(Option opt, ListIterator iter) throws ParseException
+ {
+ // loop until an option is found
+ while (iter.hasNext())
+ {
+ String str = (String) iter.next();
+
+ // found an Option, not an argument
+ if (getOptions().hasOption(str) && str.startsWith("-"))
+ {
+ iter.previous();
+ break;
+ }
+
+ // found a value
+ try
+ {
+ opt.addValueForProcessing(Util.stripLeadingAndTrailingQuotes(str));
+ }
+ catch (RuntimeException exp)
+ {
+ iter.previous();
+ break;
+ }
+ }
+
+ if (opt.getValues() == null && !opt.hasOptionalArg())
+ {
+ throw new MissingArgumentException(opt);
+ }
+ }
+
+/* METHOD processOption */
+protected void processOption(String arg, ListIterator iter) throws ParseException
+ {
+ boolean hasOption = getOptions().hasOption(arg);
+
+ // if there is no option throw an UnrecognisedOptionException
+ if (!hasOption)
+ {
+ throw new UnrecognizedOptionException("Unrecognized option: " + arg, arg);
+ }
+
+ // get the option represented by arg
+ Option opt = (Option) getOptions().getOption(arg).clone();
+
+ // if the option is a required option remove the option from
+ // the requiredOptions list
+ if (opt.isRequired())
+ {
+ getRequiredOptions().remove(opt.getKey());
+ }
+
+ // if the option is in an OptionGroup make that option the selected
+ // option of the group
+ if (getOptions().getOptionGroup(opt) != null)
+ {
+ OptionGroup group = getOptions().getOptionGroup(opt);
+
+ if (group.isRequired())
+ {
+ getRequiredOptions().remove(group);
+ }
+
+ group.setSelected(opt);
+ }
+
+ // if the option takes an argument value
+ if (opt.hasArg())
+ {
+ processArgs(opt, iter);
+ }
+
+ // set the option on the command line
+ cmd.addOption(opt);
+ }
+
+/* METHOD getOptions */
+protected Options getOptions()
+ {
+ return options;
+ }
+
+/* METHOD parse */
+public CommandLine parse(Options options, String[] arguments) throws ParseException
+ {
+ return parse(options, arguments, null, false);
+ }
+
+/* METHOD parse */
+public CommandLine parse(Options options, String[] arguments, Properties properties) throws ParseException
+ {
+ return parse(options, arguments, properties, false);
+ }
+
+/* METHOD parse */
+public CommandLine parse(Options options, String[] arguments, boolean stopAtNonOption) throws ParseException
+ {
+ return parse(options, arguments, null, stopAtNonOption);
+ }
+
+/* METHOD checkRequiredOptions */
+protected void checkRequiredOptions() throws MissingOptionException
+ {
+ // if there are required options that have not been processsed
+ if (!getRequiredOptions().isEmpty())
+ {
+ throw new MissingOptionException(getRequiredOptions());
+ }
+ }

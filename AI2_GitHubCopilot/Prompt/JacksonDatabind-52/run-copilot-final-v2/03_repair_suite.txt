@@ -1,0 +1,239 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 52  Version: JacksonDatabind-52b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 999
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.ext.ExternalTypeId999Test::testExternalTypeId
+ --> junit.framework.ComparisonFailure: expected:<foo> but was:<null>
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerBase, com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializerBase | java]
+package com.fasterxml.jackson.databind.deser;
+public abstract class BeanDeserializerBase
+protected final static PropertyName TEMP_PROPERTY_NAME = new PropertyName("#temporary-name");
+final protected JavaType _beanType;
+final protected JsonFormat.Shape _serializationShape;
+protected final ValueInstantiator _valueInstantiator;
+protected JsonDeserializer<Object> _delegateDeserializer;
+protected JsonDeserializer<Object> _arrayDelegateDeserializer;
+protected PropertyBasedCreator _propertyBasedCreator;
+protected boolean _nonStandardCreation;
+protected boolean _vanillaProcessing;
+final protected BeanPropertyMap _beanProperties;
+final protected ValueInjector[] _injectables;
+protected SettableAnyProperty _anySetter;
+final protected Set<String> _ignorableProps;
+final protected boolean _ignoreAllUnknown;
+final protected boolean _nee
+...[truncated deterministically]...
+n, String fieldName, DeserializationContext ctxt)
+@Deprecated // since 2.4, not used by core Jackson; only relevant for arrays/Collections
+public void wrapAndThrow(Throwable t, Object bean, int index, DeserializationContext ctxt) throws IOException {
+private Throwable throwOrReturnThrowable(Throwable t, DeserializationContext ctxt)
+protected Object wrapInstantiationProblem(Throwable t, DeserializationContext ctxt)
+
+[com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler | java]
+package com.fasterxml.jackson.databind.deser.impl;
+public class ExternalTypeHandler
+protected ExternalTypeHandler(ExternalTypeHandler h)
+public ExternalTypeHandler start() {
+@SuppressWarnings("resource")
+public Object complete(JsonParser p
+...[truncated deterministically]...
+ic class Builder
+private final ArrayList<ExtTypedProperty> _properties = new ArrayList<ExtTypedProperty>();
+private final HashMap<String, Integer> _nameToPropertyIndex = new HashMap<String, Integer>();
+public void addExternal(SettableBeanProperty property, TypeDeserializer typeDeser)
+@Deprecated // since 2.8; may be removed as early as 2.9
+public ExternalTypeHandler build() {
+private final static class ExtTypedProperty
+public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser)
+public void linkTypeProperty(SettableBeanProperty p) {
+public boolean hasTypePropertyName(String n) {
+public boolean hasDefaultType() {
+public String getDefaultTypeId() {
+public String getTypePropertyName() { return _typePropertyName; }
+public SettableBeanProperty getProperty() {
+public SettableBeanProperty getTypeProperty() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.jsontype.ext;
+
+import static org.junit.Assert.;
+import org.junit.;
+
+import com.fasterxml.jackson.annotation.;
+import com.fasterxml.jackson.databind.;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+
+/**
+
+ - Tests for ExternalTypeHandler bug (databind#999): external type id property is not set
+ - on bean when using property-based creator.
+  */
+ public class ExternalTypeHandlerBug52Test {
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+  // Polymorphic value base with external type id
+  @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+            property = "type", visible = true)
+  @JsonSubTypes({@JsonSubTypes.Type(value = FooValue.class, name = "foo"),
+             @JsonSubTypes.Type(value = BarValue.class, name = "bar")})
+  interface ValueBase { }
+  static class FooValue implements ValueBase {
+  public String foo;
+  }
+  static class BarValue implements ValueBase {
+  public int bar;
+  }
+  // Bean using property-based creator (the buggy scenario)
+  static class CreatorBean {
+  public final String type;
+  public final ValueBase value;
+  @JsonCreator
+  public CreatorBean(@JsonProperty("type") String type,
+                     @JsonProperty("value") ValueBase value) {
+      this.type = type;
+      this.value = value;
+  }
+  }
+  // Bean using setters (should work even in buggy version)
+  static class SetterBean {
+  private String type;
+  private ValueBase value;
+  public void setType(String type) { this.type = type; }
+  public void setValue(ValueBase value) { this.value = value; }
+  public String getType() { return type; }
+  public ValueBase getValue() { return value; }
+  }
+  // Bean with external type and default implementation
+  @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+            property = "type", visible = true, defaultImpl = BarValue.class)
+  @JsonSubTypes({@JsonSubTypes.Type(value = FooValue.class, name = "foo"),
+             @JsonSubTypes.Type(value = BarValue.class, name = "bar")})
+  interface DefaultableValue extends ValueBase { }
+  static class DefaultableCreatorBean {
+  public final String type;
+  public final DefaultableValue value;
+  @JsonCreator
+  public DefaultableCreatorBean(@JsonProperty("type") String type,
+                                @JsonProperty("value") DefaultableValue value) {
+      this.type = type;
+      this.value = value;
+  }
+  }
+  // Helper
+  private void assertBean(String type, Class<? extends ValueBase> valueClass,
+                       CreatorBean bean) {
+  assertEquals(type, bean.type);
+  assertNotNull(bean.value);
+  assertTrue(valueClass.isInstance(bean.value));
+  }
+  // ---- Tests ----
+  //
+  1. Core bug: external type id property not set with creator parameters
+  @Test
+  public void testExternalTypeIdWithCreator() throws Exception {
+  String json = "{"type":"foo", "value":{"foo":"bar"}}";
+  CreatorBean bean = MAPPER.readValue(json, CreatorBean.class);
+  assertBean("foo", FooValue.class, bean);
+  assertEquals("bar", ((FooValue) bean.value).foo);
+  }
+  //
+  2. Same scenario but with setter-based bean (should pass in buggy version too)
+  @Test
+  public void testExternalTypeIdWithSetters() throws Exception {
+  String json = "{"type":"bar", "value":{"bar":42}}";
+  SetterBean bean = MAPPER.readValue(json, SetterBean.class);
+  assertEquals("bar", bean.getType());
+  assertTrue(bean.getValue() instanceof BarValue);
+  assertEquals(42, ((BarValue) bean.getValue()).bar);
+  }
+  //
+  3. Null type id: type property should be null, no subtype resolution needed
+  @Test
+  public void testNullExternalTypeId() throws Exception {
+  String json = "{"type":null, "value":{"foo":"baz"}}";
+  CreatorBean bean = MAPPER.readValue(json, CreatorBean.class);
+  assertNull(bean.type);
+  // With null type id, natural type deserialization may apply; FooValue doesn't
+  // have a natural type mapping, so the property might be set or error.
+  // In buggy version this path likely fails; after fix, type property is null.
+  // We check that type is null (the external id value).
+  assertNull(bean.type);
+  }
+  //
+  4. Type field appears before value in JSON (order independence)
+  @Test
+  public void testTypeOrderBeforeValue() throws Exception {
+  String json = "{"type":"foo", "value":{"foo":"first"}}";
+  CreatorBean bean = MAPPER.readValue(json, CreatorBean.class);
+  assertBean("foo", FooValue.class, bean);
+  }
+  //
+  5. Type field appears after value in JSON
+  @Test
+  public void testTypeOrderAfterValue() throws Exception {
+  String json = "{"value":{"bar":7}, "type":"bar"}";
+  SetterBean bean = MAPPER.readValue(json, SetterBean.class);
+  assertEquals("bar", bean.getType());
+  assertTrue(bean.getValue() instanceof BarValue);
+  assertEquals(7, ((BarValue) bean.getValue()).bar);
+  }
+  //
+  6. Missing type field with defaultImpl – value should be default subtype,
+  //    type property should remain null (no type id to set)
+  @Test
+  public void testMissingTypeWithDefaultImpl() throws Exception {
+  String json = "{"value":{"bar":99}}";
+  DefaultableCreatorBean bean = MAPPER.readValue(json, DefaultableCreatorBean.class);
+  assertNull(bean.type);
+  assertTrue(bean.value instanceof BarValue);
+  assertEquals(99, ((BarValue) bean.value).bar);
+  }
+  //
+  7. Unknown type id should cause an exception
+  @Test(expected = InvalidTypeIdException.class)
+  public void testUnknownExternalTypeId() throws Exception {
+  String json = "{"type":"unknown", "value":{"foo":"x"}}";
+  MAPPER.readValue(json, CreatorBean.class);
+  }
+  //
+  8. Both type and value missing from JSON: when using creator, should fail
+  //    because value property is required
+  @Test(expected = JsonMappingException.class)
+  public void testBothTypeAndValueMissing() throws Exception {
+  String json = "{}";
+  MAPPER.readValue(json, CreatorBean.class);
+  }
+  //
+  9. Type id set to empty string: invalid type name, should throw
+  @Test(expected = InvalidTypeIdException.class)
+  public void testEmptyTypeId() throws Exception {
+  String json = "{"type":"", "value":{"foo":"e"}}";
+  MAPPER.readValue(json, CreatorBean.class);
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-52f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-52f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-52f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-52f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-52f-copilot/.test_suite/com/fasterxml/jackson/databind/jsontype/ext/ExternalTypeHandlerBug52Test.java:3: error: <identifier> expected
+ [javac] import static org.junit.Assert.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 29 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

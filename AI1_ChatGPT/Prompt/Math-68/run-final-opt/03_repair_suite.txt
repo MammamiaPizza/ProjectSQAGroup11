@@ -1,0 +1,132 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 68  Version: Math-68b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-362
+Trigger failures:
+- org.apache.commons.math.optimization.general.MinpackTest::testMinpackJennrichSampson
+ --> junit.framework.AssertionFailedError: expected:<0.2578330049> but was:<0.257819926636807>
+ - org.apache.commons.math.optimization.general.MinpackTest::testMinpackFreudensteinRoth
+ --> junit.framework.AssertionFailedError: expected:<11.4121122022341> but was:<11.41300466147456>
+Modified: org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizer
+
+Available API/signatures:
+[org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizer | java]
+package org.apache.commons.math.optimization.general;
+public class LevenbergMarquardtOptimizer extends AbstractLeastSquaresOptimizer {
+public LevenbergMarquardtOptimizer() {
+public void setInitialStepBoundFactor(double initialStepBoundFactor) {
+public void setCostRelativeTolerance(double costRelativeTolerance) {
+public void setParRelativeTolerance(double parRelativeTolerance) {
+public void setOrthoTolerance(double orthoTolerance) {
+@Override
+protected VectorialPointValuePair doOptimize()
+private void qrDecomposition() throws OptimizationException {
+private void qTy(double[] y) {
+
+Generated JUnit Test:
+package org.apache.commons.math.optimization.general;
+
+import static org.junit.Assert.assertEquals;
+
+import org.apache.commons.math.analysis.DifferentiableMultivariateVectorialFunction;
+import org.apache.commons.math.analysis.MultivariateMatrixFunction;
+import org.junit.Test;
+
+public class LevenbergMarquardtOptimizerMATH362Test {
+
+    @Test
+    public void testJennrichSampsonConvergesToEstablishedRms() throws Exception {
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+
+        optimizer.optimize(jennrichSampsonFunction(),
+                           new double[10],
+                           unitWeights(10),
+                           new double[] { 0.3, 0.4 });
+
+        assertEquals(0.2578330049, optimizer.getRMS(), 1.0e-9);
+    }
+
+    @Test
+    public void testFreudensteinRothConvergesToEstablishedRms() throws Exception {
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+
+        optimizer.optimize(freudensteinRothFunction(),
+                           new double[] { 0.0, 0.0 },
+                           unitWeights(2),
+                           new double[] { 0.5, -2.0 });
+
+        assertEquals(11.4121122022341, optimizer.getRMS(), 1.0e-9);
+    }
+
+    private static double[] unitWeights(int size) {
+        double[] weights = new double[size];
+        for (int i = 0; i < size; ++i) {
+            weights[i] = 1.0;
+        }
+        return weights;
+    }
+
+    private static DifferentiableMultivariateVectorialFunction jennrichSampsonFunction() {
+        return new DifferentiableMultivariateVectorialFunction() {
+            public double[] value(double[] point) {
+                double[] values = new double[10];
+                for (int i = 0; i < values.length; ++i) {
+                    values[i] = 2.0 + 2.0 * i
+                              - Math.exp(i * point[0])
+                              - Math.exp(i * point[1]);
+                }
+                return values;
+            }
+
+            public MultivariateMatrixFunction jacobian() {
+                return new MultivariateMatrixFunction() {
+                    public double[][] value(double[] point) {
+                        double[][] jacobian = new double[10][2];
+                        for (int i = 0; i < jacobian.length; ++i) {
+                            jacobian[i][0] = -i * Math.exp(i * point[0]);
+                            jacobian[i][1] = -i * Math.exp(i * point[1]);
+                        }
+                        return jacobian;
+                    }
+                };
+            }
+        };
+    }
+
+    private static DifferentiableMultivariateVectorialFunction freudensteinRothFunction() {
+        return new DifferentiableMultivariateVectorialFunction() {
+            public double[] value(double[] point) {
+                double x = point[0];
+                double y = point[1];
+                return new double[] {
+                    -13.0 + x + ((5.0 - y) * y - 2.0) * y,
+                    -29.0 + x + ((1.0 + y) * y - 14.0) * y
+                };
+            }
+
+            public MultivariateMatrixFunction jacobian() {
+                return new MultivariateMatrixFunction() {
+                    public double[][] value(double[] point) {
+                        double y = point[1];
+                        return new double[][] {
+                            { 1.0, 10.0 * y - 3.0 * y * y - 2.0 },
+                            { 1.0, 3.0 * y * y + 2.0 * y - 14.0 }
+                        };
+                    }
+                };
+            }
+        };
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerMATH362Test::testFreudensteinRothConvergesToEstablishedRms
+ - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerMATH362Test::testJennrichSampsonConvergesToEstablishedRms
+
+Failing generated tests: org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerMATH362Test::testFreudensteinRothConvergesToEstablishedRms, org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerMATH362Test::testJennrichSampsonConvergesToEstablishedRms

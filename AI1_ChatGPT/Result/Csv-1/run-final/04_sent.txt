@@ -1,0 +1,392 @@
+The current JUnit Test Suite compiles and runs successfully, but some reachable statements, branches,
+methods, or fault-related behaviors are not adequately tested.
+Analyze the production source code, current Test Suite, behavioral specification, bug report, Project Context,
+and coverage report.
+
+Requirements:
+1. Identify the reachable statements, conditions, branches, and methods that are not covered.
+2. Identify the behaviors related to the supplied bug report, API contract, or specification that are not
+adequately tested.
+3. Add only meaningful Test Cases that increase statement coverage, branch coverage, method coverage, or
+fault-detection capability.
+4. Prioritize uncovered code related to the supplied bug report or behavioral specification.
+5. Add Test Cases that could distinguish the incorrect behavior described in the bug report from the expected
+behavior.
+6. Include normal, boundary, invalid, null, and exceptional cases when relevant to the uncovered code.
+7. Do not duplicate the behavior of existing Test Cases.
+8. Do not modify the production source code.
+9. Use the JUnit version and build tool configured in the project.
+10. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+11. Do not invent APIs, dependencies, or expected behavior.
+12. Derive expected results only from the supplied specification, API documentation, bug report, public
+contract, permitted existing tests, and Project Context.
+13. Analyze only the Source Version and Project Context supplied in this prompt.
+14. Preserve all valid existing Test Cases.
+15. Keep all Test Cases independent and free from execution-order dependencies.
+16. Return the complete updated Java Test Class.
+17. After the Test Class, explain which uncovered statement, condition, branch, method, or fault-related
+behavior each new Test Case targets.
+Project ID:
+Csv
+Bug ID:
+1
+Source Version:
+Csv-1b
+JUnit Version:
+junit-4.10.jar
+Build Tool:
+Maven
+Target Class:
+org.apache.commons.csv.ExtendedBufferedReader
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: Csv
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: Csv
+       Program: commons-csv
+    Build file: /root/defects4j/framework/projects/Csv/Csv.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-csv.git
+     Commit db: /root/defects4j/framework/projects/Csv/active-bugs.csv
+Number of bugs: 16
+--------------------------------------------------------------------------------
+
+Summary for Bug: Csv-1
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+de1838ea067f3fbc4c7c21b9eeae077c739ecb73
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2012-03-27 00:49:17 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+CSV-75
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/CSV-75
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.csv.CSVParserTest::testGetLineNumberWithCR
+   --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.csv.ExtendedBufferedReader
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.csv.ExtendedBufferedReader =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.csv;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.Reader;
+
+/**
+ * ExtendedBufferedReader
+ *
+ * A special reader decorator which supports more
+ * sophisticated access to the underlying reader object.
+ *
+ * In particular the reader supports a look-ahead option,
+ * which allows you to see the next char returned by
+ * next().
+ */
+class ExtendedBufferedReader extends BufferedReader {
+
+    /** The end of stream symbol */
+    static final int END_OF_STREAM = -1;
+
+    /** Undefined state for the lookahead char */
+    static final int UNDEFINED = -2;
+
+    /** The last char returned */
+    private int lastChar = UNDEFINED;
+
+    /** The line counter */
+    private int lineCounter = 0;
+
+    /**
+     * Created extended buffered reader using default buffer-size
+     */
+    ExtendedBufferedReader(Reader r) {
+        super(r);
+    }
+
+    @Override
+    public int read() throws IOException {
+        int current = super.read();
+        if (current == '\n') {
+            lineCounter++;
+        }
+        lastChar = current;
+        return lastChar;
+    }
+
+    /**
+     * Returns the last character that was read as an integer (0 to 65535). This
+     * will be the last character returned by any of the read methods. This will
+     * not include a character read using the {@link #peek()} method. If no
+     * character has been read then this will return {@link #UNDEFINED}. If the
+     * end of the stream was reached on the last read then this will return
+     * {@link #END_OF_STREAM}.
+     * 
+     * @return the last character that was read
+     */
+    int readAgain() {
+        return lastChar;
+    }
+
+    @Override
+    public int read(char[] buf, int offset, int length) throws IOException {
+        if (length == 0) {
+            return 0;
+        }
+        
+        int len = super.read(buf, offset, length);
+        
+        if (len > 0) {
+
+            for (int i = offset; i < offset + len; i++) {
+                char ch = buf[i];
+                if (ch == '\n') {
+                    if ('\r' != (i > 0 ? buf[i-1]: lastChar)) {
+                        lineCounter++;                        
+                    }
+                } else if (ch == '\r') {
+                    lineCounter++;
+                }
+            }
+
+            lastChar = buf[offset + len - 1];
+
+        } else if (len == -1) {
+            lastChar = END_OF_STREAM;
+        }
+        
+        return len;
+    }
+
+    /**
+     * Calls {@link BufferedReader#readLine()} which drops the line terminator(s).
+     * This method should only be called when processing a comment, otherwise
+     * information can be lost.
+     * <p>
+     * Increments  {@link #lineCounter}
+     * <p>
+     * Sets {@link #lastChar} to {@link #END_OF_STREAM} at EOF, 
+     * otherwise to last character on the line (won't be CR or LF) 
+     * 
+     * @return the line that was read, or null if reached EOF.
+     */
+    @Override
+    public String readLine() throws IOException {
+        String line = super.readLine();
+
+        if (line != null) {
+            if (line.length() > 0) {
+                lastChar = line.charAt(line.length() - 1);
+            }
+            lineCounter++;
+        } else {
+            lastChar = END_OF_STREAM;
+        }
+
+        return line;
+    }
+
+    /**
+     * Returns the next character in the current reader without consuming it. So
+     * the next call to {@link #read()} will still return this value.
+     * 
+     * @return the next character
+     * 
+     * @throws IOException if there is an error in reading
+     */
+    int lookAhead() throws IOException {
+        super.mark(1);
+        int c = super.read();
+        super.reset();
+
+        return c;
+    }
+
+    /**
+     * Returns the nof line read
+     *
+     * @return the current-line-number (or -1)
+     */
+    int getLineNumber() {
+        return lineCounter;
+    }
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.csv.ExtendedBufferedReader
+
+Triggering tests:
+- org.apache.commons.csv.CSVParserTest::testGetLineNumberWithCR
+Current JUnit Test Suite:
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.io.StringReader;
+
+import org.junit.Test;
+
+public class ExtendedBufferedReaderTest {
+
+    @Test
+    public void testSingleCharacterReadsCountCarriageReturnAndLineFeed() throws IOException {
+        ExtendedBufferedReader reader =
+                new ExtendedBufferedReader(new StringReader("\rX\n"));
+
+        assertEquals(0, reader.getLineNumber());
+        assertEquals(ExtendedBufferedReader.UNDEFINED, reader.readAgain());
+
+        assertEquals('\r', reader.read());
+        assertEquals("A carriage return terminates one line", 1, reader.getLineNumber());
+        assertEquals('\r', reader.readAgain());
+
+        assertEquals('X', reader.read());
+        assertEquals(1, reader.getLineNumber());
+        assertEquals('X', reader.readAgain());
+
+        assertEquals('\n', reader.read());
+        assertEquals("A line feed terminates one additional line", 2, reader.getLineNumber());
+        assertEquals('\n', reader.readAgain());
+    }
+
+    @Test
+    public void testLookAheadDoesNotConsumeCharacterOrChangeLastCharacter() throws IOException {
+        ExtendedBufferedReader reader =
+                new ExtendedBufferedReader(new StringReader("a"));
+
+        assertEquals(ExtendedBufferedReader.UNDEFINED, reader.readAgain());
+        assertEquals('a', reader.lookAhead());
+        assertEquals("Looking ahead must not update the last character", ExtendedBufferedReader.UNDEFINED,
+                reader.readAgain());
+        assertEquals(0, reader.getLineNumber());
+
+        assertEquals('a', reader.read());
+        assertEquals('a', reader.readAgain());
+
+        assertEquals(ExtendedBufferedReader.END_OF_STREAM, reader.lookAhead());
+        assertEquals("Looking ahead at EOF must not update the last character", 'a', reader.readAgain());
+
+        assertEquals(ExtendedBufferedReader.END_OF_STREAM, reader.read());
+        assertEquals(ExtendedBufferedReader.END_OF_STREAM, reader.readAgain());
+    }
+
+    @Test
+    public void testBulkReadCountsCrLfAsOneLineAndUpdatesLastCharacterAtEof() throws IOException {
+        ExtendedBufferedReader reader =
+                new ExtendedBufferedReader(new StringReader("\r\nx\ny\r"));
+        char[] buffer = new char[8];
+
+        assertEquals(0, reader.read(buffer, 0, 0));
+        assertEquals(ExtendedBufferedReader.UNDEFINED, reader.readAgain());
+        assertEquals(0, reader.getLineNumber());
+
+        assertEquals(6, reader.read(buffer, 1, 7));
+        assertEquals('\r', buffer[1]);
+        assertEquals('\n', buffer[2]);
+        assertEquals('x', buffer[3]);
+        assertEquals('\n', buffer[4]);
+        assertEquals('y', buffer[5]);
+        assertEquals('\r', buffer[6]);
+
+        assertEquals("CRLF, LF, and CR each terminate one line", 3, reader.getLineNumber());
+        assertEquals('\r', reader.readAgain());
+
+        assertEquals(ExtendedBufferedReader.END_OF_STREAM, reader.read(buffer, 0, buffer.length));
+        assertEquals(ExtendedBufferedReader.END_OF_STREAM, reader.readAgain());
+    }
+
+    @Test
+    public void testBulkReadRecognizesCrLfSplitAcrossSeparateReads() throws IOException {
+        ExtendedBufferedReader reader =
+                new ExtendedBufferedReader(new StringReader("\r\n"));
+        char[] buffer = new char[1];
+
+        assertEquals(1, reader.read(buffer, 0, 1));
+        assertEquals('\r', buffer[0]);
+        assertEquals(1, reader.getLineNumber());
+
+        assertEquals(1, reader.read(buffer, 0, 1));
+        assertEquals('\n', buffer[0]);
+        assertEquals("LF following a previously-read CR must not add another line", 1,
+                reader.getLineNumber());
+        assertEquals('\n', reader.readAgain());
+    }
+
+    @Test
+    public void testReadLineCountsNonEmptyAndEmptyLinesAndSetsEndOfStreamState() throws IOException {
+        ExtendedBufferedReader reader =
+                new ExtendedBufferedReader(new StringReader("first\n\nsecond\r\n"));
+
+        assertEquals("first", reader.readLine());
+        assertEquals(1, reader.getLineNumber());
+        assertEquals('t', reader.readAgain());
+
+        assertEquals("", reader.readLine());
+        assertEquals(2, reader.getLineNumber());
+
+        assertEquals("second", reader.readLine());
+        assertEquals(3, reader.getLineNumber());
+        assertEquals('d', reader.readAgain());
+
+        assertEquals(null, reader.readLine());
+        assertEquals(ExtendedBufferedReader.END_OF_STREAM, reader.readAgain());
+        assertEquals(3, reader.getLineNumber());
+    }
+
+    @Test
+    public void testBulkReadWithNullBufferThrowsNullPointerExceptionWithoutChangingState()
+            throws IOException {
+        ExtendedBufferedReader reader =
+                new ExtendedBufferedReader(new StringReader("value"));
+
+        try {
+            reader.read(null, 0, 1);
+            fail("A null destination buffer must throw NullPointerException");
+        } catch (NullPointerException expected) {
+            assertEquals(ExtendedBufferedReader.UNDEFINED, reader.readAgain());
+            assertEquals(0, reader.getLineNumber());
+        }
+    }
+}
+
+Coverage report from the actual coverage tool:
+Actual Defects4J coverage summary.csv:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+37,37,26,24
+
+Coverage XML uncovered-code summary:
+Class: org.apache.commons.csv.ExtendedBufferedReader
+Uncovered lines: (none)
+Partially covered branch lines: 58 (83% (5/6)), 102 (50% (1/2)), 58 (83% (5/6)), 102 (50% (1/2))

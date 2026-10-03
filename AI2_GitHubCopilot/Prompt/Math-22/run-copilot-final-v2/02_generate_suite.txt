@@ -1,0 +1,348 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 22  Version: Math-22b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math3.distribution.FDistribution, org.apache.commons.math3.distribution.UniformRealDistribution
+Modified: org.apache.commons.math3.distribution.FDistribution, org.apache.commons.math3.distribution.UniformRealDistribution
+Triggers: org.apache.commons.math3.distribution.FDistributionTest::testIsSupportLowerBoundInclusive, org.apache.commons.math3.distribution.UniformRealDistributionTest::testIsSupportUpperBoundInclusive
+
+Bug/specification summary:
+Bug report: MATH-859
+Trigger failures:
+- org.apache.commons.math3.distribution.FDistributionTest::testIsSupportLowerBoundInclusive
+ --> junit.framework.AssertionFailedError: expected:<false> but was:<true>
+ - org.apache.commons.math3.distribution.UniformRealDistributionTest::testIsSupportUpperBoundInclusive
+ --> junit.framework.AssertionFailedError: expected:<true> but was:<false>
+Modified: org.apache.commons.math3.distribution.FDistribution, org.apache.commons.math3.distribution.UniformRealDistribution
+
+Prompt-01 test plan:
+TARGETS: FDistribution.isSupportLowerBoundInclusive(),
+UniformRealDistribution.isSupportUpperBoundInclusive()
+ORACLES: F-distribution support (0,∞) → lower bound not inclusive; UniformReal support [lower,upper]
+→ upper bound inclusive
+CASES: FDist with numeratorDF=1, denominatorDF=1; FDist with numeratorDF=10, denominatorDF=100; both
+inheriting DEFAULT_INVERSE_ABSOLUTE_ACCURACY
+CASES: UniformReal default(-1,1); UniformReal(0,1); UniformReal(-100,100); UniformReal(1e-9,1e9)
+ORACLES: Respect mathematical definition; not dependent on constructor parameters;
+isSupportConnected must return true
+RISKS: Ensure both inclusivity methods are tested; no side-effects on
+getSupportLowerBound/getSupportUpperBound
+RISKS: FDistribution lower bound always 0.0 (not inclusive); UniformReal lower bound inclusive,
+upper bound inclusive
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math3.distribution.FDistribution (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math3.distribution;
+public class FDistribution extends AbstractRealDistribution {
+public static final double DEFAULT_INVERSE_ABSOLUTE_ACCURACY = 1e-9;
+public double density(double x) {
+final double logx = FastMath.log(x);
+final double logn = FastMath.log(numeratorDegreesOfFreedom);
+final double logm = FastMath.log(denominatorDegreesOfFreedom);
+public double cumulativeProbability(double x) {
+public double getNumeratorDegreesOfFreedom() {
+public double getDenominatorDegreesOfFreedom() {
+@Override
+protected double getSolverAbsoluteAccuracy() {
+public double getNumericalMean() {
+final double denominatorDF = getDenominatorDegreesOfFreedom();
+public double getNumericalVariance() {
+protected double calculateNumericalVariance() {
+final double numeratorDF = getNumeratorDegreesOfFreedom();
+public double getSupportLowerBound() {
+public double getSupportUpperBound() {
+public boolean isSupportLowerBoundInclusive() {
+public boolean isSupportUpperBoundInclusive() {
+public boolean isSupportConnected() {
+
+/* HEADER */
+package org.apache.commons.math3.distribution;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.special.Beta;
+import org.apache.commons.math3.util.FastMath;
+import org.apache.commons.math3.random.RandomGenerator;
+import org.apache.commons.math3.random.Well19937c;
+public class FDistribution extends AbstractRealDistribution {
+
+/* METHOD FDistribution */
+public FDistribution(double numeratorDegreesOfFreedom,
+ double denominatorDegreesOfFreedom)
+ throws NotStrictlyPositiveException {
+ this(numeratorDegreesOfFreedom, denominatorDegreesOfFreedom,
+ DEFAULT_INVERSE_ABSOLUTE_ACCURACY);
+ }
+
+/* METHOD FDistribution */
+public FDistribution(double numeratorDegreesOfFreedom,
+ double denominatorDegreesOfFreedom,
+ double inverseCumAccuracy)
+ throws NotStrictlyPositiveException {
+ this(new Well19937c(), numeratorDegreesOfFreedom,
+ denominatorDegreesOfFreedom, inverseCumAccuracy);
+ }
+
+/* METHOD FDistribution */
+public FDistribution(RandomGenerator rng,
+ double numeratorDegreesOfFreedom,
+ double denominatorDegreesOfFreedom,
+ double inverseCumAccuracy)
+ throws NotStrictlyPositiveException {
+ super(rng);
+
+ if (numeratorDegreesOfFreedom <= 0) {
+ throw new NotStrictlyPositiveException(LocalizedFormats.DEGREES_OF_FREEDOM,
+ numeratorDegreesOfFreedom);
+ }
+ if (denominatorDegreesOfFreedom <= 0) {
+ throw new NotStrictlyPositiveException(LocalizedFormats.DEGREES_OF_FREEDOM,
+ denominatorDegreesOfFreedom);
+ }
+ this.numeratorDegreesOfFreedom = numeratorDegreesOfFreedom;
+ this.denominatorDegreesOfFreedom = denominatorDegreesOfFreedom;
+ solverAbsoluteAccuracy = inverseCumAccuracy;
+ }
+
+/* METHOD density */
+public double density(double x) {
+ final double nhalf = numeratorDegreesOfFreedom / 2;
+ final double mhalf = denominatorDegreesOfFreedom / 2;
+ final double logx = FastMath.log(x);
+ final double logn = FastMath.log(numeratorDegreesOfFreedom);
+ final double logm = FastMath.log(denominatorDegreesOfFreedom);
+ final double lognxm = FastMath.log(numeratorDegreesOfFreedom * x +
+ denominatorDegreesOfFreedom);
+ return FastMath.exp(nhalf * logn + nhalf * logx - logx +
+ mhalf * logm - nhalf * lognxm - mhalf * lognxm -
+ Beta.logBeta(nhalf, mhalf));
+ }
+
+/* METHOD getNumericalVariance */
+public double getNumericalVariance() {
+ if (!numericalVarianceIsCalculated) {
+ numericalVariance = calculateNumericalVariance();
+ numericalVarianceIsCalculated = true;
+ }
+ return numericalVariance;
+ }
+
+/* METHOD isSupportLowerBoundInclusive */
+public boolean isSupportLowerBoundInclusive() {
+ return true;
+ }
+
+/* METHOD isSupportUpperBoundInclusive */
+public boolean isSupportUpperBoundInclusive() {
+ return false;
+ }
+
+/* METHOD isSupportConnected */
+public boolean isSupportConnected() {
+ return true;
+ }
+
+/* METHOD cumulativeProbability */
+public double cumulativeProbability(double x) {
+ double ret;
+ if (x <= 0) {
+ ret = 0;
+ } else {
+ double n = numeratorDegreesOfFreedom;
+ double m = denominatorDegreesOfFreedom;
+
+ ret = Beta.regularizedBeta((n * x) / (m + n * x),
+ 0.5 * n,
+ 0.5 * m);
+ }
+ return ret;
+ }
+
+/* METHOD getNumeratorDegreesOfFreedom */
+public double getNumeratorDegreesOfFreedom() {
+ return numeratorDegreesOfFreedom;
+ }
+
+/* METHOD getDenominatorDegreesOfFreedom */
+public double getDenominatorDegreesOfFreedom() {
+ return denominatorDegreesOfFreedom;
+ }
+
+/* METHOD getSolverAbsoluteAccuracy */
+@Override
+ protected double getSolverAbsoluteAccuracy() {
+ return solverAbsoluteAccuracy;
+ }
+
+/* METHOD getNumericalMean */
+public double getNumericalMean() {
+ final double denominatorDF = getDenominatorDegreesOfFreedom();
+
+ if (denominatorDF > 2) {
+ return denominatorDF / (denominatorDF - 2);
+ }
+
+ return Double.NaN;
+ }
+
+/* METHOD calculateNumericalVariance */
+protected double calculateNumericalVariance() {
+ final double denominatorDF = getDenominatorDegreesOfFreedom();
+
+ if (denominatorDF > 4) {
+ final double numeratorDF = getNumeratorDegreesOfFreedom();
+ final double denomDFMinusTwo = denominatorDF - 2;
+
+ return ( 2 * (denominatorDF * denominatorDF) * (numeratorDF + denominatorDF - 2) ) /
+ ( (numeratorDF * (denomDFMinusTwo * denomDFMinusTwo) * (denominatorDF - 4)) );
+ }
+
+ return Double.NaN;
+ }
+
+/* METHOD getSupportLowerBound */
+public double getSupportLowerBound() {
+ return 0;
+ }
+
+/* METHOD getSupportUpperBound */
+public double getSupportUpperBound() {
+ return Double.POSITIVE_INFINITY;
+ }
+
+===== org.apache.commons.math3.distribution.UniformRealDistribution (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math3.distribution;
+public class UniformRealDistribution extends AbstractRealDistribution {
+public static final double DEFAULT_INVERSE_ABSOLUTE_ACCURACY = 1e-9;
+public UniformRealDistribution() {
+public UniformRealDistribution(double lower, double upper)
+public UniformRealDistribution(double lower, double upper, double inverseCumAccuracy)
+public double density(double x) {
+public double cumulativeProbability(double x) {
+@Override
+protected double getSolverAbsoluteAccuracy() {
+public double getNumericalMean() {
+public double getNumericalVariance() {
+public double getSupportLowerBound() {
+public double getSupportUpperBound() {
+public boolean isSupportLowerBoundInclusive() {
+public boolean isSupportUpperBoundInclusive() {
+public boolean isSupportConnected() {
+public double sample() {
+final double u = random.nextDouble();
+
+/* HEADER */
+package org.apache.commons.math3.distribution;
+import org.apache.commons.math3.exception.NumberIsTooLargeException;
+import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.random.RandomGenerator;
+import org.apache.commons.math3.random.Well19937c;
+public class UniformRealDistribution extends AbstractRealDistribution {
+
+/* METHOD UniformRealDistribution */
+public UniformRealDistribution(RandomGenerator rng,
+ double lower,
+ double upper,
+ double inverseCumAccuracy)
+ throws NumberIsTooLargeException {
+ super(rng);
+ if (lower >= upper) {
+ throw new NumberIsTooLargeException(
+ LocalizedFormats.LOWER_BOUND_NOT_BELOW_UPPER_BOUND,
+ lower, upper, false);
+ }
+
+ this.lower = lower;
+ this.upper = upper;
+ solverAbsoluteAccuracy = inverseCumAccuracy;
+ }
+
+/* METHOD UniformRealDistribution */
+public UniformRealDistribution(double lower, double upper)
+ throws NumberIsTooLargeException {
+ this(lower, upper, DEFAULT_INVERSE_ABSOLUTE_ACCURACY);
+ }
+
+/* METHOD UniformRealDistribution */
+public UniformRealDistribution(double lower, double upper, double inverseCumAccuracy)
+ throws NumberIsTooLargeException {
+ this(new Well19937c(), lower, upper, inverseCumAccuracy);
+ }
+
+/* METHOD UniformRealDistribution */
+public UniformRealDistribution() {
+ this(0, 1);
+ }
+
+/* METHOD isSupportLowerBoundInclusive */
+public boolean isSupportLowerBoundInclusive() {
+ return true;
+ }
+
+/* METHOD isSupportUpperBoundInclusive */
+public boolean isSupportUpperBoundInclusive() {
+ return false;
+ }
+
+/* METHOD isSupportConnected */
+public boolean isSupportConnected() {
+ return true;
+ }
+
+/* METHOD density */
+public double density(double x) {
+ if (x < lower || x > upper) {
+ return 0.0;
+ }
+ return 1 / (upper - lower);
+ }
+
+/* METHOD cumulativeProbability */
+public double cumulativeProbability(double x) {
+ if (x <= lower) {
+ return 0;
+ }
+ if (x >= upper) {
+ return 1;
+ }
+ return (x - lower) / (upper - lower);
+ }
+
+/* METHOD getSolverAbsoluteAccuracy */
+@Override
+ protected double getSolverAbsoluteAccuracy() {
+ return solverAbsoluteAccuracy;
+ }
+
+/* METHOD getNumericalMean */
+public double getNumericalMean() {
+ return 0.5 * (lower + upper);
+ }
+
+/* METHOD getNumericalVariance */
+public double getNumericalVariance() {
+ double ul = upper - lower;
+ return ul * ul / 12;
+ }
+
+/* METHOD getSupportLowerBound */
+public double getSupportLowerBound() {
+ return lower;
+ }
+
+/* METHOD getSupportUpperBound */
+public double getSupportUpperBound() {
+ return upper;
+ }
+
+/* METHOD sample */
+@Override
+ public double sample() {
+ final double u = random.nextDouble();
+ return u * upper + (1 - u) * lower;
+ }

@@ -1,0 +1,403 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 92  Version: Jsoup-92b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.nodes.Attributes, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.ParseSettings, org.jsoup.parser.Token, org.jsoup.parser.XmlTreeBuilder
+Modified: org.jsoup.nodes.Attributes, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.ParseSettings, org.jsoup.parser.Token, org.jsoup.parser.XmlTreeBuilder
+Triggers: org.jsoup.parser.HtmlParserTest::retainsAttributesOfDifferentCaseIfSensitive, org.jsoup.parser.HtmlParserTest::dropsDuplicateAttributes, org.jsoup.parser.XmlTreeBuilderTest::dropsDuplicateAttributes
+
+Bug/specification summary:
+Bug report: 1219
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::retainsAttributesOfDifferentCaseIfSensitive
+ --> junit.framework.AssertionFailedError: expected:<<p One="[One" one="Three" two="Four]" Two="Six">Text</p>> but was:<<p One="[Two" one="Three" two="Five]" Two="Six">Text</p>>
+ - org.jsoup.parser.HtmlParserTest::dropsDuplicateAttributes
+ --> junit.framework.AssertionFailedError: expected:<<p one="[One" two="two]">Text</p>> but was:<<p one="[Four" one="Two" two="two" one="Three" two="Five]">Text</p>>
+ - org.jsoup.parser.XmlTreeBuilderTest::dropsDuplicateAttributes
+ --> junit.framework.AssertionFailedError: expected:<<p One="[One" ONE="Two" one="Three" two="Six]" Two="Eight">Text</...> but was:<<p One="[Four" ONE="Five" one="Three" two="Seven]" Two="Eight">Text</...>
+Modified: org.jsoup.nodes.Attributes, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.ParseSettings, org.jsoup.parser.Token, org.jsoup.parser.XmlTreeBuilder
+
+Prompt-01 test plan:
+TARGETS: Attributes.put,add,indexOfKeyIgnoreCase,getIgnoreCase; Token.Tag.finaliseTag,newAttribute;
+HtmlTreeBuilder.insert; XmlTreeBuilder.process
+ORACLES: HTML5: duplicate attrs case-insensitive, keep first; XML: case-sensitive, keep distinct
+case; expected outputs in trigger assert messages
+CASES: same-case dup, diff-case dup, case-sensitive parsing on, case-insensitive on, data- keys
+preserved, boolean attrs, null key
+RISKS: Private add()/checkCapacity not directly testable; dedup may depend on ParseSettings
+internals; limited code visibility
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Attributes (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+public class Attributes implements Iterable<Attribute>, Cloneable {
+protected static final String dataPrefix = "data-";
+private void checkCapacity(int minNewSize) {
+private static String[] copyOf(String[] orig, int size) {
+private int indexOfKeyIgnoreCase(String key) {
+static String checkNotNull(String val) {
+@param key the (case-sensitive) attribute key
+@return the attribute value if set; or empty string if not set (or a boolean attribute).
+@see #hasKey(String)
+public String get(String key) {
+public String getIgnoreCase(Str
+...[truncated deterministically]...
+public Iterator<Map.Entry<String, String>> iterator() {
+private class DatasetIterator implements Iterator<Map.Entry<String, String>> {
+private Iterator<Attribute> attrIter = attributes.iterator();
+public Entry<String, String> next() {
+private static String dataKey(String key) {
+
+/* HEADER */
+package org.jsoup.nodes;
+import org.jsoup.SerializationException;
+import org.jsoup.helper.Validate;
+import org.jsoup.internal.StringUtil;
+import java.io.IOException;
+import java.util.AbstractMap;
+import java.util.AbstractSet;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import static org.jsoup.internal.Normalizer.lowerCase;
+public class Attributes implements Iterable<Attribute>, Cloneable {
+
+/* METHOD asList */
+public List<Attribute> asList() {
+ ArrayList<Attribute> list = new ArrayList<>(size);
+ for (int i = 0; i < size; i++) {
+ Attribute attr = vals[i] == null ?
+ new BooleanAttribute(keys[i]) : // deprecated class, but maybe someone still wants it
+ new Attribute(keys[i], vals[i], Attributes.this);
+ list.add(attr);
+ }
+ return Collections.unmodifiableList(list);
+ }
+
+/* METHOD put */
+public Attributes put(Attribute attribute) {
+ Validate.notNull(attribute);
+ put(attribute.getKey(), attribute.getValue());
+ attribute.parent = this;
+ return this;
+ }
+
+/* METHOD addAll */
+public void addAll(Attributes incoming) {
+ if (incoming.size() == 0)
+ return;
+ checkCapacity(size + incoming.size);
+
+ for (Attribute attr : incoming) {
+ // todo - should this be case insensitive?
+ put(attr);
+ }
+
+ }
+
+===== org.jsoup.parser.HtmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+public static final int MaxScopeSearchDepth = 100; // prevents the parser bogging down in exceptionally broken pages
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+protected boolean process(Token token) {
+Element insert(final Token.StartTag startTag) {
+final Element el = currentElement();
+final String tagName = el.tagName();
+final String data = charac
+...[truncated deterministically]...
+tom = stack.size() -1;
+final String elName = stack.get(pos).normalName();
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.nodes.CDataNode;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import static org.jsoup.internal.StringUtil.inSorted;
+public class HtmlTreeBuilder extends TreeBuilder {
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+ super.initialiseParse(input, baseUri, parser);
+
+ // this is a bit mucky. todo - probably just create new parser objects to ensure all reset.
+ state = HtmlTreeBuilderState.Initial;
+ originalState = null;
+ baseUriSetFromDoc = false;
+ headElement = null;
+ formElement = null;
+ contextElement = null;
+ formattingElements = new ArrayList<>();
+ pendingTableCharacters = new ArrayList<>();
+ emptyEnd = new Token.EndTag();
+ framesetOk = true;
+ fosterInserts = false;
+ fragmentParsing = false;
+ }
+
+===== org.jsoup.parser.ParseSettings (java) =====
+package org.jsoup.parser;
+
+import org.jsoup.nodes.Attributes;
+
+import static org.jsoup.internal.Normalizer.lowerCase;
+
+/**
+ * Controls parser settings, to optionally preserve tag and/or attribute name case.
+ */
+public class ParseSettings {
+ /**
+ * HTML default settings: both tag and attribute names are lower-cased during parsing.
+ */
+ public static final ParseSettings htmlDefault;
+ /**
+ * Preserve both tag and attribute case.
+ */
+ public static final ParseSettings preserveCase;
+
+ static {
+ htmlDefault = new ParseSettings(false, false);
+ preserveCase = new ParseSettings(true, true);
+ }
+
+ private final boolean preserveTagCase;
+ private final boolean preserveAttributeCase;
+
+ /**
+ * Returns true if preserving tag name case.
+ */
+ public boolean preserveTagCase() {
+ return preserveTagCase;
+ }
+
+ /**
+ * Returns true if preserving attribute case.
+ */
+
+ /**
+ * Define parse settings.
+ * @param tag preserve tag case?
+ * @param attribute preserve attribute name case?
+ */
+ public ParseSettings(boolean tag, boolean attribute) {
+ preserveTagCase = tag;
+ preserveAttributeCase = attribute;
+ }
+
+ /**
+ * Normalizes a tag name according to the case preservation setting.
+ */
+ public String normalizeTag(String name) {
+ name = name.trim();
+ if (!preserveTagCase)
+ name = lowerCase(name);
+ return name;
+ }
+
+ /**
+ * Normalizes an attribute according to the case preservation setting.
+ */
+ public String normalizeAttribute(String name) {
+ name = name.trim();
+ if (!preserveAttributeCase)
+ name = lowerCase(name);
+ return name;
+ }
+
+ Attributes normalizeAttributes(Attributes attributes) {
+ if (!preserveAttributeCase) {
+ attributes.normalize();
+ }
+ return attributes;
+ }
+}
+
+===== org.jsoup.parser.Token (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+abstract class Token {
+private Token() {
+abstract Token reset();
+static void reset(StringBuilder sb) {
+static final class Doctype extends Token {
+final StringBuilder name = new StringBuilder();
+final StringBuilder publicIdentifier = new StringBuilder();
+final StringBuilder systemIdentifier = new StringBuilder();
+@Override
+public String getSystemIdentifier() {
+public boolean isForceQuirks() {
+static abstract class Tag extends Token {
+protected String tagName;
+protected String normalName; // lc version of tag name, for case i
+...[truncated deterministically]...
+) {
+final StartTag asStartTag() {
+final boolean isEndTag() {
+final EndTag asEndTag() {
+final boolean isComment() {
+final Comment asComment() {
+final boolean isCharacter() {
+final boolean isCData() {
+final Character asCharacter() {
+final boolean isEOF() {
+public enum TokenType {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attributes;
+import static org.jsoup.internal.Normalizer.lowerCase;
+
+/* METHOD Token */
+private Token() {
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ if (attributes != null && attributes.size() > 0)
+ return "<" + name() + " " + attributes.toString() + ">";
+ else
+ return "<" + name() + ">";
+ }
+
+/* METHOD newAttribute */
+final void newAttribute() {
+ if (attributes == null)
+ attributes = new Attributes();
+
+ if (pendingAttributeName != null) {
+ // the tokeniser has skipped whitespace control chars, but trimming could collapse to empty for other control codes, so verify here
+ pendingAttributeName = pendingAttributeName.trim();
+ if (pendingAttributeName.length() > 0) {
+ String value;
+ if (hasPendingAttributeValue)
+ value = pendingAttributeValue.length() > 0 ? pendingAttributeValue.toString() : pendingAttributeValueS;
+ else if (hasEmptyAttributeValue)
+ value = "";
+ else
+ value = null;
+ // note that we add, not put. So that the first is kept, and rest are deduped, once in a context where case sensitivity is known (the appropriate tree builder).
+ attributes.put(pendingAttributeName, value);
+ }
+ }
+ pendingAttributeName = null;
+ hasEmptyAttributeValue = false;
+ hasPendingAttributeValue = false;
+ reset(pendingAttributeValue);
+ pendingAttributeValueS = null;
+ }
+
+===== org.jsoup.parser.XmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class XmlTreeBuilder extends TreeBuilder {
+@Override
+protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+final String data = token.getData();
+private void popStackToClose(Token.EndTag endTag) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.CDataNode;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.nodes.XmlDeclaration;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.List;
+public class XmlTreeBuilder extends TreeBuilder {
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+ super.initialiseParse(input, baseUri, parser);
+ stack.add(doc); // place the document onto the stack. differs from HtmlTreeBuilder (not on stack)
+ doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
+ }
+
+/* METHOD process */
+@Override
+ protected boolean process(Token token) {
+ // start tag, end tag, doctype, comment, character, eof
+ switch (token.type) {
+ case StartTag:
+ insert(token.asStartTag());
+ break;
+ case EndTag:
+ popStackToClose(token.asEndTag());
+ break;
+ case Comment:
+ insert(token.asComment());
+ break;
+ case Character:
+ insert(token.asCharacter());
+ break;
+ case Doctype:
+ insert(token.asDoctype());
+ break;
+ case EOF: // could put some normalisation here if desired
+ break;
+ default:
+ Validate.fa
+...[truncated deterministically]...
+/* METHOD insert */
+Element insert(Token.StartTag startTag) {
+ Tag tag = Tag.valueOf(startTag.name(), settings);
+ // todo: wonder if for xml parsing, should treat all tags as unknown? because it's not html.
+
+ Element el = new Element(tag, baseUri, settings.normalizeAttributes(startTag.attributes));
+ insertNode(el);
+ if (startTag.isSelfClosing()) {
+ if (!tag.isKnownTag()) // unknown tag, remember this is self closing for output. see above.
+ tag.setSelfClosing();
+ } else {
+ stack.add(el);
+ }
+ return el;
+ }
+
+ void insert(Token.Comment
+...[truncated deterministically]...
+html, but not xml)
+ // so we do a bit of a hack and parse the data as an element to pull the attributes out
+ XmlDeclaration decl = comment.asXmlDeclaration(); // else, we couldn't parse it as a decl, so leave as a comment
+ if (decl != null)
+ insert = decl;
+ }

@@ -1,0 +1,184 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 168  Version: Closure-168b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 726
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue726
+ --> junit.framework.AssertionFailedError: expected a warning
+Modified: com.google.javascript.jscomp.TypedScopeCreator
+
+Available API/signatures:
+[com.google.javascript.jscomp.TypedScopeCreator | java]
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private final List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+@Override
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static class DiscoverEnumsAndTypedefs
+public void visit(NodeTraversal t, Node node, Node parent) {
+private JSType getNativeType(JSTypeNative nativeType) {
+private abstract class AbstractScopeBuilder
+private final List<Node> nonExternFunctions = Lists.newArrayList();
+private AbstractScopeBuilder(Scope scope) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void attachLiteralTypes(NodeTraversal t, Node n) {
+private void defineObjectLiteral(Node objectLit) {
+private void defineName(Node name, Node var, Node parent, JSDocInfo info) {
+@Nullable Node rValue,
+@Nullable String name,
+@Nullable JSDocInfo info,
+@Nullable Node lvalueNode) {
+private void defineSlot(Node name, Node parent, JSType type) {
+private boolean isQnameRootedInGlobalScope(Node n) {
+private Scope getQnameRootScope(Node n) {
+private FunctionType getFunctionType(@Nullable Var v) {
+private ObjectType getObjectSlot(String slotName) {
+private final class CollectProperties
+private static final class StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class GlobalScopeBuilder extends AbstractScopeBuilder {
+private GlobalScopeBuilder(Scope scope) {
+@Override public void visit(NodeTraversal t, Node n, Node parent) {
+private final class LocalScopeBuilder extends AbstractScopeBuilder {
+private LocalScopeBuilder(Scope scope) {
+private void handleFunctionInputs(Node fnNode) {
+private void declareArguments(Node functionNode) {
+private static class FirstOrderFunctionAnalyzer
+@Override public void process(Node externs, Node root) {
+@Override public void enterScope(NodeTraversal t) {
+private AstFunctionContents getFunctionAnalysisResults(@Nullable Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import junit.framework.TestCase;
+
+ public class TypedScopeCreatorTest extends TestCase {
+
+   private static final String ENUM_INIT_WARNING =
+       "enum initializer must be an object literal or an enum";
+
+   private Compiler compiler;
+
+   @Override
+   protected void setUp() throws Exception {
+     super.setUp();
+     compiler = new Compiler();
+   }
+
+   private void checkEnumWarning(String js, boolean expectWarning) {
+     CompilerOptions options = new CompilerOptions();
+     compiler.initOptions(options);
+     compiler.compile(
+         SourceFile.fromCode("externs", ""),
+         SourceFile.fromCode("test", js));
+
+     JSError[] warnings = compiler.getWarnings();
+     boolean found = false;
+     for (JSError w : warnings) {
+       if (w.description.contains(ENUM_INIT_WARNING)) {
+         found = true;
+         break;
+       }
+     }
+
+     if (expectWarning) {
+       assertTrue("Expected enum init warning for: " + js, found);
+     } else {
+       assertFalse("Unexpected enum init warning for: " + js, found);
+     }
+   }
+
+   public void testEnumWithObjectLiteralInit() {
+     checkEnumWarning("/** @enum {number} */ var E = {A: 1, B: 2};", false);
+   }
+
+   public void testEnumWithAnotherEnum() {
+     checkEnumWarning(
+         "/** @enum {number} */ var E1 = {A: 1};"
+         + "/** @enum {number} */ var E2 = E1;",
+         false);
+   }
+
+   public void testEnumWithVariableInit() {
+     checkEnumWarning(
+         "var x = {A: 1};/** @enum {number} */ var E = x;",
+         true);
+   }
+
+   public void testEnumWithNumberInit() {
+     checkEnumWarning("/** @enum {number} */ var E = 42;", true);
+   }
+
+   public void testEnumWithStringInit() {
+     checkEnumWarning("/** @enum {string} */ var E = 'hello';", true);
+   }
+
+   public void testEnumWithNullInit() {
+     checkEnumWarning("/** @enum {number} */ var E = null;", true);
+   }
+
+   public void testEnumWithBooleanInit() {
+     checkEnumWarning("/** @enum {boolean} */ var E = true;", true);
+   }
+
+   public void testEnumWithArrayInit() {
+     checkEnumWarning("/** @enum {number} */ var E = [1, 2, 3];", true);
+   }
+
+   public void testEnumWithFunctionCallInit() {
+     checkEnumWarning(
+         "/** @return {Object} */ function f() { return {}; }"
+         + "/** @enum {number} */ var E = f();",
+         true);
+   }
+
+   public void testEnumWithUnaryOpInit() {
+     checkEnumWarning("/** @enum {number} */ var E = -1;", true);
+   }
+
+   public void testEnumWithTernaryInit() {
+     checkEnumWarning(
+         "/** @enum {number} */ var E = true ? {A:1} : {B:2};",
+         true);
+   }
+
+   public void testEnumWithNoInitializer() {
+     checkEnumWarning("/** @enum {number} */ var E;", true);
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-168f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-168f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-168f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-168f-copilot/.test_suite/com/google/javascript/jscomp/TypedScopeCreatorTest.java:21: error: method compile in class Compiler cannot be applied to given types;
+ [javac] compiler.compile(
+ [javac] ^
+ [javac] required: List<T1>,List<T2>,CompilerOptions
+ [javac] reason: cannot infer type-variable(s) T1,T2
+ [javac] (actual and formal argument lists differ in length)
+ [javac] where T1,T2 are type-variables:
+ [javac] T1 extends SourceFile declared in method <T1,T2>compile(List<T1>,List<T2>,CompilerOptions)
+ [javac] T2 extends SourceFile declared in method <T1,T2>compile(List<T1>,List<T2>,CompilerOptions)
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 14 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

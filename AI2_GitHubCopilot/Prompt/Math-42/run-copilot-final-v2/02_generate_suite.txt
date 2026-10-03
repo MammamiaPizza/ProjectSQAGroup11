@@ -1,0 +1,371 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 42  Version: Math-42b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.optimization.linear.SimplexTableau
+Modified: org.apache.commons.math.optimization.linear.SimplexTableau
+Triggers: org.apache.commons.math.optimization.linear.SimplexSolverTest::testMath713NegativeVariable
+
+Bug/specification summary:
+Bug report: MATH-713
+Trigger failures:
+- org.apache.commons.math.optimization.linear.SimplexSolverTest::testMath713NegativeVariable
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math.optimization.linear.SimplexTableau
+
+Prompt-01 test plan:
+TARGETS: SimplexTableau.normalize() handling negative lower bound; createTableau() split vars.
+ORACLES: testMath713NegativeVariable assertion expected solution point values.
+CASES: one var lb<0; all vars lb<0; mixed signs; equality with neg lb; zero lb.
+RISKS: no access to test source; only public SimplexTableau API visible; normalization may vary.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.optimization.linear.SimplexTableau (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.optimization.linear;
+class SimplexTableau implements Serializable {
+private final List<String> columnLabels = new ArrayList<String>();
+protected void initializeColumnLabels() {
+protected RealMatrix createTableau(final boolean maximize) {
+public List<LinearConstraint> normalizeConstraints(Collection<LinearConstraint> originalConstraints) {
+private LinearConstraint normalize(final LinearConstraint constraint) {
+protected final int getNumObjectiveFunctions() {
+private int getConstraintTypeCounts(final Relationship relationship) {
+for (final LinearConstraint constraint : constraints) {
+protected static double getInvertedCoefficientSum(final RealVector coefficients) {
+protected Integer getBasicRow(final int col) {
+final double entry = getEntry(i, col);
+protected void dropPhase1Objective() {
+final double entry = tableau.getEntry(0, i);
+private void copyArray(final double[] src, final double[] dest) {
+protected RealPointValuePair getSolution() {
+protected void divideRow(final int dividendRow, final double divisor) {
+protected final int getWidth() {
+protected final int getHeight() {
+protected final double getEntry(final int row, final int column) {
+protected final int getSlackVariableOffset() {
+protected final int getArtificialVariableOffset() {
+protected final int getRhsOffset() {
+protected final int getNumDecisionVariables() {
+protected final int getOriginalNumDecisionVariables() {
+protected final int getNumSlackVariables() {
+protected final int getNumArtificialVariables() {
+protected final double[][] getData() {
+@Override
+public boolean equals(Object other) {
+public int hashCode() {
+private void writeObject(ObjectOutputStream oos)
+private void readObject(ObjectInputStream ois)
+
+/* HEADER */
+package org.apache.commons.math.optimization.linear;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import org.apache.commons.math.linear.Array2DRowRealMatrix;
+import org.apache.commons.math.linear.MatrixUtils;
+import org.apache.commons.math.linear.RealMatrix;
+import org.apache.commons.math.linear.RealVector;
+import org.apache.commons.math.optimization.GoalType;
+import org.apache.commons.math.optimization.RealPointValuePair;
+import org.apache.commons.math.util.Precision;
+class SimplexTableau implements Serializable {
+
+/* METHOD SimplexTableau */
+SimplexTableau(final LinearObjectiveFunction f,
+ final Collection<LinearConstraint> constraints,
+ final GoalType goalType, final boolean restrictToNonNegative,
+ final double epsilon) {
+ this(f, constraints, goalType, restrictToNonNegative, epsilon, DEFAULT_ULPS);
+ }
+
+/* METHOD SimplexTableau */
+SimplexTableau(final LinearObjectiveFunction f,
+ final Collection<LinearConstraint> constraints,
+ final GoalType goalType, final boolean restrictToNonNegative,
+ final double epsilon,
+ final int maxUlps) {
+ this.f = f;
+ this.constraints = normalizeConstraints(constraints);
+ this.restrictToNonNegative = restrictToNonNegative;
+ this.epsilon = epsilon;
+ this.maxUlps = maxUlps;
+ this.numDecisionVariables = f.getCoefficients().getDimension() +
+ (restrictToNonNegative ? 0 : 1);
+ this.numSlackVariables = getConstraintTypeCounts(Relationship.LEQ) +
+ getConstraintTypeCounts(Relationship.GEQ);
+ this.numArtificialVariables = getConstraintTypeCounts(Relationship.EQ) +
+ getConstraintTypeCounts(Relationship.GEQ);
+ this.tableau = createTableau(goalType == GoalType.MAXIMIZE);
+ initializeColumnLabels();
+ }
+
+/* METHOD normalizeConstraints */
+public List<LinearConstraint> normalizeConstraints(Collection<LinearConstraint> originalConstraints) {
+ List<LinearConstraint> normalized = new ArrayList<LinearConstraint>();
+ for (LinearConstraint constraint : originalConstraints) {
+ normalized.add(normalize(constraint));
+ }
+ return normalized;
+ }
+
+/* METHOD dropPhase1Objective */
+protected void dropPhase1Objective() {
+ if (getNumObjectiveFunctions() == 1) {
+ return;
+ }
+
+ List<Integer> columnsToDrop = new ArrayList<Integer>();
+ columnsToDrop.add(0);
+
+ // positive cost non-artificial variables
+ for (int i = getNumObjectiveFunctions(); i < getArtificialVariableOffset(); i++) {
+ final double entry = tableau.getEntry(0, i);
+ if (Precision.compareTo(entry, 0d, maxUlps) > 0) {
+ columnsToDrop.add(i);
+ }
+ }
+
+ // non-basic artificial variables
+ for (int i = 0; i < getNumArtificialVariables(); i++) {
+ int col = i + getArtificialVariableOffset();
+ if (getBasicRow(col) == null) {
+ columnsToDrop.add(col);
+ }
+ }
+
+ double[][] matrix = new double[getHeight() - 1][getWidth() - columnsToDrop.size()];
+ for (int i = 1; i < getHeight(); i++) {
+ int col = 0;
+ for (int j = 0; j < getWidth(); j++) {
+ if (!columnsToDrop.contains(j)) {
+ matrix[i - 1][col++] = tableau.getEntry(i, j);
+ }
+ }
+ }
+
+ for (int i = columnsToDrop.size() - 1; i >= 0; i--) {
+ columnLabels.remove((int) columnsToDrop.get(i));
+ }
+
+ this.tableau = new Array2DRowRealMatrix(matrix);
+ this.numArtificialVariables = 0;
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object other) {
+
+ if (this == other) {
+ return true;
+ }
+
+ if (other instanceof SimplexTableau) {
+ SimplexTableau rhs = (SimplexTableau) other;
+ return (restrictToNonNegative == rhs.restrictToNonNegative) &&
+ (numDecisionVariables == rhs.numDecisionVariables) &&
+ (numSlackVariables == rhs.numSlackVariables) &&
+ (numArtificialVariables == rhs.numArtificialVariables) &&
+ (epsilon == rhs.epsilon) &&
+ (maxUlps == rhs.maxUlps) &&
+ f.equals(rhs.f) &&
+ constraints.equals(rhs.constraints) &&
+ tableau.equals(rhs.tableau);
+ }
+ return false;
+ }
+
+/* METHOD initializeColumnLabels */
+protected void initializeColumnLabels() {
+ if (getNumObjectiveFunctions() == 2) {
+ columnLabels.add("W");
+ }
+ columnLabels.add("Z");
+ for (int i = 0; i < getOriginalNumDecisionVariables(); i++) {
+ columnLabels.add("x" + i);
+ }
+ if (!restrictToNonNegative) {
+ columnLabels.add(NEGATIVE_VAR_COLUMN_LABEL);
+ }
+ for (int i = 0; i < getNumSlackVariables(); i++) {
+ columnLabels.add("s" + i);
+ }
+ for (int i = 0; i < getNumArtificialVariables(); i++) {
+ columnLabels.add("a" + i);
+ }
+ columnLabels.add("RHS");
+ }
+
+/* METHOD createTableau */
+protected RealMatrix createTableau(final boolean maximize) {
+
+ // create a matrix of the correct size
+ int width = numDecisionVariables + numSlackVariables +
+ numArtificialVariables + getNumObjectiveFunctions() + 1; // + 1 is for RHS
+ int height = constraints.size() + getNumObjectiveFunctions();
+ Array2DRowRealMatrix matrix = new Array2DRowRealMatrix(height, width);
+
+ // initialize the objective function rows
+ if (getNumObjectiveFunctions() == 2) {
+ matrix.setEntry(0, 0, -1);
+ }
+ int zIndex = (getNumObjectiveFunctions() == 1) ? 0 : 1;
+ matrix.setEntry(zIndex, zIndex, maximize ? 1 : -1);
+ RealVector objectiveCoefficients =
+ maximize ? f.getCoefficients().mapMultiply(-1) : f.getCoefficients();
+ copyArray(objectiveCoefficients.toArray(), matrix.getDataRef()[zIndex]);
+ matrix.setEntry(zIndex, width - 1,
+ maximize ? f.getConstantTerm() : -1 * f.getConstantTerm());
+
+ if (!restrictToNonNegative) {
+ matrix.setEntry(zIndex, getSlackVariableOffset() - 1,
+ getInvertedCoefficientSum(objectiveCoefficients));
+ }
+
+ // initialize the constraint rows
+ int slackVar = 0;
+ int artificialVar = 0;
+ for (int i = 0; i < constraints.size(); i++) {
+ LinearConstraint constraint = constraints.get(i);
+ int row = getNumObjectiveFunctions() + i;
+
+ // decision variable coefficients
+ copyArray(constraint.getCoefficients().toArray(), matrix.getDataRef()[row]);
+
+ // x-
+ if (!restrictToNonNegative) {
+ matrix.setEntry(row, getSlackVariableOffset() - 1,
+ getInvertedCoefficientSum(constraint.getCoefficients()));
+ }
+
+ // RHS
+ matrix.setEntry(row, width - 1, constraint.getValue());
+
+ // slack variables
+ if (constraint.getRelationship() == Relationship.LEQ) {
+ matrix.setEntry(row, getSlackVariableOffset() + slackVar++, 1); // slack
+ } else if (constraint.getRelationship() == Relationship.GEQ) {
+ matrix.setEntry(row, getSlackVariableOffset() + slackVar++, -1); // excess
+ }
+
+ // artificial variables
+ if ((constraint.getRelationship() == Relationship.EQ) ||
+ (constraint.getRelationship() == Relationship.GEQ)) {
+ matrix.setEntry(0, getArtificialVariableOffset() + artificialVar, 1);
+ matrix.setEntry(row, getArtificialVariableOffset() + artificialVar++, 1);
+ matrix.setRowVector(0, matrix.getRowVector(0).subtract(matrix.getRowVector(row)));
+ }
+ }
+
+ return matrix;
+ }
+
+/* METHOD getNumObjectiveFunctions */
+protected final int getNumObjectiveFunctions() {
+ return this.numArtificialVariables > 0 ? 2 : 1;
+ }
+
+/* METHOD getInvertedCoefficientSum */
+protected static double getInvertedCoefficientSum(final RealVector coefficients) {
+ double sum = 0;
+ for (double coefficient : coefficients.toArray()) {
+ sum -= coefficient;
+ }
+ return sum;
+ }
+
+/* METHOD getBasicRow */
+protected Integer getBasicRow(final int col) {
+ Integer row = null;
+ for (int i = 0; i < getHeight(); i++) {
+ final double entry = getEntry(i, col);
+ if (Precision.equals(entry, 1d, maxUlps) && (row == null)) {
+ row = i;
+ } else if (!Precision.equals(entry, 0d, maxUlps)) {
+ return null;
+ }
+ }
+ return row;
+ }
+
+/* METHOD getSolution */
+protected RealPointValuePair getSolution() {
+ int negativeVarColumn = columnLabels.indexOf(NEGATIVE_VAR_COLUMN_LABEL);
+ Integer negativeVarBasicRow = negativeVarColumn > 0 ? getBasicRow(negativeVarColumn) : null;
+ double mostNegative = negativeVarBasicRow == null ? 0 : getEntry(negativeVarBasicRow, getRhsOffset());
+
+ Set<Integer> basicRows = new HashSet<Integer>();
+ double[] coefficients = new double[getOriginalNumDecisionVariables()];
+ for (int i = 0; i < coefficients.length; i++) {
+ int colIndex = columnLabels.indexOf("x" + i);
+ if (colIndex < 0) {
+ coefficients[i] = 0;
+ continue;
+ }
+ Integer basicRow = getBasicRow(colIndex);
+ // if the basic row is found to be the objective function row
+ // set the coefficient to 0 -> this case handles unconstrained 
+ // variables that are still part of the objective function
+ if (basicRows.contains(basicRow)) {
+ // if multiple variables can take a given value
+ // then we choose the first and set the rest equal to 0
+ coefficients[i] = 0 - (restrictToNonNegative ? 0 : mostNegative);
+ } else {
+ basicRows.add(basicRow);
+ coefficients[i] =
+ (basicRow == null ? 0 : getEntry(basicRow, getRhsOffset())) -
+ (restrictToNonNegative ? 0 : mostNegative);
+ }
+ }
+ return new RealPointValuePair(coefficients, f.getValue(coefficients));
+ }
+
+/* METHOD divideRow */
+protected void divideRow(final int dividendRow, final double divisor) {
+ for (int j = 0; j < getWidth(); j++) {
+ tableau.setEntry(dividendRow, j, tableau.getEntry(dividendRow, j) / divisor);
+ }
+ }
+
+/* METHOD subtractRow */
+protected void subtractRow(final int minuendRow, final int subtrahendRow,
+ final double multiple) {
+ tableau.setRowVector(minuendRow, tableau.getRowVector(minuendRow)
+ .subtract(tableau.getRowVector(subtrahendRow).mapMultiply(multiple)));
+ }
+
+/* METHOD getWidth */
+protected final int getWidth() {
+ return tableau.getColumnDimension();
+ }
+
+/* METHOD getHeight */
+protected final int getHeight() {
+ return tableau.getRowDimension();
+ }
+
+/* METHOD getEntry */
+protected final double getEntry(final int row, final int column) {
+ return tableau.getEntry(row, column);
+ }
+
+/* METHOD setEntry */
+protected final void setEntry(final int row, final int column,
+ final double value) {
+ tableau.setEntry(row, column, value);
+ }
+
+/* METHOD getSlackVariableOffset */
+protected final int getSlackVariableOffset() {
+ return getNumObjectiveFunctions() + numDecisionVariables;
+ }

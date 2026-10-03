@@ -1,0 +1,444 @@
+The previously generated JUnit Test Suite failed to compile or run.
+Analyze the production source code, generated test, Project Context, behavioral specification, and error
+output. Return a corrected complete Java Test Class.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Preserve all valid and meaningful Test Cases.
+4. Fix package, import, syntax, type, constructor, method-call, dependency, mock, and assertion errors.
+5. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+6. Do not invent missing APIs, dependencies, or expected behavior.
+7. Do not change an assertion only to make the test pass unless the supplied specification, API
+documentation, public contract, or bug report supports the change.
+8. Do not remove a Test Case merely to hide an error unless the scenario is impossible according to the
+supplied context.
+9. Do not modify the intended behavior being tested.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Keep the Test Cases independent and free from execution-order dependencies.
+12. Briefly explain the cause of each error and the correction made.
+13. Return the complete corrected Java Test Class.
+Project ID:
+JxPath
+Bug ID:
+2
+Source Version:
+JxPath-2b
+JUnit Version:
+junit-3.8.1.jar
+Build Tool:
+Ant
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: JxPath
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: JxPath
+       Program: commons-jxpath
+    Build file: /root/defects4j/framework/projects/JxPath/JxPath.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-jxpath.git
+     Commit db: /root/defects4j/framework/projects/JxPath/active-bugs.csv
+Number of bugs: 22
+--------------------------------------------------------------------------------
+
+Summary for Bug: JxPath-2
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+716c03b3b12ec106974898451b149f6eb79c65da
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2007-01-10 22:37:24 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+JXPATH-50
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/JXPATH-50
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.jxpath.ri.compiler.ExtensionFunctionTest::testNodeSetReturn
+   --> junit.framework.AssertionFailedError: Evaluating value iterator <test:nodeSet()> expected:<[Nested: Name 1, Nested: Name 2]> but was:<[[/beans[1], /beans[2]]]>
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.jxpath.ri.compiler.Expression
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.jxpath.ri.compiler.Expression (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.compiler;
+
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.EvalContext;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.util.ValueUtils;
+
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Locale;
+
+/**
+ * Common superclass for several types of nodes in the parse tree. Provides
+ * APIs for optimization of evaluation of expressions.  Specifically, an
+ * expression only needs to executed once during the evaluation of an xpath
+ * if that expression is context-independent.  Expression.isContextDependent()
+ * provides that hint.
+ *
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public abstract class Expression {
+
+    protected static final Double ZERO = new Double(0);
+    protected static final Double ONE = new Double(1);
+    protected static final Double NOT_A_NUMBER = new Double(Double.NaN);
+
+    private boolean contextDependencyKnown = false;
+    private boolean contextDependent;
+
+    /**
+     * Returns true if this expression should be re-evaluated
+     * each time the current position in the context changes.
+     */
+    public boolean isContextDependent() {
+        if (!contextDependencyKnown) {
+            contextDependent = computeContextDependent();
+            contextDependencyKnown = true;
+        }
+        return contextDependent;
+    }
+
+    /**
+     * Implemented by subclasses and result is cached by isContextDependent()
+     */
+    public abstract boolean computeContextDependent();
+
+    /**
+     * Evaluates the expression. If the result is a node set, returns
+     * the first element of the node set.
+     */
+    public abstract Object computeValue(EvalContext context);
+    public abstract Object compute(EvalContext context);
+
+    public Iterator iterate(EvalContext context) {
+        Object result = compute(context);
+        if (result instanceof EvalContext) {
+            return new ValueIterator((EvalContext) result);
+        }
+        return ValueUtils.iterate(result);
+    }
+
+    public Iterator iteratePointers(EvalContext context) {
+        Object result = compute(context);
+        if (result == null) {
+            return Collections.EMPTY_LIST.iterator();
+        }
+        if (result instanceof EvalContext) {
+            return (EvalContext) result;
+        }
+        return new PointerIterator(ValueUtils.iterate(result),
+                new QName(null, "value"),
+                context.getRootContext().getCurrentNodePointer().getLocale());
+    }
+
+    public static class PointerIterator implements Iterator {
+        private Iterator iterator;
+        private QName qname;
+        private Locale locale;
+
+        //to what method does the following comment refer?
+        /**
+         * @deprecated Use the method that takes a NamespaceManager
+         */
+        public PointerIterator(Iterator it, QName qname, Locale locale) {
+            this.iterator = it;
+            this.qname = qname;
+            this.locale = locale;
+        }
+
+        public boolean hasNext() {
+            return iterator.hasNext();
+        }
+
+        public Object next() {
+            Object o = iterator.next();
+            return o instanceof Pointer ? o : NodePointer.newNodePointer(qname, o, locale);
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    public static class ValueIterator implements Iterator {
+        private Iterator iterator;
+
+        public ValueIterator(Iterator it) {
+            this.iterator = it;
+        }
+
+        public boolean hasNext() {
+            return iterator.hasNext();
+        }
+
+        public Object next() {
+            Object o = iterator.next();
+            if (o instanceof Pointer) {
+                return ((Pointer) o).getValue();
+            }
+            return o;
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.jxpath.ri.compiler.Expression
+
+Triggering tests:
+- org.apache.commons.jxpath.ri.compiler.ExtensionFunctionTest::testNodeSetReturn
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.compiler;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.NoSuchElementException;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.EvalContext;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+/**
+ * Tests for {@link Expression}.
+ */
+public class ExpressionGeneratedTest extends TestCase {
+
+    public void testContextDependencyIsComputedOnlyOnceAndComputeValueDelegatesToSubclass() {
+        TestExpression expression = new TestExpression("value", true);
+
+        assertTrue(expression.isContextDependent());
+        assertTrue(expression.isContextDependent());
+        assertEquals(1, expression.getContextDependencyComputations());
+
+        assertEquals("value", expression.computeValue(null));
+        assertEquals("value", expression.compute(null));
+    }
+
+    public void testIterateConvertsPointersReturnedByEvalContextToTheirValues() {
+        NodePointer first = pointerFor("Nested: Name 1");
+        NodePointer second = pointerFor("Nested: Name 2");
+        ListEvalContext nodeSet =
+                new ListEvalContext(pointerFor("root"), new Object[] { first, second });
+
+        TestExpression expression = new TestExpression(nodeSet, false);
+        Iterator values = expression.iterate(null);
+
+        assertTrue(values.hasNext());
+        assertEquals("Nested: Name 1", values.next());
+        assertTrue(values.hasNext());
+        assertEquals("Nested: Name 2", values.next());
+        assertFalse(values.hasNext());
+    }
+
+    public void testIterateReturnsElementsForOrdinaryCollectionResult() {
+        TestExpression expression =
+                new TestExpression(Arrays.asList(new String[] { "first", "second" }), false);
+
+        Iterator values = expression.iterate(null);
+
+        assertTrue(values.hasNext());
+        assertEquals("first", values.next());
+        assertTrue(values.hasNext());
+        assertEquals("second", values.next());
+        assertFalse(values.hasNext());
+    }
+
+    public void testIteratePointersReturnsEvalContextUnchangedForNodeSetResult() {
+        ListEvalContext nodeSet =
+                new ListEvalContext(pointerFor("root"),
+                        new Object[] { pointerFor("value") });
+        TestExpression expression = new TestExpression(nodeSet, false);
+
+        Iterator pointers = expression.iteratePointers(null);
+
+        assertSame(nodeSet, pointers);
+        assertTrue(pointers.hasNext());
+        assertSame(nodeSet.getExpectedElement(0), pointers.next());
+    }
+
+    public void testIteratePointersWrapsPlainValuesAndPreservesExistingPointers() {
+        NodePointer root = pointerFor("root");
+        NodePointer existingPointer = pointerFor("already a pointer");
+        ListEvalContext context = new ListEvalContext(root, new Object[0]);
+        TestExpression expression = new TestExpression(
+                Arrays.asList(new Object[] { "plain value", existingPointer }), false);
+
+        Iterator pointers = expression.iteratePointers(context);
+
+        assertTrue(pointers.hasNext());
+        Object wrapped = pointers.next();
+        assertTrue(wrapped instanceof Pointer);
+        assertEquals("plain value", ((Pointer) wrapped).getValue());
+
+        assertTrue(pointers.hasNext());
+        assertSame(existingPointer, pointers.next());
+        assertFalse(pointers.hasNext());
+
+        try {
+            pointers.remove();
+            fail("PointerIterator.remove() must not be supported");
+        }
+        catch (UnsupportedOperationException expected) {
+            assertTrue(true);
+        }
+    }
+
+    public void testIteratePointersReturnsEmptyIteratorForNullResult() {
+        TestExpression expression = new TestExpression(null, false);
+
+        Iterator pointers = expression.iteratePointers(null);
+
+        assertNotNull(pointers);
+        assertFalse(pointers.hasNext());
+    }
+
+    public void testValueIteratorDereferencesPointersAndKeepsOrdinaryValues() {
+        NodePointer pointer = pointerFor("pointer value");
+        Expression.ValueIterator values = new Expression.ValueIterator(
+                Arrays.asList(new Object[] { pointer, "ordinary value" }).iterator());
+
+        assertTrue(values.hasNext());
+        assertEquals("pointer value", values.next());
+        assertTrue(values.hasNext());
+        assertEquals("ordinary value", values.next());
+        assertFalse(values.hasNext());
+
+        try {
+            values.remove();
+            fail("ValueIterator.remove() must not be supported");
+        }
+        catch (UnsupportedOperationException expected) {
+            assertTrue(true);
+        }
+    }
+
+    private static NodePointer pointerFor(Object value) {
+        return NodePointer.newNodePointer(
+                new QName(null, "value"), value, Locale.US);
+    }
+
+    private static final class TestExpression extends Expression {
+        private final Object result;
+        private final boolean contextDependentResult;
+        private int contextDependencyComputations;
+
+        private TestExpression(Object result, boolean contextDependentResult) {
+            this.result = result;
+            this.contextDependentResult = contextDependentResult;
+        }
+
+        public boolean computeContextDependent() {
+            contextDependencyComputations++;
+            return contextDependentResult;
+        }
+
+        public Object computeValue(EvalContext context) {
+            return result;
+        }
+
+        public Object compute(EvalContext context) {
+            return result;
+        }
+
+        private int getContextDependencyComputations() {
+            return contextDependencyComputations;
+        }
+    }
+
+    /**
+     * Controlled EvalContext used as an expression result and as a root context
+     * for pointer wrapping tests.
+     */
+    private static final class ListEvalContext extends EvalContext {
+        private final NodePointer currentNodePointer;
+        private final Object[] elements;
+        private int index;
+
+        private ListEvalContext(NodePointer currentNodePointer, Object[] elements) {
+            super(null);
+            this.currentNodePointer = currentNodePointer;
+            this.elements = elements;
+        }
+
+        public NodePointer getCurrentNodePointer() {
+            return currentNodePointer;
+        }
+
+        public boolean setPosition(int position) {
+            return false;
+        }
+
+        public int getDocumentOrder() {
+            return 0;
+        }
+
+        public boolean nextNode() {
+            return false;
+        }
+
+        public boolean hasNext() {
+            return index < elements.length;
+        }
+
+        public Object next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return elements[index++];
+        }
+
+        private Object getExpectedElement(int elementIndex) {
+            return elements[elementIndex];
+        }
+    }
+}
+
+Compiler or Test Runner error:
+Failing tests: 1
+  - org.apache.commons.jxpath.ri.compiler.ExpressionGeneratedTest::testIteratePointersWrapsPlainValuesAndPreservesExistingPointers
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+
+
+Generated tests failing on fixed:
+- org.apache.commons.jxpath.ri.compiler.ExpressionGeneratedTest::testIteratePointersWrapsPlainValuesAndPreservesExistingPointers

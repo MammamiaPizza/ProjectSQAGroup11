@@ -1,0 +1,211 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 18  Version: Gson-18b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1107
+Trigger failures:
+- com.google.gson.functional.CollectionTest::testIssue1107
+ --> java.lang.ClassCastException: com.google.gson.internal.LinkedTreeMap cannot be cast to com.google.gson.functional.CollectionTest$SmallClass
+Modified: com.google.gson.internal.$Gson$Types
+
+Available API/signatures:
+[com.google.gson.internal.$Gson$Types | java]
+package com.google.gson.internal;
+public final class $Gson$Types {
+private $Gson$Types() {
+public static GenericArrayType arrayOf(Type componentType) {
+public static WildcardType subtypeOf(Type bound) {
+public static WildcardType supertypeOf(Type bound) {
+return new WildcardTypeImpl(new Type[] { Object.class }, lowerBounds);
+public static Type canonicalize(Type type) {
+public static Class<?> getRawType(Type type) {
+return Object.class;
+static boolean equal(Object a, Object b) {
+public static boolean equals(Type a, Type b) {
+static int hashCodeOrZero(Object o) {
+public static String typeToString(Type type) {
+static Type getGenericSupertype(Type context, Class<?> rawType, Class<?> toResolve) {
+while (rawType != Object.class) {
+static Type getSupertype(Type context, Class<?> contextRawType, Class<?> supertype) {
+public static Type getArrayComponentType(Type array) {
+public static Type getCollectionElementType(Type context, Class<?> contextRawType) {
+Type collectionType = getSupertype(context, contextRawType, Collection.class);
+public static Type[] getMapKeyAndValueTypes(Type context, Class<?> contextRawType) {
+if (context == Properties.class) {
+return new Type[] { String.class, String.class }; // TODO: test subclasses of Properties!
+Type mapType = getSupertype(context, contextRawType, Map.class);
+return new Type[] { Object.class, Object.class };
+public static Type resolve(Type context, Class<?> contextRawType, Type toResolve) {
+static Type resolveTypeVariable(Type context, Class<?> contextRawType, TypeVariable<?> unknown) {
+private static int indexOf(Object[] array, Object toFind) {
+private stati
+...[truncated deterministically]...
+l(Type ownerType, Type rawType, Type... typeArguments) {
+public Type[] getActualTypeArguments() {
+public Type getRawType() {
+public Type getOwnerType() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+@Override public String toString() {
+private static final class GenericArrayTypeImpl implements GenericArrayType, Serializable {
+public GenericArrayTypeImpl(Type componentType) {
+public Type getGenericComponentType() {
+@Override public boolean equals(Object o) {
+private static final class WildcardTypeImpl implements WildcardType, Serializable {
+public WildcardTypeImpl(Type[] upperBounds, Type[] lowerBounds) {
+checkArgument(upperBounds[0] == Object.class);
+this.upperBound = Object.class;
+public Type[] getUpperBounds() {
+public Type[] getLowerBounds() {
+} else if (upperBound == Object.class) {
+
+Generated JUnit Test:
+package com.google.gson.internal;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import org.junit.Test;
+
+@SuppressWarnings({"unused", "rawtypes"})
+public class GsonTypesTest {
+
+  static final class SmallClass { }
+
+  static final class ArrayListOfString extends ArrayList<String> { }
+
+  static final class UnsupportedType implements Type { }
+
+  interface Single<T> { }
+
+  static final class SingleChild implements Single<List<String>> { }
+
+  static final class GenericHolder<T> { }
+
+  static final class ConcreteHolder extends GenericHolder<List<String>> { }
+
+  private static List<String> listOfString; private static List<? extends Number> numberList;
+private static Map<Long, SmallClass> mapOfLongToSmall; private static List<Map<String, SmallClass>>
+listOfMaps;
+
+  private static Type genericTypeOf(String fieldName) {
+    try {
+      return GsonTypesTest.class.getDeclaredField(fieldName).getGenericType();
+    } catch (NoSuchFieldException e) {
+      throw new AssertionError(e);
+    } }
+
+  @Test public void testGetCollectionElementTypeFromSubclass() {
+    Type element = $Gson$Types.getCollectionElementType(ArrayListOfString.class,
+ArrayListOfString.class);
+    assertEquals(String.class, element); }
+
+  @Test public void testGetCollectionElementTypeFromParameterizedList() {
+    Type context = genericTypeOf("listOfString");
+    Type element = $Gson$Types.getCollectionElementType(context, $Gson$Types.getRawType(context));
+    assertEquals(String.class, element); }
+
+  @Test public void testGetCollectionElementTypeIssue1107Shape() {
+    Type context = genericTypeOf("listOfMaps");
+    Type element = $Gson$Types.getCollectionElementType(context, $Gson$Types.getRawType(context));
+
+ assertTrue(element instanceof ParameterizedType);
+ assertEquals(Map.class, $Gson$Types.getRawType(element));
+
+ Type[] actualTypeArguments = ((ParameterizedType) element).getActualTypeArguments();
+ assertEquals(String.class, actualTypeArguments[0]);
+ assertEquals(SmallClass.class, actualTypeArguments[1]); }
+
+  @Test public void testGetCollectionElementTypeWildcardUpperBound() {
+    Type context = genericTypeOf("numberList");
+    Type element = $Gson$Types.getCollectionElementType(context, $Gson$Types.getRawType(context));
+
+ assertTrue(element instanceof WildcardType);
+ assertEquals(Number.class, ((WildcardType) element).getUpperBounds()[0]); }
+
+  @Test public void testGetCollectionElementTypeRawCollection() {
+    Type element = $Gson$Types.getCollectionElementType(ArrayList.class, ArrayList.class);
+    assertEquals(Object.class, element); }
+
+  @Test public void testGetMapKeyAndValueTypesForProperties() {
+    Type[] keyAndValue = $Gson$Types.getMapKeyAndValueTypes(Properties.class, Properties.class);
+    assertArrayEquals(new Type[] { String.class, String.class }, keyAndValue); }
+
+  @Test public void testGetMapKeyAndValueTypesParameterized() {
+    Type context = genericTypeOf("mapOfLongToSmall");
+    Type[] keyAndValue = $Gson$Types.getMapKeyAndValueTypes(context,
+$Gson$Types.getRawType(context));
+
+ assertEquals(Long.class, keyAndValue[0]);
+ assertEquals(SmallClass.class, keyAndValue[1]); }
+
+  @Test public void testResolveTypeVariableDeclaredOnInterface() {
+    TypeVariable<?> typeVariable = Single.class.getTypeParameters()[0];
+    Type resolved = $Gson$Types.resolve(SingleChild.class, SingleChild.class, typeVariable);
+
+ assertTrue(resolved instanceof ParameterizedType);
+ assertEquals(List.class, $Gson$Types.getRawType(resolved));
+ assertEquals(String.class, ((ParameterizedType) resolved).getActualTypeArguments()[0]); }
+
+  @Test public void testGetSupertypeForGenericSuperclass() {
+    Type supertype = $Gson$Types.getSupertype(ConcreteHolder.class, ConcreteHolder.class,
+GenericHolder.class);
+
+ assertTrue(supertype instanceof ParameterizedType);
+ assertEquals(GenericHolder.class, $Gson$Types.getRawType(supertype));
+
+ Type typeArgument = ((ParameterizedType) supertype).getActualTypeArguments()[0];
+ assertEquals(List.class, $Gson$Types.getRawType(typeArgument));
+ assertEquals(String.class, ((ParameterizedType) typeArgument).getActualTypeArguments()[0]); }
+
+  @Test public void testGetRawTypeRejectsUnsupportedType() {
+    try {
+      $Gson$Types.getRawType(new UnsupportedType());
+      fail("Expected IllegalArgumentException for an unsupported Type implementation");
+    } catch (IllegalArgumentException expected) {
+      assertNotNull(expected.getMessage());
+    } }
+
+  @Test public void testWildcardFactories() {
+    WildcardType subtype = $Gson$Types.subtypeOf(Number.class);
+    assertArrayEquals(new Type[] { Number.class }, subtype.getUpperBounds());
+    assertArrayEquals(new Type[] {}, subtype.getLowerBounds());
+
+ WildcardType supertype = $Gson$Types.supertypeOf(Number.class);
+ assertArrayEquals(new Type[] { Object.class }, supertype.getUpperBounds());
+ assertArrayEquals(new Type[] { Number.class }, supertype.getLowerBounds()); }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Gson-18f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Gson-18f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Gson-18f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Gson-18f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Gson-18f-copilot/.test_suite/com/google/gson/internal/GsonTypesTest.java:35: error: cannot inherit from final GenericHolder
+ [javac] static final class ConcreteHolder extends GenericHolder<List<String>> { }
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 42 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,148 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 51  Version: Closure-51b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 582
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testIssue582
+ --> junit.framework.ComparisonFailure: expected:<var x=[-0.]0> but was:<var x=[]0>
+Modified: com.google.javascript.jscomp.CodeConsumer
+
+Available API/signatures:
+[com.google.javascript.jscomp.CodeConsumer | java]
+package com.google.javascript.jscomp;
+abstract class CodeConsumer {
+abstract char getLastChar();
+abstract void append(String str);
+static boolean isWordChar(char ch) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Tests for {@link CodeConsumer}, focusing on the proper handling of
+  * negative zero (-0.0) as reported in issue 582.
+  */
+ public class CodeConsumerTest extends TestCase {
+
+     private TestConsumer consumer;
+
+     @Override
+     protected void setUp() throws Exception {
+         super.setUp();
+         consumer = new TestConsumer();
+     }
+
+     @Override
+     protected void tearDown() throws Exception {
+         consumer = null;
+         super.tearDown();
+     }
+
+     // -- Negative zero (the core bug) --
+
+     public void testNegativeZeroLiteral() {
+         consumer.addNumber(-0.0);
+         assertEquals("-0.0", consumer.getOutput());
+     }
+
+     public void testPositiveZeroLiteral() {
+         consumer.addNumber(0.0);
+         assertEquals("0", consumer.getOutput());
+     }
+
+     public void testNegativeZeroWithPrecedingMinus() {
+         consumer.add("-");
+         consumer.addNumber(-0.0);
+         assertEquals("- -0.0", consumer.getOutput());
+     }
+
+     public void testNegativeZeroWithPrecedingPlus() {
+         consumer.add("+");
+         consumer.addNumber(-0.0);
+         assertEquals("+-0.0", consumer.getOutput());
+     }
+
+     public void testNegativeZeroAfterSpace() {
+         consumer.add(" ");
+         consumer.addNumber(-0.0);
+         assertEquals(" -0.0", consumer.getOutput());
+     }
+
+     public void testNegativeZeroFormattedWithSign() {
+         consumer.addNumber(-0.0);
+         assertFalse("Output must not be plain \"0\"",
+                 "0".equals(consumer.getOutput()));
+         assertTrue("Output must contain a minus sign",
+                 consumer.getOutput().contains("-"));
+     }
+
+     // -- Ordinary numbers (sanity / regression) --
+
+     public void testZeroLiteralAsInteger() {
+         consumer.addNumber(0);
+         assertEquals("0", consumer.getOutput());
+     }
+
+     public void testNegativeOne() {
+         consumer.addNumber(-1.0);
+         assertEquals("-1", consumer.getOutput());
+     }
+
+     public void testLargePositiveInteger() {
+         consumer.addNumber(1234567890.0);
+         assertEquals("1234567890", consumer.getOutput());
+     }
+
+     public void testLargeNegativeInteger() {
+         consumer.addNumber(-1000000000.0);
+         assertEquals("-1000000000", consumer.getOutput());
+     }
+
+     public void testSmallFraction() {
+         consumer.addNumber(0.5);
+         assertEquals("0.5", consumer.getOutput());
+     }
+
+     public void testNegativeSmallFraction() {
+         consumer.addNumber(-0.25);
+         assertEquals("-0.25", consumer.getOutput());
+     }
+
+     // -- Helper concrete consumer for testing --
+
+     static class TestConsumer extends CodeConsumer {
+         private final StringBuilder sb = new StringBuilder();
+         private char lastChar = '\0';
+
+         @Override
+         void append(String str) {
+             if (str != null && str.length() > 0) {
+                 sb.append(str);
+                 lastChar = str.charAt(str.length() - 1);
+             }
+         }
+
+         @Override
+         char getLastChar() {
+             return lastChar;
+         }
+
+         String getOutput() {
+             return sb.toString();
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.google.javascript.jscomp.CodeConsumerTest::testNegativeZeroWithPrecedingMinus
+ - com.google.javascript.jscomp.CodeConsumerTest::testLargeNegativeInteger
+
+Failing generated tests: com.google.javascript.jscomp.CodeConsumerTest::testLargeNegativeInteger, com.google.javascript.jscomp.CodeConsumerTest::testNegativeZeroWithPrecedingMinus

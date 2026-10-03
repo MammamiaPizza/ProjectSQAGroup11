@@ -1,0 +1,146 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 16  Version: JacksonDatabind-16b
+JUnit: junit-4.11.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.introspect.AnnotationMap
+Modified: com.fasterxml.jackson.databind.introspect.AnnotationMap
+Triggers: com.fasterxml.jackson.databind.mixins.MixinsWithBundlesTest::testMixinWithBundles
+
+Bug/specification summary:
+Bug report: 771
+Trigger failures:
+- com.fasterxml.jackson.databind.mixins.MixinsWithBundlesTest::testMixinWithBundles
+ --> junit.framework.ComparisonFailure: expected:<{"[bar]":"result"}> but was:<{"[stuff]":"result"}>
+Modified: com.fasterxml.jackson.databind.introspect.AnnotationMap
+
+Prompt-01 test plan:
+TARGETS: AnnotationMap.merge(primary, secondary); annotation precedence and preservation 
+TARGETS: AnnotationMap.get, annotations, size, addIfNotPresent, add behavior 
+ORACLES: Trigger expects bundled mixin serialization {"bar":"result"}, not {"stuff":"result"} 
+ORACLES: AnnotationMap contents returned by get/annotations/size after merge or add 
+CASES: Merge maps with same annotation type; verify primary/secondary precedence via retrieved annotation 
+CASES: Merge disjoint maps; verify both annotations and resulting size 
+CASES: Merge empty/nonempty maps and both empty maps 
+CASES: addIfNotPresent duplicate type versus add replacement behavior 
+RISKS: Annotation instances/types require available test annotations; no separate expected spec is provided
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.introspect.AnnotationMap (java) =====
+package com.fasterxml.jackson.databind.introspect;
+
+import java.lang.annotation.Annotation;
+import java.util.*;
+
+import com.fasterxml.jackson.databind.util.Annotations;
+
+/**
+ * Simple helper class used to keep track of collection of
+ * Jackson Annotations associated with annotatable things
+ * (methods, constructors, classes).
+ * Note that only Jackson-owned annotations are tracked (for now?).
+ */
+public final class AnnotationMap implements Annotations
+{
+ protected HashMap<Class<? extends Annotation>,Annotation> _annotations;
+
+ public AnnotationMap() { }
+ 
+ private AnnotationMap(HashMap<Class<? extends Annotation>,Annotation> a) {
+ _annotations = a;
+ }
+
+ @SuppressWarnings("unchecked")
+ @Override
+ public <A extends Annotation> A get(Class<A> cls)
+ {
+ if (_annotations == null) {
+ return null;
+ }
+ return (A) _annotations.get(cls);
+ }
+
+ /**
+ * @since 2.3
+ */
+ public Iterable<Annotation> annotations() {
+ if (_annotations == null || _annotations.size() == 0) {
+ return Collections.emptyList();
+ }
+ return _annotations.values();
+ }
+ 
+ public static AnnotationMap merge(AnnotationMap primary, AnnotationMap secondary)
+ {
+ if (primary == null || primary._annotations == null || primary._annotations.isEmpty()) {
+ return secondary;
+ }
+ if (secondary == null || secondary._annotations == null || secondary._annotations.isEmpty()) {
+ return primary;
+ }
+ HashMap<Class<? extends Annotation>,Annotation> annotations
+ = new HashMap<Class<? extends Annotation>,Annotation>();
+ // add secondary ones first
+ for (Annotation ann : secondary._annotations.values()) {
+ annotations.put(ann.annotationType(), ann);
+ }
+ // to be overridden by primary ones
+ for (Annotation ann : primary._annotations.values()) {
+ annotations.put(ann.annotationType(), ann);
+ }
+ return new AnnotationMap(annotations);
+ }
+ 
+ @Override
+ public int size() {
+ return (_annotations == null) ? 0 : _annotations.size();
+ }
+
+ /**
+ * Method called to add specified annotation in the Map, but
+ * only if it didn't yet exist.
+ */
+ public boolean addIfNotPresent(Annotation ann)
+ {
+ if (_annotations == null || !_annotations.containsKey(ann.annotationType())) {
+ _add(ann);
+ return true;
+ }
+ return false;
+ }
+
+ /**
+ * Method called to add specified annotation in the Map.
+ * 
+ * @return True if the addition changed the contents, that is, this map did not
+ * already have specified annotation
+ */
+ public boolean add(Annotation ann) {
+ return _add(ann);
+ }
+
+ @Override
+ public String toString() {
+ if (_annotations == null) {
+ return "[null]";
+ }
+ return _annotations.toString();
+ }
+
+ /*
+ /**********************************************************
+ /* Helper methods
+ /**********************************************************
+ */
+
+ protected final boolean _add(Annotation ann) {
+ if (_annotations == null) {
+ _annotations = new HashMap<Class<? extends Annotation>,Annotation>();
+ }
+ Annotation previous = _annotations.put(ann.annotationType(), ann);
+ return (previous != null) && previous.equals(ann);
+ }
+}

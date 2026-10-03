@@ -1,0 +1,123 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 17  Version: Compress-17b
+JUnit: junit-4.10.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-197
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::testCompress197
+ --> junit.framework.AssertionFailedError: COMPRESS-197: Error detected parsing the header
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarUtils | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarUtils {
+static final ZipEncoding FALLBACK_ENCODING = new ZipEncoding() {
+public boolean canEncode(String name) { return true; }
+public ByteBuffer encode(String name) {
+final int length = name.length();
+public String decode(byte[] buffer) {
+/** Private constructor to prevent instantiation of this utility class. */
+private TarUtils(){
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+final boolean negative = buffer[offset] == (byte) 0xff;
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+public static String parseName(byte[] buffer, final int offset, final int length) {
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+final int limit = b.limit();
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+final int bits = (length - 1) * 8;
+final byte[] b = val.toByteArray();
+final byte fill = (byte) (negative ? 0xff : 0);
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static long computeCheckSum(final byte[] buf) {
+public static boolean verifyCheckSum(byte[] header) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
+public class TarUtilsTest {
+
+    @Test
+    public void parsesAsciiOctalWithLeadingSpacesAndTrailingPadding() {
+        byte[] field = new byte[] { ' ', ' ', '1', '7', '5', ' ', 0 };
+
+        assertEquals(125L, TarUtils.parseOctal(field, 0, field.length));
+    }
+
+    @Test
+    public void parsesPositiveBase256ValueInSmallestSupportedField() {
+        byte[] field = new byte[] { (byte) 0x80, (byte) 0xff };
+
+        assertEquals(255L, TarUtils.parseOctal(field, 0, field.length));
+    }
+
+    @Test
+    public void parsesNegativeBase256ValueInSmallestSupportedField() {
+        byte[] field = new byte[] { (byte) 0xff, (byte) 0x80 };
+
+        assertEquals(-128L, TarUtils.parseOctal(field, 0, field.length));
+    }
+
+    @Test
+    public void parsesPositiveBase256ValueUsingBigIntegerSizedField() {
+        byte[] field = new byte[] {
+            (byte) 0x80, 0, 0, 0, 0, 0, 0, 0, 42
+        };
+
+        assertEquals(42L, TarUtils.parseOctal(field, 0, field.length));
+    }
+
+    @Test
+    public void parsesMaximumSignedLongBase256Value() {
+        byte[] field = new byte[] {
+            (byte) 0x80,
+            0x7f,
+            (byte) 0xff,
+            (byte) 0xff,
+            (byte) 0xff,
+            (byte) 0xff,
+            (byte) 0xff,
+            (byte) 0xff,
+            (byte) 0xff
+        };
+
+        assertEquals(Long.MAX_VALUE, TarUtils.parseOctal(field, 0, field.length));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsInvalidAsciiOctalDigit() {
+        byte[] field = new byte[] { '1', '8', ' ', 0 };
+
+        TarUtils.parseOctal(field, 0, field.length);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsAsciiFieldWithoutTrailingSpaceOrNul() {
+        byte[] field = new byte[] { '1', '2', '3', '4' };
+
+        TarUtils.parseOctal(field, 0, field.length);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsFieldLengthsSmallerThanTwoBytes() {
+        TarUtils.parseOctal(new byte[] { '0' }, 0, 1);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesPositiveBase256ValueUsingBigIntegerSizedField
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesMaximumSignedLongBase256Value
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesNegativeBase256ValueInSmallestSupportedField
+Failing generated tests: org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesMaximumSignedLongBase256Value, org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesNegativeBase256ValueInSmallestSupportedField, org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesPositiveBase256ValueInSmallestSupportedField, org.apache.commons.compress.archivers.tar.TarUtilsTest::parsesPositiveBase256ValueUsingBigIntegerSizedField

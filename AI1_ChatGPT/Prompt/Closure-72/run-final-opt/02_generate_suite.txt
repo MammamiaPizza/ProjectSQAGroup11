@@ -1,0 +1,385 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 72  Version: Closure-72b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.FunctionToBlockMutator, com.google.javascript.jscomp.RenameLabels
+Modified: com.google.javascript.jscomp.FunctionToBlockMutator, com.google.javascript.jscomp.RenameLabels
+Triggers: com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions31
+
+Bug/specification summary:
+Bug report: 435
+Trigger failures:
+- com.google.javascript.jscomp.InlineFunctionsTest::testInlineFunctions31
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.FunctionToBlockMutator, com.google.javascript.jscomp.RenameLabels
+
+Prompt-01 test plan:
+TARGETS: FunctionToBlockMutator local-name uniquification and uninitialized var declaration repair.
+TARGETS: RenameLabels label declarations plus break/continue label-reference renaming across scopes.
+ORACLES: InlineFunctionsTest::testInlineFunctions31 assertion is the available expected-result source.
+ORACLES: Compiler output/AST label bindings must remain valid after function inlining.
+CASES: Inline a function containing labels and labeled break/continue statements.
+CASES: Inline in a loop (isCallInLoop) with local declarations lacking initializers.
+CASES: Nested labels/scopes with same label names, including references to enclosing labels.
+RISKS: Label namespace stack or rename map may bind references to the wrong renamed label.
+RISKS: Context provides no exact input JS or expected transformed output beyond the failing test.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.FunctionToBlockMutator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class FunctionToBlockMutator {
+private void fixUnitializedVarDeclarations(Node n) {
+private void makeLocalNamesUnique(Node fnNode, boolean isCallInLoop) {
+static class LabelNameSupplier implements Supplier<String> {
+@Override
+public String get() {
+private String getLabelNameForFunction(String fnName){
+private static void addDummyAssignment(Node node, String resultName) {
+private static Node createAssignStatementNode(String name, Node expression) {
+private static boolean hasReturnAtExit(Node block) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.MakeDeclaredNamesUnique.InlineRenamer;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Map.Entry;
+class FunctionToBlockMutator {
+
+/* METHOD FunctionToBlockMutator */
+FunctionToBlockMutator(
+ AbstractCompiler compiler, Supplier<String> safeNameIdSupplier) {
+ this.compiler = compiler;
+ this.safeNameIdSupplier = safeNameIdSupplier;
+ }
+
+/* METHOD get */
+@Override
+ public String get() {
+ return "JSCompiler_inline_label_" + idSupplier.get();
+ }
+
+/* METHOD aliasAndInlineArguments */
+private Node aliasAndInlineArguments(
+ Node fnTemplateRoot, LinkedHashMap<String, Node> argMap,
+ Set<String> namesToAlias) {
+
+ if (namesToAlias == null || namesToAlias.isEmpty()) {
+ // There are no names to alias, just inline the arguments directly.
+ Node result = FunctionArgumentInjector.inject(
+ fnTemplateRoot, null, argMap);
+ Preconditions.checkState(result == fnTemplateRoot);
+ return result;
+ } else {
+ // Create local alias of names that can not be safely
+ // used directly.
+
+ // An arg map that will be updated to contain the
+ // safe aliases.
+ Map<String, Node> newArgMap = Maps.newHashMap(argMap);
+
+ // Declare the alias in the same order as they
+ // are declared.
+ List<Node> newVars = Lists.newLinkedList();
+ // NOTE: argMap is a linked map so we get the parameters in the
+ // order that they were declared.
+ for (Entry<String, Node> entry : argMap.entrySet()) {
+ String name = entry.getKey();
+ if (namesToAlias.contains(name)) {
+ Node newValue = entry.getValue().cloneTree();
+ Node newNode = NodeUtil.newVarNode(name, newValue)
+ .copyInformationFromForTree(newValue);
+ newVars.add(0, newNode);
+ // Remove the parameter from the list to replace.
+ newArgMap.remove(name);
+ }
+ }
+
+ // Inline the arguments.
+ Node result = FunctionArgumentInjector.inject(
+ fnTemplateRoot, null, newArgMap);
+ Preconditions.checkState(result == fnTemplateRoot);
+
+ // Now that the names have been replaced, add the new aliases for
+ // the old names.
+ for (Node n : newVars) {
+ fnTemplateRoot.addChildToFront(n);
+ }
+
+ return result;
+ }
+ }
+
+/* METHOD mutate */
+Node mutate(String fnName, Node fnNode, Node callNode,
+ String resultName, boolean needsDefaultResult, boolean isCallInLoop) {
+ Node newFnNode = fnNode.cloneTree();
+ // Now that parameter names have been replaced, make sure all the local
+ // names are unique, to allow functions to be inlined multiple times
+ // without causing conflicts.
+ makeLocalNamesUnique(newFnNode, isCallInLoop);
+
+ // TODO(johnlenz): Mark NAME nodes constant for parameters that are not
+ // modified.
+ Set<String> namesToAlias =
+ FunctionArgumentInjector.findModifiedParameters(newFnNode);
+ LinkedHashMap<String, Node> args =
+ FunctionArgumentInjector.getFunctionCallParameterMap(
+ newFnNode, callNode, this.safeNameIdSupplier);
+ boolean hasArgs = !args.isEmpty();
+ if (hasArgs) {
+ FunctionArgumentInjector.maybeAddTempsForCallArguments(
+ newFnNode, args, namesToAlias, compiler.getCodingConvention());
+ }
+
+ Node newBlock = NodeUtil.getFunctionBody(newFnNode);
+ // Make the newBlock insertable .
+ newBlock.detachFromParent();
+
+ i
+...[truncated deterministically]...
+ToAlias);
+ Preconditions.checkState(newBlock == inlineResult);
+ }
+
+ //
+ // For calls inlined into loops, VAR declarations are not reinitialized to
+ // undefined as they would have been if the function were called, so ensure
+ // that they are properly initialized.
+ //
+ if (isCallInLoop) {
+ fixUnitializedVarDeclarations(newBlock);
+ }
+
+ String labelName = getLabelNameForFunction(fnName);
+ Node injectableBlock = replaceReturns(
+ newBlock, resultName, labelName, needsDefaultResult);
+ Preconditions.checkState(injectableBlock != null);
+
+ return injectableBlock;
+ }
+
+/* METHOD getLabelNameForFunction */
+private String getLabelNameForFunction(String fnName){
+ String name = (fnName == null || fnName.isEmpty()) ? "anon" : fnName;
+ return "JSCompiler_inline_label_" + name + "_" + safeNameIdSupplier.get();
+ }
+
+/* METHOD makeLocalNamesUnique */
+private void makeLocalNamesUnique(Node fnNode, boolean isCallInLoop) {
+ Supplier<String> idSupplier = compiler.getUniqueNameIdSupplier();
+ // Make variable names unique to this instance.
+ NodeTraversal.traverse(
+ compiler, fnNode, new MakeDeclaredNamesUnique(
+ new InlineRenamer(
+ idSupplier,
+ "inline_",
+ isCallInLoop)));
+ // Make label names unique to this instance.
+ }
+
+/* METHOD replaceReturns */
+private static Node replaceReturns(
+ Node block, String resultName, String labelName,
+ boolean resultMustBeSet) {
+ Preconditions.checkNotNull(block);
+ Preconditions.checkNotNull(labelName);
+
+ Node root = block;
+
+ boolean hasReturnAtExit = false;
+ int returnCount = NodeUtil.getNodeTypeReferenceCount(
+ block, Token.RETURN, new NodeUtil.MatchShallowStatement());
+ if (returnCount > 0) {
+ hasReturnAtExit = hasReturnAtExit(block);
+ // TODO(johnlenz): Simpler not to special case thi
+...[truncated deterministically]...
+Statement(
+ Node node, String resultName) {
+ Node resultNode = null;
+
+ Node retVal = null;
+ if (node.hasChildren()) {
+ // Clone the child as the child hasn't been removed
+ // from the node yet.
+ retVal = node.getFirstChild().cloneTree();
+ }
+
+===== com.google.javascript.jscomp.RenameLabels (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+final class RenameLabels implements CompilerPass {
+static class DefaultNameSupplier implements Supplier<String> {
+@Override
+public String get() {
+class ProcessLabels implements ScopedCallback {
+final Deque<LabelNamespace> namespaceStack = Lists.newLinkedList();
+final ArrayList<String> names = new ArrayList<String>();
+public void enterScope(NodeTraversal nodeTraversal) {
+public void exitScope(NodeTraversal nodeTraversal) {
+public void visit(NodeTraversal nodeTraversal, Node node, Node parent) {
+private void visitBreakOrContinue(Node node) {
+private void visitLabel(Node node, Node parent) {
+public void process(Node externs, Node root) {
+private static class LabelInfo {
+private static class LabelNamespace {
+final Map<String, LabelInfo> renameMap = new HashMap<String, LabelInfo>();
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.collect.Lists;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+ class ProcessLabels implements ScopedCallback {
+
+/* METHOD RenameLabels */
+RenameLabels(AbstractCompiler compiler) {
+ this(compiler, new DefaultNameSupplier(), true);
+ }
+
+/* METHOD RenameLabels */
+RenameLabels(
+ AbstractCompiler compiler,
+ Supplier<String> supplier,
+ boolean removeUnused) {
+ this.compiler = compiler;
+ this.nameSupplier = supplier;
+ this.removeUnused = removeUnused;
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ // Do variable reference counting.
+ NodeTraversal.traverse(compiler, root, new ProcessLabels());
+ }
+
+/* METHOD shouldTraverse */
+public boolean shouldTraverse(NodeTraversal nodeTraversal, Node node,
+ Node parent) {
+ if (node.getType() == Token.LABEL) {
+ // Determine the new name for this label.
+ LabelNamespace current = namespaceStack.peek();
+ int currentDepth = current.renameMap.size() + 1;
+ String name = node.getFirstChild().getString();
+
+ // Store the context for this label name.
+ LabelInfo li = new LabelInfo(currentDepth);
+ Preconditions.checkState(!current.renameMap.containsKey(name));
+ current.renameMap.put(name, li);
+
+ // Create a new name, if needed, for this depth.
+ if (names.size() < currentDepth) {
+ names.add(nameSupplier.get());
+ }
+
+ String newName = getNameForId(currentDepth);
+ compiler.addToDebugLog("label renamed: " + name + " => " + newName);
+ }
+
+ return true;
+ }
+
+/* METHOD visitLabel */
+private void visitLabel(Node node, Node parent) {
+ Node nameNode = node.getFirstChild();
+ Preconditions.checkState(nameNode != null);
+ String name = nameNode.getString();
+ LabelInfo li = getLabelInfo(name);
+ // This is a label...
+ if (li.referenced) {
+ String newName = getNameForId(li.id);
+ if (!name.equals(newName)) {
+ // ... and it is used, give it the short name.
+ nameNode.setString(newName);
+ compiler.reportCodeChange();
+ }
+ } else {
+ // ... and it is not referenced, just remove it.
+ Node newChild = node.getLastChild();
+ node.removeChild(newChild);
+ parent.replaceChild(node, newChild);
+ if (newChild.getType() == Token.BLOCK) {
+ NodeUtil.tryMergeBlock(newChild);
+ }
+ compiler.reportCodeChange();
+ }
+
+ // Remove the label from the current stack of labels.
+ namespaceStack.peek().renameMap.remove(name);
+ }
+
+/* METHOD get */
+@Override
+ public String get() {
+ return nameGenerator.generateNextName();
+ }
+
+/* METHOD enterScope */
+@Override
+ public void enterScope(NodeTraversal nodeTraversal) {
+ // Start a new namespace for label names.
+ namespaceStack.push(new LabelNamespace());
+ }
+
+/* METHOD exitScope */
+@Override
+ public void exitScope(NodeTraversal nodeTraversal) {
+ namespaceStack.pop();
+ }
+
+/* METHOD visit */
+public void visit(NodeTraversal nodeTraversal, Node node, Node parent) {
+ switch (node.getType()) {
+ case Token.LABEL:
+ visitLabel(node, parent);
+ break;
+
+ case Token.BREAK:
+ case Token.CONTINUE:
+ visitBreakOrContinue(node);
+ break;
+ }
+ }
+
+/* METHOD ProcessLabels */
+ProcessLabels() {
+ // Create a entry for global scope.
+ namespaceStack.push(new LabelNamespace());
+ }
+
+/* METHOD getNameForId */
+String getNameForId(int id) {
+ return names.get(id - 1);
+ }
+
+/* METHOD getLabelInfo */
+LabelInfo getLabelInfo(String name) {
+ return namespaceStack.peek().renameMap.get(name);
+ }
+
+/* METHOD LabelInfo */
+LabelInfo(int id) {
+ this.id = id;
+ }

@@ -1,0 +1,482 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Cli  Bug: 31  Version: Cli-31b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.apache.commons.cli.HelpFormatter, org.apache.commons.cli.Option, org.apache.commons.cli.OptionBuilder
+Modified: org.apache.commons.cli.HelpFormatter, org.apache.commons.cli.Option, org.apache.commons.cli.OptionBuilder
+Triggers: org.apache.commons.cli.HelpFormatterTest::testDefaultArgName
+
+Bug/specification summary:
+Bug report: CLI-205
+Trigger failures:
+- org.apache.commons.cli.HelpFormatterTest::testDefaultArgName
+ --> junit.framework.ComparisonFailure: expected:<usage: app -f <arg[ument]>
+Modified: org.apache.commons.cli.HelpFormatter, org.apache.commons.cli.Option, org.apache.commons.cli.OptionBuilder
+
+Prompt-01 test plan:
+TARGETS: HelpFormatter usage/help rendering for Option argument names; defaultArgName and Option.getArgName 
+TARGETS: Option constructors/setters and OptionBuilder.withArgName/create state transfer/reset 
+ORACLES: Trigger expects usage fragment "-f <argument>" when an arg name is not explicitly set 
+ORACLES: Public constants/default fields and rendered formatter output provide expected-result sources 
+CASES: Option("-f", true, ...) rendered in usage with default arg name; explicit arg name overrides it 
+CASES: Builder hasArg()+create("f") default name; withArgName("file") preserves explicit name 
+CASES: Boundary: no-arg option must not render an argument placeholder 
+RISKS: Exact whitespace/newline/wrapping depends on HelpFormatter defaults and platform line separator 
+RISKS: Available context truncates formatter signatures/complete existing-test expectations
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.cli.HelpFormatter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli;
+public class HelpFormatter
+public static final int DEFAULT_WIDTH = 74;
+public static final int DEFAULT_LEFT_PAD = 1;
+public static final int DEFAULT_DESC_PAD = 3;
+public static final String DEFAULT_SYNTAX_PREFIX = "usage: ";
+public static final String DEFAULT_OPT_PREFIX = "-";
+public static final String DEFAULT_LONG_OPT_PREFIX = "--";
+public static final String DEFAULT_LONG_OPT_SEPARATOR = " ";
+public static final String DEFAULT_ARG_NAME = "arg";
+public int defaultWidth = DEFAULT_WIDTH;
+public int defaultLeftPad = DEFAULT_LEFT_PAD;
+public int defaultDescPad = DEFAULT_DESC_PAD;
+public String defaultSyntaxPrefix = DEFAULT_SYNTAX_PREFIX;
+public String defaultNewLine = System.getProperty("line.separator");
+public String defaultOptPrefix = DEFAULT_OPT_PREFIX;
+public String defaultLongOptPrefix = DEFAULT_LONG_OPT_PREFIX;
+public String defaultArgName
+...[truncated deterministically]...
+Buffer sb, int width, Options options, int leftPad, int descPad)
+final String lpad = createPadding(leftPad);
+final String dpad = createPadding(descPad);
+final String padding = createPadding(nextLineTabStop);
+protected int findWrapPos(String text, int width, int startPos)
+protected String createPadding(int len)
+protected String rtrim(String s)
+private static class OptionComparator implements Comparator
+public int compare(Object o1, Object o2)
+
+/* HEADER */
+package org.apache.commons.cli;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+public class HelpFormatter
+
+/* METHOD printHelp */
+public void printHelp(PrintWriter pw, int width, String cmdLineSyntax,
+ String header, Options options, int leftPad,
+ int descPad, String footer, boolean autoUsage)
+ {
+ if ((cmdLineSyntax == null) || (cmdLineSyntax.length() == 0))
+ {
+ throw new IllegalArgumentException("cmdLineSyntax not provided");
+ }
+
+ if (autoUsage)
+ {
+ printUsage(pw, width, cmdLineSyntax, options);
+ }
+ else
+ {
+ printUsage(pw, width, cmdLineSyntax);
+ }
+
+ if ((header != null) && (header.trim().length() > 0))
+ {
+ printWrapped(pw, width, header);
+ }
+
+ printOptions(pw, width, options, leftPad, descPad);
+
+ if ((footer != null) && (footer.trim().length() > 0))
+ {
+ printWrapped(pw, width, footer);
+ }
+ }
+
+/* METHOD printUsage */
+public void printUsage(PrintWriter pw, int width, String app, Options options)
+ {
+ // initialise the string buffer
+ StringBuffer buff = new StringBuffer(defaultSyntaxPrefix).append(app).append(" ");
+
+ // create a list for processed option groups
+ final Collection processedGroups = new ArrayList();
+
+ // temp variable
+ Option option;
+
+ List optList = new ArrayList(options.getOptions());
+ Collections.sort(optList, getOptionComparator());
+ // iterate over the options
+ for (Iterator i = optList.iterator(); i.hasNext();)
+ {
+ // get the next Option
+ option = (Option) i.next();
+
+ // check if the option is part of an OptionGroup
+ OptionGroup group = options.getOptionGroup(option);
+
+ // if the option is part of a group 
+ if (group != null)
+ {
+ // and if the group has not already been processed
+ if (!processedGroups.contains(group))
+ {
+ // add the group to the processed list
+ processedGroups.add(group);
+
+ // add the usage clause
+ appendOptionGroup(buff, group);
+ }
+
+ // otherwise the option was displayed in the group
+ // previously so ignore it.
+ }
+
+ // if the Option is not part of an OptionGroup
+ else
+ {
+ appendOption(buff, option, option.isRequired());
+ }
+
+ if (i.hasNext())
+ {
+ buff.append(" ");
+ }
+ }
+
+ // call printWrapped
+ printWrapped(pw, width, buff.toString().indexOf(' ') + 1, buff.toString());
+ }
+
+===== org.apache.commons.cli.Option (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli;
+public class Option implements Cloneable, Serializable
+public static final int UNINITIALIZED = -1;
+public static final int UNLIMITED_VALUES = -2;
+private List values = new ArrayList();
+public Option(String opt, String description) throws IllegalArgumentException
+public Option(String opt, boolean hasArg, String description) throws IllegalArgumentException
+public Option(String opt, String longOpt, boolean hasArg, String description)
+public int getId()
+public String getOpt()
+public Object getType()
+public void setType(Object type)
+public String getLongOpt()
+public void setLongOpt(String longOpt)
+public void setOptionalArg(boolean optionalArg)
+public boolean hasOptionalArg()
+public boolean hasLongOpt()
+public boolean hasArg()
+public String getDescription()
+public void setDescription(String description)
+public boolean isRequired()
+public void setReq
+...[truncated deterministically]...
+int getArgs()
+private void processValue(String value)
+private void add(String value)
+public String getValue()
+public String getValue(int index) throws IndexOutOfBoundsException
+public String getValue(String defaultValue)
+public String[] getValues()
+public List getValuesList()
+public String toString()
+private boolean hasNoValues()
+public boolean equals(Object o)
+public int hashCode()
+public Object clone()
+public boolean addValue(String value)
+
+/* HEADER */
+package org.apache.commons.cli;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+public class Option implements Cloneable, Serializable
+
+/* METHOD Option */
+public Option(String opt, String longOpt, boolean hasArg, String description)
+ throws IllegalArgumentException
+ {
+ // ensure that the option is valid
+ OptionValidator.validateOption(opt);
+
+ this.opt = opt;
+ this.longOpt = longOpt;
+
+ // if hasArg is set then the number of arguments is 1
+ if (hasArg)
+ {
+ this.numberOfArgs = 1;
+ }
+
+ this.description = description;
+ }
+
+/* METHOD Option */
+public Option(String opt, String description) throws IllegalArgumentException
+ {
+ this(opt, null, false, description);
+ }
+
+/* METHOD Option */
+public Option(String opt, boolean hasArg, String description) throws IllegalArgumentException
+ {
+ this(opt, null, hasArg, description);
+ }
+
+/* METHOD toString */
+public String toString()
+ {
+ StringBuffer buf = new StringBuffer().append("[ option: ");
+
+ buf.append(opt);
+
+ if (longOpt != null)
+ {
+ buf.append(" ").append(longOpt);
+ }
+
+ buf.append(" ");
+
+ if (hasArgs())
+ {
+ buf.append("[ARG...]");
+ }
+ else if (hasArg())
+ {
+ buf.append(" [ARG]");
+ }
+
+ buf.append(" :: ").append(description);
+
+ if (type != null)
+ {
+ buf.append(" :: ").append(type);
+ }
+
+ buf.append(" ]");
+
+ return buf.toString();
+ }
+
+/* METHOD setOptionalArg */
+public void setOptionalArg(boolean optionalArg)
+ {
+ this.optionalArg = optionalArg;
+ }
+
+/* METHOD hasOptionalArg */
+public boolean hasOptionalArg()
+ {
+ return optionalArg;
+ }
+
+/* METHOD hasArg */
+public boolean hasArg()
+ {
+ return numberOfArgs > 0 || numberOfArgs == UNLIMITED_VALUES;
+ }
+
+/* METHOD hasArgs */
+public boolean hasArgs()
+ {
+ return numberOfArgs > 1 || numberOfArgs == UNLIMITED_VALUES;
+ }
+
+/* METHOD setArgs */
+public void setArgs(int num)
+ {
+ this.numberOfArgs = num;
+ }
+
+/* METHOD getArgs */
+public int getArgs()
+ {
+ return numberOfArgs;
+ }
+
+/* METHOD clone */
+public Object clone()
+ {
+ try
+ {
+ Option option = (Option) super.clone();
+ option.values = new ArrayList(values);
+ return option;
+ }
+ catch (CloneNotSupportedException cnse)
+ {
+ throw new RuntimeException("A CloneNotSupportedException was thrown: " + cnse.getMessage());
+ }
+ }
+
+===== org.apache.commons.cli.OptionBuilder (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli;
+public final class OptionBuilder
+private static OptionBuilder instance = new OptionBuilder();
+private OptionBuilder()
+private static void reset()
+public static OptionBuilder withLongOpt(String newLongopt)
+public static OptionBuilder hasArg()
+public static OptionBuilder hasArg(boolean hasArg)
+public static OptionBuilder withArgName(String name)
+public static OptionBuilder isRequired()
+public static OptionBuilder withValueSeparator(char sep)
+public static OptionBuilder withValueSeparator()
+public static OptionBuilder isRequired(boolean newRequired)
+public static OptionBuilder hasArgs()
+public static OptionBuilder hasArgs(int num)
+public static OptionBuilder hasOptionalArg()
+public static OptionBuilder hasOptionalArgs()
+public static OptionBuilder hasOptionalArgs(int numArgs)
+public static OptionBuilder withType(Object newType)
+public static OptionBuilder withDescription(String newDescription)
+public static Option create(char opt) throws IllegalArgumentException
+public static Option create() throws IllegalArgumentException
+public static Option create(String opt) throws IllegalArgumentException
+
+/* HEADER */
+package org.apache.commons.cli;
+
+/* METHOD OptionBuilder */
+private OptionBuilder()
+ {
+ // hide the constructor
+ }
+
+/* METHOD create */
+public static Option create(String opt) throws IllegalArgumentException
+ {
+ Option option = null;
+ try
+ {
+ // create the option
+ option = new Option(opt, description);
+
+ // set the option properties
+ option.setLongOpt(longopt);
+ option.setRequired(required);
+ option.setOptionalArg(optionalArg);
+ option.setArgs(numberOfArgs);
+ option.setType(type);
+ option.setValueSeparator(valuesep);
+ option.setArgName(argName);
+ }
+ finally
+ {
+ // reset the OptionBuilder properties
+ OptionBuilder.reset();
+ }
+
+ // return the Option instance
+ return option;
+ }
+
+/* METHOD hasArg */
+public static OptionBuilder hasArg()
+ {
+ OptionBuilder.numberOfArgs = 1;
+
+ return instance;
+ }
+
+/* METHOD hasArg */
+public static OptionBuilder hasArg(boolean hasArg)
+ {
+ OptionBuilder.numberOfArgs = hasArg ? 1 : Option.UNINITIALIZED;
+
+ return instance;
+ }
+
+/* METHOD hasArgs */
+public static OptionBuilder hasArgs()
+ {
+ OptionBuilder.numberOfArgs = Option.UNLIMITED_VALUES;
+
+ return instance;
+ }
+
+/* METHOD hasArgs */
+public static OptionBuilder hasArgs(int num)
+ {
+ OptionBuilder.numberOfArgs = num;
+
+ return instance;
+ }
+
+/* METHOD hasOptionalArg */
+public static OptionBuilder hasOptionalArg()
+ {
+ OptionBuilder.numberOfArgs = 1;
+ OptionBuilder.optionalArg = true;
+
+ return instance;
+ }
+
+/* METHOD hasOptionalArgs */
+public static OptionBuilder hasOptionalArgs()
+ {
+ OptionBuilder.numberOfArgs = Option.UNLIMITED_VALUES;
+ OptionBuilder.optionalArg = true;
+
+ return instance;
+ }
+
+/* METHOD hasOptionalArgs */
+public static OptionBuilder hasOptionalArgs(int numArgs)
+ {
+ OptionBuilder.numberOfArgs = numArgs;
+ OptionBuilder.optionalArg = true;
+
+ return instance;
+ }
+
+/* METHOD create */
+public static Option create() throws IllegalArgumentException
+ {
+ if (longopt == null)
+ {
+ OptionBuilder.reset();
+ throw new IllegalArgumentException("must specify longopt");
+ }
+
+ return create(null);
+ }
+
+/* METHOD withArgName */
+public static OptionBuilder withArgName(String name)
+ {
+ OptionBuilder.argName = name;
+
+ return instance;
+ }
+
+/* METHOD withDescription */
+public static OptionBuilder withDescription(String newDescription)
+ {
+ OptionBuilder.description = newDescription;
+
+ return instance;
+ }
+
+/* METHOD withLongOpt */
+public static OptionBuilder withLongOpt(String newLongopt)
+ {
+ OptionBuilder.longopt = newLongopt;
+
+ return instance;
+ }

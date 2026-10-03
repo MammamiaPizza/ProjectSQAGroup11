@@ -1,0 +1,317 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 103  Version: JacksonDatabind-103b
+JUnit: powermock-module-junit4-1.7.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2128
+Trigger failures:
+- com.fasterxml.jackson.databind.exc.BasicExceptionTest::testLocationAddition
+ --> junit.framework.AssertionFailedError: Should only get one 'at [' marker, got 2, source: Cannot deserialize Map key of type `com.fasterxml.jackson.databind.BaseMapTest$ABC` from String "value": not a valid representation, problem: (com.fasterxml.jackson.databind.exc.InvalidFormatException) Cannot deserialize Map key of type `com.fasterxml.jackson.databind.BaseMapTest$ABC` from String "value": not one of values excepted for Enum class: [A, B, C]
+Modified: com.fasterxml.jackson.databind.DatabindContext, com.fasterxml.jackson.databind.DeserializationContext, com.fasterxml.jackson.databind.JsonMappingException, com.fasterxml.jackson.databind.SerializerProvider, com.fasterxml.jackson.databind.deser.BasicDeserializerFactory, com.fasterxml.jackson.databind.deser.BeanDeserializerFactory, com.fasterxml.jackson.databind.deser.DeserializerCache, com.fasterxml.jackson.databind.deser.SettableAnyProperty, com.fasterxml.jackson.databind.deser.SettableBeanProperty, com.fasterxml.jackson.databind.deser.std.StdDeserializer, com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator, com.fasterxml.jackson.databind.introspect.BasicBeanDescription, com.fasterxml.jackson.databind.ser.DefaultSerializerProvider, com.fasterxml.jackson.databind.ser.PropertyBuilder, com.fasterxml.jackson.databind.util.ClassUtil
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.DatabindContext | java]
+package com.fasterxml.jackson.databind;
+public abstract class DatabindContext
+public abstract MapperConfig<?> getConfig();
+public abstract AnnotationIntrospector getAnnotationIntrospector();
+public abstract boolean isEnabled(MapperFeature feature);
+public abstract boolean canOverrideAccessModifiers();
+public abstract Class<?> getActiveView();
+public abstract Locale getLocale();
+public abstract TimeZone getTimeZone();
+public abstract JsonFormat.Value getDefaultPropertyFormat(Class<?> baseType);
+public abstract Object getAttribute(Object key);
+public abstract DatabindContext setAttribute(Object key, Object value);
+public JavaType constructType(Type type) {
+public JavaType constructSpecializedType(JavaType baseType, Class<?> subclass) {
+public JavaType resolveSubType(JavaType baseType, String
+...[truncated deterministically]...
+aType type, String msg) throws JsonMappingException;
+public <T> T reportBadDefinition(Class<?> type, String msg) throws JsonMappingException {
+protected final String _format(String msg, Object... msgArgs) {
+protected final String _truncate(String desc) {
+protected String _quotedString(String desc) {
+protected String _colonConcat(String msgBase, String extra) {
+protected String _desc(String desc) {
+
+[com.fasterxml.jackson.databind.DeserializationContext | java]
+package com.fasterxml.jackson.databind;
+public abstract class DeserializationContext
+protected final DeserializerCache _cache;
+protected final DeserializerFactory _factory;
+protected final DeserializationConfig _config;
+protected final int _featureFlags;
+protected final Class<?> _view;
+protected transient J
+...[truncated deterministically]...
+>> findRawSuperTypes(Class<?> cls, Class<?> endBefore, boolean addClassItself) {
+if ((cls == null) || (cls == endBefore) || (cls == Object.class)) {
+@Deprecated // since 2.7
+public static List<Class<?>> findSuperTypes(Class<?> cls, Class<?> endBefore) {
+public static List<Class<?>> findSuperTypes(Class<?> cls, Class<?> endBefore, List<Class<?>> result) {
+final Class<?> cls = type.getRawClass();
+...[truncated deterministically]...
+expectedName, Class<?> type)
+if (found != null) { // it's non-public, need to force accessible
+public final static class Ctor
+public final Constructor<?> _ctor;
+public Ctor(Constructor<?> ctor) {
+public Constructor<?> getConstructor() {
+public int getParamCount() {
+public Class<?> getDeclaringClass() {
+public Annotation[] getDeclaredAnnotations() {
+public Annotation[][] getParameterAnnotations() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.exc;
+
+ import java.io.IOException;
+ import java.util.Map;
+
+ import org.junit.Test;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.fail;
+
+ import com.fasterxml.jackson.core.Version;
+ import com.fasterxml.jackson.core.type.TypeReference;
+ import com.fasterxml.jackson.databind.DeserializationContext;
+ import com.fasterxml.jackson.databind.JsonMappingException;
+ import com.fasterxml.jackson.databind.KeyDeserializer;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.fasterxml.jackson.databind.module.SimpleModule;
+
+ public class JsonMappingExceptionMessageTest {
+
+     // Enum used for invalid key test
+     static enum ABC { A, B, C }
+
+     // Custom key class that deliberately triggers failure when deserialized
+     static class BadKey {
+         public BadKey(String s) {
+             throw new IllegalArgumentException("BadKey always fails");
+         }
+
+         @Override
+         public String toString() { return "BadKey"; }
+     }
+
+     // Helper to count occurrences of a substring
+     private static int countOccurrences(String str, String sub) {
+         if (str == null || sub == null || sub.isEmpty()) return 0;
+         int count = 0;
+         int idx = 0;
+         while ((idx = str.indexOf(sub, idx)) != -1) {
+             count++;
+             idx += sub.length();
+         }
+         return count;
+     }
+
+     // ----------------------------------------------------------------------
+     // Tests for the bug: duplicate "at [" path markers in error messages
+     // ----------------------------------------------------------------------
+
+     @Test
+     public void testInvalidEnumMapKeySingleAtMarker() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         try {
+             mapper.readValue("{\"value\":1}", new TypeReference<Map<ABC, Integer>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testInvalidEnumMapKeyInsideObject() throws Exception {
+         // Wraps the failing map inside a simple bean to add a path element
+         ObjectMapper mapper = new ObjectMapper();
+         try {
+             mapper.readValue("{\"wrapper\": {\"value\": 123}}",
+                     new TypeReference<Map<String, Map<ABC, Integer>>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testInvalidEnumMapKeyTwoLevels() throws Exception {
+         // Map-of-Map, inner key fails; path should be longer but still single "at ["
+         ObjectMapper mapper = new ObjectMapper();
+         try {
+             mapper.readValue("{\"outer\": {\"notA\": \"shouldFail\"}}",
+                     new TypeReference<Map<String, Map<ABC, String>>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testCustomKeyDeserializerFailureSingleAt() throws Exception {
+         // Uses a custom key deserializer that throws a mapping exception directly
+         SimpleModule module = new SimpleModule("testModule", Version.unknownVersion());
+         module.addKeyDeserializer(BadKey.class, new KeyDeserializer() {
+             @Override
+             public Object deserializeKey(String key, DeserializationContext ctxt)
+                     throws IOException {
+                 throw ctxt.mappingException("Custom key deserialization failure for: %s", key);
+             }
+         });
+
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.registerModule(module);
+
+         try {
+             mapper.readValue("{\"aBadKey\": \"someValue\"}",
+                     new TypeReference<Map<BadKey, String>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testCustomKeyDeserializerFailureInsideObject() throws Exception {
+         // Same custom key failure but inside a bean to add path depth
+         SimpleModule module = new SimpleModule("testModule", Version.unknownVersion());
+         module.addKeyDeserializer(BadKey.class, new KeyDeserializer() {
+             @Override
+             public Object deserializeKey(String key, DeserializationContext ctxt)
+                     throws IOException {
+                 throw ctxt.mappingException("Inner key deserialization failure for: %s", key);
+             }
+         });
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.registerModule(module);
+
+         try {
+             mapper.readValue("{\"outer\": {\"bad\": \"value\"}}",
+                     new TypeReference<Map<String, Map<BadKey, String>>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testValidEnumMapKeyDoesNotProduceAtMarker() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         Map<ABC, Integer> result = mapper.readValue("{\"A\": 10, \"B\": 20}",
+                 new TypeReference<Map<ABC, Integer>>() {});
+         assertNotNull(result);
+         assertEquals(2, result.size());
+         // No exception -> no "at [" markers can be counted
+     }
+
+     @Test
+     public void testMultipleInvalidKeysInMapStillSingleAt() throws Exception {
+         // Even if multiple keys are invalid, the first failure triggers exception;
+         // the path should only appear once.
+         ObjectMapper mapper = new ObjectMapper();
+         try {
+             mapper.readValue("{\"firstBad\": 1, \"secondBad\": 2}",
+                     new TypeReference<Map<ABC, Integer>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testEnumKeyInvalidFormatExceptionMsgConsistency() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         try {
+             mapper.readValue("{\"XYZ\": 0}", new TypeReference<Map<ABC, Integer>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             // The message should contain the type name and the invalid value
+             assertTrue(msg.contains("ABC"));
+             assertTrue(msg.contains("XYZ"));
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+
+     @Test
+     public void testKeyFailureWithIOExceptionWrapping() throws Exception {
+         // A key deserializer that throws an IOException (non-JsonMappingException)
+         // should still result in a mapped exception with exactly one "at [" marker.
+         SimpleModule module = new SimpleModule("testModule", Version.unknownVersion());
+         module.addKeyDeserializer(BadKey.class, new KeyDeserializer() {
+             @Override
+             public Object deserializeKey(String key, DeserializationContext ctxt)
+                     throws IOException {
+                 throw new IOException("Low-level I/O error");
+             }
+         });
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.registerModule(module);
+
+         try {
+             mapper.readValue("{\"x\": 1}", new TypeReference<Map<BadKey, Integer>>() {});
+             fail("Should have thrown JsonMappingException");
+         } catch (JsonMappingException e) {
+             String msg = e.getMessage();
+             assertNotNull(msg);
+             int atCount = countOccurrences(msg, "at [");
+             assertEquals("Expected exactly one \"at [\" marker in message: " + msg,
+                     1, atCount);
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-103f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-103f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-103f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-103f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-103f-copilot/.test_suite/com/fasterxml/jackson/databind/exc/JsonMappingExceptionMessageTest.java:193: error: cannot find symbol
+ [javac] assertTrue(msg.contains("ABC"));
+ [javac] ^
+ [javac] symbol: method assertTrue(boolean)
+ [javac] location: class JsonMappingExceptionMessageTest
+ [javac] Note: /root/sqa-workspaces/JacksonDatabind-103f-copilot/.test_suite/com/fasterxml/jackson/databind/exc/JsonMappingExceptionMessageTest.java uses or overrides a deprecated API.
+ [javac] Note: Recompile with -Xlint:deprecation for details.
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 8 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

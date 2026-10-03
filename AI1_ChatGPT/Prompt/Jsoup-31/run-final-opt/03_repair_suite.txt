@@ -1,0 +1,112 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 31  Version: Jsoup-31b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 242
+Trigger failures:
+- org.jsoup.parser.XmlTreeBuilderTest::handlesXmlDeclarationAsDeclaration
+ --> junit.framework.AssertionFailedError: expected:<<[?xml encoding='UTF-8' ?]> <body> One </body>...> but was:<<[!--?xml encoding='UTF-8' ?--]> <body> One </body>...>
+Modified: org.jsoup.parser.Token, org.jsoup.parser.TokeniserState, org.jsoup.parser.XmlTreeBuilder
+
+Available API/signatures:
+[org.jsoup.parser.Token | java]
+package org.jsoup.parser;
+abstract class Token {
+private Token() {
+static class Doctype extends Token {
+final StringBuilder name = new StringBuilder();
+final StringBuilder publicIdentifier = new StringBuilder();
+final StringBuilder systemIdentifier = new StringBuilder();
+public String getSystemIdentifier() {
+public boolean isForceQuirks() {
+static abstract class Tag extends Token {
+protected String tagName;
+@SuppressWarnings({"TypeMayBeWeakened"})
+static class StartTag extends Tag {
+@Override
+public String toString() {
+static class EndTag extends Tag{
+static class Comment extends Token {
+final StringBuilder data = new StringBuilder();
+static class Character extends Token {
+static class EOF extends Token {
+enum TokenType {
+
+[org.jsoup.parser.TokeniserState | java]
+package org.jsoup.parser;
+enum TokeniserState {
+private void anythingElse(Tokeniser t, CharacterReader r) {
+abstract void read(Tokeniser t, CharacterReader r);
+private static final String replacementStr = String.valueOf(Tokeniser.replacementChar);
+
+[org.jsoup.parser.XmlTreeBuilder | java]
+package org.jsoup.parser;
+public class XmlTreeBuilder extends TreeBuilder {
+@Override
+protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private void popStackToClose(Token.EndTag endTag) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class XmlDeclarationHandlingTest {
+
+    @Test
+    public void parsesXmlDeclarationAsDeclarationBeforeBody() {
+        Document document = Jsoup.parse("<?xml encoding='UTF-8' ?><body>One</body>", "", Parser.xmlParser());
+
+        assertEquals("<?xml encoding='UTF-8' ?>\n<body>One</body>", document.outerHtml());
+    }
+
+    @Test
+    public void preservesDeclarationClosedWithoutWhitespaceBeforeQuestionMark() {
+        Document document = Jsoup.parse("<?xml version='1.0'?><root/>", "", Parser.xmlParser());
+
+        String declaration = document.childNode(0).outerHtml();
+        assertTrue(declaration.startsWith("<?xml"));
+        assertTrue(declaration.contains("version='1.0'"));
+        assertTrue(declaration.endsWith("?>"));
+        assertFalse(declaration.startsWith("<!--"));
+    }
+
+    @Test
+    public void preservesSpacingAndAttributesInXmlDeclaration() {
+        Document document = Jsoup.parse("<?xml   version='1.0' encoding='UTF-8'   ?><root/>", "", Parser.xmlParser());
+
+        String declaration = document.childNode(0).outerHtml();
+        assertTrue(declaration.startsWith("<?xml"));
+        assertTrue(declaration.contains("version='1.0'"));
+        assertTrue(declaration.contains("encoding='UTF-8'"));
+        assertTrue(declaration.endsWith("?>"));
+        assertFalse(declaration.contains("<!--"));
+    }
+
+    @Test
+    public void keepsOrdinaryXmlCommentsAsComments() {
+        Document document = Jsoup.parse("<!--ordinary comment--><root/>", "", Parser.xmlParser());
+
+        assertEquals("<!--ordinary comment-->", document.childNode(0).outerHtml());
+        assertTrue(document.childNode(0).outerHtml().startsWith("<!--"));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.parser.XmlDeclarationHandlingTest::parsesXmlDeclarationAsDeclarationBeforeBody
+ - org.jsoup.parser.XmlDeclarationHandlingTest::keepsOrdinaryXmlCommentsAsComments
+
+Failing generated tests: org.jsoup.parser.XmlDeclarationHandlingTest::keepsOrdinaryXmlCommentsAsComments, org.jsoup.parser.XmlDeclarationHandlingTest::parsesXmlDeclarationAsDeclarationBeforeBody

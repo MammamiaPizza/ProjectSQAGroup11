@@ -1,0 +1,189 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 14  Version: JacksonDatabind-14b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 744
+Trigger failures:
+- com.fasterxml.jackson.databind.convert.TestUpdateValue::testIssue744
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "i" (class com.fasterxml.jackson.databind.convert.TestUpdateValue$DataB), not marked as ignorable (2 known properties: "da", "k"])
+Modified: com.fasterxml.jackson.databind.ObjectReader
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ObjectReader | java]
+package com.fasterxml.jackson.databind;
+public class ObjectReader
+private final static JavaType JSON_NODE_TYPE = SimpleType.constructUnsafe(JsonNode.class);
+protected final DeserializationConfig _config;
+protected final DefaultDeserializationContext _context;
+protected final JsonFactory _parserFactory;
+protected final boolean _unwrapRoot;
+protected final JavaType _valueType;
+protected final JsonDeserializer<Object> _rootDeserializer;
+protected final Object _valueToUpdate;
+protected final FormatSchema _schema;
+protected final InjectableValues _injectableValues;
+protected final DataFormatReaders _dataFormatReaders;
+final protected ConcurrentHashMap<JavaType, JsonDeserializer<Object>> _rootDeserializers;
+protected final RootNameLookup _rootNames;
+protected ObjectReader(ObjectMapper mapper, DeserializationConfig config) {
+protected ObjectReader(ObjectReader base, DeserializationConfig config)
+protected ObjectReader(ObjectReader base, JsonFactory f)
+@Override
+public Version version() {
+protected ObjectReader _new(ObjectReader base, JsonFactory f) {
+protected ObjectReader _new(ObjectReader base, DeserializationConfig config) {
+protected JsonToken _initForReading(JsonParser p) throws IOException
+protected void _initForMultiRead(JsonParser p) throws IOException {
+public ObjectReader with(DeserializationFeature feature) {
+public ObjectReader withFeatures(DeserializationFeature... features) {
+public ObjectReader without(DeserializationFeature feature) {
+public ObjectReader withoutFeatures(DeserializationFeature... features) {
+public ObjectReader with(JsonParser.Feature feature) {
+public ObjectRea
+...[truncated deterministically]...
+tchRootDeserializer(DeserializationConfig config, JavaType valueType)
+protected Object _detectBindAndClose(byte[] src, int offset, int length) throws IOException
+protected Object _detectBindAndClose(DataFormatReaders.Match match, boolean forceClosing)
+protected <T> MappingIterator<T> _detectBindAndReadValues(DataFormatReaders.Match match, boolean forceClosing)
+protected JsonNode _detectBindAndCloseAsTree(InputStream in) throws IOException
+protected void _reportUnkownFormat(DataFormatReaders detector, DataFormatReaders.Match match) throws JsonProcessingException
+protected void _verifySchemaType(FormatSchema schema)
+protected void _reportUndetectableSource(Object src) throws JsonProcessingException
+protected InputStream _inputStream(URL src) throws IOException {
+protected InputStream _inputStream(File f) throws IOException {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.convert;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+/**
+
+ - Tests for ObjectReader with {@code withValueToUpdate} (update mode)
+ - that focus on handling of unknown properties according to
+ - {@link DeserializationFeature#FAIL_ON_UNKNOWN_PROPERTIES}.
+  */
+ public class TestIssue744 {
+  // Simple value class matching the bug report's DataB
+  public static class DataB {
+  public String da;
+  public int k;
+  public DataB() { }
+  public DataB(String da, int k) {
+      this.da = da;
+      this.k = k;
+  }
+  }
+  // --- Normal update -----------------------------------------------------------------
+  @Test
+  public void testUpdateWithMatchingFields() throws Exception {
+  ObjectMapper mapper = new ObjectMapper();
+  DataB value = new DataB();
+  ObjectReader reader = mapper.reader(DataB.class).withValueToUpdate(value);
+  DataB result = reader.readValue("{"da":"hello","k":42}");
+  assertSame("update must return the same instance", value, result);
+  assertEquals("hello", value.da);
+  assertEquals(42, value.k);
+  }
+  @Test
+  public void testUpdateLeavesUnmentionedFieldsUntouched() throws Exception {
+  ObjectMapper mapper = new ObjectMapper();
+  DataB value = new DataB("original", 7);
+  ObjectReader reader = mapper.reader(DataB.class).withValueToUpdate(value)
+          .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+  reader.readValue("{"k":100}");
+  assertEquals("original", value.da);
+  assertEquals(100, value.k);
+  }
+  @Test
+  public void testUpdateReturnsSameInstance() throws Exception {
+  ObjectMapper mapper = new ObjectMapper();
+  DataB value = new DataB();
+  ObjectReader reader = mapper.reader(DataB.class).withValueToUpdate(value);
+  DataB result = reader.readValue("{"da":"x","k":1}");
+  assertSame(value, result);
+  }
+  // --- Unknown properties handling ---------------------------------------------------
+  @Test
+  public void testUpdateWithExtraFieldIgnoredViaReaderOverride() throws Exception {
+  ObjectMapper mapper = new ObjectMapper(); // default: fail on unknown = true
+  DataB value = new DataB();
+  ObjectReader reader = mapper.reader(DataB.class).withValueToUpdate(value)
+          .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+  // Should silently ignore the extra field "i"
+  DataB result = reader.readValue("{"da":"a","k":1,"i":"extra"}");
+  assertSame(value, result);
+  assertEquals("a", value.da);
+  assertEquals(1, value.k);
+  }
+  @Test(expected = UnrecognizedPropertyException.class)
+  public void testUpdateWithExtraFieldThrowsWhenFeatureEnabled() throws Exception {
+  ObjectMapper mapper = new ObjectMapper(); // fails on unknown by default
+  DataB value = new DataB();
+  ObjectReader reader = mapper.reader(DataB.class).withValueToUpdate(value);
+  reader.readValue("{"da":"a","k":1,"i":"extra"}");
+  }
+  @Test
+  public void testUpdateWithExtraFieldIgnoredViaMapperConfig() throws Exception {
+  ObjectMapper mapper = new ObjectMapper();
+  mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+  DataB value = new DataB();
+  ObjectReader reader = mapper.reader(DataB.class).withValueToUpdate(value);
+  DataB result = reader.readValue("{"da":"b","k":2,"i":"oops"}");
+  assertEquals("b", value.da);
+  assertEquals(2, value.k);
+  }
+  // --- Rejection of invalid input ----------------------------------------------------
+  @Test(expected = IllegalArgumentException.class)
+  public void testWithValueToUpdateThrowsForNull() {
+  new ObjectMapper().reader(DataB.class).withValueToUpdate(null);
+  }
+  @Test(expected = IllegalArgumentException.class)
+  public void testWithValueToUpdateThrowsForArray() {
+  new ObjectMapper().reader(String[].class).withValueToUpdate(new String[0]);
+  }
+  // --- Plain read (without update) also respects feature override --------------------
+  @Test
+  public void testNormalReadIgnoresExtraFieldWhenFeatureDisabled() throws Exception {
+  ObjectMapper mapper = new ObjectMapper();
+  ObjectReader reader = mapper.reader(DataB.class)
+          .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+  DataB result = reader.readValue("{"da":"c","k":3,"i":"extra"}");
+  assertEquals("c", result.da);
+  assertEquals(3, result.k);
+  }
+  @Test(expected = UnrecognizedPropertyException.class)
+  public void testNormalReadThrowsWhenFeatureEnabled() throws Exception {
+  ObjectMapper mapper = new ObjectMapper();
+  ObjectReader reader = mapper.reader(DataB.class);
+  reader.readValue("{"da":"c","k":3,"i":"extra"}");
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-14f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-14f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-14f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-14f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-14f-copilot/.test_suite/com/fasterxml/jackson/databind/convert/TestIssue744.java:34: error: ')' expected
+ [javac] DataB result = reader.readValue("{"da":"hello","k":42}");
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 39 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

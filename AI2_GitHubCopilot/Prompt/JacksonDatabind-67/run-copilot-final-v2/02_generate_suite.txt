@@ -1,0 +1,331 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 67  Version: JacksonDatabind-67b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.BasicDeserializerFactory
+Modified: com.fasterxml.jackson.databind.deser.BasicDeserializerFactory
+Triggers: com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer::testCustomEnumValueAndKeyViaModifier
+
+Bug/specification summary:
+Bug report: 1445
+Trigger failures:
+- com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer::testCustomEnumValueAndKeyViaModifier
+ --> com.fasterxml.jackson.databind.exc.InvalidFormatException: Can not deserialize Map key of type com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer$KeyEnum from String "REPlaceMENTS": not a valid representation, problem: (com.fasterxml.jackson.databind.exc.InvalidFormatException) Can not deserialize Map key of type com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer$KeyEnum from String "REPlaceMENTS": not one of values excepted for Enum class: [rootDirectory, replacements, licenseString]
+Modified: com.fasterxml.jackson.databind.deser.BasicDeserializerFactory
+
+Prompt-01 test plan:
+TARGETS: createKeyDeserializer(DeserializationConfig,JavaType) in BasicDeserializerFactory for enum
+key types
+TARGETS: Integration of custom KeyDeserializers (via DeserializerModifier) for enum map keys
+TARGETS: _createEnumKeyDeserializer or equivalent method that resolves key deserializer for enums
+ORACLES: Expected: custom key deserializer is used when registered; no InvalidFormatException for
+variant key strings
+ORACLES: Verify that a KeyDeserializer from KeyDeserializers interface handles String→Enum matching
+(case-insensitive if configured)
+CASES: Normal: exact enum-name key (e.g., "replacements") → deserialized correctly via custom
+deserializer
+CASES: Boundary: case-variant key (e.g., "REPlaceMENTS") → accepted by custom deserializer, maps to
+KeyEnum.REPLACEMENTS
+CASES: Error: key string not handled by custom deserializer (e.g., "unknown") → still throws
+InvalidFormatException
+RISKS: The exact factory method responsible for enum key deserialization is not visible; may be
+createKeyDeserializer or a new internal method
+RISKS: The custom key deserializer implementation in the test is unknown; assumption: it does
+case-insensitive lookup via @JsonCreator or explicit mapping
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.BasicDeserializerFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser;
+@SuppressWarnings("serial")
+public abstract class BasicDeserializerFactory
+private final static Class<?> CLASS_OBJECT = Object.class;
+private final static Class<?> CLASS_STRING = String.class;
+private final static Class<?> CLASS_CHAR_BUFFER = CharSequence.class;
+private final static Class<?> CLASS_ITERABLE = Iterable.class;
+private final static Class<?> CLASS_MAP_ENTRY = Map.Entry.class;
+protected final static PropertyName UNWRAPPED_CREATOR_PARAM_NAME = new PropertyName("@JsonUnwrapped");
+@SuppressWarnings("rawtypes")
+_mapFallbacks.put(Map.class.getName(), LinkedHashMap.class);
+_mapFallbacks.put(ConcurrentMap.class.getName(), ConcurrentHashMap.class);
+_mapFallbacks.put(SortedMap.class.getName(), TreeMap.class);
+_mapFallbacks.put(java.util.NavigableMap.class.getName(), TreeMap.class);
+_mapFallbacks.put(java.util.concurrent.ConcurrentNavigableMap.class.getName(),
+java.util.concurrent.ConcurrentSkipListMap.class);
+_collectionFallbacks.put(Collection.class.getName(), ArrayList.class);
+_collectionFallbacks.put(List.class.getName(), ArrayList.class);
+_collectionFallbacks.put(Set.class.getName(), HashSet.class);
+_collectionFallbacks.put(SortedSet.class.getName(), TreeSet.class);
+_collectionFallbacks.put(Queue.class.getName(), LinkedList.class);
+_collectionFallbacks.put("java.util.Deque", LinkedList.class);
+_collectionFallbacks.put("java.util.NavigableSet", TreeSet.class);
+protected final DeserializerFactoryConfig _factoryConfig;
+protected BasicDeserializerFactory(DeserializerFactoryConfig config) {
+public DeserializerFactoryConfig getFactoryConfig() {
+protected abstract DeserializerFactory withConfig(DeserializerFactoryConfig config);
+@Override
+public final DeserializerFactory withAdditionalDeserializers(Deserializers additional) {
+public final DeserializerFactory withAdditionalKeyDeserializers(KeyDeserializers additional) {
+public final DeserializerFactory withDeserializerModifier(BeanDeserializerModifier modifier) {
+public final DeserializerFactory withAbstractTypeResolver(AbstractTypeResolver resolver) {
+public final DeserializerFactory withValueInstantiators(ValueInstantiators instantiators) {
+public JavaType mapAbstractType(DeserializationConfig config, JavaType type) throws JsonMappingException
+throw new IllegalArgumentException("Invalid abstract type resolution from "+type+" to "+next+": latter is not a subtype of former");
+private JavaType _mapAbstractType2(DeserializationConfig config, JavaType type)
+final DeserializationConfig config = ctxt.getConfig();
+final AnnotatedParameter nonAnnotatedParam = instantiator.getIncompleteParameter();
+final AnnotatedWithParams ctor = no
+...[truncated deterministically]...
+n _hasExplicitParamName(AnnotatedParameter param, AnnotationIntrospector intr)
+} else if (raw == String.class) {
+if (EnumSet.class.isAssignableFrom(collectionClass)) {
+/* One twist: if we are being asked to instantiate an interface or
+if (type.getRawClass() == ArrayBlockingQueue.class) {
+if (contentType.getRawClass() == String.class) {
+protected CollectionType _mapAbstractCollectionType(JavaType type, DeserializationConfig config)
+@SuppressWarnings("unchecked")
+if (EnumMap.class.isAssignableFrom(mapClass)) {
+JsonIgnoreProperties.Value ignorals = config.getDefaultPropertyIgnorals(Map.class,
+final Class<?> enumClass = type.getRawClass();
+if (AtomicReference.class.isAssignableFrom(type.getRawClass())) {
+final AnnotationIntrospector ai = config.getAnnotationIntrospector();
+if (factory.getRawParameterType(0) != String.class) {
+lt = _findRemappedType(config, List.class);
+mt = _findRemappedType(config, Map.class);
+CollectionType ct = tf.constructCollectionType(Collection.class, elemType);
+if (rawType == TokenBuffer.class) {
+protected JavaType _findRemappedType(DeserializationConfig config, Class<?> rawType) throws JsonMappingException {
+@Deprecated
+@Deprecated // since 2.8
+@Deprecated // not used, possibly remove as early as 2.9
+protected AnnotatedMethod _findJsonValueFor(DeserializationConfig config, JavaType enumType)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser;
+import java.lang.reflect.Method;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.cfg.DeserializerFactoryConfig;
+import com.fasterxml.jackson.databind.cfg.HandlerInstantiator;
+import com.fasterxml.jackson.databind.deser.impl.CreatorCollector;
+import com.fasterxml.jackson.databind.deser.std.*;
+import com.fasterxml.jackson.databind.ext.OptionalHandlerFactory;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.NamedType;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import com.fasterxml.jackson.databind.type.*;
+import com.fasterxml.jackson.databind.util.*;
+
+/* METHOD BasicDeserializerFactory */
+protected BasicDeserializerFactory(DeserializerFactoryConfig config) {
+ _factoryConfig = config;
+ }
+
+/* METHOD createKeyDeserializer */
+@Override
+ public KeyDeserializer createKeyDeserializer(DeserializationContext ctxt,
+ JavaType type)
+ throws JsonMappingException
+ {
+ final DeserializationConfig config = ctxt.getConfig();
+ KeyDeserializer deser = null;
+ if (_factoryConfig.hasKeyDeserializers()) {
+ BeanDescription beanDesc = config.introspectClassAnnotations(type.getRawClass());
+ for (KeyDeserializers d : _factoryConfig.keyDeserializers()) {
+ deser = d.findKeyDeserializer(type, config, beanDesc);
+ if (deser != null) {
+ break;
+ }
+ }
+ }
+ // the only non-standard thing is this:
+ if (deser == null) {
+ if (type.isEnumType()) {
+ return _createEnumKeyDeserializer(ctxt, type);
+ }
+ deser = StdKeyDeserializers.findStringBasedKeyDeserializer(config, type);
+ }
+ // and then post-processing
+ if (deser != null) {
+ if (_factoryConfig.hasDeserializerModifiers()) {
+ for (BeanDeserializerModifier mod : _factoryConfig.deserializerModifiers()) {
+ deser = mod.modifyKeyDeserializer(config, type, deser);
+ }
+ }
+ }
+ return deser;
+ }
+
+/* METHOD findTypeDeserializer */
+@Override
+ public TypeDeserializer findTypeDeserializer(DeserializationConfig config,
+ JavaType baseType)
+ throws JsonMappingException
+ {
+ BeanDescription bean = config.introspectClassAnnotations(baseType.getRawClass());
+ AnnotatedClass ac = bean.getClassInfo();
+ AnnotationIntrospector ai = config.getAnnotationIntrospector();
+ TypeResolverBuilder<?> b = ai.findTypeResolver(config, ac, baseType);
+
+ /* Ok: if there is no explicit type info handler, we may want to
+ * use a default. If so, config object knows what to use.
+ */
+ Collection<NamedType> subtypes = null;
+ if (b == null) {
+ b = config.getDefaultTyper(baseType);
+ if (b == null) {
+ return null;
+ }
+ } else {
+ subtypes = config.getSubtypeResolver().collectAndResolveSubtypesByTypeId(config, ac);
+ }
+ // May need to figure out default implementation, if none found yet
+ // (note: check for abstract type is not 100% mandatory, more of an optimization)
+ if ((b.getDefaultImpl() == null) && baseType.isAbstract()) {
+ JavaType defaultType = mapAbstractType(config, baseType);
+ if (defaultType != null && defaultType.getRawClass() != baseType.getRawClass()) {
+ b = b.defaultImpl(defaultType.getRawClass());
+ }
+ }
+ return b.buildTypeDeserializer(config, baseType, subtypes);
+ }
+
+/* METHOD findDefaultDeserializer */
+public JsonDeserializer<?> findDefaultDeserializer(DeserializationContext ctxt,
+ JavaType type, BeanDescription beanDesc)
+ throws JsonMappingException
+ {
+ Class<?> rawType = type.getRawClass();
+ // Object ("untyped"), String equivalents:
+ if (rawType == CLASS_OBJECT) {
+ // 11-Feb-2015, tatu: As per [databind#700] need to be careful wrt n
+...[truncated deterministically]...
+(config, List.class);
+ mt = _findRemappedType(config, Map.class);
+ } else {
+ lt = mt = null;
+ }
+ return new UntypedObjectDeserializer(lt, mt);
+ }
+ if (rawType == CLASS_STRING || rawType == CLASS_CHAR_BUFFER) {
+ return StringDeserializer.instance;
+ }
+ if (rawType == CLASS_ITERABLE) {
+ // [databind#199]: Can and should 'upgrade' to a Collection type:
+ TypeFactory tf = ctxt.getTypeFactory();
+ JavaType[] tps = tf.findTypeParameters(type, CLASS_ITERABLE);
+ JavaType elemType = (tps == null || tps.length != 1) ? TypeFactory.unknownType() : tps[0];
+ CollectionType ct = tf.constructCollectionType(Collection.class, elemType);
+ // Should we re-introspect beanDesc? For now let's not...
+ return createCollectionDeserializer(ctxt, ct, beanDesc);
+ }
+ if (rawType == CLASS_MAP_ENTRY) {
+ // 28-Apr-2015, tatu: TypeFactory does it all for us already so
+ JavaType kt = type.containedType(0);
+ if (kt == null) {
+ kt = TypeFactory.unknownType();
+ }
+ JavaType vt = type.containedType(1);
+ if (vt == null) {
+ vt = TypeFactory.unknownType();
+ }
+ TypeDeserializer vts = (TypeDeserializer) vt.getTypeHandler();
+ if (vts == null) {
+ vts = findTypeDeserializer(ctxt.getConfig(), vt);
+ }
+ JsonDeserializer<Object> valueDeser = vt.getValueHandler();
+ KeyDeserializer keyDes = (KeyDeserializer) kt.getValueHandler();
+ return new MapEntryDeserializer(type, keyDes, valueDeser, vts);
+ }
+ String clsName = rawType.getName();
+ if (rawType.isPrimitive() || clsName.startsWith("java.")) {
+ // Primitives/wrappers, other Numbers:
+ JsonDeserializer<?> deser = NumberDeserializers.find(rawType, clsName);
+ if (deser == null) {
+ deser = DateDeserializers.find(rawType, clsName);
+ }
+ if (deser != null) {
+ return deser;
+ }
+ }
+ // and a few Jackson types as well:
+ if (rawType == TokenBuffer.class) {
+ return new TokenBufferDeserializer();
+ }
+ JsonDeserializer<?> deser = findOptionalStdDeserializer(ctxt, type, beanDesc);
+ if (deser != null) {
+ return deser;
+ }
+ return JdkDeserializers.find(rawType, clsName);
+ }
+
+ protected JavaType _findRemappedType(DeserializationConfig config, Class<?> rawType) throws JsonMappingException {
+ JavaType type = mapAbstractType(config, config.constructType(rawType));
+ return (type == null || type.hasRawClass(rawType)) ? null : type;
+ }
+
+ /*
+ /**********************************************************
+ /* Helper methods, finding custom deserializers
+ /**********************************************************
+ */
+
+ protected JsonDeserializer<?> _findCustomTreeNodeDe
+...[truncated deterministically]...
+otation found.
+ */
+ protected KeyDeserializer findKeyDeserializerFromAnnotation(DeserializationContext ctxt,
+ Annotated ann)
+ throws JsonMappingException
+ {
+ AnnotationIntrospector intr = ctxt.getAnnotationIntrospector();
+ if (intr != null) {
+ Object deserDef = intr.findKeyDeserializer(ann);
+ if (deserDef != null) {
+ return ctxt.keyDeserializerInstance(ann, deserDef);
+ }
+ }
+ return null;
+ }
+
+ /**
+ * Helper method used to resolve additional type-related annotation information
+ * like type overrides, or handler (serializer, deserializer) overrides,
+ * so that from declared field, property or constructor parameter type
+ * is used as the base and modified based on annotations, if any.
+ * 
+ * @since 2.8 Combines functionality of <code>modifyTypeByAnnotation</code>
+ * and <code>resolveType</code>
+ */
+ protected JavaType resolveMemberAndTypeAnnotations(DeserializationContext ctxt,
+ AnnotatedMember member, JavaType type)
+ throws JsonMappingException
+ {
+ AnnotationIntrospector intr = ctxt.getAnnotationIntrospector();
+ if (intr == null) {
+ return type;
+ }
+
+ // First things first: see if we can find annotations on declared
+ // type
+
+ if (type.isMapLikeType()) {
+ JavaType keyType = type.getKeyType();
+ if (keyType != null) {
+ Object kdDef = intr.findKeyDeserializer(member);
+ KeyDeserializer kd = ctxt.keyDeserializerInstance(member, kdDef);
+ if (kd != null) {
+ type = ((MapLikeType) type).withKeyValueHandler(kd);
+ keyType = type.getKeyType(); // just in case it's used below
+ }
+ }

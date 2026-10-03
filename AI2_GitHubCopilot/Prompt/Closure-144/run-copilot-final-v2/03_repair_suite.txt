@@ -1,0 +1,304 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 144  Version: Closure-144b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 143
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsAssign
+ --> junit.framework.ComparisonFailure: expected:</**
+ - com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsMember
+ --> junit.framework.ComparisonFailure: expected:<var a = {};
+ - com.google.javascript.jscomp.CodePrinterTest::testOptionalTypesAnnotation
+ --> junit.framework.ComparisonFailure: expected:<...param {string=} x
+ - com.google.javascript.jscomp.CodePrinterTest::testTempConstructor
+ --> junit.framework.ComparisonFailure: expected:</**
+ - com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsDispatcher1
+ --> junit.framework.ComparisonFailure: expected:<var a = {};
+ - com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsDispatcher2
+ --> junit.framework.ComparisonFailure: expected:<var a = {};
+ - com.google.javascript.jscomp.CodePrinterTes
+...[truncated deterministically]...
+[undefined]> but was:<...n (this:Window, ?): [?]>
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testConstructorProperty
+ --> junit.framework.ComparisonFailure: expected:<...ion (this:foo.Bar): [undefined]> but was:<...ion (this:foo.Bar): [?]>
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testReturnTypeInference1
+ --> junit.framework.ComparisonFailure: expected:<function (): [undefined]> but was:<function (): [?]>
+Modified: com.google.javascript.jscomp.FunctionTypeBuilder, com.google.javascript.jscomp.TypedScopeCreator, com.google.javascript.rhino.jstype.FunctionBuilder, com.google.javascript.rhino.jstype.FunctionType
+
+Available API/signatures:
+[com.google.javascript.jscomp.FunctionTypeBuilder | java]
+package com.google.javascript.jscomp;
+final class FunctionTypeBuilder {
+"@extends used without @constructor or @interface for {0}");
+"@implements used without @constructor or @interface for {0}");
+@Nullable Node owner) {
+@Nullable JSDocInfo info) {
+private void maybeSetBaseType(FunctionType fnType) {
+private FunctionType getOrCreateConstructor() {
+private void reportWarning(DiagnosticType warning, String ... args) {
+private void reportError(DiagnosticType error, String ... args) {
+static boolean isFunctionTypeDeclaration(JSDocInfo info) {
+
+[com.google.javascript.jscomp.TypedScopeCreator | java]
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static class DiscoverEnums extends AbstractShallowCallback {
+@Override
+public void visit(NodeTraversal t, Node node, Node parent) {
+private static Node getPrototypePropertyOwner(Node n) {
+private abstract class AbstractScopeBuilder
+private AbstractScopeBuilder(Scope scope) {
+public abstract void visit(NodeTraversal t, Nod
+...[truncated deterministically]...
+ass StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class CollectProperties
+public void visit(NodeTraversal t, N
+...[truncated deterministically]...
+public boolean isInterface() {
+public boolean isOrdinaryFunction() {
+public boolean isFunctionType() {
+public boolean canBeCalled() {
+public Iterable<Node> getParameters() {
+public Node getParametersNode() {
+public int getMinArguments() {
+public int getMaxArguments() {
+public JSType getReturnType() {
+public boolean isReturnTypeInferred() {
+public FunctionPrototypeType getPrototype() {
+public v
+...[truncated deterministically]...
+Type() {
+public boolean hasInstanceType() {
+public ObjectType getTypeOfThis() {
+public Node getSource() {
+public void setSource(Node source) {
+private void addSubType(FunctionType subType) {
+public List<FunctionType> getSubTypes() {
+public boolean hasCachedValues() {
+public String getTemplateTypeName() {
+public String toDebugHashCodeString() {
+private String getDebugHashCodeStringOf(JSType type) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertTrue;
+
+ import com.google.javascript.rhino.SourceFile;
+ import com.google.javascript.rhino.jstype.FunctionBuilder;
+ import com.google.javascript.rhino.jstype.FunctionParamBuilder;
+ import com.google.javascript.rhino.jstype.FunctionType;
+ import com.google.javascript.rhino.jstype.JSType;
+ import com.google.javascript.rhino.jstype.JSTypeNative;
+ import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ /**
+  * Regression tests for Bug 144: function types without an explicit return annotation
+  * should default to VOID_TYPE (printed as "undefined"), not UNKNOWN_TYPE ("?").
+  */
+ public class FunctionTypeRegressionTest {
+
+     private JSTypeRegistry registry;
+     private Compiler compiler;
+
+     @Before
+     public void setUp() {
+         registry = new JSTypeRegistry(new com.google.javascript.rhino.ErrorReporter() {
+             @Override
+             public void warning(String message, String sourceName, int line, int lineOffset) { }
+             @Override
+             public void error(String message, String sourceName, int line, int lineOffset) { }
+         }, false);
+         compiler = new Compiler();
+         CompilerOptions options = new CompilerOptions();
+         options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+         options.setIdeMode(true); // allows partial compilation without full externs
+         compiler.initOptions(options);
+     }
+
+     // ----------------------------------------------------------------------------
+     //  Unit tests via FunctionBuilder
+     // ----------------------------------------------------------------------------
+
+     @Test
+     public void testDefaultReturnTypeIsVoid_FunctionBuilder() {
+         // A function with no return type set should default to void (undefined).
+         FunctionBuilder builder = new FunctionBuilder(registry)
+                 .withParams(new FunctionParamBuilder(registry));
+         FunctionType ft = builder.build();
+
+         assertEquals("function (): undefined", ft.toString());
+         assertEquals(registry.getNativeType(JSTypeNative.VOID_TYPE), ft.getReturnType());
+         assertTrue(ft.getReturnType().isVoidType());
+     }
+
+     @Test
+     public void testExplicitReturnType_FunctionBuilder() {
+         // An explicitly set return type must be preserved.
+         FunctionBuilder builder = new FunctionBuilder(registry)
+                 .withParams(new FunctionParamBuilder(registry))
+                 .withReturnType(registry.getNativeType(JSTypeNative.NUMBER_TYPE));
+         FunctionType ft = builder.build();
+
+         assertEquals("function (): number", ft.toString());
+         assertEquals(registry.getNativeType(JSTypeNative.NUMBER_TYPE), ft.getReturnType());
+     }
+
+     @Test
+     public void testUnknownReturnTypeAnnotation_FunctionBuilder() {
+         // When user writes @return {?}, the type must stay unknown ("?") and not become void.
+         FunctionBuilder builder = new FunctionBuilder(registry)
+                 .withParams(new FunctionParamBuilder(registry))
+                 .withReturnType(registry.getNativeType(JSTypeNative.UNKNOWN_TYPE));
+         FunctionType ft = builder.build();
+
+         assertEquals("function (): ?", ft.toString());
+         assertEquals(registry.getNativeType(JSTypeNative.UNKNOWN_TYPE), ft.getReturnType());
+     }
+
+     @Test
+     public void testInferredReturnTypeVoid_FunctionBuilder() {
+         // Calling withInferredReturnType(VOID_TYPE) should lead to a void return too.
+         FunctionBuilder builder = new FunctionBuilder(registry)
+                 .withParams(new FunctionParamBuilder(registry))
+                 .withInferredReturnType(registry.getNativeType(JSTypeNative.VOID_TYPE));
+         FunctionType ft = builder.build();
+
+         assertEquals("function (): undefined", ft.toString());
+         assertEquals(registry.getNativeType(JSTypeNative.VOID_TYPE), ft.getReturnType());
+     }
+
+     @Test
+     public void testConstructorReturnTypeIsVoid_FunctionBuilder() {
+         // A constructor with no return annotation must also default to void.
+         FunctionBuilder builder = new FunctionBuilder(registry)
+                 .withParams(new FunctionParamBuilder(registry))
+                 .forConstructor();
+         FunctionType ft = builder.build();
+
+         assertTrue(ft.isConstructor());
+         assertEquals("function (): undefined", ft.toString());
+         assertEquals(registry.getNativeType(JSTypeNative.VOID_TYPE), ft.getReturnType());
+     }
+
+     // ----------------------------------------------------------------------------
+     //  Integration tests via Compiler + TypedScopeCreator
+     // ----------------------------------------------------------------------------
+
+     /**
+      * Helper: compile `code` and return the FunctionType of the top-level function named `fnName`.
+      */
+     private FunctionType getFunctionType(String code, String fnName) {
+         SourceFile[] inputs = { SourceFile.fromCode("test.js", code) };
+         SourceFile[] externs = {};  // minimal – ex‑IDE mode allows empty externs
+         compiler.compile(externs, inputs, new PrintStreamErrorReporter(System.err));
+         Scope topScope = compiler.getTopScope();
+         assertNotNull("Top scope was null after compilation", topScope);
+         Var var = topScope.getVar(fnName);
+         assertNotNull("Variable '" + fnName + "' not found in top scope", var);
+         JSType type = var.getType();
+         assertNotNull("Type of '" + fnName + "' is null", type);
+         return type.toMaybeFunctionType();
+     }
+
+     @Test
+     public void testFunctionWithoutAnnotation_Compiler() {
+         String code = "function f() {}";
+         FunctionType ft = getFunctionType(code, "f");
+         assertNotNull(ft);
+         assertTrue("Expected return type to be void", ft.getReturnType().isVoidType());
+         assertEquals("function (): undefined", ft.toString());
+     }
+
+     @Test
+     public void testFunctionWithReturnStatementNoAnnotation_Compiler() {
+         // Even when the body contains a return, the absence of a JSDoc annotation
+         // means the return type must be void (undefined).
+         String code = "function g() { return 42; }";
+         FunctionType ft = getFunctionType(code, "g");
+         assertNotNull(ft);
+         assertTrue("Expected return type to be void", ft.getReturnType().isVoidType());
+         assertEquals("function (): undefined", ft.toString());
+     }
+
+     @Test
+     public void testConstructorWithoutAnnotation_Compiler() {
+         // A constructor with no @return annotation must have return type undefined.
+         String code = "/** @constructor */ function Bar() {}";
+         FunctionType ft = getFunctionType(code, "Bar");
+         assertNotNull(ft);
+         assertTrue(ft.isConstructor());
+         assertTrue("Expected return type to be void", ft.getReturnType().isVoidType());
+         assertEquals("function (this:Bar): undefined", ft.toString());
+     }
+
+     @Test
+     public void testFunctionWithExplicitUnknownReturn_Compiler() {
+         // Explicit @return {?} must remain "?".
+         String code = "/** @return {?} */ function h() {}";
+         FunctionType ft = getFunctionType(code, "h");
+         assertNotNull(ft);
+         assertEquals(registry.getNativeType(JSTypeNative.UNKNOWN_TYPE), ft.getReturnType());
+         assertEquals("function (): ?", ft.toString());
+     }
+
+     @Test
+     public void testFunctionWithExplicitVoidReturn_Compiler() {
+         // Explicit @return {void} must remain undefined.
+         String code = "/** @return {void} */ function i() {}";
+         FunctionType ft = getFunctionType(code, "i");
+         assertNotNull(ft);
+         assertEquals(registry.getNativeType(JSTypeNative.VOID_TYPE), ft.getReturnType());
+         assertEquals("function (): undefined", ft.toString());
+     }
+
+     @Test
+     public void testReturnTypeIsNotUnknownByDefault_Compiler() {
+         // Sanity check: the default return type is NOT the unknown type.
+         String code = "function noReturn() {}";
+         FunctionType ft = getFunctionType(code, "noReturn");
+         assertNotNull(ft);
+         assertFalse("Default return type must not be unknown",
+                 ft.getReturnType().isUnknownType());
+         assertTrue("Default return type must be void",
+                 ft.getReturnType().isVoidType());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-144f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-144f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-144f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-144f-copilot/.test_suite/com/google/javascript/jscomp/FunctionTypeRegressionTest.java:8: error: cannot find symbol
+ [javac] import com.google.javascript.rhino.SourceFile;
+ [javac] ^
+ [javac] symbol: class SourceFile
+ [javac] location: package com.google.javascript.rhino
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 8 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

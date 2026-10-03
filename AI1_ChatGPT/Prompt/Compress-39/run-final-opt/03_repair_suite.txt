@@ -1,0 +1,99 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 39  Version: Compress-39b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-351
+Trigger failures:
+- org.apache.commons.compress.ArchiveUtilsTest::sanitizeShortensString
+ --> junit.framework.AssertionFailedError: expected:<...23456789012345678901[...]> but was:<...23456789012345678901[234567890123456789012345678901234567890123456789]>
+Modified: org.apache.commons.compress.utils.ArchiveUtils
+
+Available API/signatures:
+[org.apache.commons.compress.utils.ArchiveUtils | java]
+package org.apache.commons.compress.utils;
+public class ArchiveUtils {
+/** Private constructor to prevent instantiation of this utility class. */
+private ArchiveUtils(){
+public static String toString(final ArchiveEntry entry){
+final StringBuilder sb = new StringBuilder();
+final String size = Long.toString(entry.getSize());
+} catch (final UnsupportedEncodingException e) {
+public static boolean matchAsciiBuffer(final String expected, final byte[] buffer){
+public static byte[] toAsciiBytes(final String inputString){
+public static String toAsciiString(final byte[] inputBytes){
+public static String toAsciiString(final byte[] inputBytes, final int offset, final int length){
+public static boolean isEqual(final byte[] buffer1, final byte[] buffer2 ){
+public static boolean isEqual(final byte[] buffer1, final byte[] buffer2, final boolean ignoreTrailingNulls){
+public static boolean isArrayZero(final byte[] a, final int size) {
+public static String sanitize(String s) {
+final char[] chars = s.toCharArray();
+
+Generated JUnit Test:
+package org.apache.commons.compress;
+
+import static org.junit.Assert.assertEquals;
+
+import org.apache.commons.compress.utils.ArchiveUtils;
+import org.junit.Test;
+
+public class ArchiveUtilsSanitizeTest {
+
+    @Test
+    public void sanitizeLeavesPrintableTextUnchanged() {
+        assertEquals("archive-file_123.txt", ArchiveUtils.sanitize("archive-file_123.txt"));
+    }
+
+    @Test
+    public void sanitizeReplacesIsoControlCharacters() {
+        assertEquals("a?b?c?d", ArchiveUtils.sanitize("a\u0000b\nc\u007Fd"));
+    }
+
+    @Test
+    public void sanitizeReplacesCharactersFromSpecialsUnicodeBlock() {
+        assertEquals("before?after", ArchiveUtils.sanitize("before\uFFFDafter"));
+    }
+
+    @Test
+    public void sanitizeKeepsStringAtMaximumLength() {
+        final String input = repeatedPattern(255);
+        assertEquals(input, ArchiveUtils.sanitize(input));
+        assertEquals(255, ArchiveUtils.sanitize(input).length());
+    }
+
+    @Test
+    public void sanitizeShortensStringLongerThanMaximumLength() {
+        final String input = repeatedPattern(256);
+        final String sanitized = ArchiveUtils.sanitize(input);
+
+        assertEquals(input.substring(0, 255), sanitized);
+        assertEquals(255, sanitized.length());
+    }
+
+    @Test
+    public void sanitizeTruncatesAfterReplacingControlsWithinRetainedPrefix() {
+        final String input = "A\u0000" + repeatedPattern(300);
+        final String sanitized = ArchiveUtils.sanitize(input);
+
+        assertEquals("A?" + repeatedPattern(253), sanitized);
+        assertEquals(255, sanitized.length());
+    }
+
+    private static String repeatedPattern(final int length) {
+        final StringBuilder value = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            value.append((char) ('0' + (i % 10)));
+        }
+        return value.toString();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.compress.ArchiveUtilsSanitizeTest::sanitizeShortensStringLongerThanMaximumLength
+ - org.apache.commons.compress.ArchiveUtilsSanitizeTest::sanitizeTruncatesAfterReplacingControlsWithinRetainedPrefix
+
+Failing generated tests: org.apache.commons.compress.ArchiveUtilsSanitizeTest::sanitizeShortensStringLongerThanMaximumLength, org.apache.commons.compress.ArchiveUtilsSanitizeTest::sanitizeTruncatesAfterReplacingControlsWithinRetainedPrefix

@@ -1,0 +1,199 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 140  Version: Closure-140b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 126
+Trigger failures:
+- com.google.javascript.jscomp.CrossModuleCodeMotionTest::testEmptyModule
+ --> junit.framework.AssertionFailedError: compiler.reportCodeChange() was called even though nothing changed
+Modified: com.google.javascript.jscomp.Compiler
+
+Available API/signatures:
+[com.google.javascript.jscomp.Compiler | java]
+package com.google.javascript.jscomp;
+public class Compiler extends AbstractCompiler {
+private final StringBuilder debugLog = new StringBuilder();
+public PerformanceTracker tracker;
+public Compiler() {
+public Compiler(PrintStream stream) {
+public Compiler(ErrorManager errorManager) {
+@Override
+public void setErrorManager(ErrorManager errorManager) {
+private MessageFormatter createMessageFormatter() {
+public void initOptions(CompilerOptions options) {
+private void initBasedOnOptions() {
+private void checkFirstModule(JSModule[] modules) {
+public void rebuildInputsFromModules() {
+private CompilerInput[] getAllInputsFromModules() {
+private Result compile() {
+public Result call() throws Exception {
+public void disableThreads() {
+@SuppressWarnings("unchecked")
+private <T> T runInCompilerThread(final Callable<T> callable) {
+final boolean dumpTraceReport = options.tracer.isOn();
+public void run() {
+private void compileInternal() {
+public void parse() {
+public void setPassConfig(PassConfig passes) {
+public void check() {
+private void externExports() {
+protected CompilerPass createInternal(AbstractCompiler compiler) {
+private void maybeSanityCheck() {
+private void runSanityCheck() {
+private void runCustomPasses(CustomPassExecutionTime executionTime) {
+public Result getResult() {
+public JSError[] getMessages() {
+public JSError[] getErrors() {
+public JSError[] getWarnings() {
+public Node getRoot() {
+private int nextUniqueNameId() {
+@VisibleForTesting
+public String get() {
+public CompilerInput getInput(String name) {
+public CompilerInput newExternInput(String name) {
+public JSTypeRegistry getTypeRegistry(
+...[truncated deterministically]...
+alize() {
+public void reportCodeChange() {
+public CodingConvention getCodingConvention() {
+public boolean isIdeMode() {
+public boolean isTypeCheckingEnabled() {
+public void report(JSError error) {
+public int getErrorCount() {
+public int getWarningCount() {
+public boolean hasErrors() {
+private SourceFile getSourceFileByName(String sourceName) {
+public String getSourceLine(String sourceName, int lineNumber) {
+public Region getSourceRegion(String sourceName, int lineNumber) {
+public SourceMap getSourceMap() {
+public static void setLoggingLevel(Level level) {
+public String getAstDotGraph() throws IOException {
+public ErrorManager getErrorManager() {
+public static class IntermediateState implements Serializable {
+private IntermediateState() {}
+public IntermediateState getState() {
+public void setState(IntermediateState state) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+public class CompilerReportCodeChangeTest {
+
+  private static final class ChangeCountingCompiler extends Compiler {
+    int codeChangeCount;
+
+    @Override
+    public void reportCodeChange() {
+      codeChangeCount++;
+      super.reportCodeChange();
+    }
+  }
+
+  @Test
+  public void testEmptyLeadingModuleDoesNotReportCodeChange() {
+    JSModule empty = module("empty", null);
+    JSModule source = module("source", "var untouched = 1;");
+    source.addDependency(empty);
+
+    ChangeCountingCompiler compiler = runPass(empty, source);
+
+    assertEquals(
+        "A module with no inputs must not cause CrossModuleCodeMotion to report a change.",
+        0,
+        compiler.codeChangeCount);
+  }
+
+  @Test
+  public void testEmptyTrailingModuleDoesNotReportCodeChange() {
+    JSModule source = module("source", "var untouched = 1;");
+    JSModule empty = module("empty", null);
+    empty.addDependency(source);
+
+    ChangeCountingCompiler compiler = runPass(source, empty);
+
+    assertEquals(
+        "An empty dependent module must not make a no-op optimization report a change.",
+        0,
+        compiler.codeChangeCount);
+  }
+
+  @Test
+  public void testOnlyEmptyModulesDoNotReportCodeChange() {
+    JSModule first = module("first", null);
+    JSModule second = module("second", null);
+    second.addDependency(first);
+
+    ChangeCountingCompiler compiler = runPass(first, second);
+
+    assertEquals(
+        "Running CrossModuleCodeMotion over modules with no inputs is a no-op.",
+        0,
+        compiler.codeChangeCount);
+  }
+
+  @Test
+  public void testActualCrossModuleMotionReportsCodeChange() {
+    JSModule declaration = module("declaration", "function moved() { return 1; }");
+    JSModule use = module("use", "moved();");
+    use.addDependency(declaration);
+
+    ChangeCountingCompiler compiler = runPass(declaration, use);
+
+    assertTrue(
+        "Moving a declaration needed only by a dependent module must report a code change.",
+        compiler.codeChangeCount > 0);
+  }
+
+  private static JSModule module(String name, String source) {
+    JSModule module = new JSModule(name);
+    if (source != null) {
+      module.add(new JSSourceFile(name + ".js", source));
+    }
+    return module;
+  }
+
+  private static ChangeCountingCompiler runPass(JSModule... modules) {
+    ChangeCountingCompiler compiler = new ChangeCountingCompiler();
+    compiler.init(new JSSourceFile[0], modules, new CompilerOptions());
+    compiler.parse();
+
+    assertEquals("Test inputs must parse without compiler errors.", 0, compiler.getErrorCount());
+
+    Node root = compiler.getRoot();
+    new CrossModuleCodeMotion(compiler, false)
+        .process(root.getFirstChild(), root.getLastChild());
+    return compiler;
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-140f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-140f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-140f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-140f-ai/.test_suite/com/google/javascript/jscomp/CompilerReportCodeChangeTest.java:79: error: constructor JSSourceFile in class JSSourceFile cannot be applied to given types;
+ [javac] module.add(new JSSourceFile(name + ".js", source));
+ [javac] ^
+ [javac] required: SourceFile
+ [javac] found: String,String
+ [javac] reason: actual and formal argument lists differ in length
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 34 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

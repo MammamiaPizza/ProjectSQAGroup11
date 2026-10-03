@@ -1,0 +1,154 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: JacksonDatabind  Bug: 85  Version: JacksonDatabind-85b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase
+Bug/specification summary:
+Bug report: 1648
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.DateSerializationTest::testFormatWithoutPattern
+ --> junit.framework.ComparisonFailure: expected:<{"date":"1970-01-01[X01:00:]00"}> but was:<{"date":"1970-01-01[T01:00:00.000+01]00"}>
+Modified: com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase | java]
+package com.fasterxml.jackson.databind.ser.std;
+@SuppressWarnings("serial")
+public abstract class DateTimeSerializerBase<T>
+protected final Boolean _useTimestamp;
+protected final DateFormat _customFormat;
+public abstract DateTimeSerializerBase<T> withFormat(Boolean timestamp, DateFormat customFormat);
+@Override
+final String pattern = format.hasPattern()
+final Locale loc = format.hasLocale()
+@Deprecated
+public boolean isEmpty(T value) {
+public boolean isEmpty(SerializerProvider serializers, T value) {
+protected abstract long _timestamp(T value);
+public JsonNode getSchema(SerializerProvider serializers, Type typeHint) {
+public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) throws JsonMappingException
+public abstract void serialize(T value, JsonGenerator gen, SerializerProvider serializers)
+protected boolean _asTimestamp(SerializerProvider serializers)
+
+Existing test summary (method names/assertions only):
+Test methods: timezoneOnlyFormatUsesConfiguredDefaultDateFormat, unannotatedDateUsesConfiguredDefaultDateFormat, explicitPatternStillOverridesConfiguredDefaultFormat, numericShapeStillSerializesAsTimestamp
+Representative assertions:
+assertEquals("{\"date\":\"1970-01-01X01:00:00\"}",
+assertEquals("{\"date\":\"1970-01-01X00:00:00\"}",
+assertEquals("{\"date\":\"1970/01/01 01:00\"}",
+assertEquals("{\"date\":0}",
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+62,38,54,23
+
+Line/branch gaps:
+Class: com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase
+Uncovered lines: 191, 192, 195, 197, 183, 185, 154, 155, 53, 57, 69, 73, 90, 91, 92, 94, 95, 97, 105, 107, 112, 148, 140, 134, 53, 57, 69, 73, 90, 91 ... (+18 more)
+Partially covered branch lines: 178 (50% (1/2)), 179 (50% (1/2)), 52 (50% (1/2)), 56 (50% (1/2)), 68 (50% (1/2)), 72 (50% (1/2)), 81 (50% (1/2)), 83 (66% (4/6)), 89 (50% (1/2)), 103 (50% (1/2)), 110 (50% (1/2)), 117 (50% (2/4)), 118 (50% (1/2)), 52 (50% (1/2)), 56 (50% (1/2)), 68 (50% (1/2)), 72 (50% (1/2)), 81 (50% (1/2)), 83 (66% (4/6)), 89 (50% (1/2)), 103 (50% (1/2)), 110 (50% (1/2)), 117 (50% (2/4)), 118 (50% (1/2)), 178 (50% (1/2)), 179 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase]
+152: if (serializers != null) {
+153: return serializers.isEnabled(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+154: }
+155: // 12-Jun-2014, tatu: Is it legal not to have provider? Was NPE:ing earlier so leave a check
+156: throw new IllegalArgumentException("Null SerializerProvider passed for "+handledType().getName());
+---
+153: return serializers.isEnabled(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+154: }
+155: // 12-Jun-2014, tatu: Is it legal not to have provider? Was NPE:ing earlier so leave a check
+156: throw new IllegalArgumentException("Null SerializerProvider passed for "+handledType().getName());
+157: }
+---
+51: {
+52: if (property == null) {
+53: return this;
+54: }
+55: JsonFormat.Value format = findFormatOverrides(serializers, property, handledType());
+---
+55: JsonFormat.Value format = findFormatOverrides(serializers, property, handledType());
+56: if (format == null) {
+57: return this;
+58: }
+59: // Simple case first: serialize as numeric timestamp?
+---
+67: if ((shape == JsonFormat.Shape.STRING) || format.hasPattern()
+68: || format.hasLocale() || format.hasTimeZone()) {
+69: TimeZone tz = format.getTimeZone();
+70: final String pattern = format.hasPattern()
+71: ? format.getPattern()
+---
+71: ? format.getPattern()
+72: : StdDateFormat.DATE_FORMAT_STR_ISO8601;
+73: final Locale loc = format.hasLocale()
+74: ? format.getLocale()
+75: : serializers.getLocale();
+---
+88: 
+89: // 08-Jun-2017, tatu: Unfortunately there's no generally usable
+90: // mechanism for changing `DateFormat` instances (or even clone()ing)
+91: // So: require it be `SimpleDateFormat`; can't config other types
+92: // serializers.reportBadDefinition(handledType(), String.format(
+---
+89: // 08-Jun-2017, tatu: Unfortunately there's no generally usable
+90: // mechanism for changing `DateFormat` instances (or even clone()ing)
+91: // So: require it be `SimpleDateFormat`; can't config other types
+92: // serializers.reportBadDefinition(handledType(), String.format(
+93: // Ugh. No way to change `Locale`, create copy; must re-crete completely:
+---
+90: // mechanism for changing `DateFormat` instances (or even clone()ing)
+91: // So: require it be `SimpleDateFormat`; can't config other types
+92: // serializers.reportBadDefinition(handledType(), String.format(
+93: // Ugh. N
+...[truncated deterministically]...
+etely:
+94: return this;
+95: }
+96: 
+97: /*
+---
+95: }
+96: 
+97: /*
+98: /**********************************************************
+99: /* Accessors
+---
+103: @Deprecated
+104: @Override
+105: public boolean isEmpty(T value) {
+106: // let's assume "null date" (timestamp 0) qualifies for empty
+107: return (value == null) || (_timestamp(value) == 0L);
+---
+105: public boolean isEmpty(T value) {
+106: // let's assume "null date" (timestamp 0) qualifies for empty
+107: return (value == null) || (_timestamp(value) == 0L);
+108: }
+109: 
+---
+110: @Override
+111: public boolean isEmpty(SerializerProvider serializers, T value) {
+112: // let's assume "null date" (timestamp 0) qualifies for empty
+113: return (value == null) || (_timestamp(value) == 0L);
+114: }
+---
+146: protected boolean _asTimestamp(SerializerProvider serializers)
+147: {
+148: if (_useTimestamp != null) {
+149: return _useTimestamp.booleanValue();
+150: }
+---
+138: throws IOException;
+139: 
+140: /*
+141: /**********************************************************
+142: /* Helper methods
+---
+132: /* Actual serialization
+133: /**********************************************************
+134: */
+135: 
+136: @Override

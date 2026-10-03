@@ -1,0 +1,194 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 44  Version: Lang-44b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-457
+Trigger failures:
+- org.apache.commons.lang.NumberUtilsTest::testLang457
+ --> java.lang.StringIndexOutOfBoundsException: String index out of range: 0
+Modified: org.apache.commons.lang.NumberUtils
+
+Available API/signatures:
+[org.apache.commons.lang.NumberUtils | java]
+package org.apache.commons.lang;
+public final class NumberUtils {
+public NumberUtils() {
+public static int stringToInt(String str) {
+public static int stringToInt(String str, int defaultValue) {
+public static Number createNumber(String val) throws NumberFormatException {
+private static boolean isAllZeros(String s) {
+public static Float createFloat(String val) {
+public static Double createDouble(String val) {
+public static Integer createInteger(String val) {
+public static Long createLong(String val) {
+public static BigInteger createBigInteger(String val) {
+public static BigDecimal createBigDecimal(String val) {
+public static long minimum(long a, long b, long c) {
+public static int minimum(int a, int b, int c) {
+public static long maximum(long a, long b, long c) {
+public static int maximum(int a, int b, int c) {
+public static int compare(double lhs, double rhs) {
+public static int compare(float lhs, float rhs) {
+public static boolean isDigits(String str) {
+public static boolean isNumber(String str) {
+
+Generated JUnit Test:
+package org.apache.commons.lang;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+ import static org.hamcrest.CoreMatchers.*;
+
+ /**
+  * JUnit test class targeting the LANG-457 bug in NumberUtils.createNumber().
+  * The bug causes StringIndexOutOfBoundsException when the mantissa becomes empty
+  * after stripping a type suffix (L, l, F, f, D, d).
+  */
+ public class NumberUtilsBugTest {
+
+     // ---------- normal valid numbers ----------
+
+     @Test
+     public void testNormalIntegers() {
+         assertThat(NumberUtils.createNumber("123"), instanceOf(Integer.class));
+         assertThat(NumberUtils.createNumber("-45"), instanceOf(Integer.class));
+         assertThat(NumberUtils.createNumber("0"),   instanceOf(Integer.class));
+         assertThat(NumberUtils.createNumber("-0"),  instanceOf(Integer.class));
+     }
+
+     @Test
+     public void testLongWithSuffix() {
+         assertThat(NumberUtils.createNumber("1L"),  instanceOf(Long.class));
+         assertThat(NumberUtils.createNumber("0L"),  instanceOf(Long.class));
+         assertThat(NumberUtils.createNumber("-0L"), instanceOf(Long.class));
+         assertThat(NumberUtils.createNumber("0x1L"), instanceOf(Long.class));
+         assertThat(NumberUtils.createNumber("0x0L"), instanceOf(Long.class));
+         assertThat(NumberUtils.createNumber("-0x0L"),instanceOf(Long.class));
+     }
+
+     @Test
+     public void testFloatDoubleSuffix() {
+         assertThat(NumberUtils.createNumber("1.0f"), instanceOf(Float.class));
+         assertThat(NumberUtils.createNumber("3.14f"),instanceOf(Float.class));
+         assertThat(NumberUtils.createNumber("0.0D"), instanceOf(Double.class));
+         assertThat(NumberUtils.createNumber("1.0d"), instanceOf(Double.class));
+         assertThat(NumberUtils.createNumber("1e3D"), instanceOf(Double.class));
+     }
+
+     @Test
+     public void testHexNumbers() {
+         assertThat(NumberUtils.createNumber("0x1A"), instanceOf(Integer.class));
+         assertThat(NumberUtils.createNumber("0x0"),  instanceOf(Integer.class));
+         assertThat(NumberUtils.createNumber("-0x0"), instanceOf(Integer.class));
+     }
+
+     @Test
+     public void testScientificNotation() {
+         assertThat(NumberUtils.createNumber("1e3"),  instanceOf(Double.class));
+         assertThat(NumberUtils.createNumber("1e-3"), instanceOf(Double.class));
+     }
+
+     // ---------- LANG-457 triggers ----------
+
+     @Test
+     public void testEmptyAndSingleSuffixThrows() {
+         String[] inputs = {"", "L", "l", "F", "f", "D", "d"};
+         for (String in : inputs) {
+             try {
+                 NumberUtils.createNumber(in);
+                 fail("Expected NumberFormatException for input: '" + in + "'");
+             } catch (NumberFormatException expected) {
+                 // expected
+             } catch (StringIndexOutOfBoundsException e) {
+                 fail("BUG LANG-457 triggered: StringIndexOutOfBoundsException for input: '" + in +
+"'");
+             }
+         }
+     }
+
+     @Test
+     public void testHexPrefixWithSuffixThrows() {
+         String[] inputs = {"0xL", "-0xL", "0xl", "-0xl"};
+         for (String in : inputs) {
+             try {
+                 NumberUtils.createNumber(in);
+                 fail("Expected NumberFormatException for input: '" + in + "'");
+             } catch (NumberFormatException expected) {
+                 // expected
+             } catch (IndexOutOfBoundsException e) {
+                 fail("IndexOutOfBoundsException for input: '" + in + "'");
+             }
+         }
+     }
+
+     @Test
+     public void testSignedSuffixThrows() {
+         String[] inputs = {"- L", "+ L"};
+         for (String in : inputs) {
+             try {
+                 NumberUtils.createNumber(in);
+                 fail("Expected NumberFormatException for input: '" + in + "'");
+             } catch (NumberFormatException expected) {
+                 // expected
+             } catch (IndexOutOfBoundsException e) {
+                 fail("IndexOutOfBoundsException for input: '" + in + "'");
+             }
+         }
+     }
+
+     @Test
+     public void testInvalidHexThrows() {
+         String[] inputs = {"0x G", "0x.0", "0x", "0x-1A"};
+         for (String in : inputs) {
+             try {
+                 NumberUtils.createNumber(in);
+                 fail("Expected NumberFormatException for input: '" + in + "'");
+             } catch (NumberFormatException expected) {
+                 // expected
+             } catch (IndexOutOfBoundsException e) {
+                 fail("IndexOutOfBoundsException for input: '" + in + "'");
+             }
+         }
+     }
+
+     @Test
+     public void testDoubleDashThrows() {
+         try {
+             NumberUtils.createNumber("--1");
+             fail("Expected NumberFormatException for '--1'");
+         } catch (NumberFormatException expected) {
+             // expected
+         } catch (IndexOutOfBoundsException e) {
+             fail("IndexOutOfBoundsException for '--1'");
+         }
+     }
+
+     @Test
+     public void testNullThrows() {
+         try {
+             NumberUtils.createNumber(null);
+             fail("Expected NumberFormatException for null");
+         } catch (NumberFormatException expected) {
+             // expected
+         } catch (IndexOutOfBoundsException e) {
+             fail("IndexOutOfBoundsException for null");
+         }
+     }
+
+     @Test
+     public void testDecimalWithSuffix() {
+         assertThat(NumberUtils.createNumber("0.0d"), instanceOf(Double.class));
+         assertThat(NumberUtils.createNumber("3.14D"), instanceOf(Double.class));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.lang.NumberUtilsBugTest::testScientificNotation
+ - org.apache.commons.lang.NumberUtilsBugTest::testLongWithSuffix
+ - org.apache.commons.lang.NumberUtilsBugTest::testDoubleDashThrows
+Failing generated tests: org.apache.commons.lang.NumberUtilsBugTest::testDoubleDashThrows, org.apache.commons.lang.NumberUtilsBugTest::testLongWithSuffix, org.apache.commons.lang.NumberUtilsBugTest::testNullThrows, org.apache.commons.lang.NumberUtilsBugTest::testScientificNotation

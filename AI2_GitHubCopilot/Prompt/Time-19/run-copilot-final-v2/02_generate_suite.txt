@@ -1,0 +1,390 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Time  Bug: 19  Version: Time-19b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.joda.time.DateTimeZone
+Modified: org.joda.time.DateTimeZone
+Triggers: org.joda.time.TestDateTimeZoneCutover::testDateTimeCreation_london
+
+Bug/specification summary:
+Bug report: 124
+Trigger failures:
+- org.joda.time.TestDateTimeZoneCutover::testDateTimeCreation_london
+ --> junit.framework.ComparisonFailure: expected:<...1-10-30T01:15:00.000[+01:00]> but was:<...1-10-30T01:15:00.000[Z]>
+Modified: org.joda.time.DateTimeZone
+
+Prompt-01 test plan:
+TARGETS: DateTimeZone.getOffsetFromLocal(long), convertLocalToUTC(long,boolean), getOffset(long)
+ORACLES: Test expects +01:00 for Europe/London at 1891-10-30T01:15:00 (gap time); derived from
+historical timezone data
+CASES: Instant in DST gap (01:15), gap start/end (01:00:00.000, 02:00:00.000)
+CASES: Non-gap times before/after transition, winter UTC+0, ambiguous overlap times
+RISKS: Pre-1900 timezone data may differ; test expectation is oracle; no access to buggy diff
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.joda.time.DateTimeZone (java) =====
+/* API SIGNATURES */
+package org.joda.time;
+public abstract class DateTimeZone implements Serializable {
+public static final DateTimeZone UTC = new FixedDateTimeZone("UTC", "UTC", 0, 0);
+public static DateTimeZone getDefault() {
+synchronized(DateTimeZone.class) {
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+@FromString
+public static DateTimeZone forID(String id) {
+public static DateTimeZone forOffsetHours(int hoursOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetMillis(int millisOffset) {
+public static DateTimeZone forTimeZone(TimeZone zone) {
+final String id = zone.getID();
+private static synchronized DateTimeZone fixedOffsetZone(String id, int offset) {
+public static Set<String> getAvailableIDs() {
+public static Provider getProvider() {
+public static void setProvider(Provider provider) throws SecurityException {
+private static void setProvider0(Provider provider) {
+private static Provider getDefaultProvider() {
+public static NameProvider getNameProvider() {
+public static void setNameProvider(NameProvider nameProvider) throws SecurityException {
+private static void setNameProvider0(NameProvider nameProvider) {
+private static NameProvider getDefaultNameProvider() {
+private static synchronized String getConvertedId(String id) {
+private static int parseOffset(String str) {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public String toString() {
+private static String printOffset(int offset) {
+private static synchronized DateTimeFormatter offsetFormatter() {
+protected DateTimeZone(String id) {
+@ToString
+public final String getID() {
+public abstract String getNameKey(long instant);
+public final String getShortName(long instant) {
+public String getShortName(long instant, Locale locale) {
+public final String getName(long instant) {
+public String getName(long instant, Locale locale) {
+public abstract int getOffset(long instant);
+public final int getOffset(ReadableInstant instant) {
+public abstract int getStandardOffset(long instant);
+public boolean isStandardOffset(long instant) {
+public int getOffsetFromLocal(long instantLocal) {
+final int offsetLocal = getOffset(instantLocal);
+final int offsetAdjusted = getOffset(instantAdjusted);
+public long convertUTCToLocal(long instantUTC) {
+public long convertLocalToUTC(long instantLocal, boolean strict, long originalInstantUTC) {
+public long convertLocalToUTC(long instantLocal, boolean strict) {
+public long getMillisKeepLocal(DateTimeZone newZone, long oldInstant) {
+public boolean isLocalDateTimeGap(LocalDateTime localDateTime) {
+public long adjustOffset(long instant, boolean earlierOrLater) {
+public abstract boolean isFixed();
+public abstract long nextTransition(long instant);
+public abstract long previousTransition(long instant);
+public java.util.TimeZone toTimeZone() {
+public abstract boolean equals(Object object);
+public int hashCode() {
+protected Object writeReplace() throws ObjectStreamException {
+private static final class Stub implements Serializable {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException {
+private Object readResolve() throws ObjectStreamException {
+
+/* HEADER */
+package org.joda.time;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectStreamException;
+import java.io.Serializable;
+import java.lang.ref.Reference;
+import java.lang.ref.SoftReference;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import org.joda.convert.FromString;
+import org.joda.convert.ToString;
+import org.joda.time.chrono.BaseChronology;
+import org.joda.time.field.FieldUtils;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.DateTimeFormatterBuilder;
+import org.joda.time.format.FormatUtils;
+import org.joda.time.tz.DefaultNameProvider;
+import org.joda.time.tz.FixedDateTimeZone;
+import org.joda.time.tz.NameProvider;
+import org.joda.time.tz.Provider;
+import org.joda.time.tz.UTCProvider;
+import org.joda.time.tz.ZoneInfoProvider;
+
+/* METHOD DateTimeZone */
+protected DateTimeZone(String id) {
+ if (id == null) {
+ throw new IllegalArgumentException("Id must not be null");
+ }
+ iID = id;
+ }
+
+/* METHOD setDefault */
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+ SecurityManager sm = System.getSecurityManager();
+ if (sm != null) {
+ sm.checkPermission(new JodaTimePermission("DateTimeZone.setDefault"));
+ }
+ if (zone == null) {
+ throw new IllegalArgumentException("The datetime zone must not be null");
+ }
+ synchronized(DateTimeZone.class) {
+ cDefault = zone;
+ }
+ }
+
+/* METHOD setProvider */
+public static void setProvider(Provider provider) throws SecurityException {
+ SecurityManager sm = System.getSecurityManager();
+ if (sm != null) {
+ sm.checkPermission(new JodaTimePermission("DateTimeZone.setProvider"));
+ }
+ setProvider0(provider);
+ }
+
+/* METHOD setNameProvider */
+public static void setNameProvider(NameProvider nameProvider) throws SecurityException {
+ SecurityManager sm = System.getSecurityManager();
+ if (sm != null) {
+ sm.checkPermission(new JodaTimePermission("DateTimeZone.setNameProvider"));
+ }
+ setNameProvider0(nameProvider);
+ }
+
+/* METHOD parseOffset */
+private static int parseOffset(String str) {
+ // Can't use a real chronology if called during class
+ // initialization. Offset parser doesn't need it anyhow.
+ Chronology chrono = new BaseChronology() {
+ public DateTimeZone getZone() {
+ return null;
+ }
+ public Chronology withUTC() {
+ return this;
+ }
+ public Chronology withZone(DateTimeZone zone) {
+ return this;
+ }
+ public String toString() {
+ return getClass().getName();
+ }
+ };
+ return -(int) offsetFormatter().withChronology(chrono).parseMillis(str);
+ }
+
+/* METHOD getDefault */
+public static DateTimeZone getDefault() {
+ DateTimeZone zone = cDefault;
+ if (zone == null) {
+ synchronized(DateTimeZone.class) {
+ zone = cDefault;
+ if (zone == null) {
+ DateTimeZone temp = null;
+ try {
+ try {
+ String id = System.getProperty("user.timezone");
+ if (id != null) { // null check avoids stack overflow
+ temp = forID(id);
+ }
+ } catch (RuntimeException ex) {
+ // ignored
+ }
+ if (temp == null) {
+ temp = forTimeZone(TimeZone.getDefault());
+ }
+ } catch (IllegalArgumentException ex) {
+ // ignored
+ }
+ if (temp == null) {
+ temp = UTC;
+ }
+ cDefault = zone = temp;
+ }
+ }
+ }
+ return zone;
+ }
+
+/* METHOD forID */
+@FromString
+ public static DateTimeZone forID(String id) {
+ if (id == null) {
+ return getDefault();
+ }
+ if (id.equals("UTC")) {
+ return DateTimeZone.UTC;
+ }
+ DateTimeZone zone = cProvider.getZone(id);
+ if (zone != null) {
+ return zone;
+ }
+ if (id.startsWith("+") || id.startsWith("-")) {
+ int offset = parseOffset(id);
+ if (offset == 0L) {
+ return DateTimeZone.UTC;
+ } else {
+ id = printOffset(offset);
+ return fixedOffsetZone(id, offset);
+ }
+ }
+ throw new IllegalArgumentException("The datetime zone id '" + id + "' is not recognised");
+ }
+
+/* METHOD forOffsetHours */
+public static DateTimeZone forOffsetHours(int hoursOffset) throws IllegalArgumentException {
+ return forOffsetHoursMinutes(hoursOffset, 0);
+ }
+
+/* METHOD forOffsetHoursMinutes */
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+ if (hoursOffset == 0 && minutesOffset == 0) {
+ return DateTimeZone.UTC;
+ }
+ if (minutesOffset < 0 || minutesOffset > 59) {
+ throw new IllegalArgumentException("Minutes out of range: " + minutesOffset);
+ }
+ int offset = 0;
+ try {
+ int hoursInMinutes = FieldUtils.safeMultiply(hoursOffset, 60);
+ if (hoursInMinutes < 0) {
+ minutesOffset = FieldUtils.safeAdd(hoursInMinutes, -minutesOffset);
+ } else {
+ minutesOffset = FieldUtils.safeAdd(hoursInMinutes, minutesOffset);
+ }
+ offset = FieldUtils.safeMultiply(minutesOffset, DateTimeConstants.MILLIS_PER_MINUTE);
+ } catch (ArithmeticException ex) {
+ throw new IllegalArgumentException("Offset is too large");
+ }
+ return forOffsetMillis(offset);
+ }
+
+/* METHOD forOffsetMillis */
+public static DateTimeZone forOffsetMillis(int millisOffset) {
+ String id = printOffset(millisOffset);
+ return fixedOffsetZone(id, millisOffset);
+ }
+
+/* METHOD forTimeZone */
+public static DateTimeZone forTimeZone(TimeZone zone) {
+ if (zone == null) {
+ return getDefault();
+ }
+ final String id = zone.getID();
+ if (id.equals("UTC")) {
+ return DateTimeZone.UTC;
+ }
+
+ // Convert from old alias before consulting provider since they may differ.
+ DateTimeZone dtz = null;
+ String convId = getConvertedId(id);
+ if (convId != null) {
+ dtz = cProvider.getZone(convId);
+ }
+ if (dtz == null) {
+ dtz = cProvider.getZone(id);
+ }
+ if (dtz != null) {
+ return dtz;
+ }
+
+ // Support GMT+/-hh:mm formats
+ if (convId == null) {
+ convId = zone.getDisplayName();
+ if (convId.startsWith("GMT+") || convId.startsWith("GMT-")) {
+ convId = convId.substring(3);
+ int offset = parseOffset(convId);
+ if (offset == 0L) {
+ return DateTimeZone.UTC;
+ } else {
+ convId = printOffset(offset);
+ return fixedOffsetZone(convId, offset);
+ }
+ }
+ }
+ throw new IllegalArgumentException("The datetime zone id '" + id + "' is not recognised");
+ }
+
+/* METHOD getZone */
+public DateTimeZone getZone() {
+ return null;
+ }
+
+/* METHOD withZone */
+public Chronology withZone(DateTimeZone zone) {
+ return this;
+ }
+
+/* METHOD convertUTCToLocal */
+public long convertUTCToLocal(long instantUTC) {
+ int offset = getOffset(instantUTC);
+ long instantLocal = instantUTC + offset;
+ // If there is a sign change, but the two values have the same sign...
+ if ((instantUTC ^ instantLocal) < 0 && (instantUTC ^ offset) >= 0) {
+ throw new ArithmeticException("Adding time zone offset caused overflow");
+ }
+ return instantLocal;
+ }
+
+/* METHOD getMillisKeepLocal */
+public long getMillisKeepLocal(DateTimeZone newZone, long oldInstant) {
+ if (newZone == null) {
+ newZone = DateTimeZone.getDefault();
+ }
+ if (newZone == this) {
+ return oldInstant;
+ }
+ long instantLocal = convertUTCToLocal(oldInstant);
+ return newZone.convertLocalToUTC(instantLocal, false, oldInstant);
+ }
+
+/* METHOD getOffset */
+public final int getOffset(ReadableInstant instant) {
+ if (instant == null) {
+ return getOffset(DateTimeUtils.currentTimeMillis());
+ }
+ return getOffset(instant.getMillis());
+ }
+
+/* METHOD getOffsetFromLocal */
+public int getOffsetFromLocal(long instantLocal) {
+ // get the offset at instantLocal (first estimate)
+ final int offsetLocal = getOffset(instantLocal);
+ // adjust instantLocal using the estimate and recalc the offset
+ final long instantAdjusted = instantLocal - offsetLocal;
+ final int offsetAdjusted = getOffset(instantAdjusted);
+ // if the offsets differ, we must be near a DST boundary
+ if (offsetLocal != offsetAdjusted) {
+ // we need to ensure that time is always after the DST gap
+ // this happens naturally for positive offsets, but not for negative
+ if ((offsetLocal - offsetAdjusted) < 0) {
+ // if we just return offsetAdjusted then the time is pushed
+ // back before the transition, whereas it should be
+ // on or after the transition
+ long nextLocal = nextTransition(instantAdjusted);
+ long nextAdjusted = nextTransition(instantLocal - offsetAdjusted);
+ if (nextLocal != nextAdjusted) {
+ return offsetLocal;
+ }
+ }
+ } else if (offsetLocal > 0) {
+ long prev = previousTransition(instantAdjusted);
+ if (prev < instantAdjusted) {
+ int offsetPrev = getOffset(prev);
+ int diff = offsetPrev - offsetLocal;
+ if (instantAdjusted - prev <= diff) {
+ return offsetPrev;
+ }
+ }
+ }
+ return offsetAdjusted;
+ }

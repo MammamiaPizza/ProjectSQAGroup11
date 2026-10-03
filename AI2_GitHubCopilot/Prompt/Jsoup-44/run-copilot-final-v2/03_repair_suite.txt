@@ -1,0 +1,196 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 44  Version: Jsoup-44b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 552
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::testInvalidTableContents
+ --> junit.framework.AssertionFailedError: Search text did not come after comment
+Modified: org.jsoup.parser.TreeBuilder
+
+Available API/signatures:
+[org.jsoup.parser.TreeBuilder | java]
+package org.jsoup.parser;
+abstract class TreeBuilder {
+protected Document doc; // current doc we are building into
+protected ArrayList<Element> stack; // the stack of open elements
+protected String baseUri; // current base uri, for creating new elements
+protected Token currentToken; // currentToken is used only for error tracking.
+protected ParseErrorList errors; // null when not tracking errors
+private Token.StartTag start = new Token.StartTag(); // start tag to process
+private Token.EndTag end = new Token.EndTag();
+protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+protected void runParser() {
+protected abstract boolean process(Token token);
+protected boolean processStartTag(String name) {
+public boolean processStartTag(String name, Attributes attrs) {
+protected boolean processEndTag(String name) {
+protected Element currentElement() {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.*;
+ import org.junit.Before;
+ import org.junit.Test;
+
+ import java.util.List;
+
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for {@link TreeBuilder} comment and start-tag processing,
+  * concentrating on the table foster-parenting bug #44.
+  */
+ public class TreeBuilderTest {
+
+     private static final String TABLE_COMMENT_TEXT =
+         "<html><body><table><tbody><tr><td>Search text</td></tr><!-- comment
+--></tbody></table></body></html>";
+
+     private Document baseDoc;
+
+     @Before
+     public void setUp() {
+         baseDoc = Jsoup.parse(TABLE_COMMENT_TEXT);
+     }
+
+     // -------- comment ordering --------
+
+     @Test public void invalidTableContentsOrder() {
+         // reproduces the "Search text did not come after comment" failure
+         String bodyHtml = baseDoc.body().html();
+         int commentPos = bodyHtml.indexOf("<!-- comment -->");
+         int textPos = bodyHtml.indexOf("Search text");
+         assertTrue("Search text did not come after comment", textPos > commentPos);
+     }
+
+     @Test public void commentBeforeTrInTable() {
+         Document doc = Jsoup.parse("<html><body><table><!-- hello
+--><tr><td>cell</td></tr></table></body></html>");
+         String bodyHtml = doc.body().html();
+         assertTrue("comment should precede cell text",
+             bodyHtml.indexOf("<!-- hello -->") < bodyHtml.indexOf("cell"));
+     }
+
+     @Test public void commentInsideTdWithText() {
+         Document doc = Jsoup.parse("<table><tr><td>before<!-- c -->after</td></tr></table>");
+         Element td = doc.select("td").first();
+         List<Node> children = td.childNodes();
+         assertEquals(3, children.size());
+         assertTrue(children.get(0) instanceof TextNode);
+         assertEquals("before", ((TextNode) children.get(0)).getWholeText());
+         assertTrue(children.get(1) instanceof Comment);
+         assertEquals(" c ", ((Comment) children.get(1)).getData());
+         assertTrue(children.get(2) instanceof TextNode);
+         assertEquals("after", ((TextNode) children.get(2)).getWholeText());
+     }
+
+     @Test public void multipleCommentsInCell() {
+         Document doc = Jsoup.parse("<table><tr><td>x<!-- a --><!-- b -->y</td></tr></table>");
+         Element td = doc.select("td").first();
+         List<Node> children = td.childNodes();
+         // expect: TextNode("x"), Comment(" a "), Comment(" b "), TextNode("y")
+         assertEquals(4, children.size());
+         assertTrue(children.get(0) instanceof TextNode);
+         assertTrue(children.get(1) instanceof Comment);
+         assertTrue(children.get(2) instanceof Comment);
+         assertTrue(children.get(3) instanceof TextNode);
+     }
+
+     // -------- foster-parenting of comments --------
+
+     @Test public void commentAfterTrBecomesPreviousSiblingOfTable() {
+         Document doc = Jsoup.parse("<table><tr><td>cell</td></tr><!-- c --></table>");
+         Element table = doc.select("table").first();
+         Node prev = table.previousSibling();
+         assertNotNull("comment should be placed before table", prev);
+         assertTrue(prev instanceof Comment);
+     }
+
+     @Test public void commentBeforeAnyRowIsFosterParented() {
+         Document doc = Jsoup.parse("<table><!-- c
+--><tbody><tr><td>data</td></tr></tbody></table>");
+         Element table = doc.select("table").first();
+         Node prev = table.previousSibling();
+         if (prev != null && prev instanceof Comment) {
+             // common spec behaviour: comment moved before table
+             assertEquals(" c ", ((Comment) prev).getData());
+         } else {
+             // alternative valid outcome: inside table but before tbody
+             Element tbody = table.select("tbody").first();
+             assertNotNull(tbody);
+             Node bodyPrev = tbody.previousSibling();
+             assertTrue(bodyPrev == null || !(bodyPrev instanceof Comment));
+         }
+     }
+
+     @Test public void commentOutsideTableUnaffected() {
+         Document doc = Jsoup.parse("<div><p>before</p><table><tr><td>inside</td></tr></table><!--
+after --></div>");
+         Element div = doc.select("div").first();
+         List<Node> children = div.childNodes();
+         Node last = children.get(children.size() - 1);
+         assertTrue(last instanceof Comment);
+         assertEquals(" after ", ((Comment) last).getData());
+     }
+
+     // -------- nested tables --------
+
+     @Test public void commentInNestedTable() {
+         Document doc = Jsoup.parse(
+             "<table><tr><td><table><tr><td>nested</td></tr><!-- inner
+--></table></td></tr></table>");
+         Element outerTd = doc.select("td").first();
+         Element innerTable = outerTd.select("table").first();
+         Node prev = innerTable.previousSibling();
+         if (prev != null) {
+             assertTrue(prev instanceof Comment);
+         }
+         // "nested" text should still be inside the inner table
+         assertTrue(innerTable.text().contains("nested"));
+     }
+
+     // -------- start-tag processing (exercises TreeBuilder.processStartTag) --------
+
+     @Test public void processStartTagViaParser() {
+         Document doc = Jsoup.parse("<p>hello</p>");
+         assertNotNull(doc.select("p").first());
+         assertEquals("hello", doc.select("p").first().text());
+     }
+
+     @Test public void processStartTagWithAttributes() {
+         Document doc = Jsoup.parse("<div id='x' class='y'>content</div>");
+         Element div = doc.select("div").first();
+         assertEquals("x", div.id());
+         assertEquals("y", div.className());
+     }
+
+     @Test public void emptyTableNoCrash() {
+         Document doc = Jsoup.parse("<table></table>");
+         assertNotNull(doc.select("table").first());
+         assertEquals("", doc.select("table").first().text());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-44f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-44f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-44f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-44f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-44f-copilot/.test_suite/org/jsoup/parser/TreeBuilderTest.java:19: error: unclosed string literal
+ [javac] "<html><body><table><tbody><tr><td>Search text</td></tr><!-- comment
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 19 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

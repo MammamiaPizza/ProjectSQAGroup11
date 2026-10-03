@@ -1,0 +1,144 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 18  Version: Time-18b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 130
+Trigger failures:
+- org.joda.time.chrono.TestGJChronology::testLeapYearRulesConstruction
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+Modified: org.joda.time.chrono.GJChronology
+
+Available API/signatures:
+[org.joda.time.chrono.GJChronology | java]
+package org.joda.time.chrono;
+public final class GJChronology extends AssembledChronology {
+private static long convertByYear(long instant, Chronology from, Chronology to) {
+private static long convertByWeekyear(final long instant, Chronology from, Chronology to) {
+static final Instant DEFAULT_CUTOVER = new Instant(-12219292800000L);
+private static final Map<DateTimeZone, ArrayList<GJChronology>> cCache = new HashMap<DateTimeZone, ArrayList<GJChronology>>();
+public static GJChronology getInstanceUTC() {
+public static GJChronology getInstance() {
+public static GJChronology getInstance(DateTimeZone zone) {
+private Object readResolve() {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public Instant getGregorianCutover() {
+public int getMinimumDaysInFirstWeek() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+protected void assemble(Fields fields) {
+private class CutoverField extends BaseDateTimeField {
+protected DurationField iDurationField;
+protected DurationField iRangeDurationField;
+public boolean isLenient() {
+public int get(long instant) {
+public String getAsText(long instant, Locale locale) {
+public String getAsText(int fieldValue, Locale locale) {
+public String getAsShortText(long instant, Locale locale) {
+public String getAsShortText(int fieldValue, Locale locale) {
+public long add(long instant, int value) {
+public long add(long instant, long value) {
+public int[] add(ReadablePartial partial, int fieldIndex, int[] values, int valueToAdd) {
+public int getDifference(long minuendInstant, long
+...[truncated deterministically]...
+tLeapDurationField() {
+public int getMinimumValue() {
+public int getMinimumValue(ReadablePartial partial) {
+public int getMinimumValue(ReadablePartial partial, int[] values) {
+public int getMinimumValue(long instant) {
+public int getMaximumValue() {
+public int getMaximumValue(long instant) {
+public int getMaximumValue(ReadablePartial partial) {
+public int getMaximumValue(ReadablePartial partial, int[] values) {
+public long roundFloor(long instant) {
+public long roundCeiling(long instant) {
+public int getMaximumTextLength(Locale locale) {
+public int getMaximumShortTextLength(Locale locale) {
+protected long julianToGregorian(long instant) {
+protected long gregorianToJulian(long instant) {
+private final class ImpreciseCutoverField extends CutoverField {
+private static class LinkedDurationField extends DecoratedDurationField {
+
+Generated JUnit Test:
+package org.joda.time.chrono;
+
+import static org.junit.Assert.assertEquals;
+
+import org.joda.time.IllegalFieldValueException;
+import org.junit.Test;
+
+public class GJChronologyLeapRulesTest {
+
+    @Test
+    public void testJulianLeapDayBeforeDefaultCutoverIsConstructed() {
+        GJChronology chronology = GJChronology.getInstanceUTC();
+
+        long instant = chronology.getDateTimeMillis(1500, 2, 29, 0);
+
+        assertEquals(1500, chronology.year().get(instant));
+        assertEquals(2, chronology.monthOfYear().get(instant));
+        assertEquals(29, chronology.dayOfMonth().get(instant));
+    }
+
+    @Test
+    public void testJulianLeapDayHasLeapYearLengthBeforeDefaultCutover() {
+        GJChronology chronology = GJChronology.getInstanceUTC();
+
+        long februaryTwentyEighth = chronology.getDateTimeMillis(1500, 2, 28, 0);
+        long leapDay = chronology.dayOfMonth().add(februaryTwentyEighth, 1);
+
+        assertEquals(1500, chronology.year().get(leapDay));
+        assertEquals(2, chronology.monthOfYear().get(leapDay));
+        assertEquals(29, chronology.dayOfMonth().get(leapDay));
+    }
+
+    @Test(expected = IllegalFieldValueException.class)
+    public void testNonLeapJulianYearRejectsFebruaryTwentyNinth() {
+        GJChronology.getInstanceUTC().getDateTimeMillis(1501, 2, 29, 0);
+    }
+
+    @Test
+    public void testGregorianLeapDayAfterDefaultCutoverIsConstructed() {
+        GJChronology chronology = GJChronology.getInstanceUTC();
+
+        long instant = chronology.getDateTimeMillis(1600, 2, 29, 0);
+
+        assertEquals(1600, chronology.year().get(instant));
+        assertEquals(2, chronology.monthOfYear().get(instant));
+        assertEquals(29, chronology.dayOfMonth().get(instant));
+    }
+
+    @Test(expected = IllegalFieldValueException.class)
+    public void testGregorianCenturyNonLeapYearRejectsFebruaryTwentyNinth() {
+        GJChronology.getInstanceUTC().getDateTimeMillis(1700, 2, 29, 0);
+    }
+
+    @Test
+    public void testDatesOnBothSidesOfDefaultCutoverRetainTheirCalendarFields() {
+        GJChronology chronology = GJChronology.getInstanceUTC();
+
+        long lastJulianDate = chronology.getDateTimeMillis(1582, 10, 4, 0);
+        long firstGregorianDate = chronology.getDateTimeMillis(1582, 10, 15, 0);
+
+        assertEquals(4, chronology.dayOfMonth().get(lastJulianDate));
+        assertEquals(15, chronology.dayOfMonth().get(firstGregorianDate));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testDateInDefaultCutoverGapIsRejected() {
+        GJChronology.getInstanceUTC().getDateTimeMillis(1582, 10, 10, 0);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.joda.time.chrono.GJChronologyLeapRulesTest::testJulianLeapDayBeforeDefaultCutoverIsConstructed
+
+Extract test suite......................................................... OK
+Failing generated tests: org.joda.time.chrono.GJChronologyLeapRulesTest::testJulianLeapDayBeforeDefaultCutoverIsConstructed

@@ -1,0 +1,374 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Chart  Bug: 5  Version: Chart-5b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Target: org.jfree.data.xy.XYSeries
+Modified: org.jfree.data.xy.XYSeries
+Triggers: org.jfree.data.xy.junit.XYSeriesTests::testBug1955483
+
+Bug/specification summary:
+Bug report: 862
+Trigger failures:
+- org.jfree.data.xy.junit.XYSeriesTests::testBug1955483
+ --> java.lang.IndexOutOfBoundsException: Index: -1, Size: 1
+Modified: org.jfree.data.xy.XYSeries
+
+Prompt-01 test plan:
+TARGETS: XYSeries.add(Number,Number) and add(double,double) with duplicate x; addOrUpdate;
+indexOf(Number); update; delete; getY
+ORACLES: Bug 862: adding duplicate x when allowDuplicateXValues=false should replace/update, no
+exception; item count stays 1; getY returns new value
+CASES: Normal: add unique x with autoSort; Boundary: duplicate x after first item (size=1) with
+allowDuplicateXValues=false—expect replace; duplicate with allowDuplicate=true—expect two items
+CASES: indexOf for existing duplicate x; addOrUpdate for new vs existing x; update on non-existent
+x; delete start/end; toArray consistency
+RISKS: Bug triggers on second add with duplicate x; must test both autoSort values; indexOf may
+return -1 incorrectly; expected behavior only from bug summary
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jfree.data.xy.XYSeries (java) =====
+/* API SIGNATURES */
+package org.jfree.data.xy;
+public class XYSeries extends Series implements Cloneable, Serializable {
+protected List data;
+public XYSeries(Comparable key) {
+public XYSeries(Comparable key, boolean autoSort) {
+public boolean getAutoSort() {
+public boolean getAllowDuplicateXValues() {
+public int getItemCount() {
+public List getItems() {
+public int getMaximumItemCount() {
+public void setMaximumItemCount(int maximum) {
+public void add(XYDataItem item) {
+public void add(double x, double y) {
+public void add(double x, double y, boolean notify) {
+public void add(double x, Number y) {
+public void add(double x, Number y, boolean notify) {
+public void add(Number x, Number y) {
+public void add(Number x, Number y, boolean notify) {
+public void add(XYDataItem item, boolean notify) {
+public void delete(int start, int end) {
+public XYDataItem remove(int index) {
+public XYDataItem remove(Number x) {
+public void clear() {
+public XYDataItem getDataItem(int index) {
+public Number getX(int index) {
+public Number getY(int index) {
+public void updateByIndex(int index, Number y) {
+public void update(Number x, Number y) {
+public XYDataItem addOrUpdate(double x, double y) {
+public XYDataItem addOrUpdate(Number x, Number y) {
+public int indexOf(Number x) {
+public double[][] toArray() {
+public Object clone() throws CloneNotSupportedException {
+public XYSeries createCopy(int start, int end)
+public boolean equals(Object obj) {
+public int hashCode() {
+
+/* HEADER */
+package org.jfree.data.xy;
+import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
+import org.jfree.chart.util.ObjectUtilities;
+import org.jfree.data.general.Series;
+import org.jfree.data.general.SeriesChangeEvent;
+import org.jfree.data.general.SeriesException;
+public class XYSeries extends Series implements Cloneable, Serializable {
+
+/* METHOD XYSeries */
+public XYSeries(Comparable key,
+ boolean autoSort,
+ boolean allowDuplicateXValues) {
+ super(key);
+ this.data = new java.util.ArrayList();
+ this.autoSort = autoSort;
+ this.allowDuplicateXValues = allowDuplicateXValues;
+ }
+
+/* METHOD XYSeries */
+public XYSeries(Comparable key) {
+ this(key, true, true);
+ }
+
+/* METHOD XYSeries */
+public XYSeries(Comparable key, boolean autoSort) {
+ this(key, autoSort, true);
+ }
+
+/* METHOD addOrUpdate */
+public XYDataItem addOrUpdate(Number x, Number y) {
+ if (x == null) {
+ throw new IllegalArgumentException("Null 'x' argument.");
+ }
+
+ // if we get to here, we know that duplicate X values are not permitted
+ XYDataItem overwritten = null;
+ int index = indexOf(x);
+ if (index >= 0 && !this.allowDuplicateXValues) {
+ XYDataItem existing = (XYDataItem) this.data.get(index);
+ try {
+ overwritten = (XYDataItem) existing.clone();
+ }
+ catch (CloneNotSupportedException e) {
+ throw new SeriesException("Couldn't clone XYDataItem!");
+ }
+ existing.setY(y);
+ }
+ else {
+ // if the series is sorted, the negative index is a result from
+ // Collections.binarySearch() and tells us where to insert the
+ // new item...otherwise it will be just -1 and we should just
+ // append the value to the list...
+ if (this.autoSort) {
+ this.data.add(-index - 1, new XYDataItem(x, y));
+ }
+ else {
+ this.data.add(new XYDataItem(x, y));
+ }
+ // check if this addition will exceed the maximum item count...
+ if (getItemCount() > this.maximumItemCount) {
+ this.data.remove(0);
+ }
+ }
+ fireSeriesChanged();
+ return overwritten;
+ }
+
+/* METHOD createCopy */
+public XYSeries createCopy(int start, int end)
+ throws CloneNotSupportedException {
+
+ XYSeries copy = (XYSeries) super.clone();
+ copy.data = new java.util.ArrayList();
+ if (this.data.size() > 0) {
+ for (int index = start; index <= end; index++) {
+ XYDataItem item = (XYDataItem) this.data.get(index);
+ XYDataItem clone = (XYDataItem) item.clone();
+ try {
+ copy.add(clone);
+ }
+ catch (SeriesException e) {
+ System.err.println("Unable to add cloned data item.");
+ }
+ }
+ }
+ return copy;
+
+ }
+
+/* METHOD updateByIndex */
+public void updateByIndex(int index, Number y) {
+ XYDataItem item = getDataItem(index);
+ item.setY(y);
+ fireSeriesChanged();
+ }
+
+/* METHOD update */
+public void update(Number x, Number y) {
+ int index = indexOf(x);
+ if (index < 0) {
+ throw new SeriesException("No observation for x = " + x);
+ }
+ else {
+ XYDataItem item = getDataItem(index);
+ item.setY(y);
+ fireSeriesChanged();
+ }
+ }
+
+/* METHOD indexOf */
+public int indexOf(Number x) {
+ if (this.autoSort) {
+ return Collections.binarySearch(this.data, new XYDataItem(x, null));
+ }
+ else {
+ for (int i = 0; i < this.data.size(); i++) {
+ XYDataItem item = (XYDataItem) this.data.get(i);
+ if (item.getX().equals(x)) {
+ return i;
+ }
+ }
+ return -1;
+ }
+ }
+
+/* METHOD remove */
+public XYDataItem remove(Number x) {
+ return remove(indexOf(x));
+ }
+
+/* METHOD getX */
+public Number getX(int index) {
+ return getDataItem(index).getX();
+ }
+
+/* METHOD getY */
+public Number getY(int index) {
+ return getDataItem(index).getY();
+ }
+
+/* METHOD clone */
+public Object clone() throws CloneNotSupportedException {
+ XYSeries clone = (XYSeries) super.clone();
+ clone.data = (List) ObjectUtilities.deepClone(this.data);
+ return clone;
+ }
+
+/* METHOD getItemCount */
+public int getItemCount() {
+ return this.data.size();
+ }
+
+/* METHOD getItems */
+public List getItems() {
+ return Collections.unmodifiableList(this.data);
+ }
+
+/* METHOD setMaximumItemCount */
+public void setMaximumItemCount(int maximum) {
+ this.maximumItemCount = maximum;
+ boolean dataRemoved = false;
+ while (this.data.size() > maximum) {
+ this.data.remove(0);
+ dataRemoved = true;
+ }
+ if (dataRemoved) {
+ fireSeriesChanged();
+ }
+ }
+
+/* METHOD add */
+public void add(Number x, Number y, boolean notify) {
+ // delegate argument checking to XYDataItem...
+ XYDataItem item = new XYDataItem(x, y);
+ add(item, notify);
+ }
+
+/* METHOD remove */
+public XYDataItem remove(int index) {
+ XYDataItem result = (XYDataItem) this.data.remove(index);
+ fireSeriesChanged();
+ return result;
+ }
+
+/* METHOD clear */
+public void clear() {
+ if (this.data.size() > 0) {
+ this.data.clear();
+ fireSeriesChanged();
+ }
+ }
+
+/* METHOD getDataItem */
+public XYDataItem getDataItem(int index) {
+ return (XYDataItem) this.data.get(index);
+ }
+
+/* METHOD addOrUpdate */
+public XYDataItem addOrUpdate(double x, double y) {
+ return addOrUpdate(new Double(x), new Double(y));
+ }
+
+/* METHOD equals */
+public boolean equals(Object obj) {
+ if (obj == this) {
+ return true;
+ }
+ if (!(obj instanceof XYSeries)) {
+ return false;
+ }
+ if (!super.equals(obj)) {
+ return false;
+ }
+ XYSeries that = (XYSeries) obj;
+ if (this.maximumItemCount != that.maximumItemCount) {
+ return false;
+ }
+ if (this.autoSort != that.autoSort) {
+ return false;
+ }
+ if (this.allowDuplicateXValues != that.allowDuplicateXValues) {
+ return false;
+ }
+ if (!ObjectUtilities.equal(this.data, that.data)) {
+ return false;
+ }
+ return true;
+ }
+
+/* METHOD add */
+public void add(XYDataItem item) {
+ // argument checking delegated...
+ add(item, true);
+ }
+
+/* METHOD add */
+public void add(double x, Number y) {
+ add(new Double(x), y);
+ }
+
+/* METHOD add */
+public void add(double x, Number y, boolean notify) {
+ add(new Double(x), y, notify);
+ }
+
+/* METHOD add */
+public void add(Number x, Number y) {
+ // argument checking delegated...
+ add(x, y, true);
+ }
+
+/* METHOD delete */
+public void delete(int start, int end) {
+ for (int i = start; i <= end; i++) {
+ this.data.remove(start);
+ }
+ fireSeriesChanged();
+ }
+
+/* METHOD toArray */
+public double[][] toArray() {
+ int itemCount = getItemCount();
+ double[][] result = new double[2][itemCount];
+ for (int i = 0; i < itemCount; i++) {
+ result[0][i] = this.getX(i).doubleValue();
+ Number y = getY(i);
+ if (y != null) {
+ result[1][i] = y.doubleValue();
+ }
+ else {
+ result[1][i] = Double.NaN;
+ }
+ }
+ return result;
+ }
+
+/* METHOD getAutoSort */
+public boolean getAutoSort() {
+ return this.autoSort;
+ }
+
+/* METHOD getAllowDuplicateXValues */
+public boolean getAllowDuplicateXValues() {
+ return this.allowDuplicateXValues;
+ }
+
+/* METHOD getMaximumItemCount */
+public int getMaximumItemCount() {
+ return this.maximumItemCount;
+ }
+
+/* METHOD add */
+public void add(double x, double y) {
+ add(new Double(x), new Double(y), true);
+ }
+
+/* METHOD add */
+public void add(double x, double y, boolean notify) {
+ add(new Double(x), new Double(y), notify);
+ }

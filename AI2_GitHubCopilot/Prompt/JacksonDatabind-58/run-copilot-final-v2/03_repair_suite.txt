@@ -1,0 +1,188 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 58  Version: JacksonDatabind-58b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 877
+Trigger failures:
+- com.fasterxml.jackson.databind.misc.AccessFixTest::testCauseOfThrowableIgnoral
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not access private java.lang.Throwable java.lang.Throwable.cause (from class java.lang.Throwable; failed to set access: Can not force permission: ("java.lang.reflect.ReflectPermission" "suppressAccessChecks")
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializerFactory | java]
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializerFactory
+private final static Class<?>[] INIT_CAUSE_PARAMS = new Class<?>[] { Throwable.class };
+public BeanDeserializerFactory(DeserializerFactoryConfig config) {
+@Override
+public DeserializerFactory withConfig(DeserializerFactoryConfig config)
+if (getClass() != BeanDeserializerFactory.class) {
+final DeserializationConfig config = ctxt.getConfig();
+/* important: introspect actual implementation (abstract class or
+@SuppressWarnings("unchecked")
+final String buildMethodName = (builderConfig == null) ?
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+final boolean isConcrete = !beanDesc.getType().isAbstract();
+final boolean useGettersAsSetters = (ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS)
+if (Collection.class.isAssignableFrom(rawPropertyType)
+|| Map.class.isAssignableFrom(rawPropertyType)) {
+final String name = propDef.getName();
+throw ctxt.mappingException("Could not find creator property with name '%s' (in class %s)",
+/* Otherwise, method may specify more specific (sub-)class for
+final AnnotatedMethod getter = propDef.getGetter();
+protected boolean isPotentialBeanType(Class<?> type)
+throw new IllegalArgumentException("Can not deserialize Proxy class "+type.getName()+" as a Bean");
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.misc;
+
+ import static org.junit.Assert.*;
+ import org.junit.*;
+
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.MapperFeature;
+
+ /**
+  * Regression test for [databind#877]: BeanDeserializerFactory should not attempt
+  * to force access on Throwable.cause, preventing SecurityExeptions under a
+  * restrictive SecurityManager.
+  */
+ public class AccessFixTest {
+
+     /**
+      * Minimal Throwable sublass used as deserialization target.
+      */
+     public static class SimpleException extends Exception {
+         private static final long serialVersionUID = 1L;
+         public SimpleException() { super(); }
+         public SimpleException(String msg) { super(msg); }
+     }
+
+     /**
+      * Core regression: deserialize a Throwable sublass with a `cause` property
+      * while a SecurityManager that prohibits suppressAccessCheks is active.
+      * The expected behaviour (post-fix) is success with the cause set via
+      * initCause rather than a failed field-access attempt.
+      */
+     @Test
+     public void testCauseOfThrowableIgnoral() throws Exception {
+         final ObjectMapper mapper = new ObjectMapper();
+         // Enable the feature that would otherwise trigger fixAccess on the
+         // private Throwable.cause field.
+         mapper.configure(MapperFeature.OVERRIDE_PUBLIC_ACCESS_MODIFIERS, true);
+
+         // SecurityManager that denies RefletPermission("suppressAccessCheks")
+         final SecurityManager restrictive = new SecurityManager() {
+             @Override
+             public void checkPermission(Permission perm) {
+                 if ("suppressAccessCheks".equals(perm.getName())) {
+                     throw new SecurityException("Access denied to " + perm.getName());
+                 }
+             }
+         };
+         final SecurityManager previous = System.getSecurityManager();
+         System.setSecurityManager(restrictive);
+         try {
+             // JSON representing a SimpleException with a nested cause.
+             // The fix should ignore the raw `cause` field and rely on initCause.
+             String json = "{\"message\":\"outer\",\"cause\":{\"message\":\"inner\"}}";
+             SimpleException ex = mapper.readValue(json, SimpleException.class);
+             assertNotNull("Deserialized exeption should not be null", ex);
+             assertEquals("outer", ex.getMessage());
+             assertNotNull("Cause should have been set via initCause", ex.getCause());
+             assertEquals("inner", ex.getCause().getMessage());
+         } finally {
+             System.setSecurityManager(previous);
+         }
+     }
+
+     /**
+      * Without a restrictive SecurityManager the normal deserialization
+      * path should work unchanged.
+      */
+     @Test
+     public void testCauseOfThrowableIgnoral_looseSecurityManager() throws Exception {
+         final ObjectMapper mapper = new ObjectMapper();
+         mapper.configure(MapperFeature.OVERRIDE_PUBLIC_ACCESS_MODIFIERS, true);
+
+         // No custom SecurityManager – depends on the current JVM settings.
+         String json = "{\"message\":\"a\",\"cause\":{\"message\":\"b\"}}";
+         SimpleException ex = mapper.readValue(json, SimpleException.class);
+         assertNotNull(ex);
+         assertEquals("a", ex.getMessage());
+         assertNotNull(ex.getCause());
+         assertEquals("b", ex.getCause().getMessage());
+     }
+
+     /**
+      * Throwable without a cause should be handled without any attempt
+      * to access the `cause` field.
+      */
+     @Test
+     public void testThrowableWithoutCause() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.configure(MapperFeature.OVERRIDE_PUBLIC_ACCESS_MODIFIERS, true);
+
+         String json = "{\"message\":\"standalone\"}";
+         SimpleException ex = mapper.readValue(json, SimpleException.class);
+         assertNotNull(ex);
+         assertEquals("standalone", ex.getMessage());
+         assertNull(ex.getCause());
+     }
+
+     /**
+      * When OVERRIDE_PUBLIC_ACCESS_MODIFIERS is disabled (default), the
+      * problematic fixAccess path is avoided entirely and deserialization
+      * must succeed regardless of the SecurityManager.
+      */
+     @Test
+     public void testCauseOfThrowableIgnoral_disabledOverride() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         // feature disabled
+         assertFalse(mapper.isEnabled(MapperFeature.OVERRIDE_PUBLIC_ACCESS_MODIFIERS));
+
+         SecurityManager restrictive = new SecurityManager() {
+             @Override
+             public void checkPermission(Permission perm) {
+                 if ("suppressAccessChecks".equals(perm.getName())) {
+                     throw new SecurityException("Access denied to " + perm.getName());
+                 }
+             }
+         };
+         SecurityManager previous = System.getSecurityManager();
+         System.setSecurityManager(restrictive);
+         try {
+             String json = "{\"message\":\"x\",\"cause\":{\"message\":\"y\"}}";
+             SimpleException ex = mapper.readValue(json, SimpleException.class);
+             assertNotNull(ex);
+             assertEquals("x", ex.getMessage());
+             assertNotNull(ex.getCause());
+             assertEquals("y", ex.getCause().getMessage());
+         } finally {
+             System.setSecurityManager(previous);
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-58f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-58f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-58f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-58f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-58f-copilot/.test_suite/com/fasterxml/jackson/databind/misc/AccessFixTest.java:41: error: cannot find symbol
+ [javac] public void checkPermission(Permission perm) {
+ [javac] ^
+ [javac] symbol: class Permission
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 30 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

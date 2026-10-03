@@ -1,0 +1,273 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 100  Version: JacksonDatabind-100b
+JUnit: powermock-module-junit4-1.7.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2096
+Trigger failures:
+- com.fasterxml.jackson.databind.node.TestConversions::testBase64Text
+ --> junit.framework.AssertionFailedError: Failed (variant MODIFIED-FOR-URL, data length 1): Cannot access contents of TextNode as binary due to broken Base64 encoding: Unexpected end-of-String in base64 content
+Modified: com.fasterxml.jackson.databind.node.TreeTraversingParser
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.node.TreeTraversingParser | java]
+package com.fasterxml.jackson.databind.node;
+public class TreeTraversingParser extends ParserMinimalBase
+protected ObjectCodec _objectCodec;
+protected NodeCursor _nodeCursor;
+protected JsonToken _nextToken;
+protected boolean _startContainer;
+protected boolean _closed;
+public TreeTraversingParser(JsonNode n) { this(n, null); }
+public TreeTraversingParser(JsonNode n, ObjectCodec codec)
+@Override
+public void setCodec(ObjectCodec c) {
+public ObjectCodec getCodec() {
+public Version version() {
+public void close() throws IOException
+public JsonToken nextToken() throws IOException, JsonParseException
+public JsonParser skipChildren() throws IOException, JsonParseException
+public boolean isClosed() {
+public String getCurrentName() {
+public void overrideCurrentName(String name)
+public JsonStreamContext getParsingContext() {
+public JsonLocation getTokenLocation() {
+public JsonLocation getCurrentLocation() {
+public String getText()
+public char[] getTextCharacters() throws IOException, JsonParseException {
+public int getTextLength() throws IOException, JsonParseException {
+public int getTextOffset() throws IOException, JsonParseException {
+public boolean hasTextCharacters() {
+public NumberType getNumberType() throws IOException, JsonParseException {
+public BigInteger getBigIntegerValue() throws IOException, JsonParseException
+public BigDecimal getDecimalValue() throws IOException, JsonParseException {
+public double getDoubleValue() throws IOException, JsonParseException {
+public float getFloatValue() throws IOException, JsonParseException {
+public long getLongValue() throws IOException, JsonParseException {
+public int getIntValue() throws IOException, JsonParseException {
+public Number getNumberValue() throws IOException, JsonParseException {
+public Object getEmbeddedObject()
+public boolean isNaN() {
+public byte[] getBinaryValue(Base64Variant b64variant)
+public int readBinaryValue(Base64Variant b64variant, OutputStream out)
+protected JsonNode currentNode() {
+protected JsonNode currentNumericNode()
+protected void _handleEOF() throws JsonParseException {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.node;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+
+ import org.junit.Test;
+
+ public class TreeTraversingParser2096Test {
+
+     // ---------- URL-safe variant (the original bug) ----------
+
+     @Test
+     public void testUrlSafeVariantSingleByte() throws IOException {
+         byte[] data = new byte[]{0x00}; // single 0-byte
+         String base64 = com.fasterxml.jackson.core.Base64Variant.MODIFIED_FOR_URL.encode(data);
+
+         JsonNode textNode = JsonNodeFactory.instance.textNode(base64);
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken(); // advance to VALUE_STRING
+
+         byte[] result =
+parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MODIFIED_FOR_URL);
+         assertNotNull("getBinaryValue should not return null for valid URL-safe base64 TextNode",
+result);
+         assertArrayEquals("Decoded bytes must match original data", data, result);
+     }
+
+     @Test
+     public void testUrlSafeVariantMultiByte() throws IOException {
+         byte[] data = new byte[]{0x01, 0x02, 0x03, 0x04};
+         String base64 = com.fasterxml.jackson.core.Base64Variant.MODIFIED_FOR_URL.encode(data);
+
+         JsonNode textNode = JsonNodeFactory.instance.textNode(base64);
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         byte[] result =
+parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MODIFIED_FOR_URL);
+         assertNotNull(result);
+         assertArrayEquals(data, result);
+     }
+
+     // ---------- Standard (MIME) variant ----------
+
+     @Test
+     public void testStandardVariantSingleByte() throws IOException {
+         byte[] data = new byte[]{0x00};
+         com.fasterxml.jackson.core.Base64Variant variant =
+com.fasterxml.jackson.core.Base64Variant.MIME_NO_LINEFEEDS;
+         String base64 = variant.encode(data);
+
+         JsonNode textNode = JsonNodeFactory.instance.textNode(base64);
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         byte[] result = parser.getBinaryValue(variant);
+         assertNotNull(result);
+         assertArrayEquals(data, result);
+     }
+
+     @Test
+     public void testStandardVariantMultiByte() throws IOException {
+         byte[] data = new byte[]{0x7F, (byte) 0xFF, 0x00};
+         com.fasterxml.jackson.core.Base64Variant variant =
+com.fasterxml.jackson.core.Base64Variant.MIME_NO_LINEFEEDS;
+         String base64 = variant.encode(data);
+
+         JsonNode textNode = JsonNodeFactory.instance.textNode(base64);
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         byte[] result = parser.getBinaryValue(variant);
+         assertNotNull(result);
+         assertArrayEquals(data, result);
+     }
+
+     // ---------- Edge cases ----------
+
+     @Test
+     public void testEmptyTextNode() throws IOException {
+         JsonNode textNode = JsonNodeFactory.instance.textNode("");
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         byte[] result = parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+         assertNotNull("Empty text should decode to empty byte array", result);
+         assertEquals(0, result.length);
+     }
+
+     @Test
+     public void testExtraPadding() throws Exception {
+         // "AA===" is valid base64 content ("AA") followed by illegal third padding character
+         JsonNode textNode = JsonNodeFactory.instance.textNode("AA===");
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         try {
+             parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+             fail("Expected JsonParseException for extra padding");
+         } catch (com.fasterxml.jackson.core.JsonParseException e) {
+             // expected
+         }
+     }
+
+     @Test(expected = com.fasterxml.jackson.core.JsonParseException.class)
+     public void testInvalidBase64Character() throws IOException {
+         // '!' is not a valid base64 character
+         JsonNode textNode = JsonNodeFactory.instance.textNode("!nvalid===");
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+     }
+
+     @Test
+     public void testNonTextNodeReturnsNull() throws IOException {
+         JsonNode intNode = JsonNodeFactory.instance.numberNode(123);
+         TreeTraversingParser parser = new TreeTraversingParser(intNode);
+         parser.nextToken(); // VALUE_NUMBER_INT
+
+         byte[] result = parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+         assertNull("Non-text / non-binary nodes should yield null", result);
+     }
+
+     @Test
+     public void testClosedParserReturnsNull() throws IOException {
+         JsonNode textNode = JsonNodeFactory.instance.textNode("AA==");
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         parser.close();
+         byte[] result = parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+         assertNull(result);
+     }
+
+     @Test
+     public void testTextNodeWithStandardPadding() throws IOException {
+         // "AA==" encodes a single byte 0x00
+         byte[] expected = new byte[]{0x00};
+         JsonNode textNode = JsonNodeFactory.instance.textNode("AA==");
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         byte[] result = parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+         assertNotNull(result);
+         assertArrayEquals(expected, result);
+     }
+
+     // ---------- Verify the variant is actually used ----------
+
+     @Test
+     public void testVariantDoesMatter() throws IOException {
+         // A string that is valid in MODIFIED_FOR_URL but not in standard mode
+         // URL-safe variant uses '-' and '_' instead of '+' and '/'
+         // encode a byte that yields '-' or '_' with the URL-safe variant,
+         // make sure standard variant fails on it
+         byte[] data = new byte[]{(byte) 0xFC}; // 11111100 -> base64 uses all bits
+         com.fasterxml.jackson.core.Base64Variant urlVariant =
+com.fasterxml.jackson.core.Base64Variant.MODIFIED_FOR_URL;
+         String urlBase64 = urlVariant.encode(data); // may contain '-' or '_'
+
+         JsonNode textNode = JsonNodeFactory.instance.textNode(urlBase64);
+         TreeTraversingParser parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+
+         // URL-safe variant must work
+         byte[] urlResult = parser.getBinaryValue(urlVariant);
+         assertNotNull(urlResult);
+         assertArrayEquals(data, urlResult);
+
+         // Standard variant must fail on the same text (contains invalid chars)
+         // Close and recreate parser because it is stateful
+         parser.close();
+
+         parser = new TreeTraversingParser(textNode);
+         parser.nextToken();
+         try {
+             parser.getBinaryValue(com.fasterxml.jackson.core.Base64Variant.MIME);
+             // If we reach here without exception the bug is present or the variant doesn't differ;
+             // we can still assert that the standard variant failed or returned null.
+             // But in the buggy version getBinaryValue ignores the variant, so it might succeed
+             // unintentionally. We can still assert: ensure it fails for standard by checking
+exception.
+             // Actually in the buggy version, binaryValue() tries to decode with default variant
+(maybe MIME)
+             // and will fail. So we expect exception. After fix, getBinaryValue uses provided
+variant
+             // and returns bytes, but when we call with MIME it should fail on URL char.
+             // So either way this test is consistent with fixed behaviour.
+             fail("Should have thrown JsonParseException for invalid MIME base64 content");
+         } catch (com.fasterxml.jackson.core.JsonParseException e) {
+             // expected: MIME variant does not accept URL-safe chars
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-100f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-100f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-100f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-100f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-100f-copilot/.test_suite/com/fasterxml/jackson/databind/node/TreeTraversingParser2096Test.java:184: error: <identifier> expected
+ [javac] exception.
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

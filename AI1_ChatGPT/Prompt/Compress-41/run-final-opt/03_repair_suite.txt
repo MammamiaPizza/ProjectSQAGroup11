@@ -1,0 +1,182 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 41  Version: Compress-41b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-367
+Trigger failures:
+- org.apache.commons.compress.archivers.ZipTestCase::testListAllFilesWithNestedArchive
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+ - org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamTest::testThrowOnInvalidEntry
+ --> junit.framework.AssertionFailedError: IOException expected
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.zip.ZipArchiveInputStream | java]
+package org.apache.commons.compress.archivers.zip;
+public class ZipArchiveInputStream extends ArchiveInputStream {
+private final Inflater inf = new Inflater(true);
+private final ByteBuffer buf = ByteBuffer.allocate(ZipArchiveOutputStream.BUFFER_SIZE);
+public ZipArchiveInputStream(final InputStream inputStream) {
+public ZipArchiveInputStream(final InputStream inputStream, final String encoding) {
+public ZipArchiveInputStream(final InputStream inputStream, final String encoding, final boolean useUnicodeExtraFields) {
+public ZipArchiveEntry getNextZipEntry() throws IOException {
+} catch (final EOFException e) {
+final ZipLong sig = new ZipLong(LFH_BUF);
+final int versionMadeBy = ZipShort.getValue(LFH_BUF, off);
+final GeneralPurposeBit gpFlag = GeneralPurposeBit.parse(LFH_BUF, off);
+final boolean hasUTF8Flag = gpFlag.usesUTF8ForNames();
+final long time = ZipUtil.dosToJavaTime(ZipLong.getValue(LFH_BUF, off));
+final int fileNameLen = ZipShort.getValue(LFH_BUF, off);
+final int extraLen = ZipShort.getValue(LFH_BUF, off);
+private void readFirstLocalFileHeader(final byte[] lfh) throws IOException {
+final ZipLong sig = new ZipLong(lfh);
+private void processZip64Extra(final ZipLong size, final ZipLong cSize) {
+@Override
+public ArchiveEntry getNextEntry() throws IOException {
+public boolean canReadEntryData(final ArchiveEntry ae) {
+final ZipArchiveEntry ze = (ZipArchiveEntry) ae;
+public int read(final byte[] buffer, final int offset, final int length) throws IOException {
+private int readStored(final byte[] buffer, final int offset, final int length) throws IOException {
+final lon
+...[truncated deterministically]...
+ivate boolean isFirstByteOfEocdSig(final int b) {
+private static final class CurrentEntry {
+private final ZipArchiveEntry entry = new ZipArchiveEntry();
+private final CRC32 crc = new CRC32();
+private class BoundedInputStream extends InputStream {
+public BoundedInputStream(final InputStream in, final long size) {
+public int read() throws IOException {
+final int result = in.read();
+public int read(final byte[] b) throws IOException {
+public int read(final byte[] b, final int off, final int len) throws IOException {
+final long maxRead = max >= 0 ? Math.min(len, max - pos) : len;
+final int bytesRead = in.read(b, off, (int) maxRead);
+public long skip(final long n) throws IOException {
+final long toSkip = max >= 0 ? Math.min(n, max - pos) : n;
+final long skippedBytes = in.skip(toSkip);
+public int available() throws IOException {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.zip;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import org.junit.Test;
+
+public class ZipArchiveInputStreamRegressionTest {
+
+    @Test
+    public void truncatedLocalFileHeaderIsRejected() throws Exception {
+        final byte[] truncatedLocalHeader = new byte[] {
+            'P', 'K', 3, 4
+        };
+        final ZipArchiveInputStream input =
+            new ZipArchiveInputStream(new ByteArrayInputStream(truncatedLocalHeader));
+
+        try {
+            input.getNextZipEntry();
+            fail("A truncated local file header must cause an IOException");
+        } catch (final IOException expected) {
+            // expected
+        } finally {
+            input.close();
+        }
+    }
+
+    @Test
+    public void readsNestedZipEntryAndTraversesItsContents() throws Exception {
+        final byte[] payload = "nested archive payload".getBytes("UTF-8");
+        final byte[] nestedZip = zipWithSingleEntry("inside.txt", payload);
+        final byte[] outerZip = zipWithSingleEntry("nested.zip", nestedZip);
+
+        final ZipArchiveInputStream outer =
+            new ZipArchiveInputStream(new ByteArrayInputStream(outerZip));
+        final ZipArchiveEntry outerEntry = outer.getNextZipEntry();
+
+        assertNotNull(outerEntry);
+        assertEquals("nested.zip", outerEntry.getName());
+        final byte[] extractedNestedZip = readAll(outer);
+        assertArrayEquals(nestedZip, extractedNestedZip);
+        assertNull(outer.getNextZipEntry());
+        outer.close();
+
+        final ZipArchiveInputStream nested =
+            new ZipArchiveInputStream(new ByteArrayInputStream(extractedNestedZip));
+        final ZipArchiveEntry nestedEntry = nested.getNextZipEntry();
+
+        assertNotNull(nestedEntry);
+        assertEquals("inside.txt", nestedEntry.getName());
+        assertArrayEquals(payload, readAll(nested));
+        assertNull(nested.getNextZipEntry());
+        nested.close();
+    }
+
+    @Test
+    public void advancingToNextEntryDrainsUnreadPreviousEntry() throws Exception {
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        final ZipOutputStream zip = new ZipOutputStream(bytes);
+        zip.putNextEntry(new ZipEntry("first.txt"));
+        zip.write("first entry content".getBytes("UTF-8"));
+        zip.closeEntry();
+        zip.putNextEntry(new ZipEntry("second.txt"));
+        zip.write("second entry content".getBytes("UTF-8"));
+        zip.closeEntry();
+        zip.close();
+
+        final ZipArchiveInputStream input =
+            new ZipArchiveInputStream(new ByteArrayInputStream(bytes.toByteArray()));
+
+        final ZipArchiveEntry first = input.getNextZipEntry();
+        assertNotNull(first);
+        assertEquals("first.txt", first.getName());
+
+        final ZipArchiveEntry second = input.getNextZipEntry();
+        assertNotNull(second);
+        assertEquals("second.txt", second.getName());
+        assertArrayEquals("second entry content".getBytes("UTF-8"), readAll(input));
+        assertNull(input.getNextZipEntry());
+        input.close();
+    }
+
+    private static byte[] zipWithSingleEntry(final String name, final byte[] contents)
+            throws IOException {
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        final ZipOutputStream zip = new ZipOutputStream(bytes);
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(contents);
+        zip.closeEntry();
+        zip.close();
+        return bytes.toByteArray();
+    }
+
+    private static byte[] readAll(final ZipArchiveInputStream input) throws IOException {
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        final byte[] buffer = new byte[256];
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            bytes.write(buffer, 0, read);
+        }
+        return bytes.toByteArray();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamRegressionTest::truncatedLocalFileHeaderIsRejected
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamRegressionTest::truncatedLocalFileHeaderIsRejected

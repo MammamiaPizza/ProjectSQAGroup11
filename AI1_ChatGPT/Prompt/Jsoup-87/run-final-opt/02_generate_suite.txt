@@ -1,0 +1,419 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 87  Version: Jsoup-87b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.nodes.Element, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState, org.jsoup.parser.Tag
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState, org.jsoup.parser.Tag
+Triggers: org.jsoup.parser.HtmlParserTest::preservedCaseLinksCantNest
+
+Bug/specification summary:
+Bug report: 1149
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::preservedCaseLinksCantNest
+ --> junit.framework.AssertionFailedError: expected:<<A> ONE <[/A> <A> Two] </A>> but was:<<A> ONE <[A> Two </A>] </A>>
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState, org.jsoup.parser.Tag
+
+Prompt-01 test plan:
+TARGETS: HtmlParser handling of nested <A>/<a> when tag case is preserved; Element/Tag name comparison behavior.
+ORACLES: Existing trigger expected HTML: <A> ONE </A> <A> Two </A>.
+CASES: Parse preserved-case nested links; verify outer link closes before second link opens.
+CASES: Exercise uppercase, lowercase, and mixed-case A start/end tags under preserved-case settings.
+RISKS: Available context omits parser entry-point/settings signatures and full modified logic.
+RISKS: Do not derive expectations from another program version; use trigger assertion/spec only.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Element (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+public class Element extends Node {
+private static final List<Node> EMPTY_NODES = Collections.emptyList();
+private static final Pattern classSplit = Pattern.compile("\\s+");
+public Element(String tag) {
+public Element(Tag tag, String baseUri, Attributes attributes) {
+public Element(Tag tag, String baseUri) {
+protected List<Node> ensureChildNodes() {
+@Override
+protected boolean hasAttributes() {
+public Attributes attributes() {
+public String baseUri() {
+protected void doSetBaseUri(String baseUri) {
+public int childNodeSize() {
+public String nodeName() {
+public String tagName() {
+public Element tagName(String tagName) {
+public Tag tag(
+...[truncated deterministically]...
+IOException {
+public String html() {
+public <T extends Appendable> T html(T appendable) {
+public Element html(String html) {
+public Element clone() {
+public Element shallowClone() {
+protected Element doClone(Node parent) {
+private static final class NodeList extends ChangeNotifyingArrayList<Node> {
+public void onContentsChanged() {
+
+/* HEADER */
+package org.jsoup.nodes;
+import org.jsoup.helper.ChangeNotifyingArrayList;
+import org.jsoup.helper.Validate;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.parser.ParseSettings;
+import org.jsoup.parser.Tag;
+import org.jsoup.select.Collector;
+import org.jsoup.select.Elements;
+import org.jsoup.select.Evaluator;
+import org.jsoup.select.NodeTraversor;
+import org.jsoup.select.NodeVisitor;
+import org.jsoup.select.QueryParser;
+import org.jsoup.select.Selector;
+import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import static org.jsoup.internal.Normalizer.normalize;
+public class Element extends Node {
+
+/* METHOD Elemen
+...[truncated deterministically]...
+{
+ Validate.notNull(tag);
+ Validate.notNull(baseUri);
+ childNodes = EMPTY_NODES;
+ this.baseUri = baseUri;
+ this.attributes = attributes;
+ this.tag = tag;
+ }
+
+/* METHOD Element */
+public Element(String tag) {
+ this(Tag.valueOf(tag), "", new Attributes());
+ }
+
+/* METHOD Element */
+public Element(Tag tag, String baseUri) {
+ this(tag, baseUri, null);
+ }
+
+/* METHOD tag */
+public Tag tag() {
+ return tag;
+ }
+
+/* METHOD data */
+public String data() {
+ StringBuilder sb = StringUtil.borrowBuilder();
+
+ for (Node childNode : childNodes) {
+ if (childNode instanceof DataNode) {
+ DataNode data = (DataNode) childNode;
+ sb.append(data.getWholeData());
+ } else if (childNode instanceof Comment) {
+ Comment comment = (Comment) childNode;
+ sb.append(comment.getData());
+ } else if (childNode in
+...[truncated deterministically]...
+cript.
+ // but incase another type gets through.
+ CDataNode cDataNode = (CDataNode) childNode;
+ sb.append(cDataNode.getWholeText());
+ }
+ }
+ return StringUtil.releaseBuilder(sb);
+ }
+
+===== org.jsoup.parser.HtmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+public static final int MaxScopeSearchDepth = 100; // prevents the parser bogging down in exceptionally broken pages
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+protected boolean process(Token token) {
+final Element el = currentElement();
+final String tagName = el.tagName();
+final String data = characterToken.getData();
+private void insertNode(Node node) {
+private boolean isElementInQueue(ArrayList<Element> queue, Element element) {
+private void clearStackT
+...[truncated deterministically]...
+, String[] baseTypes, String[] extraTypes) {
+final int bottom = stack.size() -1;
+final String elName = stack.get(pos).nodeName();
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.CDataNode;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import static org.jsoup.internal.StringUtil.inSorted;
+public class HtmlTreeBuilder extends TreeBuilder {
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(Reader input, String baseUri, Parser parser) {
+ super.initialiseParse(input, baseUri, parser);
+
+ // this is a bit mucky. todo - probably just create new parser objects to ensure all reset.
+ state = HtmlTreeBuilderState.Initial;
+ originalState = null;
+ b
+...[truncated deterministically]...
+ontextElement = null;
+ formattingElements = new ArrayList<>();
+ pendingTableCharacters = new ArrayList<>();
+ emptyEnd = new Token.EndTag();
+ framesetOk = true;
+ fosterInserts = false;
+ fragmentParsing = false;
+ }
+
+/* METHOD parseFragment */
+List<Node> parseFragment(String inputFragment, Element context, String baseUri, Parser parser) {
+ // context may be null
+ state = HtmlTreeBuilderState.Initial;
+ initialiseParse(new StringReader(inputFragment), baseUri, parser);
+ contextElement = context;
+ fragmentParsing = true;
+ Element root = null;
+
+ if (context != null) {
+ if (context.ownerDocument() != null) // quirks setup:
+ doc.quirksMode(context.ownerDocument().quirksMode());
+
+ // initialise the tokeniser state:
+ String
+...[truncated deterministically]...
+0, context);
+ for (Element parent: contextChain) {
+ if (parent instanceof FormElement) {
+ formElement = (FormElement) parent;
+ break;
+ }
+ }
+ }
+
+ runParser();
+ if (context != null)
+ return root.childNodes();
+ else
+ return doc.childNodes();
+ }
+
+===== org.jsoup.parser.HtmlTreeBuilderState (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+enum HtmlTreeBuilderState {
+private boolean anythingElse(Token t, HtmlTreeBuilder tb) {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+final int stackSize = stack.size();
+private boolean exitTableBody(Token t, HtmlTreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(HtmlTreeBuilder tb) {
+private static String nullString = String.valueOf('\u0000');
+abstract boolean process(Token t, HtmlTreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static boolean isWhitespace(String data) {
+private static void handleRcData(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, HtmlTreeBuilder tb) {
+static final class Constants {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.internal.StringUtil;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import java.util.ArrayList;
+enum HtmlTreeBuilderState {
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ tb.insert(t.asCharacter());
+ return true;
+ }
+ switch (t.type) {
+ case Comment:
+ tb.insert(t.asComment());
+ break;
+ case Doctype:
+ tb.error(this);
+ return false;
+ case StartTag:
+ Token.StartTag start = t.asStartTag();
+ String name = start.normalName();
+ if (name.equals("html")) {
+ return InBody.process(t, tb);
+ } else if (StringUtil.in(name, "base", "basefont", "bgsound", "command", "link")) {
+ Element el = tb.insertEmpty(start);
+ // jsoup special: update base the frist time it is seen
+ if (name.equals("base") && el.hasAttr("href"))
+ tb.maybeSetBaseUri(el);
+ } else if (name.equals("meta")) {
+ Element meta = tb.insertEmpty(start);
+ // todo: charset switches
+ } else if (name.equals("title")) {
+ handleRcData(start, tb);
+ } else if (StringUtil.in(name, "noframes", "style")) {
+ handleRawtext(start, tb);
+ } else if (name.equals("noscript")) {
+ // else if noscript && scripting flag = true: rawtext (jsoup doesn't run script, to handle as noscript)
+ tb.insert(start);
+ tb.transition(InHeadNoscript);
+ } else if (name.equals("script")) {
+ // skips some script rules as won't execute them
+
+ tb.tokeniser.transition(TokeniserState.ScriptData);
+ tb.markInsertionMode();
+ tb.transition(Text);
+ tb.insert(start);
+ } else if (name.equals("head")) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ break;
+ case EndTag:
+ Token.EndTag end = t.asEndTag();
+ name = end.normalName();
+ if (name.equals("head")) {
+ tb.pop();
+ tb.transition(AfterHead);
+ } else if (StringUtil.in(name, "body", "html", "br")) {
+ return anythingElse(t, tb);
+ } else {
+ tb.error(this);
+ return false;
+ }
+ break;
+ default:
+ return anythingElse(t, tb);
+ }
+ return true;
+ }
+
+===== org.jsoup.parser.Tag (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class Tag {
+private static final Map<String, Tag> tags = new HashMap<>(); // map of known tags
+private boolean selfClosing = false; // can self close (<foo />). used for unknown tags that self close, without forcing them as empty.
+private Tag(String tagName) {
+public String getName() {
+public static Tag valueOf(String tagName, ParseSettings settings) {
+public static Tag valueOf(String tagName) {
+public boolean isBlock() {
+public boolean formatAsBlock() {
+public boolean canContainBlock() {
+public boolean isInline() {
+public boolean isData() {
+public boolean isEmpty() {
+public boolean isSelfClosing() {
+public boolean isKnownTag() {
+public static boolean isKnownTag(String tagName) {
+public boolean preserveWhitespace() {
+public boolean isFormListed() {
+public boolean isFormSubmittable() {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+public String toString() {
+private static void register(Tag tag) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import java.util.HashMap;
+import java.util.Map;
+public class Tag {
+
+/* METHOD Tag */
+private Tag(String tagName) {
+ this.tagName = tagName;
+ }
+
+/* METHOD valueOf */
+public static Tag valueOf(String tagName, ParseSettings settings) {
+ Validate.notNull(tagName);
+ Tag tag = tags.get(tagName);
+
+ if (tag == null) {
+ tagName = settings.normalizeTag(tagName);
+ Validate.notEmpty(tagName);
+ tag = tags.get(tagName);
+
+ if (tag == null) {
+ // not defined: create default; go anywhere, do anything! (incl be inside a <p>)
+ tag = new Tag(tagName);
+ tag.isBlock = false;
+ }
+ }
+ return tag;
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object o) {
+ if (this == o) return true;
+ if (!(o instanceof Tag)) return false;
+
+ Tag tag = (Tag) o;
+
+ if (!tagName.equals(tag.tagName)) return false;
+ if (canContainInline != tag.canContainInline) return false;
+ if (empty != tag.empty) return false;
+ if (formatAsBlock != tag.formatAsBlock) return false;
+ if (isBlock != tag.isBlock) return false;
+ if (preserveWhitespace != tag.preserveWhitespace) return false;
+ if (selfClosing != tag.selfClosing) return false;
+ if (formList != tag.formList) return false;
+ return formSubmit == tag.formSubmit;
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ int result = tagName.hashCode();
+ result = 31 * result + (isBlock ? 1 : 0);
+ result = 31 * result + (formatAsBlock ? 1 : 0);
+ result = 31 * result + (canContainInline ? 1 : 0);
+ result = 31 * result + (empty ? 1 : 0);
+ result = 31 * result + (selfClosing ? 1 : 0);
+ result = 31 * result + (preserveWhitespace ? 1 : 0);
+ result = 31 * result + (formList ? 1 : 0);
+ result = 31 * result + (formSubmit ? 1 : 0);
+ return result;
+ }

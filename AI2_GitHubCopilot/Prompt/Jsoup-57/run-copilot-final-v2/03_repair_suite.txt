@@ -1,0 +1,234 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 57  Version: Jsoup-57b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 759
+Trigger failures:
+- org.jsoup.nodes.ElementTest::testChainedRemoveAttributes
+ --> java.util.ConcurrentModificationException
+Modified: org.jsoup.nodes.Attributes
+
+Available API/signatures:
+[org.jsoup.nodes.Attributes | java]
+package org.jsoup.nodes;
+public class Attributes implements Iterable<Attribute>, Cloneable {
+protected static final String dataPrefix = "data-";
+@param key the (case-sensitive) attribute key
+@return the attribute value if set; or empty string if not set.
+@see #hasKey(String)
+public String get(String key) {
+public String getIgnoreCase(String key) {
+@param key attribute key
+@param value attribute value
+public void put(String key, String value) {
+public void put(String key, boolean value) {
+@param attribute attribute
+public void put(Attribute attribute) {
+@param key attribute key to remove
+public void remove(String key) {
+public void removeIgnoreCase(String key) {
+@param key case-sensitive key to check for
+@return true if key exists, false otherwise
+public boolean hasKey(String key) {
+@param key key to check for
+public boolean hasKeyIgnoreCase(String key) {
+@return size
+public int size() {
+@param incoming attributes to add to these attributes.
+public void addAll(Attributes incoming) {
+public Iterator<Attribute> iterator() {
+@return an view of the attributes as a List.
+public List<Attribute> asList() {
+public Map<String, String> dataset() {
+@return HTML
+@throws SerializationException if the HTML representation of the attributes cannot be constructed.
+public String html() {
+@Override
+public String toString() {
+public boolean equals(Object o) {
+public int hashCode() {
+public Attributes clone() {
+private class Dataset extends AbstractMap<String, String> {
+private Dataset() {
+public Set<Entry<String, String>> entrySet() {
+public String put(String key, String value) {
+private class EntrySet extends AbstractSet<Map.Entry<String, String>> {
+public Iterator<Map.Entry<String, String>> iterator() {
+private class DatasetIterator implements Iterator<Map.Entry<String, String>> {
+private Iterator<Attribute> attrIter = attributes.values().iterator();
+public boolean hasNext() {
+public Entry<String, String> next() {
+public void remove() {
+private static String dataKey(String key) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import static org.junit.Assert.*;
+
+ import java.util.ConcurrentModificationException;
+ import java.util.Iterator;
+ import java.util.Map;
+
+ import org.junit.Test;
+
+ public class AttributesTest {
+
+     @Test
+     public void testRemove() {
+         Attributes attrs = new Attributes();
+         attrs.put("key", "value");
+         attrs.remove("key");
+         assertEquals(0, attrs.size());
+         assertFalse(attrs.hasKey("key"));
+         assertEquals("", attrs.get("key"));
+     }
+
+     @Test
+     public void testRemoveIgnoreCase() {
+         Attributes attrs = new Attributes();
+         attrs.put("Key", "value");
+         attrs.removeIgnoreCase("key");
+         assertEquals(0, attrs.size());
+         assertFalse(attrs.hasKey("Key"));
+     }
+
+     @Test
+     public void testRemoveIgnoreCaseCaseInsensitivity() {
+         Attributes attrs = new Attributes();
+         attrs.put("Key", "value");
+         attrs.put("other", "otherValue");
+         attrs.removeIgnoreCase("kEy");
+         assertEquals(1, attrs.size());
+         assertFalse(attrs.hasKey("Key"));
+         assertTrue(attrs.hasKey("other"));
+     }
+
+     @Test
+     public void testRemoveNonExistentKey() {
+         Attributes attrs = new Attributes();
+         attrs.put("key", "value");
+         attrs.remove("nonexistent");
+         assertEquals(1, attrs.size());
+     }
+
+     @Test
+     public void testRemoveSameKeyMultipleTimes() {
+         Attributes attrs = new Attributes();
+         attrs.put("key", "value");
+         attrs.remove("key");
+         attrs.remove("key"); // should not throw
+         assertEquals(0, attrs.size());
+     }
+
+     @Test
+     public void testChainedRemoveIgnoreCase() {
+         Attributes attrs = new Attributes();
+         attrs.put("a", "1");
+         attrs.put("b", "2");
+         attrs.put("c", "3");
+         attrs.removeIgnoreCase("A");
+         attrs.removeIgnoreCase("B");
+         attrs.removeIgnoreCase("C");
+         assertEquals(0, attrs.size());
+     }
+
+     @Test
+     public void testIteratorRemove() {
+         Attributes attrs = new Attributes();
+         attrs.put("a", "1");
+         attrs.put("b", "2");
+         attrs.put("c", "3");
+
+         Iterator<Attribute> it = attrs.iterator();
+         while (it.hasNext()) {
+             Attribute attr = it.next();
+             if ("b".equals(attr.getKey())) {
+                 it.remove();
+             }
+         }
+         assertEquals(2, attrs.size());
+         assertFalse(attrs.hasKey("b"));
+     }
+
+     @Test
+     public void testDatasetIteratorRemove() {
+         Attributes attrs = new Attributes();
+         attrs.put("data-foo", "bar");
+         attrs.put("data-baz", "qux");
+
+         Map<String, String> dataset = attrs.dataset();
+         Iterator<Map.Entry<String, String>> it = dataset.entrySet().iterator();
+         while (it.hasNext()) {
+             Map.Entry<String, String> entry = it.next();
+             if ("foo".equals(entry.getKey())) {
+                 it.remove();
+             }
+         }
+         assertEquals(1, dataset.size());
+         assertEquals("", attrs.get("data-foo"));
+         assertEquals("qux", attrs.get("data-baz"));
+     }
+
+     @Test
+     public void testAddAllThenRemove() {
+         Attributes first = new Attributes();
+         first.put("a", "1");
+         first.put("b", "2");
+
+         Attributes second = new Attributes();
+         second.put("c", "3");
+         second.put("d", "4");
+
+         first.addAll(second);
+         assertEquals(4, first.size());
+
+         first.remove("a");
+         first.remove("c");
+         assertEquals(2, first.size());
+         assertTrue(first.hasKey("b"));
+         assertTrue(first.hasKey("d"));
+     }
+
+     @Test
+     public void testSizeConsistency() {
+         Attributes attrs = new Attributes();
+         assertEquals(0, attrs.size());
+         attrs.put("a", "1");
+         attrs.put("b", "2");
+         assertEquals(2, attrs.size());
+         attrs.remove("a");
+         assertEquals(1, attrs.size());
+         attrs.removeIgnoreCase("B");
+         assertEquals(0, attrs.size());
+     }
+
+     @Test
+     public void testRemoveThenHasKey() {
+         Attributes attrs = new Attributes();
+         attrs.put("key", "val");
+         assertTrue(attrs.hasKey("key"));
+         attrs.remove("key");
+         assertFalse(attrs.hasKey("key"));
+     }
+
+     @Test
+     public void testGetAfterRemove() {
+         Attributes attrs = new Attributes();
+         attrs.put("key", "val");
+         assertEquals("val", attrs.get("key"));
+         attrs.remove("key");
+         assertEquals("", attrs.get("key"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.AttributesTest::testDatasetIteratorRemove
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.AttributesTest::testDatasetIteratorRemove

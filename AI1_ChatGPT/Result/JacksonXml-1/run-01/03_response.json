@@ -1,0 +1,28 @@
+{
+  "id": "genai-01a0e87f-b686-78be-9ebd-5fa718e817d0",
+  "object": "chat.completion",
+  "created": 1790607079,
+  "model": "gpt-5.6-terra",
+  "provider": "OpenAI",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The generated suite made several low-level token-stream assumptions that are not part of the reported regression and did not hold on the fixed revision. In particular, tests for direct token sequencing, `nextTextValue()`, field-name replacement, attributes/text token layout, and invalid Base64 decoding failed on the fixed version, so they cannot be retained as valid regression assertions for this bug.\n\nThe corrected suite preserves the meaningful parser configuration and Base64-decoding coverage that passed on the fixed revision, and uses data binding to test the reported behavior: an unwrapped nested list must retain an empty nested list for both self-closing and whitespace-only XML elements.\n\n```java\npackage com.fasterxml.jackson.dataformat.xml.deser;\n\nimport java.nio.charset.Charset;\nimport java.util.List;\n\nimport org.junit.Test;\n\nimport com.fasterxml.jackson.core.Base64Variants;\nimport com.fasterxml.jackson.core.JsonToken;\nimport com.fasterxml.jackson.dataformat.xml.XmlMapper;\nimport com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;\nimport com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;\n\nimport static org.junit.Assert.assertArrayEquals;\nimport static org.junit.Assert.assertEquals;\nimport static org.junit.Assert.assertFalse;\nimport static org.junit.Assert.assertNotNull;\nimport static org.junit.Assert.assertSame;\nimport static org.junit.Assert.assertTrue;\n\npublic class FromXmlParserTest\n{\n    private FromXmlParser parserFor(String xml) throws Exception {\n        XmlMapper mapper = new XmlMapper();\n        return (FromXmlParser) mapper.getFactory().createParser(xml);\n    }\n\n    @Test\n    public void testBinaryValueIsDecodedAndCachedForCurrentStringToken() throws Exception {\n        FromXmlParser parser = parserFor(\"<root>SGVsbG8=</root>\");\n        try {\n            assertEquals(JsonToken.START_OBJECT, parser.nextToken());\n            assertEquals(JsonToken.FIELD_NAME, parser.nextToken());\n            assertEquals(JsonToken.VALUE_STRING, parser.nextToken());\n\n            byte[] first = parser.getBinaryValue(Base64Variants.getDefaultVariant());\n            byte[] second = parser.getBinaryValue(Base64Variants.getDefaultVariant());\n\n            assertArrayEquals(\"Hello\".getBytes(Charset.forName(\"UTF-8\")), first);\n            assertSame(first, second);\n        } finally {\n            parser.close();\n        }\n    }\n\n    @Test\n    public void testCodecFormatAndCloseConfiguration() throws Exception {\n        FromXmlParser parser = parserFor(\"<root/>\");\n        XmlMapper codec = new XmlMapper();\n\n        assertTrue(parser.requiresCustomCodec());\n        assertNotNull(parser.version());\n        assertNotNull(parser.getStaxReader());\n        assertEquals(0, parser.getFormatFeatures());\n\n        parser.setCodec(codec);\n        assertSame(codec, parser.getCodec());\n\n        assertSame(parser, parser.overrideFormatFeatures(0, 0));\n        assertEquals(0, parser.getFormatFeatures());\n\n        assertFalse(parser.isClosed());\n        parser.close();\n        assertTrue(parser.isClosed());\n\n        parser.close();\n        assertTrue(parser.isClosed());\n    }\n\n    @Test\n    public void testNestedUnwrappedListKeepsEmptyNestedList() throws Exception {\n        XmlMapper mapper = new XmlMapper();\n\n        NestedUnwrappedLists value = mapper.readValue(\n                \"<NestedUnwrappedLists><values/></NestedUnwrappedLists>\",\n                NestedUnwrappedLists.class);\n\n        assertNotNull(value.values);\n        assertEquals(1, value.values.size());\n        assertNotNull(value.values.get(0));\n        assertTrue(value.values.get(0).isEmpty());\n    }\n\n    @Test\n    public void testNestedUnwrappedListKeepsWhitespaceOnlyNestedList() throws Exception {\n        XmlMapper mapper = new XmlMapper();\n\n        NestedUnwrappedLists value = mapper.readValue(\n                \"<NestedUnwrappedLists><values>   </values></NestedUnwrappedLists>\",\n                NestedUnwrappedLists.class);\n\n        assertNotNull(value.values);\n        assertEquals(1, value.values.size());\n        assertNotNull(value.values.get(0));\n        assertTrue(value.values.get(0).isEmpty());\n    }\n\n    public static class NestedUnwrappedLists\n    {\n        @JacksonXmlElementWrapper(useWrapping = false)\n        @JacksonXmlProperty(localName = \"values\")\n        public List<List<String>> values;\n    }\n}\n```",
+        "reasoning": ""
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9190,
+    "completion_tokens": 4280,
+    "total_tokens": 13470
+  },
+  "model_quota": {
+    "daily_quota_tokens": 200000,
+    "daily_usage_tokens": 58186,
+    "daily_remaining_tokens": 141814
+  }
+}

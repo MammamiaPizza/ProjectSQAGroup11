@@ -1,0 +1,431 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 78  Version: Closure-78b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.PeepholeFoldConstants
+Modified: com.google.javascript.jscomp.PeepholeFoldConstants
+Triggers: com.google.javascript.jscomp.PeepholeFoldConstantsTest::testFoldArithmetic
+
+Bug/specification summary:
+Bug report: 381
+Trigger failures:
+- com.google.javascript.jscomp.PeepholeFoldConstantsTest::testFoldArithmetic
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_DIVIDE_BY_0_ERROR. Divide by 0 at testcode line 1 : 8 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.PeepholeFoldConstants
+
+Prompt-01 test plan:
+TARGETS: PeepholeFoldConstants binary arithmetic folding, especially division in tryFoldArithmeticOp/performArithmeticOp.
+ORACLES: Existing testFoldArithmetic expectation; compiler diagnostics must contain no JSC_DIVIDE_BY_0_ERROR.
+CASES: Constant nonzero division that folds to a numeric literal without emitting a divide-by-zero diagnostic.
+CASES: Division boundary where result is zero (as in trigger) and divisor is nonzero.
+RISKS: Private methods require exercising optimizer through existing compiler/test harness.
+RISKS: Context omits exact source expression and intended folding output beyond no error and expected zero diagnostics.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.PeepholeFoldConstants (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class PeepholeFoldConstants extends AbstractPeepholeOptimization {
+private static final double MAX_FOLD_NUMBER = Math.pow(2, 53);
+private static final Locale ROOT_LOCALE = new Locale("");
+@Override
+private Node tryFoldBinaryOperator(Node subtree) {
+private Node tryReduceVoid(Node n) {
+private void tryReduceOperandsForOp(Node n) {
+private void tryConvertOperandsToNumber(Node n) {
+private void tryConvertToNumber(Node n) {
+private Node tryFoldTypeof(Node originalTypeofNode) {
+private Node tryFoldUnaryOperator(Node n) {
+private Node tryFoldInstanceof(Node n, Node left, Node right) {
+private Node tryFoldAssign(Node n, Node left, Node right) {
+private Node tryFoldAndOr(Node n, Node left, Node right) {
+private Node tryFoldChildAddString(Node n, Node left, Node right) {
+private Node tryFoldAddConstantString(Node n, Node left, Node right) {
+private Node tryFoldArithmeticOp(Node n, Node left, Node right) {
+private Node performArithmeticOp(int opType, Node left, Node right) {
+private Node tryFoldLeftChildOp(Node n, Node left, Node right) {
+private Node tryFoldAdd(Node node, Node left, Node right) {
+private Node tryFoldShift(Node n, Node left, Node right) {
+@SuppressWarnings("fallthrough")
+private Node tryFoldComparison(Node n, Node left, Node right) {
+private Boolean compareAsNumbers(int op, Node left, Node right) {
+private boolean compareToUndefined(Node value, int op) {
+private Node tryFoldCtorCall(Node n) {
+private boolean inForcedStringContext(Node n) {
+private Node tryFoldInForcedStringContext(Node n) {
+private Node tryFoldKnownMethods(Node subtree) {
+private Node tryFoldKnownStringMethods(Node subtree) {
+private Node tryFoldStringToLowerCase(Node subtree, Node stringNode) {
+private Node tryFoldStringToUpperCase(Node subtree, Node stringNode) {
+private Node tryFoldArrayJoin(Node n) {
+private Node tryFoldStringSubstr(Node n, Node stringNode, Node arg1) {
+private Node tryFoldStringSubstring(Node n, Node stringNode, Node arg1) {
+private Node tryFoldGetElem(Node n, Node left, Node right) {
+private Node tryFoldGetProp(Node n, Node left, Node right) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.javascript.jscomp.mozilla.rhino.ScriptRuntime;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.TernaryValue;
+import java.util.List;
+import java.util.Locale;
+class PeepholeFoldConstants extends AbstractPeepholeOptimization {
+
+/* METHOD tryFoldGetElem */
+private Node tryFoldGetElem(Node n, Node left, Node right) {
+ Preconditions.checkArgument(n.getType() == Token.GETELEM);
+
+ if (left.getType() == Token.ARRAYLIT) {
+ if (right.getType() != Token.NUMBER) {
+ // Sometimes people like to use complex expressions to index into
+ // arrays, or strings to index into array methods.
+ return n;
+ }
+
+ double index = right.getDouble();
+ int intIndex = (int) index;
+ if (intIndex != index) {
+ error(INVALID_GETELEM_INDEX_ERROR, right);
+ return n;
+ }
+
+ if (intIndex < 0) {
+ error(INDEX_OUT_OF_BOUNDS_ERROR, right);
+ return n;
+ }
+
+ Node elem = left.getFirstChild();
+ for (int i = 0; elem != null && i < intIndex; i++) {
+ elem = elem.getNext();
+ }
+
+ if (elem == null) {
+ error(INDEX_OUT_OF_BOUNDS_ERROR, right);
+ return n;
+ }
+
+ if (elem.getType() == Token.EMPTY) {
+ elem = NodeUtil.newUndefinedNode(elem);
+ } else {
+ left.removeChild(elem);
+ }
+
+ // Replace the entire GETELEM with the value
+ n.getParent().replaceChild(n, elem);
+ reportCodeChange();
+ return elem;
+ }
+ return n;
+ }
+
+/* METHOD tryConvertToNumber */
+private void tryConvertToNumber(Node n) {
+ switch (n.getType()) {
+ case Token.NUMBER:
+ // Nothing to do
+ return;
+ case Token.AND:
+ case Token.OR:
+ case Token.COMMA:
+ tryConvertToNumber(n.getLastChild());
+ return;
+ case Token.HOOK:
+ tryConvertToNumber(n.getChildAtIndex(1));
+ tryConvertToNumber(n.getLastChild());
+ return;
+ case Token.NAME:
+ if (!NodeUtil.isUndefined(n)) {
+ return;
+ }
+ break;
+ }
+
+ Double result = NodeUtil.getNumberValue(n);
+ if (result == null) {
+ return;
+ }
+
+ double value = result;
+
+ Node replacement;
+ if (Double.isNaN(value)) {
+ replacement = Node.newString(Token.NAME, "NaN");
+ } else if (value == Double.POSITIVE_INFINITY) {
+ replacement = Node.newString(Token.NAME, "Infinity");
+ } else if (value == Double.NEGATIVE_INFINITY) {
+ replacement = new Node(Token.NEG, Node.newString(Token.NAME, "Infinity"));
+ replacement.copyInformationFromForTree(n);
+ } else {
+ replacement = Node.newNumber(value);
+ }
+
+ n.getParent().replaceChild(n, replacement);
+ reportCodeChange();
+ }
+
+/* METHOD tryReduceVoid */
+private Node tryReduceVoid(Node n) {
+ Node child = n.getFirstChild();
+ if (child.getType() != Token.NUMBER || child.getDouble() != 0.0) {
+ if (!mayHaveSideEffects(n)) {
+ n.replaceChild(child, Node.newNumber(0));
+ reportCodeChange();
+ }
+ }
+ return n;
+ }
+
+/* METHOD tryFoldUnaryOperator */
+private Node tryFoldUnaryOperator(Node n) {
+ Preconditions.checkState(n.hasOneChild());
+
+ Node left = n.getFirstChild();
+ Node parent = n.getParent();
+
+ if (left == null) {
+ return n;
+ }
+
+ TernaryValue leftVal = NodeUtil.getBooleanValue(left);
+ if (leftVal == TernaryValue.UNKNOWN) {
+ return n;
+ }
+
+ switch (n.getType()) {
+ case Token.NOT:
+ // Don't fold !0 and !1 back to false.
+ if (left.getType() == Token.NUMBER) {
+ double numValue = left.getDouble();
+ if (numValue == 0 || numValue == 1) {
+ return n;
+ }
+ }
+ int result = leftVal.toBoolean(true) ? Token.FALSE : Token.TRUE;
+ Node replacementNode = new Node(result);
+ parent.replaceChild(n, replacementNode);
+ reportCodeChange();
+ return replacementNode;
+ case Token.POS:
+ if (NodeUtil.isNumericResult(left)) {
+ // POS does nothing to numeric values.
+ parent.replaceChild(n, left.detachFromParent());
+ reportCodeChange();
+ return left;
+ }
+ return n;
+ case Token.NEG:
+ try {
+ if (left.getType() == Token.NAME) {
+ if (left.getString().equals("Infinity")) {
+ // "-Infinity" is valid and a literal, don't modify it.
+ return n;
+ } else if (left.getString().equals("NaN")) {
+ // "-NaN" is "NaN".
+ n.removeChild(left);
+ parent.replaceChild(n, left);
+ reportCodeChange();
+ return left;
+ }
+ }
+
+/* METHOD tryFoldChildAddString */
+private Node tryFoldChildAddString(Node n, Node left, Node right) {
+
+ if (NodeUtil.isLiteralValue(right, false) &&
+ left.getType() == Token.ADD) {
+
+ Node ll = left.getFirstChild();
+ Node lr = ll.getNext();
+
+ // Left's right child MUST be a string. We would not want to fold
+ // foo() + 2 + 'a' because we don't know what foo() will return, and
+ // therefore we don't know if left is a string concat, or a numeric add.
+ if (lr.getType() == Token.STRING) {
+ String leftString = NodeUtil.getStringValue(lr);
+ String rightString = NodeUtil.getStringValue(right);
+ if (leftString != null && rightString != null) {
+ left.removeChild(ll);
+ String result = leftString + rightString;
+ n.replaceChild(left, ll);
+ n.replaceChild(right, Node.newString(result));
+ reportCodeChange();
+ return n;
+ }
+ }
+ }
+
+ if (NodeUtil.isLiteralValue(left, false) &&
+ right.getType() == Token.ADD) {
+
+ Node rl = right.getFirstChild();
+ Node rr = right.getLastChild();
+
+ // Left's right child MUST be a string. We would not want to fold
+ // foo() + 2 + 'a' because we don't know what foo() will return, and
+ // therefore we don't know if left is a string concat, or a numeric add.
+ if (rl.getType() == Token.STRING) {
+ String leftString = NodeUtil.getStringValue(left);
+ String rightString = NodeUtil.getStringValue(rl);
+ if (leftString != null && rightString != null) {
+ right.removeChild(rr);
+ String result = leftString + rightString;
+ n.replaceChild(right, rr);
+ n.replaceChild(left, Node.newString(result));
+ reportCodeChange();
+ return n;
+ }
+ }
+ }
+
+ return n;
+ }
+
+/* METHOD tryFoldStringToLowerCase */
+private Node tryFoldStringToLowerCase(Node subtree, Node stringNode) {
+ // From Rhino, NativeString.java. See ECMA 15.5.4.11
+ String lowered = stringNode.getString().toLowerCase(ROOT_LOCALE);
+ Node replacement = Node.newString(lowered);
+ subtree.getParent().replaceChild(subtree, replacement);
+ reportCodeChange();
+ return replacement;
+ }
+
+/* METHOD tryFoldStringToUpperCase */
+private Node tryFoldStringToUpperCase(Node subtree, Node stringNode) {
+ // From Rhino, NativeString.java. See ECMA 15.5.4.12
+ String uppered = stringNode.getString().toUpperCase(ROOT_LOCALE);
+ Node replacement = Node.newString(uppered);
+ subtree.getParent().replaceChild(subtree, replacement);
+ reportCodeChange();
+ return replacement;
+ }
+
+/* METHOD tryFoldStringIndexOf */
+private Node tryFoldStringIndexOf(
+ Node n, String functionName, Node lstringNode, Node firstArg) {
+ Preconditions.checkArgument(n.getType() == Token.CALL);
+ Preconditions.checkArgument(lstringNode.getType() == Token.STRING);
+
+ String lstring = NodeUtil.getStringValue(lstringNode);
+ boolean isIndexOf = functionName.equals("indexOf");
+ Node secondArg = firstArg.getNext();
+ String searchValue = NodeUtil.getStringValue(firstArg);
+ // searchValue must be a valid string.
+ if (searchValue == null) {
+ return n;
+ }
+ int fromIndex = isIndexOf ? 0 : lstring.length();
+ if (secondArg != null) {
+ // Third-argument and non-numeric second arg are problematic. Discard.
+ if ((secondArg.getNext() != null) ||
+ (secondArg.getType() != Token.NUMBER)) {
+ return n;
+ } else {
+ fromIndex = (int) secondArg.getDouble();
+ }
+ }
+ int indexVal = isIndexOf ? lstring.indexOf(searchValue, fromIndex)
+ : lstring.lastIndexOf(searchValue, fromIndex);
+ Node newNode = Node.newNumber(indexVal);
+ n.getParent().replaceChild(n, newNode);
+
+ reportCodeChange();
+
+ return newNode;
+ }
+
+/* METHOD tryFoldInstanceof */
+private Node tryFoldInstanceof(Node n, Node left, Node right) {
+ Preconditions.checkArgument(n.getType() == Token.INSTANCEOF);
+
+ // TODO(johnlenz) Use type information if available to fold
+ // instanceof.
+ if (NodeUtil.isLiteralValue(left, true)
+ && !mayHaveSideEffects(right)) {
+
+ Node replacementNode = null;
+
+ if (NodeUtil.isImmutableValue(left)) {
+ // Non-object types are never instances.
+ replacementNode = new Node(Token.FALSE);
+ } else if (right.getType() == Token.NAME
+ && "Object".equals(right.getString())) {
+ replacementNode = new Node(Token.TRUE);
+ }
+
+ if (replacementNode != null) {
+ n.getParent().replaceChild(n, replacementNode);
+ reportCodeChange();
+ return replacementNode;
+ }
+ }
+
+ return n;
+ }
+
+/* METHOD tryFoldAndOr */
+private Node tryFoldAndOr(Node n, Node left, Node right) {
+ Node parent = n.getParent();
+
+ Node result = null;
+
+ int type = n.getType();
+
+ TernaryValue leftVal = NodeUtil.getBooleanValue(left);
+
+ if (leftVal != TernaryValue.UNKNOWN) {
+ boolean lval = leftVal.toBoolean(true);
+
+ // (TRUE || x) => TRUE (also, (3 || x) => 3)
+ // (FALSE && x) => FALSE
+ if (lval && type == Token.OR ||
+ !lval && type == Token.AND) {
+ result = left;
+
+ } else {
+ // (FALSE || x) => x
+ // (TRUE && x) => x
+ result = right;
+ }
+ }
+
+ // Note: Right hand side folding is handled by
+ // PeepholeSubstituteAlternateSyntax#tryMinimizeCondition
+
+ if (result != null) {
+ // Fold it!
+ n.removeChild(result);
+ parent.replaceChild(n, result);
+ reportCodeChange();
+
+ return result;
+ } else {
+ return n;
+ }
+ }
+
+/* METHOD tryFoldAddConstantString */
+private Node tryFoldAddConstantString(Node n, Node left, Node right) {
+ if (left.getType() == Token.STRING ||
+ right.getType() == Token.STRING) {
+ // Add strings.
+ String leftString = NodeUtil.getStringValue(left);
+ String rightString = NodeUtil.getStringValue(right);
+ if (leftString != null && rightString != null) {
+ Node newStringNode = Node.newString(leftString + rightString);
+ n.getParent().replaceChild(n, newStringNode);
+ reportCodeChange();
+ return newStringNode;
+ }
+ }
+
+ return n;
+ }

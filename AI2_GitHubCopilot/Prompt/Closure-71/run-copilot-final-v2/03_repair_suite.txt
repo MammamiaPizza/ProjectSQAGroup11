@@ -1,0 +1,125 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 71  Version: Closure-71b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 254
+Trigger failures:
+- com.google.javascript.jscomp.CheckAccessControlsTest::testNoPrivateAccessForProperties6
+ --> junit.framework.AssertionFailedError: Overriding private property of Foo.prototype.
+ - com.google.javascript.jscomp.CheckAccessControlsTest::testNoPrivateAccessForProperties8
+ --> junit.framework.AssertionFailedError: There should be one error. expected:<1> but was:<0>
+Modified: com.google.javascript.jscomp.CheckAccessControls
+
+Available API/signatures:
+[com.google.javascript.jscomp.CheckAccessControls | java]
+package com.google.javascript.jscomp;
+class CheckAccessControls implements ScopedCallback, HotSwapCompilerPass {
+"Access to protected property {0} of {1} not allowed here.");
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node scriptRoot) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+private JSType getClassOfMethod(Node n, Node parent) {
+private JSType normalizeClassType(JSType type) {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void checkNameDeprecation(NodeTraversal t, Node n, Node parent) {
+private void checkPropertyDeprecation(NodeTraversal t, Node n, Node parent) {
+private void checkNameVisibility(NodeTraversal t, Node name, Node parent) {
+private static boolean isValidPrivateConstructorAccess(Node parent) {
+private boolean canAccessDeprecatedTypes(NodeTraversal t) {
+private static boolean isDeprecatedFunction(Node n, Node parent) {
+private static String getTypeDeprecationInfo(JSType type) {
+private static JSType dereference(JSType type) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+public class CheckAccessControlsTest extends CompilerTestCase {
+
+  public CheckAccessControlsTest() {
+    super(); }
+
+  @Override protected CompilerPass getProcessor(Compiler compiler) {
+    return new CheckAccessControls(compiler); }
+
+  @Override protected int getNumRepetitions() {
+    return 1; }
+
+  public void testPrivateNameInSameFile() {
+    testSame("/** @private */ var x = 1; function f(){ return x; }"); }
+
+  public void testPrivateAccessFromDifferentFile() {
+    String externs = "/** @constructor / function Foo() {} /* @private */ Foo.prototype.x = 1;";
+    String js = "var a = new Foo(); a.x;";
+    test(externs, js, CheckAccessControls.BAD_PRIVATE_PROPERTY_ACCESS); }
+
+  public void testPrivateOverrideGlobalScope() {
+    String externs = "/** @constructor / function Foo() {} /* @private */ Foo.prototype.x = 1;";
+    String js = "Foo.prototype.x = 2;";
+    test(externs, js, CheckAccessControls.PRIVATE_OVERRIDE); }
+
+  public void testPrivateOverrideInFunction() {
+    String externs = "/** @constructor / function Foo() {} /* @private */ Foo.prototype.x = 1;";
+    String js = "function f() { Foo.prototype.x = 2; } f();";
+    test(externs, js, CheckAccessControls.PRIVATE_OVERRIDE); }
+
+  public void testPrivateOverrideSameFile() {
+    testSame("/** @constructor / function Foo() {} /* @private */ Foo.prototype.x = 1;
+Foo.prototype.x = 2;"); }
+
+  public void testPrivateAssignInConstructor() {
+    testSame("/** @constructor / function Foo() { this.x = 2; } /* @private */ Foo.prototype.x =
+1;"); }
+
+  public void testPrivateMethodOverride() {
+    String externs = "/** @constructor / function Foo() {} /* @private */ Foo.prototype.method =
+function(){};";
+    String js = "Foo.prototype.method = function(){};";
+    test(externs, js, CheckAccessControls.PRIVATE_OVERRIDE); }
+
+  public void testProtectedOverrideSubclass() {
+    String externs = "/** @constructor / function Base() {} /* @protected / Base.prototype.x = 1;";
+    String js = "/* @constructor @extends {Base} / function Sub(){} /* @override */ Sub.prototype.x
+= 2;";    testSame(externs, js); }
+
+  public void testPublicOverride() {
+    String externs = "/** @constructor */ function Foo() {} Foo.prototype.x = 1;";    String js =
+"Foo.prototype.x = 2;";    testSame(externs, js); }
+
+  public void testVisibilityMismatch() {
+    String externs = "/** @constructor / function Foo() {} /* @protected / Foo.prototype.x = 1;";
+ String js = "/* @public */ Foo.prototype.x = 2;";    test(externs, js,
+CheckAccessControls.VISIBILITY_MISMATCH); }
+
+  public void testProtectedAccessFromNonSubclass() {
+    String externs = "/** @constructor / function Base() {} /* @protected */ Base.prototype.x = 1;";
+   String js = "var b = new Base(); b.x;";    test(externs, js,
+CheckAccessControls.BAD_PROTECTED_PROPERTY_ACCESS); }
+
+  public void testNonOverridePrivateUse() {
+    testSame("/** @private */ var x = 1; var y = x;"); }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-71f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-71f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-71f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-71f-copilot/.test_suite/com/google/javascript/jscomp/CheckAccessControlsTest.java:33: error: unclosed string literal
+ [javac] testSame("/** @constructor / function Foo() {} /* @private */ Foo.prototype.x = 1;
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 20 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

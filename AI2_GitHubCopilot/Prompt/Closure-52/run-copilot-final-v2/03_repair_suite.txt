@@ -1,0 +1,103 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 52  Version: Closure-52b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 569
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testNumericKeys
+ --> junit.framework.ComparisonFailure: expected:<var x={["010"]:1}> but was:<var x={[10]:1}>
+Modified: com.google.javascript.jscomp.CodeGenerator
+
+Available API/signatures:
+[com.google.javascript.jscomp.CodeGenerator | java]
+package com.google.javascript.jscomp;
+class CodeGenerator {
+private final Map<String, String> ESCAPED_JS_STRINGS = Maps.newHashMap();
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+static String regexpEscape(String s, CharsetEncoder outputCharsetEncoder) {
+static String escapeToDoubleQuotedJsString(String s) {
+static String regexpEscape(String s) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+private Context clearContextForNoInOperator(Context context) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import junit.framework.TestCase;
+
+/**
+
+ - Tests the numeric-literal detection used when CodeGenerator serializes
+ - numeric object-literal keys (bug 569).
+  */
+ public class CodeGeneratorTest extends TestCase {
+
+  public void testSimpleNumberRecognizesSingleZero() {
+    assertTrue(CodeGenerator.isSimpleNumber("0")); }
+
+  public void testSimpleNumberRecognizesPlainInteger() {
+    assertTrue(CodeGenerator.isSimpleNumber("1"));
+    assertTrue(CodeGenerator.isSimpleNumber("10"));
+    assertTrue(CodeGenerator.isSimpleNumber("123456789")); }
+
+  public void testSimpleNumberRejectsNonDigitCharacters() {
+    assertFalse(CodeGenerator.isSimpleNumber(""));
+    assertFalse(CodeGenerator.isSimpleNumber("-1"));
+    assertFalse(CodeGenerator.isSimpleNumber("1.0"));
+    assertFalse(CodeGenerator.isSimpleNumber("1e2"));
+    assertFalse(CodeGenerator.isSimpleNumber("0xA"));
+    assertFalse(CodeGenerator.isSimpleNumber("Infinity"));
+    assertFalse(CodeGenerator.isSimpleNumber("NaN"));
+    assertFalse(CodeGenerator.isSimpleNumber(" 1")); }
+
+  public void testSimpleNumberRejectsLeadingZeros() {
+    assertFalse(CodeGenerator.isSimpleNumber("010"));
+    assertFalse(CodeGenerator.isSimpleNumber("00"));
+    assertFalse(CodeGenerator.isSimpleNumber("0001")); }
+
+  public void testGetSimpleNumberParsesPlainInteger() {
+    assertEquals(0.0, CodeGenerator.getSimpleNumber("0"), 0.0);
+    assertEquals(1.0, CodeGenerator.getSimpleNumber("1"), 0.0);
+    assertEquals(10.0, CodeGenerator.getSimpleNumber("10"), 0.0);
+    assertEquals(123456789.0, CodeGenerator.getSimpleNumber("123456789"), 0.0); }
+
+  public void testGetSimpleNumberReturnsNaNForLeadingZeros() {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("010")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("00"))); }
+
+  public void testGetSimpleNumberReturnsNaNForNonNumericStrings() {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("0xA")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("1.0")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("1.00")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("1e2")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("Infinity")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("NaN")));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber(""))); }
+
+  public void testGetSimpleNumberReturnsNaNWhenLongParseOverflows() {
+    assertTrue(CodeGenerator.isSimpleNumber("9223372036854775808"));
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("9223372036854775808"))); }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.google.javascript.jscomp.CodeGeneratorTest::testSimpleNumberRecognizesSingleZero
+ - com.google.javascript.jscomp.CodeGeneratorTest::testGetSimpleNumberParsesPlainInteger
+
+Failing generated tests: com.google.javascript.jscomp.CodeGeneratorTest::testGetSimpleNumberParsesPlainInteger, com.google.javascript.jscomp.CodeGeneratorTest::testSimpleNumberRecognizesSingleZero

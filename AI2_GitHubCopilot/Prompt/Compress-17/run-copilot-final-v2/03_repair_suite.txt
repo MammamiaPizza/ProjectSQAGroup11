@@ -1,0 +1,171 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 17  Version: Compress-17b
+JUnit: junit-4.10.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-197
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::testCompress197
+ --> junit.framework.AssertionFailedError: COMPRESS-197: Error detected parsing the header
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarUtils | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarUtils {
+static final ZipEncoding FALLBACK_ENCODING = new ZipEncoding() {
+public boolean canEncode(String name) { return true; }
+public ByteBuffer encode(String name) {
+final int length = name.length();
+public String decode(byte[] buffer) {
+/** Private constructor to prevent instantiation of this utility class. */
+private TarUtils(){
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+final boolean negative = buffer[offset] == (byte) 0xff;
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+public static String parseName(byte[] buffer, final int offset, final int length) {
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+final int limit = b.limit();
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+final int bits = (length - 1) * 8;
+final byte[] b = val.toByteArray();
+final byte fill = (byte) (negative ? 0xff : 0);
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static long computeCheckSum(final byte[] buf) {
+public static boolean verifyCheckSum(byte[] header) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for {@link TarUtils} targeting COMPRESS-197 and related edge cases.
+  */
+ public class TarUtilsTest {
+
+     // ------------ parseOctal ------------
+
+     @Test
+     public void testParseOctal_ValidOctal() {
+         // "755\0" should parse to 493 (7*8^2 + 5*8 + 5)
+         byte[] buffer = new byte[] { '7', '5', '5', 0 };
+         assertEquals(493, TarUtils.parseOctal(buffer, 0, 4));
+     }
+
+     @Test
+     public void testParseOctal_LeadingSpacesAndTrailingNulls() {
+         // Spaces then octal digits then two NUL bytes
+         byte[] buffer = new byte[] { ' ', ' ', '7', '5', '5', 0, 0 };
+         assertEquals(493, TarUtils.parseOctal(buffer, 0, buffer.length));
+     }
+
+     @Test
+     public void testParseOctal_AllZeros() {
+         byte[] buffer = new byte[] { '0', '0', '0', '0', '0', '0', '0', '0', 0 };
+         assertEquals(0, TarUtils.parseOctal(buffer, 0, buffer.length));
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testParseOctal_LengthTooSmall() {
+         TarUtils.parseOctal(new byte[] { '1', '2' }, 0, 1);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testParseOctal_InvalidOctalDigit() {
+         // '8' is not an octal digit
+         byte[] buffer = new byte[] { '1', '2', '8', 0 };
+         TarUtils.parseOctal(buffer, 0, buffer.length);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testParseOctal_LeadingFFByte() {
+         // buffer with leading 0xff is invalid for the current parseOctal
+         byte[] buffer = new byte[] { (byte) 0xff, '7', '5', '5', 0 };
+         TarUtils.parseOctal(buffer, 0, buffer.length);
+     }
+
+     @Test
+     public void testParseOctal_Max12DigitValue() {
+         // 12-digit max octal value 777777777777 = 8^12 - 1 = 68719476735
+         byte[] buffer = new byte[] { '7', '7', '7', '7', '7', '7', '7', '7', '7', '7', '7', '7', 0
+};
+         assertEquals(68719476735L, TarUtils.parseOctal(buffer, 0, buffer.length));
+     }
+
+     // ------------ parseName ------------
+
+     @Test
+     public void testParseName_NormalName() {
+         byte[] buffer = new byte[100];
+         byte[] nameBytes = "file.txt".getBytes();
+         System.arraycopy(nameBytes, 0, buffer, 0, nameBytes.length);
+         // remaining bytes are 0 (NUL)
+         assertEquals("file.txt", TarUtils.parseName(buffer, 0, 100));
+     }
+
+     @Test
+     public void testParseName_TrailingNullsOnly() {
+         byte[] buffer = new byte[100]; // all zeros
+         assertEquals("", TarUtils.parseName(buffer, 0, 100));
+     }
+
+     @Test
+     public void testParseName_EmbeddedNullActsAsTerminator() {
+         byte[] buffer = new byte[100];
+         byte[] nameBytes = new byte[] { 'a', 'b', 0, 'c', 'd' };
+         System.arraycopy(nameBytes, 0, buffer, 0, nameBytes.length);
+         // Trailing NULs are stripped, but the decode stops at the first NUL
+         assertEquals("ab", TarUtils.parseName(buffer, 0, 100));
+     }
+
+     // ------------ verifyCheckSum ------------
+
+     @Test
+     public void testVerifyCheckSum_ValidHeader() {
+         byte[] header = new byte[512];
+         // Fill with recognisable data
+         for (int i = 0; i < header.length; i++) {
+             header[i] = (byte) ('a' + i % 26);
+         }
+         // Set checksum area to spaces, compute sum, format checksum, then verify
+         for (int i = TarConstants.CHKSUM_OFFSET; i < TarConstants.CHKSUM_OFFSET +
+TarConstants.CHKSUMLEN; i++) {
+             header[i] = ' ';
+         }
+         long sum = TarUtils.computeCheckSum(header);
+         TarUtils.formatCheckSumOctalBytes(sum, header, TarConstants.CHKSUM_OFFSET,
+TarConstants.CHKSUMLEN);
+         assertTrue(TarUtils.verifyCheckSum(header));
+     }
+
+     @Test
+     public void testVerifyCheckSum_WrongStoredSum() {
+         byte[] header = new byte[512];
+         for (int i = 0; i < header.length; i++) {
+             header[i] = (byte) i;
+         }
+         for (int i = TarConstants.CHKSUM_OFFSET; i < TarConstants.CHKSUM_OFFSET +
+TarConstants.CHKSUMLEN; i++) {
+             header[i] = ' ';
+         }
+         long sum = TarUtils.computeCheckSum(header);
+         // Write an incorrect checksum (off by 1)
+         TarUtils.formatCheckSumOctalBytes(sum + 1, header, TarConstants.CHKSUM_OFFSET,
+TarConstants.CHKSUMLEN);
+         assertFalse(TarUtils.verifyCheckSum(header));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::testParseName_EmbeddedNullActsAsTerminator
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::testVerifyCheckSum_WrongStoredSum
+
+Failing generated tests: org.apache.commons.compress.archivers.tar.TarUtilsTest::testParseName_EmbeddedNullActsAsTerminator, org.apache.commons.compress.archivers.tar.TarUtilsTest::testVerifyCheckSum_WrongStoredSum

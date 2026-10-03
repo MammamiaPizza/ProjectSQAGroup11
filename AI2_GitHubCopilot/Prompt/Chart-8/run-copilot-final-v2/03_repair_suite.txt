@@ -1,0 +1,213 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Chart  Bug: 8  Version: Chart-8b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.data.time.junit.WeekTests::testConstructor
+ --> junit.framework.AssertionFailedError: expected:<35> but was:<34>
+Modified: org.jfree.data.time.Week
+
+Available API/signatures:
+[org.jfree.data.time.Week | java]
+package org.jfree.data.time;
+public class Week extends RegularTimePeriod implements Serializable {
+public static final int FIRST_WEEK_IN_YEAR = 1;
+public static final int LAST_WEEK_IN_YEAR = 53;
+public Week() {
+public Week(int week, int year) {
+public Week(int week, Year year) {
+public Week(Date time) {
+public Week(Date time, TimeZone zone) {
+public Week(Date time, TimeZone zone, Locale locale) {
+public Year getYear() {
+public int getYearValue() {
+public int getWeek() {
+public long getFirstMillisecond() {
+public long getLastMillisecond() {
+public void peg(Calendar calendar) {
+public RegularTimePeriod previous() {
+public RegularTimePeriod next() {
+public long getSerialIndex() {
+public long getFirstMillisecond(Calendar calendar) {
+public long getLastMillisecond(Calendar calendar) {
+public String toString() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public int compareTo(Object o1) {
+public static Week parseWeek(String s) {
+private static int findSeparator(String s) {
+private static Year evaluateAsYear(String s) {
+private static int stringToWeek(String s) {
+
+Generated JUnit Test:
+package org.jfree.data.time.junit;
+
+ import static org.junit.Assert.*;
+
+ import java.util.Calendar;
+ import java.util.Date;
+ import java.util.Locale;
+ import java.util.TimeZone;
+
+ import org.jfree.data.time.Week;
+ import org.junit.Test;
+
+ /**
+  * Tests that reveal the Week(Date, TimeZone) bug: it ignores the supplied
+  * TimeZone and always uses the default, causing wrong week numbers when
+  * the default time zone differs from the given one.
+  */
+ public class WeekTestBug {
+
+     @Test
+     public void testConstructorTwoArgsRespectsTimeZone() {
+         // Epoch: 1970-01-01 00:00:00 UTC
+         Date date = new Date(0L);
+         TimeZone laZone = TimeZone.getTimeZone("America/Los_Angeles");
+         // In LA, the date is 1969-12-31 16:00:00 → week 53 of 1969 (US locale)
+         Week week = new Week(date, laZone);
+         Calendar expectedCal = Calendar.getInstance(laZone, Locale.US);
+         expectedCal.setTime(date);
+         assertEquals("Week number must match LA time zone",
+                      expectedCal.get(Calendar.WEEK_OF_YEAR), week.getWeek());
+         assertEquals("Year must match LA time zone",
+                      expectedCal.get(Calendar.YEAR), week.getYearValue());
+     }
+
+     @Test
+     public void testConstructorTwoArgsWithUTC() {
+         Date date = new Date(0L);
+         TimeZone utc = TimeZone.getTimeZone("UTC");
+         Week week = new Week(date, utc);
+         Calendar expectedCal = Calendar.getInstance(utc, Locale.US);
+         expectedCal.setTime(date);
+         assertEquals("Week number must match UTC",
+                      expectedCal.get(Calendar.WEEK_OF_YEAR), week.getWeek());
+         assertEquals("Year must match UTC",
+                      expectedCal.get(Calendar.YEAR), week.getYearValue());
+     }
+
+     @Test
+     public void testConstructorThreeArgsWithLocale() {
+         // 2010-01-01 is a Friday – ISO week rules (Locale.GERMANY) yield week 53 of 2009
+         Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.GERMANY);
+         cal.set(2010, Calendar.JANUARY, 1);
+         Date date = cal.getTime();
+         Week week = new Week(date, TimeZone.getTimeZone("UTC"), Locale.GERMANY);
+         assertEquals("ISO week for 2010-01-01 must be 53", 53, week.getWeek());
+         assertEquals("Year must be 2009", 2009, week.getYearValue());
+     }
+
+     @Test
+     public void testWeekBoundaryDecemberToNextYear() {
+         // 2002-12-31 is a Tuesday; ISO week 1 of 2003 started Mon 2002-12-29
+         Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.GERMANY);
+         cal.set(2002, Calendar.DECEMBER, 31);
+         Date date = cal.getTime();
+         Week week = new Week(date, TimeZone.getTimeZone("UTC"), Locale.GERMANY);
+         assertEquals("Week must be 1", 1, week.getWeek());
+         assertEquals("Year must be 2003", 2003, week.getYearValue());
+     }
+
+     @Test
+     public void testNullArgumentsThrowException() {
+         Date now = new Date();
+         TimeZone tz = TimeZone.getDefault();
+         Locale loc = Locale.getDefault();
+
+         try {
+             new Week((Date) null, tz, loc);
+             fail("Should throw IllegalArgumentException for null time");
+         } catch (IllegalArgumentException ok) { /* expected */ }
+
+         try {
+             new Week(now, (TimeZone) null, loc);
+             fail("Should throw IllegalArgumentException for null zone");
+         } catch (IllegalArgumentException ok) { /* expected */ }
+
+         try {
+             new Week(now, tz, (Locale) null);
+             fail("Should throw IllegalArgumentException for null locale");
+         } catch (IllegalArgumentException ok) { /* expected */ }
+     }
+
+     @Test
+     public void testDefaultConstructor() {
+         Week week = new Week();
+         assertNotNull(week);
+         int w = week.getWeek();
+         assertTrue("Week must be between 1 and 53", w >= 1 && w <= 53);
+     }
+
+     @Test
+     public void testWeekIntYearConstructorValidValues() {
+         Week week = new Week(10, 2023);
+         assertEquals(10, week.getWeek());
+         assertEquals(2023, week.getYearValue());
+     }
+
+     @Test
+     public void testParseWeekValidString() {
+         Week week = Week.parseWeek("2007-W01");
+         assertNotNull(week);
+         assertEquals(1, week.getWeek());
+         assertEquals(2007, week.getYearValue());
+     }
+
+     @Test
+     public void testEqualsAndHashCode() {
+         Week w1 = new Week(5, 2020);
+         Week w2 = new Week(5, 2020);
+         Week w3 = new Week(5, 2021);
+         assertTrue(w1.equals(w2));
+         assertEquals(w1.hashCode(), w2.hashCode());
+         assertFalse(w1.equals(w3));
+     }
+
+     @Test
+     public void testCompareTo() {
+         Week w1 = new Week(10, 2020);
+         Week w2 = new Week(11, 2020);
+         assertTrue(w1.compareTo(w2) < 0);
+         assertTrue(w2.compareTo(w1) > 0);
+         assertEquals(0, w1.compareTo(new Week(10, 2020)));
+     }
+
+     @Test
+     public void testGetFirstAndLastMillisecondAfterPeg() {
+         Week week = new Week(20, 2025);
+         long first = week.getFirstMillisecond();
+         long last = week.getLastMillisecond();
+         assertTrue("First millisecond must be <= last", first <= last);
+     }
+
+     @Test
+     public void testPreviousAndNextAtYearBoundary() {
+         // 2020 has 53 weeks (US locale)
+         Week week53 = new Week(53, 2020);
+         Week prev = (Week) week53.previous();
+         assertEquals(52, prev.getWeek());
+         assertEquals(2020, prev.getYearValue());
+
+         Week nextOf53 = (Week) week53.next();
+         assertEquals(1, nextOf53.getWeek());
+         assertEquals(2021, nextOf53.getYearValue());
+
+         Week firstWeek = new Week(1, 2021);
+         Week prevFirst = (Week) firstWeek.previous();
+         assertEquals(53, prevFirst.getWeek());
+         assertEquals(2020, prevFirst.getYearValue());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jfree.data.time.junit.WeekTestBug::testPreviousAndNextAtYearBoundary
+ - org.jfree.data.time.junit.WeekTestBug::testConstructorTwoArgsRespectsTimeZone
+
+Failing generated tests: org.jfree.data.time.junit.WeekTestBug::testConstructorTwoArgsRespectsTimeZone, org.jfree.data.time.junit.WeekTestBug::testPreviousAndNextAtYearBoundary

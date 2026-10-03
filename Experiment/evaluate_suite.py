@@ -17,6 +17,8 @@ import json
 import re
 import shutil
 import subprocess
+import os
+import signal
 import tarfile
 import tempfile
 import time
@@ -24,10 +26,53 @@ from pathlib import Path
 
 
 def run(command, log):
-    with log.open("w") as stream:
-        result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT,
-                                check=False)
-    return result.returncode
+    """Run a command with a hard timeout and kill its whole process group if hung."""
+    timeout_sec = int(os.environ.get("D4J_TIMEOUT_SEC", "900"))
+
+    with open(log, "w") as stream:
+        stream.write(
+            f"[RUN] timeout={timeout_sec}s command={' '.join(map(str, command))}\n"
+        )
+        stream.flush()
+
+        proc = subprocess.Popen(
+            command,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+        try:
+            return proc.wait(timeout=timeout_sec)
+
+        except subprocess.TimeoutExpired:
+            stream.write(
+                f"\n[TIMEOUT] exceeded {timeout_sec}s; "
+                f"terminating process group pid={proc.pid}\n"
+            )
+            stream.flush()
+
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                stream.write(
+                    "[TIMEOUT] process group ignored SIGTERM; sending SIGKILL\n"
+                )
+                stream.flush()
+
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+                proc.wait()
+
+            return 124
 
 
 def fails(path, fqcn):

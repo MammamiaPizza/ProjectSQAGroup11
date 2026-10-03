@@ -1,0 +1,140 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 21  Version: Math-21b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-789
+Trigger failures:
+- org.apache.commons.math3.linear.RectangularCholeskyDecompositionTest::testMath789
+ --> junit.framework.AssertionFailedError: expected:<0.0> but was:<0.0180652917341963>
+ - org.apache.commons.math3.linear.RectangularCholeskyDecompositionTest::testFullRank
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math3.linear.RectangularCholeskyDecomposition
+
+Available API/signatures:
+[org.apache.commons.math3.linear.RectangularCholeskyDecomposition | java]
+package org.apache.commons.math3.linear;
+public class RectangularCholeskyDecomposition {
+public RectangularCholeskyDecomposition(RealMatrix matrix, double small)
+final int order = matrix.getRowDimension();
+final double[][] c = matrix.getData();
+final double sqrt = FastMath.sqrt(c[ir][ir]);
+public RealMatrix getRootMatrix() {
+public int getRank() {
+
+Generated JUnit Test:
+package org.apache.commons.math3.linear;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import org.junit.Test;
+
+public class RectangularCholeskyDecompositionGeneratedTest {
+
+    @Test
+    public void testPivotSelectionRetainsLargeRemainingDiagonalComponent() {
+        RealMatrix matrix = MatrixUtils.createRealMatrix(new double[][] {
+            { 0.01, 0.0, 0.0 },
+            { 0.0, 100.0, 0.0 },
+            { 0.0, 0.0, 50.0 }
+        });
+
+        RectangularCholeskyDecomposition decomposition =
+                new RectangularCholeskyDecomposition(matrix, 0.1);
+
+        assertEquals(2, decomposition.getRank());
+        RealMatrix reconstructed = reconstruction(decomposition);
+        assertEquals(0.0, reconstructed.getEntry(0, 0), 1.0e-12);
+        assertEquals(100.0, reconstructed.getEntry(1, 1), 1.0e-12);
+        assertEquals(50.0, reconstructed.getEntry(2, 2), 1.0e-12);
+        assertEquals(0.0, reconstructed.getEntry(1, 2), 1.0e-12);
+    }
+
+    @Test
+    public void testRankDeficientMatrixHasOnlyIndependentRootColumns() {
+        RealMatrix matrix = MatrixUtils.createRealMatrix(new double[][] {
+            { 4.0, 0.0, 0.0 },
+            { 0.0, 0.0, 0.0 },
+            { 0.0, 0.0, 0.0 }
+        });
+
+        RectangularCholeskyDecomposition decomposition =
+                new RectangularCholeskyDecomposition(matrix, 1.0e-12);
+
+        assertEquals(1, decomposition.getRank());
+        assertEquals(1, decomposition.getRootMatrix().getColumnDimension());
+        assertMatrixEquals(matrix, reconstruction(decomposition), 1.0e-12);
+    }
+
+    @Test
+    public void testFullRankPositiveDefiniteMatrixReconstructsInput() {
+        RealMatrix matrix = MatrixUtils.createRealMatrix(new double[][] {
+            { 4.0, 2.0, -4.0 },
+            { 2.0, 10.0, -0.5 },
+            { -4.0, -0.5, 5.25 }
+        });
+
+        RectangularCholeskyDecomposition decomposition =
+                new RectangularCholeskyDecomposition(matrix, 1.0e-12);
+
+        assertEquals(3, decomposition.getRank());
+        assertEquals(3, decomposition.getRootMatrix().getColumnDimension());
+        assertMatrixEquals(matrix, reconstruction(decomposition), 1.0e-10);
+    }
+
+    @Test
+    public void testDiagonalExactlyAtThresholdIsRetained() {
+        RealMatrix matrix = MatrixUtils.createRealMatrix(new double[][] {
+            { 4.0, 0.0 },
+            { 0.0, 0.1 }
+        });
+
+        RectangularCholeskyDecomposition decomposition =
+                new RectangularCholeskyDecomposition(matrix, 0.1);
+
+        assertEquals(2, decomposition.getRank());
+        assertMatrixEquals(matrix, reconstruction(decomposition), 1.0e-12);
+    }
+
+    @Test
+    public void testNegativeDiagonalIsRejected() {
+        RealMatrix matrix = MatrixUtils.createRealMatrix(new double[][] {
+            { -1.0 }
+        });
+
+        try {
+            new RectangularCholeskyDecomposition(matrix, 1.0e-12);
+            fail("A matrix with a negative diagonal entry must not be decomposed");
+        } catch (NonPositiveDefiniteMatrixException expected) {
+            assertEquals(0, expected.getRow());
+        }
+    }
+
+    private RealMatrix reconstruction(RectangularCholeskyDecomposition decomposition) {
+        RealMatrix root = decomposition.getRootMatrix();
+        return root.multiply(root.transpose());
+    }
+
+    private void assertMatrixEquals(RealMatrix expected, RealMatrix actual, double tolerance) {
+        assertEquals(expected.getRowDimension(), actual.getRowDimension());
+        assertEquals(expected.getColumnDimension(), actual.getColumnDimension());
+        for (int row = 0; row < expected.getRowDimension(); row++) {
+            for (int column = 0; column < expected.getColumnDimension(); column++) {
+                assertEquals(expected.getEntry(row, column),
+                             actual.getEntry(row, column),
+                             tolerance);
+            }
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.math3.linear.RectangularCholeskyDecompositionGeneratedTest::testRankDeficientMatrixHasOnlyIndependentRootColumns
+ - org.apache.commons.math3.linear.RectangularCholeskyDecompositionGeneratedTest::testPivotSelectionRetainsLargeRemainingDiagonalComponent
+
+Failing generated tests: org.apache.commons.math3.linear.RectangularCholeskyDecompositionGeneratedTest::testPivotSelectionRetainsLargeRemainingDiagonalComponent, org.apache.commons.math3.linear.RectangularCholeskyDecompositionGeneratedTest::testRankDeficientMatrixHasOnlyIndependentRootColumns

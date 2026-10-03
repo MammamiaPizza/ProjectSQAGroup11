@@ -1,0 +1,315 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 89  Version: Math-89b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.stat.Frequency
+Modified: org.apache.commons.math.stat.Frequency
+Triggers: org.apache.commons.math.stat.FrequencyTest::testAddNonComparable
+
+Bug/specification summary:
+Bug report: MATH-259
+Trigger failures:
+- org.apache.commons.math.stat.FrequencyTest::testAddNonComparable
+ --> java.lang.ClassCastException: java.lang.Object cannot be cast to java.lang.Comparable
+Modified: org.apache.commons.math.stat.Frequency
+
+Prompt-01 test plan:
+TARGETS: Frequency.addValue(Object) handling non-Comparable argument
+ORACLES: testAddNonComparable expects no ClassCastException; likely IllegalArgumentException
+CASES: add Integer/String (Comparable) then getCount/getPct
+CASES: add non-Comparable Object (should not throw ClassCastException)
+CASES: add null via deprecated addValue(Object) (expected NPE or similar)
+CASES: boundary: empty Frequency, getSumFreq=0, getCount returns 0
+CASES: multiple additions of same value, getCount returns multiplicity
+RISKS: no formal spec for non-Comparable; expected exception type unknown
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.stat.Frequency (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.stat;
+public class Frequency implements Serializable {
+public Frequency() {
+public Frequency(Comparator comparator) {
+@Override
+public String toString() {
+@Deprecated
+public void addValue(Object v) {
+public void addValue(Comparable<?>v){
+public void addValue(int v) {
+public void addValue(Integer v) {
+public void addValue(long v) {
+public void addValue(char v) {
+public void clear() {
+public Iterator valuesIterator() {
+public long getSumFreq() {
+public long getCount(Object v) {
+public long getCount(int v) {
+public long getCount(long v) {
+public long getCount(char v) {
+public double getPct(Object v) {
+final long sumFreq = getSumFreq();
+public double getPct(int v) {
+public double getPct(long v) {
+public double getPct(char v) {
+public long getCumFreq(Object v) {
+public long getCumFreq(int v) {
+public long getCumFreq(long v) {
+public long getCumFreq(char v) {
+public double getCumPct(Object v) {
+public double getCumPct(int v) {
+public double getCumPct(long v) {
+public double getCumPct(char v) {
+private static class NaturalComparator implements Comparator, Serializable {
+public int compare(Object o1, Object o2) {
+
+/* HEADER */
+package org.apache.commons.math.stat;
+import java.io.Serializable;
+import java.text.NumberFormat;
+import java.util.Iterator;
+import java.util.Comparator;
+import java.util.TreeMap;
+public class Frequency implements Serializable {
+
+/* METHOD Frequency */
+public Frequency() {
+ freqTable = new TreeMap();
+ }
+
+/* METHOD Frequency */
+public Frequency(Comparator comparator) {
+ freqTable = new TreeMap(comparator);
+ }
+
+/* METHOD addValue */
+public void addValue(Comparable<?>v){
+ Object obj = v;
+ if (v instanceof Integer) {
+ obj = Long.valueOf(((Integer) v).longValue());
+ }
+ try {
+ Long count = (Long) freqTable.get(obj);
+ if (count == null) {
+ freqTable.put(obj, Long.valueOf(1));
+ } else {
+ freqTable.put(obj, Long.valueOf(count.longValue() + 1));
+ }
+ } catch (ClassCastException ex) { 
+ //TreeMap will throw ClassCastException if v is not comparable
+ throw new IllegalArgumentException("Value not comparable to existing values.");
+ }
+ }
+
+/* METHOD getCount */
+public long getCount(Object v) {
+ if (v instanceof Integer) {
+ return getCount(((Integer) v).longValue());
+ }
+ long result = 0;
+ try { 
+ Long count = (Long) freqTable.get(v);
+ if (count != null) {
+ result = count.longValue();
+ }
+ } catch (ClassCastException ex) {
+ // ignore and return 0 -- ClassCastException will be thrown if value is not comparable
+ }
+ return result;
+ }
+
+/* METHOD getCumFreq */
+public long getCumFreq(Object v) {
+ if (getSumFreq() == 0) {
+ return 0;
+ }
+ if (v instanceof Integer) {
+ return getCumFreq(((Integer) v).longValue());
+ }
+ Comparator c = freqTable.comparator();
+ if (c == null) {
+ c = new NaturalComparator();
+ }
+ long result = 0;
+ 
+ try {
+ Long value = (Long) freqTable.get(v);
+ if (value != null) {
+ result = value.longValue();
+ }
+ } catch (ClassCastException ex) {
+ return result; // v is not comparable
+ }
+ 
+ if (c.compare(v, freqTable.firstKey()) < 0) {
+ return 0; // v is comparable, but less than first value
+ }
+ 
+ if (c.compare(v, freqTable.lastKey()) >= 0) {
+ return getSumFreq(); // v is comparable, but greater than the last value
+ }
+ 
+ Iterator values = valuesIterator();
+ while (values.hasNext()) {
+ Object nextValue = values.next();
+ if (c.compare(v, nextValue) > 0) {
+ result += getCount(nextValue);
+ } else {
+ return result;
+ }
+ }
+ return result;
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ NumberFormat nf = NumberFormat.getPercentInstance();
+ StringBuffer outBuffer = new StringBuffer();
+ outBuffer.append("Value \t Freq. \t Pct. \t Cum Pct. \n");
+ Iterator iter = freqTable.keySet().iterator();
+ while (iter.hasNext()) {
+ Object value = iter.next();
+ outBuffer.append(value);
+ outBuffer.append('\t');
+ outBuffer.append(getCount(value));
+ outBuffer.append('\t');
+ outBuffer.append(nf.format(getPct(value)));
+ outBuffer.append('\t');
+ outBuffer.append(nf.format(getCumPct(value)));
+ outBuffer.append('\n');
+ }
+ return outBuffer.toString();
+ }
+
+/* METHOD addValue */
+@Deprecated
+ public void addValue(Object v) {
+ addValue((Comparable<?>) v); 
+ }
+
+/* METHOD compare */
+public int compare(Object o1, Object o2) {
+ return ((Comparable)o1).compareTo(o2);
+ }
+
+/* METHOD getPct */
+public double getPct(Object v) {
+ final long sumFreq = getSumFreq();
+ if (sumFreq == 0) {
+ return Double.NaN;
+ }
+ return (double) getCount(v) / (double) sumFreq; 
+ }
+
+/* METHOD getCumPct */
+public double getCumPct(Object v) {
+ final long sumFreq = getSumFreq();
+ if (sumFreq == 0) {
+ return Double.NaN;
+ }
+ return (double) getCumFreq(v) / (double) sumFreq; 
+ }
+
+/* METHOD addValue */
+public void addValue(int v) {
+ addValue(Long.valueOf(v));
+ }
+
+/* METHOD addValue */
+public void addValue(Integer v) {
+ addValue(Long.valueOf(v.longValue()));
+ }
+
+/* METHOD addValue */
+public void addValue(long v) {
+ addValue(Long.valueOf(v));
+ }
+
+/* METHOD addValue */
+public void addValue(char v) {
+ addValue(Character.valueOf(v));
+ }
+
+/* METHOD clear */
+public void clear() {
+ freqTable.clear();
+ }
+
+/* METHOD valuesIterator */
+public Iterator valuesIterator() {
+ return freqTable.keySet().iterator();
+ }
+
+/* METHOD getSumFreq */
+public long getSumFreq() {
+ long result = 0;
+ Iterator iterator = freqTable.values().iterator();
+ while (iterator.hasNext()) {
+ result += ((Long) iterator.next()).longValue();
+ }
+ return result;
+ }
+
+/* METHOD getCount */
+public long getCount(int v) {
+ return getCount(Long.valueOf(v));
+ }
+
+/* METHOD getCount */
+public long getCount(long v) {
+ return getCount(Long.valueOf(v));
+ }
+
+/* METHOD getCount */
+public long getCount(char v) {
+ return getCount(Character.valueOf(v));
+ }
+
+/* METHOD getPct */
+public double getPct(int v) {
+ return getPct(Long.valueOf(v)); 
+ }
+
+/* METHOD getPct */
+public double getPct(long v) {
+ return getPct(Long.valueOf(v)); 
+ }
+
+/* METHOD getPct */
+public double getPct(char v) {
+ return getPct(Character.valueOf(v)); 
+ }
+
+/* METHOD getCumFreq */
+public long getCumFreq(int v) {
+ return getCumFreq(Long.valueOf(v)); 
+ }
+
+/* METHOD getCumFreq */
+public long getCumFreq(long v) {
+ return getCumFreq(Long.valueOf(v)); 
+ }
+
+/* METHOD getCumFreq */
+public long getCumFreq(char v) {
+ return getCumFreq(Character.valueOf(v)); 
+ }
+
+/* METHOD getCumPct */
+public double getCumPct(int v) {
+ return getCumPct(Long.valueOf(v)); 
+ }
+
+/* METHOD getCumPct */
+public double getCumPct(long v) {
+ return getCumPct(Long.valueOf(v)); 
+ }
+
+/* METHOD getCumPct */
+public double getCumPct(char v) {
+ return getCumPct(Character.valueOf(v)); 
+ }

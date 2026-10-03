@@ -1,0 +1,206 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 16  Version: JacksonDatabind-16b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 771
+Trigger failures:
+- com.fasterxml.jackson.databind.mixins.MixinsWithBundlesTest::testMixinWithBundles
+ --> junit.framework.ComparisonFailure: expected:<{"[bar]":"result"}> but was:<{"[stuff]":"result"}>
+Modified: com.fasterxml.jackson.databind.introspect.AnnotationMap
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.introspect.AnnotationMap | java]
+package com.fasterxml.jackson.databind.introspect;
+public final class AnnotationMap implements Annotations
+protected HashMap<Class<? extends Annotation>,Annotation> _annotations;
+public AnnotationMap() { }
+private AnnotationMap(HashMap<Class<? extends Annotation>,Annotation> a) {
+@SuppressWarnings("unchecked")
+@Override
+public <A extends Annotation> A get(Class<A> cls)
+public Iterable<Annotation> annotations() {
+public static AnnotationMap merge(AnnotationMap primary, AnnotationMap secondary)
+public int size() {
+public boolean addIfNotPresent(Annotation ann)
+public boolean add(Annotation ann) {
+public String toString() {
+protected final boolean _add(Annotation ann) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.introspect;
+
+ import static org.junit.Assert.*;
+ import java.lang.annotation.*;
+ import java.util.*;
+ import org.junit.Test;
+
+ public class AnnotationMapTest {
+
+     @Retention(RetentionPolicy.RUNTIME)
+     public @interface A { String value() default ""; }
+
+     @Retention(RetentionPolicy.RUNTIME)
+     public @interface B { String value() default ""; }
+
+     @A("primary")
+     static final class PrimaryA {}
+
+     @A("secondary")
+     static final class SecondaryA {}
+
+     @B("baz")
+     static final class WithB {}
+
+     @Test
+     public void testMergeSecondaryOverridesPrimary() {
+         AnnotationMap primary = new AnnotationMap();
+         primary.add(PrimaryA.class.getAnnotation(A.class));
+         AnnotationMap secondary = new AnnotationMap();
+         secondary.add(SecondaryA.class.getAnnotation(A.class));
+
+         AnnotationMap merged = AnnotationMap.merge(primary, secondary);
+
+         assertNotNull(merged);
+         A a = merged.get(A.class);
+         assertNotNull(a);
+         assertEquals("secondary", a.value());
+     }
+
+     @Test
+     public void testMergeNullPrimary() {
+         AnnotationMap secondary = new AnnotationMap();
+         secondary.add(SecondaryA.class.getAnnotation(A.class));
+
+         AnnotationMap merged = AnnotationMap.merge(null, secondary);
+
+         assertSame(secondary, merged);
+     }
+
+     @Test
+     public void testMergeNullSecondary() {
+         AnnotationMap primary = new AnnotationMap();
+         primary.add(PrimaryA.class.getAnnotation(A.class));
+
+         AnnotationMap merged = AnnotationMap.merge(primary, null);
+
+         assertSame(primary, merged);
+     }
+
+     @Test
+     public void testMergeEmptyPrimary() {
+         AnnotationMap primary = new AnnotationMap(); // empty
+         AnnotationMap secondary = new AnnotationMap();
+         secondary.add(SecondaryA.class.getAnnotation(A.class));
+
+         AnnotationMap merged = AnnotationMap.merge(primary, secondary);
+
+         assertSame(secondary, merged);
+     }
+
+     @Test
+     public void testMergeEmptySecondary() {
+         AnnotationMap primary = new AnnotationMap();
+         primary.add(PrimaryA.class.getAnnotation(A.class));
+         AnnotationMap secondary = new AnnotationMap();
+
+         AnnotationMap merged = AnnotationMap.merge(primary, secondary);
+
+         assertSame(primary, merged);
+     }
+
+     @Test
+     public void testMergeDisjointAnnotations() {
+         AnnotationMap primary = new AnnotationMap();
+         primary.add(PrimaryA.class.getAnnotation(A.class));
+         AnnotationMap secondary = new AnnotationMap();
+         secondary.add(WithB.class.getAnnotation(B.class));
+
+         AnnotationMap merged = AnnotationMap.merge(primary, secondary);
+
+         assertEquals(2, merged.size());
+         assertNotNull(merged.get(A.class));
+         assertNotNull(merged.get(B.class));
+     }
+
+     @Test
+     public void testMergeBothNull() {
+         assertNull(AnnotationMap.merge(null, null));
+     }
+
+     @Test
+     public void testAddNewAnnotationReturnsTrue() {
+         AnnotationMap map = new AnnotationMap();
+
+         boolean result = map.add(PrimaryA.class.getAnnotation(A.class));
+
+         assertTrue(result);
+         assertNotNull(map.get(A.class));
+     }
+
+     @Test
+     public void testAddExistingAnnotationReturnsFalse() {
+         AnnotationMap map = new AnnotationMap();
+         Annotation ann = PrimaryA.class.getAnnotation(A.class);
+         map.add(ann);
+
+         boolean result = map.add(ann);
+
+         assertFalse(result);
+         assertEquals(1, map.size());
+         assertEquals(ann, map.get(A.class));
+     }
+
+     @Test
+     public void testAddIfNotPresent() {
+         AnnotationMap map = new AnnotationMap();
+         Annotation ann = PrimaryA.class.getAnnotation(A.class);
+
+         assertTrue(map.addIfNotPresent(ann));
+         assertFalse(map.addIfNotPresent(ann));
+         assertEquals(ann, map.get(A.class));
+     }
+
+     @Test
+     public void testSize() {
+         AnnotationMap map = new AnnotationMap();
+         assertEquals(0, map.size());
+         map.add(PrimaryA.class.getAnnotation(A.class));
+         assertEquals(1, map.size());
+         map.add(PrimaryA.class.getAnnotation(A.class));
+         assertEquals(1, map.size());
+     }
+
+     @Test
+     public void testGetReturnsNullWhenEmpty() {
+         AnnotationMap map = new AnnotationMap();
+         assertNull(map.get(A.class));
+     }
+
+     @Test
+     public void testAnnotationsIterable() {
+         AnnotationMap map = new AnnotationMap();
+         assertFalse(map.annotations().iterator().hasNext());
+         map.add(PrimaryA.class.getAnnotation(A.class));
+         map.add(WithB.class.getAnnotation(B.class));
+         Iterator<Annotation> it = map.annotations().iterator();
+         assertTrue(it.hasNext());
+         Set<Class<?>> types = new HashSet<Class<?>>();
+         while (it.hasNext()) {
+             types.add(it.next().annotationType());
+         }
+         assertEquals(2, types.size());
+         assertTrue(types.contains(A.class));
+         assertTrue(types.contains(B.class));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.introspect.AnnotationMapTest::testMergeSecondaryOverridesPrimary
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.introspect.AnnotationMapTest::testMergeSecondaryOverridesPrimary

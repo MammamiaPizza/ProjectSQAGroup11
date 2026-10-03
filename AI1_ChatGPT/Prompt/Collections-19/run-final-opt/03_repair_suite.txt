@@ -1,0 +1,226 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 19  Version: Collections-19b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-444
+Trigger failures:
+- org.apache.commons.collections.list.SetUniqueListTest::testSetCollections444
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.collections.list.SetUniqueList
+
+Available API/signatures:
+[org.apache.commons.collections.list.SetUniqueList | java]
+package org.apache.commons.collections.list;
+public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+protected final Set<E> set;
+public static <E> SetUniqueList<E> setUniqueList(final List<E> list) {
+final List<E> temp = new ArrayList<E>(list);
+final SetUniqueList<E> sl = new SetUniqueList<E>(list, new HashSet<E>());
+protected SetUniqueList(final List<E> list, final Set<E> set) {
+public Set<E> asSet() {
+@Override
+public boolean add(final E object) {
+final int sizeBefore = size();
+public void add(final int index, final E object) {
+public boolean addAll(final Collection<? extends E> coll) {
+public boolean addAll(final int index, final Collection<? extends E> coll) {
+final List<E> temp = new ArrayList<E>();
+for (final E e : coll) {
+public E set(final int index, final E object) {
+final int pos = indexOf(object);
+final E removed = super.set(index, object);
+public boolean remove(final Object object) {
+final boolean result = set.remove(object);
+public E remove(final int index) {
+final E result = super.remove(index);
+public boolean removeAll(final Collection<?> coll) {
+for (final Object name : coll) {
+public boolean retainAll(final Collection<?> coll) {
+final Set<Object> setRetainAll = new HashSet<Object>();
+for (final Object next : coll) {
+for (final Iterator<E> it = iterator(); it.hasNext();) {
+public void clear() {
+public boolean contains(final Object object) {
+public boolean containsAll(final Collection<?> coll) {
+public Iterator<E> iterator() {
+public ListIterator<E> listIterator() {
+public ListIterator<E> listIterator(final int index) {
+public List<E> subList(final int fromIndex, final int toIndex) {
+final List<E> superSubList = super.subList(fromIndex, toIndex);
+final Set<E> subSet = createSetBasedOnList(set, superSubList);
+@SuppressWarnings("unchecked")
+protected Set<E> createSetBasedOnList(final Set<E> set, final List<E> list) {
+if (set.getClass().equals(HashSet.class)) {
+} catch (final InstantiationException ie) {
+} catch (final IllegalAccessException iae) {
+static class SetListIterator<E> extends AbstractIteratorDecorator<E> {
+protected E last = null;
+protected SetListIterator(final Iterator<E> it, final Set<E> set) {
+public E next() {
+public void remove() {
+static class SetListListIterator<E> extends
+protected SetListListIterator(final ListIterator<E> it, final Set<E> set) {
+public E previous() {
+public void add(final E object) {
+public void set(final E object) {
+
+Generated JUnit Test:
+package org.apache.commons.collections.list;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+
+import org.junit.Test;
+
+public class SetUniqueListCollections444Test {
+
+    private static SetUniqueList<String> uniqueList(final String... values) {
+        return SetUniqueList.setUniqueList(
+                new ArrayList<String>(Arrays.asList(values)));
+    }
+
+    private static void assertSynchronized(final SetUniqueList<String> list,
+            final String... expected) {
+        assertEquals(Arrays.asList(expected), list);
+        assertEquals(new HashSet<String>(Arrays.asList(expected)), list.asSet());
+        assertEquals(list.size(), list.asSet().size());
+    }
+
+    @Test
+    public void testFactoryRemovesDuplicatesAndBuildsMatchingSet() {
+        final SetUniqueList<String> list = uniqueList("one", "two", "one",
+                "three", "two");
+
+        assertSynchronized(list, "one", "two", "three");
+        assertTrue(list.containsAll(Arrays.asList("one", "two", "three")));
+        assertFalse(list.contains("missing"));
+    }
+
+    @Test
+    public void testSetToSameElementDoesNotRemoveIt() {
+        final SetUniqueList<String> list = uniqueList("one", "two", "three");
+
+        assertEquals("two", list.set(1, "two"));
+
+        assertSynchronized(list, "one", "two", "three");
+        assertEquals("two", list.get(1));
+    }
+
+    @Test
+    public void testSetToNewElementReplacesSetMembership() {
+        final SetUniqueList<String> list = uniqueList("one", "two", "three");
+
+        assertEquals("two", list.set(1, "four"));
+
+        assertSynchronized(list, "one", "four", "three");
+        assertFalse(list.contains("two"));
+        assertTrue(list.contains("four"));
+    }
+
+    @Test
+    public void testAddAndAddAllIgnoreDuplicateElements() {
+        final SetUniqueList<String> list = uniqueList("one");
+
+        assertTrue(list.add("two"));
+        assertFalse(list.add("one"));
+        assertTrue(list.addAll(Arrays.asList("two", "three", "three", "four")));
+
+        assertSynchronized(list, "one", "two", "three", "four");
+    }
+
+    @Test
+    public void testIndexedAddAllPreservesOrderOfNewElementsOnly() {
+        final SetUniqueList<String> list = uniqueList("one", "four");
+
+        assertTrue(list.addAll(1, Arrays.asList("two", "one", "three", "two")));
+
+        assertSynchronized(list, "one", "two", "three", "four");
+    }
+
+    @Test
+    public void testRemoveAndRetainKeepSetInSync() {
+        final SetUniqueList<String> list = uniqueList("one", "two", "three",
+                "four");
+
+        assertTrue(list.remove("two"));
+        assertEquals("four", list.remove(2));
+        assertFalse(list.remove("missing"));
+        assertTrue(list.retainAll(Arrays.asList("one", "three")));
+
+        assertSynchronized(list, "one", "three");
+        assertFalse(list.retainAll(Arrays.asList("one", "three")));
+    }
+
+    @Test
+    public void testIteratorRemovalKeepsSetInSync() {
+        final SetUniqueList<String> list = uniqueList("one", "two", "three");
+        final Iterator<String> iterator = list.iterator();
+
+        assertEquals("one", iterator.next());
+        iterator.remove();
+        assertEquals("two", iterator.next());
+        iterator.remove();
+
+        assertSynchronized(list, "three");
+    }
+
+    @Test
+    public void testListIteratorAddAndRemoveKeepSetInSync() {
+        final SetUniqueList<String> list = uniqueList("one", "three");
+        final ListIterator<String> iterator = list.listIterator(1);
+
+        iterator.add("two");
+        iterator.add("one");
+        assertEquals("three", iterator.next());
+        iterator.remove();
+
+        assertSynchronized(list, "one", "two");
+    }
+
+    @Test
+    public void testClearEmptiesBothListAndSet() {
+        final SetUniqueList<String> list = uniqueList("one", "two");
+
+        list.clear();
+
+        assertSynchronized(list);
+        assertTrue(list.isEmpty());
+    }
+
+    @Test
+    public void testAsSetIsUnmodifiable() {
+        final SetUniqueList<String> list = uniqueList("one");
+
+        try {
+            list.asSet().add("two");
+            fail("asSet must be unmodifiable");
+        } catch (final UnsupportedOperationException expected) {
+            assertSynchronized(list, "one");
+        }
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testFactoryRejectsNullList() {
+        SetUniqueList.setUniqueList(null);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.collections.list.SetUniqueListCollections444Test::testRemoveAndRetainKeepSetInSync
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.collections.list.SetUniqueListCollections444Test::testRemoveAndRetainKeepSetInSync

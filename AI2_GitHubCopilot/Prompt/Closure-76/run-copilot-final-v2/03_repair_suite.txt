@@ -1,0 +1,212 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 76  Version: Closure-76b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 384
+Trigger failures:
+- com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testInExpression2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue384b
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue384c
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue384d
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.DeadAssignmentsElimination
+
+Available API/signatures:
+[com.google.javascript.jscomp.DeadAssignmentsElimination | java]
+package com.google.javascript.jscomp;
+class DeadAssignmentsElimination extends AbstractPostOrderCallback implements
+@Override
+public boolean apply(Node n) {
+public DeadAssignmentsElimination(AbstractCompiler compiler) {
+public void process(Node externs, Node root) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private enum VariableLiveness {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.common.base.Preconditions;
+ import com.google.javascript.rhino.Node;
+
+ /**
+  * Tests for {@link DeadAssignmentsElimination} focusing on the bug reported
+  * in Issue 384: incorrect removal of assignments when expressions contain
+  * side effects or nested assignments.
+  */
+ public class DeadAssignmentsEliminationTest extends CompilerTestCase {
+
+   @Override
+   protected void setUp() throws Exception {
+     super.setUp();
+     enableTypeCheck(CheckLevel.OFF);
+     enableNormalize(false);
+     allowExternsChanges(false);
+   }
+
+   @Override
+   protected CompilerPass getProcessor(final Compiler compiler) {
+     return new CompilerPass() {
+       @Override
+       public void process(Node externs, Node root) {
+         new DeadAssignmentsElimination(compiler).process(externs, root);
+       }
+     };
+   }
+
+   /**
+    * Nested dead assignments without side effects: both should be removed.
+    * (Trigger: testInExpression2)
+    */
+   @Test
+   public void testInExpression2() {
+     // x = (y = 1) – both x and y are dead, no calls, so entire statement is
+     // eliminated.
+     test("function f() { var x,y; x = (y = 1); }",
+          "function f() { }");
+   }
+
+   /**
+    * Dead assignment whose RHS is a function call must be kept as an
+    * expression statement so that the call’s side effects execute.
+    * (Trigger: testIssue384b)
+    */
+   @Test
+   public void testIssue384b() {
+     // x is dead; foo() has side-effect → preserve the call.
+     test("function f() { var x; x = foo(); }",
+          "function f() { foo(); }");
+   }
+
+   /**
+    * Dead assignment inside an object literal: the property value is an
+    * assignment whose RHS has side effects. The assignment itself is dead but
+    * the call must remain.
+    * (Trigger: testIssue384c)
+    */
+   @Test
+   public void testIssue384c() {
+     test("function f() { var x; ({p: x = foo()}); }",
+          "function f() { ({p: foo()}); }");
+   }
+
+   /**
+    * Dead assignment used only in a dead branch and a dead assignment after
+    * the branch. Both assignments should be removed; the dead branch itself
+    * remains.
+    * (Trigger: testIssue384d)
+    */
+   @Test
+   public void testIssue384d() {
+     test("function f() { var x; if(false){x=1;} x=2; }",
+          "function f() { if(false){ } }");
+   }
+
+   /**
+    * An assignment whose RHS has a side-effect (property write) is not dead
+    * even if the assigned variable is unused.
+    */
+   @Test
+   public void testDeadAssignmentWithPropertyWrite() {
+     test("function f() { var a; a.b = 123; }",
+          "function f() { var a; a.b = 123; }");
+   }
+
+   /**
+    * Dead assignment used as the condition of an if-statement: the variable
+    * is dead but the condition expression includes a call that must execute.
+    */
+   @Test
+   public void testDeadAssignmentInCondition() {
+     test("function f() { var x; if(x = foo()) { } }",
+          "function f() { if(foo()) { } }");
+   }
+
+   /**
+    * For-loop increment is required for correct loop semantics even when the
+    * loop variable is dead after the loop.
+    */
+   @Test
+   public void testForLoopIncrementKept() {
+     test("function f() { for(var i=0; i<10; i++) { } }",
+          "function f() { for(var i=0; i<10; i++) { } }");
+   }
+
+   /**
+    * A chain of assignments where the RHS contains calls: the side effects
+    * must be preserved.  Only the dead inner assignments without side effects
+    * can be removed.
+    */
+   @Test
+   public void testDeadAssignmentCommaWithCalls() {
+     // x is dead; the RHS is a comma expression with two calls. The whole
+     // assignment becomes the comma expression.
+     test("function f() { var x; x = (foo(), bar()); }",
+          "function f() { foo(), bar(); }");
+   }
+
+   /**
+    * Simple dead assignment (no side effects, variable unused) is eliminated.
+    */
+   @Test
+   public void testSimpleDeadAssignment() {
+     test("function f() { var x; x = 1; }",
+          "function f() { }");
+   }
+
+   /**
+    * Assignment to a variable that is read later is never removed.
+    */
+   @Test
+   public void testLiveAssignment() {
+     test("function f() { var x; x = 1; alert(x); }",
+          "function f() { var x; x = 1; alert(x); }");
+   }
+
+   /**
+    * Dead assignment whose RHS is a property read (side-effect free) is
+    * removed together with the entire statement.
+    */
+   @Test
+   public void testDeadAssignmentRhsPropertyRead() {
+     test("function f() { var x; x = a.b; }",
+          "function f() { }");
+   }
+
+   /**
+    * While-loop condition with a side-effectful dead assignment: the call
+    * must stay.
+    */
+   @Test
+   public void testDeadAssignmentInWhileCondition() {
+     test("function f() { var x; while(x = bar()) { } }",
+          "function f() { while(bar()) { } }");
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-76f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-76f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-76f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-76f-copilot/.test_suite/com/google/javascript/jscomp/DeadAssignmentsEliminationTest.java:11: error: cannot find symbol
+ [javac] public class DeadAssignmentsEliminationTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 11 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

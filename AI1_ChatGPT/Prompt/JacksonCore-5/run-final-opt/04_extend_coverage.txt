@@ -1,0 +1,216 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: JacksonCore  Bug: 5  Version: JacksonCore-5b
+JUnit: junit-4.8.2.jar  Build: Maven
+Target: com.fasterxml.jackson.core.JsonPointer
+Bug/specification summary:
+Bug report: 173
+Trigger failures:
+- com.fasterxml.jackson.core.TestJsonPointer::testWonkyNumber173
+ --> java.lang.NumberFormatException: For input string: "1e0"
+Modified: com.fasterxml.jackson.core.JsonPointer
+
+Available API/signatures:
+[com.fasterxml.jackson.core.JsonPointer | java]
+package com.fasterxml.jackson.core;
+public class JsonPointer
+protected final static JsonPointer EMPTY = new JsonPointer();
+protected final JsonPointer _nextSegment;
+protected final String _asString;
+protected final String _matchingPropertyName;
+protected final int _matchingElementIndex;
+protected JsonPointer() {
+protected JsonPointer(String fullString, String segment, JsonPointer next) {
+public static JsonPointer compile(String input) throws IllegalArgumentException
+public static JsonPointer valueOf(String input) { return compile(input); }
+public static JsonPointer fromSegment(String... segments)
+public boolean matches() { return _nextSegment == null; }
+public String getMatchingProperty() { return _matchingPropertyName; }
+public int getMatchingIndex() { return _matchingElementIndex; }
+public boolean mayMatchProperty() { return _matchingPropertyName != null; }
+public boolean mayMatchElement() { return _matchingElementIndex >= 0; }
+public JsonPointer matchProperty(String name) {
+public JsonPointer matchElement (int index) {
+public JsonPointer tail() {
+@Override public String toString() { return _asString; }
+@Override public int hashCode() { return _asString.hashCode(); }
+@Override public boolean equals(Object o) {
+private final static int _parseIndex(String str) {
+final int len = str.length();
+protected static JsonPointer _parseTail(String input) {
+final int end = input.length();
+protected static JsonPointer _parseQuotedTail(String input, int i) {
+private static void _appendEscape(StringBuilder sb, char c) {
+
+Existing test summary (method names/assertions only):
+Test methods: scientificLookingSegmentIsPropertyNotIndex, valueOfAlsoAcceptsScientificLookingPropertySegment, ordinaryNumericSegmentMatchesElement, leadingZeroDigitsRemainParseableAsAnIndex, negativeLookingSegmentIsOnlyAProperty, multiSegmentPointerMatchesAndExposesTail, escapedPropertyNameIsDecodedForMatching, pointerMustStartWithSlash, emptyAndNullInputRepresentEmptyPointer
+Representative assertions:
+assertEquals("/1e0", pointer.toString());
+assertEquals("1e0", pointer.getMatchingProperty());
+assertEquals(-1, pointer.getMatchingIndex());
+assertTrue(pointer.mayMatchProperty());
+assertFalse(pointer.mayMatchElement());
+assertNotNull(pointer);
+assertSame(pointer.tail(), pointer.matchProperty("1e0"));
+assertNull(pointer.matchElement(1));
+assertEquals("0", pointer.getMatchingProperty());
+assertEquals(0, pointer.getMatchingIndex());
+assertTrue(pointer.mayMatchElement());
+assertSame(pointer.tail(), pointer.matchElement(0));
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+84,70,62,41
+
+Line/branch gaps:
+Class: com.fasterxml.jackson.core.JsonPointer
+Uncovered lines: 261, 265, 190, 199, 200, 201, 245, 246, 250, 251, 174, 175, 176, 170, 170, 174, 175, 176, 190, 199, 200, 201, 245, 246, 250, 251, 261, 265
+Partially covered branch lines: 260 (50% (1/2)), 262 (50% (1/2)), 189 (50% (2/4)), 198 (50% (1/2)), 238 (50% (1/2)), 244 (50% (1/2)), 249 (25% (1/4)), 219 (75% (3/4)), 173 (50% (1/2)), 149 (75% (3/4)), 142 (75% (3/4)), 138 (50% (1/2)), 138 (50% (1/2)), 142 (75% (3/4)), 149 (75% (3/4)), 173 (50% (1/2)), 189 (50% (2/4)), 198 (50% (1/2)), 219 (75% (3/4)), 238 (50% (1/2)), 244 (50% (1/2)), 249 (25% (1/4)), 260 (50% (1/2)), 262 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[com.fasterxml.jackson.core.JsonPointer]
+259: private static void _appendEscape(StringBuilder sb, char c) {
+260: if (c == '0') {
+261: c = '~';
+262: } else if (c == '1') {
+263: c = '/';
+---
+263: c = '/';
+264: } else {
+265: sb.append('~');
+266: }
+267: sb.append(c);
+---
+188: // have arrays over 2 billion entries so ints are fine.
+189: if (len == 0 || len > 10) {
+190: return -1;
+191: }
+192: for (int i = 0; i < len; ++i) {
+---
+197: }
+198: if (len == 10) {
+199: long l = NumberInput.parseLong(str);
+200: if (l > Integer.MAX_VALUE) {
+201: return -1;
+---
+198: if (len == 10) {
+199: long l = NumberInput.parseLong(str);
+200: if (l > Integer.MAX_VALUE) {
+201: return -1;
+202: }
+---
+199: long l = NumberInput.parseLong(str);
+200: if (l > Integer.MAX_VALUE) {
+201: return -1;
+202: }
+203: }
+---
+243: char c = input.charAt(i);
+244: if (c == '/') { // end is nigh!
+245: return new JsonPointer(input, sb.toString(),
+246: _parseTail(input.substring(i))); // need to push back slash
+247: }
+---
+244: if (c == '/') { // end is nigh!
+245: return new JsonPointer(input, sb.toString(),
+246: _parseTail(input.substring(i))); // need to push back slash
+247: }
+248: ++i;
+---
+248: ++i;
+249: if (c == '~' && i < end) {
+250: _appendEscape(sb, input.charAt(i++));
+251: continue;
+252: }
+---
+249: if (c == '~' && i < end) {
+250: _appendEscape(sb, input.charAt(i++));
+251: continue;
+252: }
+253: sb.append(c);
+---
+172: @Override public boolean equals(Object o) {
+173: if (o == this) return true;
+174: if (o == null) return false;
+175: if (!(o instanceof JsonPointer)) return false;
+176: return _asString.equals(((JsonPointer) o)._asString);
+---
+173: if (o == this) return true;
+174: if (o == null) return false;
+175: if (!(o instanceof JsonPointer)) return false;
+176: return _asString.equals(((JsonPointer) o)._asString);
+177: }
+---
+174: if (o == null) return false;
+175: if (!(o instanceof JsonPointer)) return false;
+176: return _asString.equals(((JsonPointer) o)._asString);
+177: }
+178: 
+---
+168: 
+169: @Override public String toString() { return _asString; }
+170: @Override public int hashCode() { return _asString.hashCode(); }
+171: 
+172: @Override public boolean equals(Object o) {
+---
+258: 
+259: private static void _appendEscape(StringBuilder sb, char c) {
+260: if (c == '0') {
+261: c = '~';
+262: } else if (c == '1') {
+---
+48: /*************************
+...[truncated deterministically]...
+********
+49: */
+50: 
+51: /**
+52: * Constructor used for creating "empty" instance, used to represent
+---
+1: package com.fasterxml.jackson.core;
+2: 
+3: import com.fasterxml.jackson.core.io.NumberInput;
+---
+1: package com.fasterxml.jackson.core;
+2: 
+3: import com.fasterxml.jackson.core.io.NumberInput;
+4: 
+---
+260: if (c == '0') {
+261: c = '~';
+262: } else if (c == '1') {
+263: c = '/';
+264: } else {
+---
+187: // [Issue#133]: beware of super long indexes; assume we never
+188: // have arrays over 2 billion entries so ints are fine.
+189: if (len == 0 || len > 10) {
+190: return -1;
+191: }
+---
+2: 
+3: import com.fasterxml.jackson.core.io.NumberInput;
+4: 
+5: /**
+6: * Implementation of
+---
+196: }
+197: }
+198: if (len == 10) {
+199: long l = NumberInput.parseLong(str);
+200: if (l > Integer.MAX_VALUE) {
+---
+236: final int end = input.length();
+237: StringBuilder sb = new StringBuilder(Math.max(16, end));
+238: if (i > 2) {
+239: sb.append(input, 1, i-1);
+240: }
+---
+242: while (i < end) {
+243: char c = input.charAt(i);
+244: if (c == '/') { // end is nigh!
+245: return new JsonPointer(input, sb.toString(),
+246: _parseTail(input.substring(i))); // need to push back slash

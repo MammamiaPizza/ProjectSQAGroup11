@@ -1,0 +1,219 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 64  Version: JacksonDatabind-64b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1417
+Trigger failures:
+- com.fasterxml.jackson.databind.filter.JsonIncludeTest::testIssue1351
+ --> junit.framework.ComparisonFailure: expected:<{[]}> but was:<{["str":null]}>
+Modified: com.fasterxml.jackson.databind.ser.PropertyBuilder
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ser.PropertyBuilder | java]
+package com.fasterxml.jackson.databind.ser;
+public class PropertyBuilder
+final protected SerializationConfig _config;
+final protected BeanDescription _beanDesc;
+final protected AnnotationIntrospector _annotationIntrospector;
+protected Object _defaultBean;
+final protected JsonInclude.Value _defaultInclusion;
+final protected boolean _useRealPropertyDefaults;
+public PropertyBuilder(SerializationConfig config, BeanDescription beanDesc)
+public Annotations getClassAnnotations() {
+@SuppressWarnings("deprecation")
+protected JavaType findSerializationType(Annotated a, boolean useStaticTyping, JavaType declaredType)
+throw new IllegalArgumentException("Illegal concrete-type annotation for method '"+a.getName()+"': class "+serClass.getName()+" not a super-type of (declared) class "+rawDeclared.getName());
+protected Object getDefaultBean()
+/* If we can fix access rights, we should; otherwise non-public
+@Deprecated // since 2.8.5
+protected Object getDefaultValue(JavaType type)
+if (cls == String.class) {
+protected Object _throwWrapped(Exception e, String propName, Object defaultBean)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.filter;
+
+import static org.junit.Assert.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class PropertyBuilderInclusionTest {
+
+ private final ObjectMapper MAPPER = new ObjectMapper();
+
+ @JsonInclude(JsonInclude.Include.NON_NULL)
+ public static class NonNullBean {
+     public String str;
+ }
+
+ @JsonInclude(JsonInclude.Include.ALWAYS)
+ public static class AlwaysBean {
+     public String str;
+ }
+
+ @JsonInclude(JsonInclude.Include.ALWAYS)
+ public static class GlobalAlwaysPropNonNull {
+     @JsonInclude(JsonInclude.Include.NON_NULL)
+     public String str;
+ }
+
+ @JsonInclude(JsonInclude.Include.NON_NULL)
+ public static class GlobalNonNullPropAlways {
+     @JsonInclude(JsonInclude.Include.ALWAYS)
+     public String str;
+ }
+
+ @JsonInclude(JsonInclude.Include.NON_NULL)
+ public static class MapBean {
+     public Map<String, String> map;
+ }
+
+ @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+ public static class NonDefaultBean {
+     public String str;
+     public int num;
+ }
+
+ @JsonInclude(JsonInclude.Include.NON_EMPTY)
+ public static class NonEmptyBean {
+     public String str;
+ }
+
+ @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+ public static class ThrowingGetterBean {
+     private String str;
+     public String getStr() {
+         if (str == null) throw new RuntimeException("null disallowed");
+         return str;
+     }
+     public void setStr(String s) { this.str = s; }
+ }
+
+ @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+ public static class NoDefaultConstructorBean {
+     public String str;
+     public NoDefaultConstructorBean(String s) { this.str = s; }
+ }
+
+ @Test
+ public void testNON_NULLExcludesNullString() throws Exception {
+     NonNullBean bean = new NonNullBean();
+     bean.str = null;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{}", json);
+ }
+
+ @Test
+ public void testNON_NULLIncludesNonNullString() throws Exception {
+     NonNullBean bean = new NonNullBean();
+     bean.str = "hello";
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{\"str\":\"hello\"}", json);
+ }
+
+ @Test
+ public void testALWAYSIncludesNullString() throws Exception {
+     AlwaysBean bean = new AlwaysBean();
+     bean.str = null;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{\"str\":null}", json);
+ }
+
+ @Test
+ public void testPropertyOverrideGlobalAlwaysWithPropNonNull() throws Exception {
+     GlobalAlwaysPropNonNull bean = new GlobalAlwaysPropNonNull();
+     bean.str = null;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{}", json);
+ }
+
+ @Test
+ public void testPropertyOverrideGlobalNonNullWithPropAlways() throws Exception {
+     GlobalNonNullPropAlways bean = new GlobalNonNullPropAlways();
+     bean.str = null;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{\"str\":null}", json);
+ }
+
+ @Test
+ public void testNON_NULLExcludesNullMapProperty() throws Exception {
+     MapBean bean = new MapBean();
+     bean.map = null;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{}", json);
+ }
+
+ @Test
+ public void testNON_DEFAULTExcludesDefaultValues() throws Exception {
+     NonDefaultBean bean = new NonDefaultBean();
+     bean.str = "";
+     bean.num = 0;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{}", json);
+ }
+
+ @Test
+ public void testNON_DEFAULTIncludesNonDefaultString() throws Exception {
+     NonDefaultBean bean = new NonDefaultBean();
+     bean.str = "abc";
+     bean.num = 0;
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{\"str\":\"abc\"}", json);
+ }
+
+ @Test
+ public void testNON_EMPTYExcludesEmptyString() throws Exception {
+     NonEmptyBean bean = new NonEmptyBean();
+     bean.str = "";
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{}", json);
+ }
+
+ @Test
+ public void testNON_EMPTYIncludesNonEmptyString() throws Exception {
+     NonEmptyBean bean = new NonEmptyBean();
+     bean.str = "x";
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{\"str\":\"x\"}", json);
+ }
+
+ @Test
+ public void testThrowingGetterPropagatesException() {
+     ThrowingGetterBean bean = new ThrowingGetterBean();
+     bean.setStr("hello");
+     try {
+         MAPPER.writeValueAsString(bean);
+         fail("Expected exception");
+     } catch (JsonProcessingException e) {
+         assertNotNull(e.getCause());
+         assertTrue(e.getCause() instanceof RuntimeException);
+     }
+ }
+
+ @Test
+ public void testNullStringWithNON_DEFAULTNoDefaultConstructor() throws Exception {
+     NoDefaultConstructorBean bean = new NoDefaultConstructorBean(null);
+     String json = MAPPER.writeValueAsString(bean);
+     assertEquals("{\"str\":null}", json);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - com.fasterxml.jackson.databind.filter.PropertyBuilderInclusionTest::testThrowingGetterPropagatesException
+ - com.fasterxml.jackson.databind.filter.PropertyBuilderInclusionTest::testNullStringWithNON_DEFAULTNoDefaultConstructor
+ - com.fasterxml.jackson.databind.filter.PropertyBuilderInclusionTest::testNON_DEFAULTExcludesDefaultValues
+
+Failing generated tests: com.fasterxml.jackson.databind.filter.PropertyBuilderInclusionTest::testNON_DEFAULTExcludesDefaultValues, com.fasterxml.jackson.databind.filter.PropertyBuilderInclusionTest::testNullStringWithNON_DEFAULTNoDefaultConstructor, com.fasterxml.jackson.databind.filter.PropertyBuilderInclusionTest::testThrowingGetterPropagatesException

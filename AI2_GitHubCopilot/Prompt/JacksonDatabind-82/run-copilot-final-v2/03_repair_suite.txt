@@ -1,0 +1,235 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 82  Version: JacksonDatabind-82b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1595
+Trigger failures:
+- com.fasterxml.jackson.databind.filter.IgnorePropertyOnDeserTest::testIgnoreGetterNotSetter1595
+ --> junit.framework.ComparisonFailure: expected:<jack> but was:<null>
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializerFactory | java]
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializerFactory
+private final static Class<?>[] INIT_CAUSE_PARAMS = new Class<?>[] { Throwable.class };
+protected final static Set<String> DEFAULT_NO_DESER_CLASS_NAMES;
+protected Set<String> _cfgIllegalClassNames = DEFAULT_NO_DESER_CLASS_NAMES;
+public BeanDeserializerFactory(DeserializerFactoryConfig config) {
+@Override
+public DeserializerFactory withConfig(DeserializerFactoryConfig config)
+if (getClass() != BeanDeserializerFactory.class) {
+final DeserializationConfig config = ctxt.getConfig();
+/* important: introspect actual implementation (abstract class or
+@SuppressWarnings("unchecked")
+final String buildMethodName = (builderConfig == null) ?
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+final boolean isConcrete = !beanDesc.getType().isAbstract();
+final boolean hasCreatorProps = (creatorProps != null);
+final boolean useGettersAsSetters = ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS)
+if (Collection.class.isAssignableFrom(rawPropertyType)
+|| Map.class.isAssignableFrom(rawPropertyType)) {
+final String name = propDef.getName();
+final AnnotatedMethod getter = propDef.getGetter();
+protected boolean isPotentialBeanType(Class<?> type)
+throw new IllegalArgumentException("Can not deserialize Proxy class "+type.getName()+" as a Bean");
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.filter;
+
+ import static org.junit.Assert.*;
+
+ import com.fasterxml.jackson.annotation.JsonIgnore;
+ import com.fasterxml.jackson.annotation.JsonProperty;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import org.junit.Before;
+ import org.junit.Test;
+
+ /**
+  * Tests that {@link com.fasterxml.jackson.databind.deser.BeanDeserializerFactory}
+  * correctly handles properties whose getters are annotated with
+  * {@code @JsonIgnore} while setters are still available.
+  * The underlying bug (#1595) caused such properties to be incorrectly ignored
+  * during deserialization, returning {@code null} instead of the supplied value.
+  */
+ public class IgnoreGetterDeserializationBugTest {
+
+     private ObjectMapper mapper;
+
+     @Before
+     public void setUp() {
+         mapper = new ObjectMapper();
+     }
+
+     // ---------- Beans used in tests ----------
+
+     public static class BeanIgnoredGetterOnly {
+         private String value;
+
+         @JsonIgnore
+         public String getValue() { return value; }
+         public void setValue(String v) { this.value = v; }
+     }
+
+     public static class BeanIgnoredGetterNoSetter {
+         private String value;
+
+         @JsonIgnore
+         public String getValue() { return value; }
+         // no setter
+     }
+
+     public static class BeanIgnoredGetterAndSetter {
+         private String value;
+
+         @JsonIgnore
+         public String getValue() { return value; }
+
+         @JsonIgnore
+         public void setValue(String v) { this.value = v; }
+     }
+
+     public static class BeanIgnoredGetterMultiple {
+         private String name;
+         private int age;
+
+         @JsonIgnore
+         public String getName() { return name; }
+         public void setName(String n) { this.name = n; }
+
+         public int getAge() { return age; }
+         public void setAge(int a) { this.age = a; }
+     }
+
+     public static class BeanIgnoredGetterBooleanProp {
+         private boolean active;
+
+         @JsonIgnore
+         public boolean isActive() { return active; }
+         public void setActive(boolean a) { this.active = a; }
+     }
+
+     public static class BeanIgnoredGetterWithJsonProperty {
+         private String code;
+
+         @JsonIgnore
+         @JsonProperty("identifier")
+         public String getCode() { return code; }
+         @JsonProperty("identifier")
+         public void setCode(String c) { this.code = c; }
+     }
+
+     public static class BeanIgnoredSetterOnly {
+         private String id;
+
+         public String getId() { return id; }
+
+         @JsonIgnore
+         public void setId(String id) { this.id = id; }
+     }
+
+     public static class BeanIgnoredGetterWithPrivateField {
+         @SuppressWarnings("unused")
+         private String data;
+
+         @JsonIgnore
+         public String getData() { return data; }
+         public void setData(String d) { this.data = d; }
+     }
+
+     // ---------- Test methods ----------
+
+     /**
+      * Core scenario: property has {@code @JsonIgnore} only on the getter,
+      * but a public setter is available – deserialization MUST still
+      * populate the value.
+      */
+     @Test
+     public void testIgnoreGetterButSetterPresent() throws Exception {
+         String json = "{\"value\":\"jack\"}";
+         BeanIgnoredGetterOnly bean = mapper.readValue(json, BeanIgnoredGetterOnly.class);
+         assertEquals("jack", bean.getValue());
+     }
+
+     /** When both getter and setter are ignored, the property must be skipped. */
+     @Test
+     public void testIgnoreGetterAndSetter() throws Exception {
+         String json = "{\"value\":\"jack\"}";
+         BeanIgnoredGetterAndSetter bean = mapper.readValue(json, BeanIgnoredGetterAndSetter.class);
+         assertNull(bean.getValue());
+     }
+
+     /** If the getter is ignored and there is no setter, the value cannot be set. */
+     @Test
+     public void testIgnoreGetterNoSetter() throws Exception {
+         String json = "{\"value\":\"jack\"}";
+         BeanIgnoredGetterNoSetter bean = mapper.readValue(json, BeanIgnoredGetterNoSetter.class);
+         assertNull(bean.getValue());
+     }
+
+     /** Multiple properties: the ignored‑getter property should still be correctly
+      * deserialised alongside normally‑detected properties. */
+     @Test
+     public void testIgnoreGetterWithOtherProperties() throws Exception {
+         String json = "{\"name\":\"jack\",\"age\":25}";
+         BeanIgnoredGetterMultiple bean = mapper.readValue(json, BeanIgnoredGetterMultiple.class);
+         assertEquals("jack", bean.getName());
+         assertEquals(25, bean.getAge());
+     }
+
+     /** Boolean property where the getter follows {@code is}-prefix convention and is ignored. */
+     @Test
+     public void testIgnoreGetterOnBooleanProperty() throws Exception {
+         String json = "{\"active\":true}";
+         BeanIgnoredGetterBooleanProp bean = mapper.readValue(json,
+BeanIgnoredGetterBooleanProp.class);
+         assertTrue(bean.isActive());
+     }
+
+     /**
+      * When {@code @JsonProperty} renames the property and the getter is ignored,
+      * the renamed property must still be deserializable via the setter.
+      */
+     @Test
+     public void testIgnoreGetterWithJsonPropertyRename() throws Exception {
+         String json = "{\"identifier\":\"XYZ\"}";
+         BeanIgnoredGetterWithJsonProperty bean = mapper.readValue(json,
+BeanIgnoredGetterWithJsonProperty.class);
+         assertEquals("XYZ", bean.getCode());
+     }
+
+     /**
+      * If the <em>setter</em> is ignored (but the getter is not), deserialization must
+      * fail to set the value – the property should remain {@code null}.
+      */
+     @Test
+     public void testIgnoreSetterButGetterNotIgnored() throws Exception {
+         String json = "{\"id\":\"abc\"}";
+         BeanIgnoredSetterOnly bean = mapper.readValue(json, BeanIgnoredSetterOnly.class);
+         assertNull(bean.getId());
+     }
+
+     /**
+      * Private field + ignored getter + public setter – setter must still be used
+      * to inject the value.
+      */
+     @Test
+     public void testIgnoreGetterWithPrivateField() throws Exception {
+         String json = "{\"data\":\"hello\"}";
+         BeanIgnoredGetterWithPrivateField bean = mapper.readValue(json,
+BeanIgnoredGetterWithPrivateField.class);
+         assertEquals("hello", bean.getData());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterWithOtherProperties
+ - com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterOnBooleanProperty
+ - com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterWithPrivateField
+Failing generated tests: com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterButSetterPresent, com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterOnBooleanProperty, com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterWithOtherProperties, com.fasterxml.jackson.databind.filter.IgnoreGetterDeserializationBugTest::testIgnoreGetterWithPrivateField

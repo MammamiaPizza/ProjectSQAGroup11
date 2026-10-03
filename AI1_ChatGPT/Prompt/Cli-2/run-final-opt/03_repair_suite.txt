@@ -1,0 +1,123 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 2  Version: Cli-2b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: CLI-51
+Trigger failures:
+- org.apache.commons.cli.bug.BugCLI51Test::test
+ --> org.apache.commons.cli.UnrecognizedOptionException: Unrecognized option: -o
+Modified: org.apache.commons.cli.PosixParser
+
+Available API/signatures:
+[org.apache.commons.cli.PosixParser | java]
+package org.apache.commons.cli;
+public class PosixParser extends Parser {
+private ArrayList tokens = new ArrayList();
+private void init()
+private void gobble(Iterator iter)
+private void process(String value)
+private void processSingleHyphen(String hyphen)
+private void processOptionToken(String token, boolean stopAtNonOption)
+protected void burstToken(String token, boolean stopAtNonOption)
+
+Generated JUnit Test:
+import junit.framework.TestCase;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.PosixParser;
+
+public class PosixParserCLI51Test extends TestCase {
+
+    public void testSingleHyphenStopsOptionRecognitionWhenStopAtNonOptionIsTrue()
+            throws Exception {
+        Options options = new Options();
+        options.addOption("a", false, "flag a");
+        options.addOption("o", false, "flag o");
+
+        CommandLine line = new PosixParser().parse(
+                options, new String[] { "-a", "-", "-o" }, true);
+
+        assertTrue(line.hasOption("a"));
+        assertFalse(line.hasOption("o"));
+        assertEquals(2, line.getArgs().length);
+        assertEquals("-", line.getArgs()[0]);
+        assertEquals("-o", line.getArgs()[1]);
+    }
+
+    public void testSingleHyphenAndFollowingOptionArePreservedAsArgumentsInFlattenedTokens() {
+        Options options = new Options();
+        options.addOption("o", false, "flag o");
+
+        ExposedPosixParser parser = new ExposedPosixParser();
+        String[] tokens = parser.flattenTokens(
+                options, new String[] { "-", "-o", "tail" }, true);
+
+        assertTokens(tokens, new String[] { "--", "-", "-o", "tail" });
+    }
+
+    public void testSingleHyphenStopsBurstingOfFollowingOptionLikeToken()
+            throws Exception {
+        Options options = new Options();
+        options.addOption("o", true, "output");
+
+        CommandLine line = new PosixParser().parse(
+                options, new String[] { "-", "-ovalue" }, true);
+
+        assertFalse(line.hasOption("o"));
+        assertEquals(2, line.getArgs().length);
+        assertEquals("-", line.getArgs()[0]);
+        assertEquals("-ovalue", line.getArgs()[1]);
+    }
+
+    public void testSingleHyphenCanStillBeArgumentOfPrecedingArgumentOption()
+            throws Exception {
+        Options options = new Options();
+        options.addOption("f", true, "file");
+        options.addOption("o", false, "output");
+
+        CommandLine line = new PosixParser().parse(
+                options, new String[] { "-f", "-", "-o" }, true);
+
+        assertEquals("-", line.getOptionValue("f"));
+        assertTrue(line.hasOption("o"));
+        assertEquals(0, line.getArgs().length);
+    }
+
+    public void testSingleHyphenDoesNotStopOptionRecognitionWhenStopAtNonOptionIsFalse()
+            throws Exception {
+        Options options = new Options();
+        options.addOption("o", false, "output");
+
+        CommandLine line = new PosixParser().parse(
+                options, new String[] { "-", "-o" }, false);
+
+        assertTrue(line.hasOption("o"));
+        assertEquals(1, line.getArgs().length);
+        assertEquals("-", line.getArgs()[0]);
+    }
+
+    private void assertTokens(String[] actual, String[] expected) {
+        assertEquals(expected.length, actual.length);
+        for (int i = 0; i < expected.length; i++) {
+            assertEquals(expected[i], actual[i]);
+        }
+    }
+
+    private static class ExposedPosixParser extends PosixParser {
+        public String[] flattenTokens(Options options, String[] arguments,
+                                      boolean stopAtNonOption) {
+            return flatten(options, arguments, stopAtNonOption);
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - PosixParserCLI51Test::testSingleHyphenStopsBurstingOfFollowingOptionLikeToken
+ - PosixParserCLI51Test::testSingleHyphenStopsOptionRecognitionWhenStopAtNonOptionIsTrue
+ - PosixParserCLI51Test::testSingleHyphenAndFollowingOptionArePreservedAsArgumentsInFlattenedTokens
+Failing generated tests: PosixParserCLI51Test::testSingleHyphenAndFollowingOptionArePreservedAsArgumentsInFlattenedTokens, PosixParserCLI51Test::testSingleHyphenStopsBurstingOfFollowingOptionLikeToken, PosixParserCLI51Test::testSingleHyphenStopsOptionRecognitionWhenStopAtNonOptionIsTrue

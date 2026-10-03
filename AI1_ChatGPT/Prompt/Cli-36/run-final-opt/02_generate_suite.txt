@@ -1,0 +1,420 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Cli  Bug: 36  Version: Cli-36b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.cli.OptionGroup, org.apache.commons.cli.Options
+Modified: org.apache.commons.cli.OptionGroup, org.apache.commons.cli.Options
+Triggers: org.apache.commons.cli.bug.BugCLI266Test::testOptionComparatorInsertedOrder
+
+Bug/specification summary:
+Bug report: CLI-266
+Trigger failures:
+- org.apache.commons.cli.bug.BugCLI266Test::testOptionComparatorInsertedOrder
+ --> junit.framework.AssertionFailedError: expected:<[p]> but was:<[x]>
+Modified: org.apache.commons.cli.OptionGroup, org.apache.commons.cli.Options
+
+Prompt-01 test plan:
+TARGETS: OptionGroup addOption/getNames/getOptions ordering; Options addOptionGroup and option lookup/group mapping.
+ORACLES: Existing BugCLI266Test expects first inserted group option name "p", not later "x".
+CASES: Add group options in p,x order; assert getNames and getOptions preserve insertion order.
+CASES: Add group to Options; verify getOptionGroup for each option and getOptions encounter order.
+CASES: Empty and single-option groups; repeated addOption behavior if observable.
+RISKS: HashMap-backed OptionGroup makes iteration order unspecified; avoid assuming undocumented duplicate semantics.
+RISKS: Context lacks Option constructors/details and broader expected ordering contract beyond trigger.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.cli.OptionGroup (java) =====
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.cli;
+
+import java.io.Serializable;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+/**
+ * A group of mutually exclusive options.
+ *
+ * @version $Id$
+ */
+public class OptionGroup implements Serializable
+{
+ /** The serial version UID. */
+ private static final long serialVersionUID = 1L;
+ 
+ /** hold the options */
+ private final Map<String, Option> optionMap = new HashMap<String, Option>();
+
+ /** the name of the selected option */
+ private String selected;
+
+ /** specified whether this group is required */
+ private boolean required;
+
+ /**
+ * Add the specified <code>Option</code> to this group.
+ *
+ * @param option the option to add to this group
+ * @return this option group with the option added
+ */
+ public OptionGroup addOption(Option option)
+ {
+ // key - option name
+ // value - the option
+ optionMap.put(option.getKey(), option);
+
+ return this;
+ }
+
+ /**
+ * @return the names of the options in this group as a 
+ * <code>Collection</code>
+ */
+ public Collection<String> getNames()
+ {
+ // the key set is the collection of names
+ return optionMap.keySet();
+ }
+
+ /**
+ * @return the options in this group as a <code>Collection</code>
+ */
+ public Collection<Option> getOptions()
+ {
+ // the values are the collection of options
+ return optionMap.values();
+ }
+
+ /**
+ * Set the selected option of this group to <code>name</code>.
+ *
+ * @param option the option that is selected
+ * @throws AlreadySelectedException if an option from this group has 
+ * already been selected.
+ */
+ public void setSelected(Option option) throws AlreadySelectedException
+ {
+ if (option == null)
+ {
+ // reset the option previously selected
+ selected = null;
+ return;
+ }
+ 
+ // if no option has already been selected or the 
+ // same option is being reselected then set the
+ // selected member variable
+ if (selected == null || selected.equals(option.getKey()))
+ {
+ selected = option.getKey();
+ }
+ else
+ {
+ throw new AlreadySelectedException(this, option);
+ }
+ }
+
+ /**
+ * @return the selected option name
+ */
+ public String getSelected()
+ {
+ return selected;
+ }
+
+ /**
+ * @param required specifies if this group is required
+ */
+ public void setRequired(boolean required)
+ {
+ this.required = required;
+ }
+
+ /**
+ * Returns whether this option group is required.
+ *
+ * @return whether this option group is required
+ */
+ public boolean isRequired()
+ {
+ return required;
+ }
+
+ /**
+ * Returns the stringified version of this OptionGroup.
+ * 
+ * @return the stringified representation of this group
+ */
+ @Override
+ public String toString()
+ {
+ StringBuilder buff = new StringBuilder();
+ 
+ Iterator<Option> iter = getOptions().iterator();
+
+ buff.append("[");
+
+ while (iter.hasNext())
+ {
+ Option option = iter.next();
+
+ if (option.getOpt() != null)
+ {
+ buff.append("-");
+ buff.append(option.getOpt());
+ }
+ else
+ {
+ buff.append("--");
+ buff.append(option.getLongOpt());
+ }
+ 
+ if (option.getDescription() != null)
+ {
+ buff.append(" ");
+ buff.append(option.getDescription());
+ }
+ 
+ if (iter.hasNext())
+ {
+ buff.append(", ");
+ }
+ }
+
+ buff.append("]");
+
+ return buff.toString();
+ }
+}
+
+===== org.apache.commons.cli.Options (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli;
+public class Options implements Serializable
+private final Map<String, Option> shortOpts = new LinkedHashMap<String, Option>();
+private final Map<String, Option> longOpts = new LinkedHashMap<String, Option>();
+private final List<Object> requiredOpts = new ArrayList<Object>();
+private final Map<String, OptionGroup> optionGroups = new java.util.HashMap<String, OptionGroup>();
+public Options addOptionGroup(OptionGroup group)
+public Options addOption(String opt, String description)
+public Options addOption(String opt, boolean hasArg, String description)
+public Options addOption(String opt, String longOpt, boolean hasArg, String description)
+public Options addOption(Option opt)
+public Collection<Option> getOptions()
+public List getRequiredOptions()
+public Option getOption(String opt)
+public List<String> getMatchingOptions(String opt)
+public boolean hasOption(String opt)
+public boolean hasLongOption(String opt)
+public boolean hasShortOption(String opt)
+public OptionGroup getOptionGroup(Option opt)
+@Override
+public String toString()
+
+/* HEADER */
+package org.apache.commons.cli;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+public class Options implements Serializable
+
+/* METHOD addOptionGroup */
+public Options addOptionGroup(OptionGroup group)
+ {
+ if (group.isRequired())
+ {
+ requiredOpts.add(group);
+ }
+
+ for (Option option : group.getOptions())
+ {
+ // an Option cannot be required if it is in an
+ // OptionGroup, either the group is required or
+ // nothing is required
+ option.setRequired(false);
+ addOption(option);
+
+ optionGroups.put(option.getKey(), group);
+ }
+
+ return this;
+ }
+
+/* METHOD addOption */
+public Options addOption(String opt, String description)
+ {
+ addOption(opt, null, false, description);
+ return this;
+ }
+
+/* METHOD addOption */
+public Options addOption(String opt, boolean hasArg, String description)
+ {
+ addOption(opt, null, hasArg, description);
+ return this;
+ }
+
+/* METHOD addOption */
+public Options addOption(String opt, String longOpt, boolean hasArg, String description)
+ {
+ addOption(new Option(opt, longOpt, hasArg, description));
+ return this;
+ }
+
+/* METHOD addOption */
+public Options addOption(Option opt)
+ {
+ String key = opt.getKey();
+
+ // add it to the long option list
+ if (opt.hasLongOpt())
+ {
+ longOpts.put(opt.getLongOpt(), opt);
+ }
+
+ // if the option is required add it to the required list
+ if (opt.isRequired())
+ {
+ if (requiredOpts.contains(key))
+ {
+ requiredOpts.remove(requiredOpts.indexOf(key));
+ }
+ requiredOpts.add(key);
+ }
+
+ shortOpts.put(key, opt);
+
+ return this;
+ }
+
+/* METHOD getRequiredOptions */
+public List getRequiredOptions()
+ {
+ return Collections.unmodifiableList(requiredOpts);
+ }
+
+/* METHOD getMatchingOptions */
+public List<String> getMatchingOptions(String opt)
+ {
+ opt = Util.stripLeadingHyphens(opt);
+ 
+ List<String> matchingOpts = new ArrayList<String>();
+
+ // for a perfect match return the single option only
+ if (longOpts.keySet().contains(opt))
+ {
+ return Collections.singletonList(opt);
+ }
+
+ for (String longOpt : longOpts.keySet())
+ {
+ if (longOpt.startsWith(opt))
+ {
+ matchingOpts.add(longOpt);
+ }
+ }
+ 
+ return matchingOpts;
+ }
+
+/* METHOD toString */
+@Override
+ public String toString()
+ {
+ StringBuilder buf = new StringBuilder();
+
+ buf.append("[ Options: [ short ");
+ buf.append(shortOpts.toString());
+ buf.append(" ] [ long ");
+ buf.append(longOpts);
+ buf.append(" ]");
+
+ return buf.toString();
+ }
+
+/* METHOD getOptions */
+public Collection<Option> getOptions()
+ {
+ return Collections.unmodifiableCollection(helpOptions());
+ }
+
+/* METHOD getOptionGroup */
+public OptionGroup getOptionGroup(Option opt)
+ {
+ return optionGroups.get(opt.getKey());
+ }
+
+/* METHOD getOption */
+public Option getOption(String opt)
+ {
+ opt = Util.stripLeadingHyphens(opt);
+
+ if (shortOpts.containsKey(opt))
+ {
+ return shortOpts.get(opt);
+ }
+
+ return longOpts.get(opt);
+ }
+
+/* METHOD hasOption */
+public boolean hasOption(String opt)
+ {
+ opt = Util.stripLeadingHyphens(opt);
+
+ return shortOpts.containsKey(opt) || longOpts.containsKey(opt);
+ }
+
+/* METHOD hasLongOption */
+public boolean hasLongOption(String opt)
+ {
+ opt = Util.stripLeadingHyphens(opt);
+
+ return longOpts.containsKey(opt);
+ }
+
+/* METHOD hasShortOption */
+public boolean hasShortOption(String opt)
+ {
+ opt = Util.stripLeadingHyphens(opt);
+
+ return shortOpts.containsKey(opt);
+ }
+
+/* METHOD helpOptions */
+List<Option> helpOptions()
+ {
+ return new ArrayList<Option>(shortOpts.values());
+ }
+
+/* METHOD getOptionGroups */
+Collection<OptionGroup> getOptionGroups()
+ {
+ return new HashSet<OptionGroup>(optionGroups.values());
+ }

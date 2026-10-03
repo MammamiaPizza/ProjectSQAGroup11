@@ -1,0 +1,348 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 66  Version: JacksonDatabind-66b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer
+Modified: com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer
+Triggers: com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer::testCustomEnumKeySerializerWithPolymorphic
+
+Bug/specification summary:
+Bug report: 1441
+Trigger failures:
+- com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer::testCustomEnumKeySerializerWithPolymorphic
+ --> com.fasterxml.jackson.databind.exc.InvalidFormatException: Can not deserialize Map key of type com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer$SuperTypeEnum from String "FOO": not a valid representation: No enum constant com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer.SuperTypeEnum.}
+Modified: com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer
+
+Prompt-01 test plan:
+TARGETS: StdKeyDeserializer.EnumKD._parse and enum-name resolver selection for polymorphic Map keys 
+ORACLES: Trigger expects key "FOO" to deserialize as TestCustomEnumKeyDeserializer$SuperTypeEnum 
+CASES: Polymorphic Map with custom enum key deserializer and valid enum-name key "FOO" 
+CASES: Invalid enum-name key verifies InvalidFormat/weird-key handling remains active 
+RISKS: Resolver may target a concrete enum while _keyClass is a polymorphic/supertype declaration 
+RISKS: Context lacks patch details and full custom-deserializer configuration; derive assertions from trigger only
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class StdKeyDeserializer extends KeyDeserializer
+public final static int TYPE_BOOLEAN = 1;
+public final static int TYPE_BYTE = 2;
+public final static int TYPE_SHORT = 3;
+public final static int TYPE_CHAR = 4;
+public final static int TYPE_INT = 5;
+public final static int TYPE_LONG = 6;
+public final static int TYPE_FLOAT = 7;
+public final static int TYPE_DOUBLE = 8;
+public final static int TYPE_LOCALE = 9;
+public final static int TYPE_DATE = 10;
+public final static int TYPE_CALENDAR = 11;
+public final static int TYPE_UUID = 12;
+public final static int TYPE_URI = 13;
+public final static int TYPE_URL = 14;
+public final static int TYPE_CLASS = 15;
+public final static int TYPE_CURRENCY = 16;
+final protected int _kind;
+final protected Class<?> _keyClass;
+protected final FromStringDeserializer<?> _deser;
+protected StdKeyDeserializer(int kind, Class<?> cls) {
+protected StdKeyDeserializer(int kind, Class<?> cls, FromStringDeserializer<?> deser) {
+public static StdKeyDeserializer forType(Class<?> raw)
+if (raw == String.class || raw == Object.class) {
+} else if (raw == UUID.class) {
+} else if (raw == Integer.class) {
+} else if (raw == Long.class) {
+} else if (raw == Date.class) {
+} else if (raw == Calendar.class) {
+} else if (raw == Boolean.class) {
+} else if (raw == Byte.class) {
+} else if (raw == Character.class) {
+} else if (raw == Short.class) {
+} else if (raw == Float.class) {
+} else if (raw == Double.class) {
+} else if (raw == URI.class) {
+} else if (raw == URL.class) {
+} else if (raw == Class.class) {
+} else if (raw == Locale.class) {
+FromStringDeserializer<?> deser = FromStringDeserializer.findDeserializer(Locale.class);
+} else if (raw == Currency.class) {
+FromStringDeserializer<?> deser = FromStringDeserializer.findDeserializer(Currency.class);
+@Override
+public Object deserializeKey(String key, DeserializationContext ctxt)
+public Class<?> getKeyClass() { return _keyClass; }
+protected Object _parse(String key, DeserializationContext ctxt) throws Exception
+protected int _parseInt(String key) throws IllegalArgumentException {
+protected long _parseLong(String key) throws IllegalArgumentException {
+protected double _parseDouble(String key) throws IllegalArgumentException {
+final static class StringKD extends StdKeyDeserializer
+private final static StringKD sString = new StringKD(String.class);
+private final static StringKD sObject = new StringKD(Object.class);
+private StringKD(Class<?> nominalType) { super(-1, nominalType); }
+public static StringKD forType(Class<?> nominalType)
+if (nominalType == String.class) {
+if (nominalType == Object.class) {
+public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+final static class DelegatingKD
+protected final JsonDeserializer<?> _delegate;
+protected DelegatingKD(Class<?> cls, JsonDeserializer<?> deser) {
+@SuppressWarnings("resource")
+public final Object deserializeKey(String key, DeserializationContext ctxt)
+final static class EnumKD extends StdKeyDeserializer
+protected final EnumResolver _byNameResolver;
+protected final AnnotatedMethod _factory;
+protected EnumResolver _byToStringResolver;
+protected EnumKD(EnumResolver er, AnnotatedMethod factory) {
+public Object _parse(String key, DeserializationContext ctxt) throws IOException
+return ctxt.handleWeirdKey(_keyClass, key, "not one of values excepted for Enum class: %s",
+private EnumResolver _getToStringResolver(DeserializationContext ctxt)
+synchronized (this) {
+final static class StringCtorKeyDeserializer extends StdKeyDeserializer
+protected final Constructor<?> _ctor;
+public StringCtorKeyDeserializer(Constructor<?> ctor) {
+public Object _parse(String key, DeserializationContext ctxt) throws Exception
+final static class StringFactoryKeyDeserializer extends StdKeyDeserializer
+public StringFactoryKeyDeserializer(Method fm) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser.std;
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.util.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.io.NumberInput;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+import com.fasterxml.jackson.databind.introspect.AnnotatedMethod;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.EnumResolver;
+public class StdKeyDeserializer extends KeyDeserializer
+
+/* METHOD StdKeyDeserializer */
+protected StdKeyDeserializer(int kind, Class<?> cls, FromStringDeserializer<?> deser) {
+ _kind = kind;
+ _keyClass = cls;
+ _deser = deser;
+ }
+
+/* METHOD StdKeyDeserializer */
+protected StdKeyDeserializer(int kind, Class<?> cls) {
+ this(kind, cls, null);
+ }
+
+/* METHOD forType */
+public static StdKeyDeserializer forType(Class<?> raw)
+ {
+ int kind;
+
+ // first common types:
+ if (raw == String.class || raw == Object.class) {
+ return StringKD.forType(raw);
+ } else if (raw == UUID.class) {
+ kind = TYPE_UUID;
+ } else if (raw == Integer.class) {
+ kind = TYPE_INT;
+ } else if (raw == Long.class) {
+ kind = TYPE_LONG;
+ } else if (raw == Date.class) {
+ kind = TYPE_DATE;
+ } else if (raw == Calendar.class) {
+ kind = TYPE_CALENDAR;
+ // then less common ones...
+ } else if (raw == Boolean.class) {
+ kind = TYPE_BOOLEAN;
+ } else if (raw == Byte.class) {
+ kind = TYPE_BYTE;
+ } else if (raw == Character.class) {
+ kind = TYPE_CHAR;
+ } else if (raw == Short.class) {
+ kind = TYPE_SHORT;
+ } else if (raw == Float.class) {
+ kind = TYPE_FLOAT;
+ } else if (raw == Double.class) {
+ kind = TYPE_DOUBLE;
+ } else if (raw == URI.class) {
+ kind = TYPE_URI;
+ } else if (raw == URL.class) {
+ kind = TYPE_URL;
+ } else if (raw == Class.class) {
+ kind = TYPE_CLASS;
+ } else if (raw == Locale.class) {
+ FromStringDeserializer<?> deser = FromStringDeserializer.findDeserializer(Locale.class);
+ return new StdKeyDeserializer(TYPE_LOCALE, raw, deser);
+ } else if (raw == Currency.class) {
+ FromStringDeserializer<?> deser = FromStringDeserializer.findDeserializer(Currency.class);
+ return new StdKeyDeserializer(TYPE_CURRENCY, raw, deser);
+ } else {
+ return null;
+ }
+ return new StdKeyDeserializer(kind, raw);
+ }
+
+/* METHOD deserializeKey */
+@Override
+ public Object deserializeKey(String key, DeserializationContext ctxt)
+ throws IOException
+ {
+ if (key == null) { // is this even legal call?
+ return null;
+ }
+ try {
+ Object result = _parse(key, ctxt);
+ if (result != null) {
+ return result;
+ }
+ } catch (Exception re) {
+ return ctxt.handleWeirdKey(_keyClass, key, "not a valid representation, problem: (%s) %s",
+ re.getClass().getName(), re.getMessage());
+ }
+ if (_keyClass.isEnum() && ctxt.getConfig().isEnabled(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL)) {
+ return null;
+ }
+ return ctxt.handleWeirdKey(_keyClass, key, "not a valid representation");
+ }
+
+/* METHOD deserializeKey */
+@SuppressWarnings("resource")
+ @Override
+ public final Object deserializeKey(String key, DeserializationContext ctxt)
+ throws IOException
+ {
+ if (key == null) { // is this even legal call?
+ return null;
+ }
+ try {
+ // Ugh... should not have to give parser which may or may not be correct one...
+ Object result = _delegate.deserialize(ctxt.getParser(), ctxt);
+ if (result != null) {
+ return result;
+ }
+ return ctxt.handleWeirdKey(_keyClass, key, "not a valid representation");
+ } catch (Exception re) {
+ return ctxt.handleWeirdKey(_keyClass, key, "not a valid representation: %s", re.getMessage());
+ }
+ }
+
+/* METHOD _parse */
+@Override
+ public Object _parse(String key, DeserializationContext ctxt) throws IOException
+ {
+ if (_factory != null) {
+ try {
+ return _factory.call1(key);
+ } catch (Exception e) {
+ ClassUtil.unwrapAndThrowAsIAE(e);
+ }
+ }
+ EnumResolver res = ctxt.isEnabled(DeserializationFeature.READ_ENUMS_USING_TO_STRING)
+ ? _getToStringResolver(ctxt) : _byNameResolver;
+ Enum<?> e = res.findEnum(key);
+ if ((e == null) && !ctxt.getConfig().isEnabled(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL)) {
+ return ctxt.handleWeirdKey(_keyClass, key, "not one of values excepted for Enum class: %s",
+ res.getEnumIds());
+ // fall-through if problems are collected, not immediately thrown
+ }
+ return e;
+ }
+
+/* METHOD deserializeKey */
+@Override
+ public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+ return key;
+ }
+
+/* METHOD _parseDouble */
+protected double _parseDouble(String key) throws IllegalArgumentException {
+ return NumberInput.parseDouble(key);
+ }
+
+/* METHOD StringCtorKeyDeserializer */
+public StringCtorKeyDeserializer(Constructor<?> ctor) {
+ super(-1, ctor.getDeclaringClass());
+ _ctor = ctor;
+ }
+
+/* METHOD _parse */
+@Override
+ public Object _parse(String key, DeserializationContext ctxt) throws Exception
+ {
+ return _ctor.newInstance(key);
+ }
+
+/* METHOD StringFactoryKeyDeserializer */
+public StringFactoryKeyDeserializer(Method fm) {
+ super(-1, fm.getDeclaringClass());
+ _factoryMethod = fm;
+ }
+
+/* METHOD _parse */
+@Override
+ public Object _parse(String key, DeserializationContext ctxt) throws Exception
+ {
+ return _factoryMethod.invoke(null, key);
+ }
+
+/* METHOD _parseInt */
+protected int _parseInt(String key) throws IllegalArgumentException {
+ return Integer.parseInt(key);
+ }
+
+/* METHOD _parseLong */
+protected long _parseLong(String key) throws IllegalArgumentException {
+ return Long.parseLong(key);
+ }
+
+/* METHOD DelegatingKD */
+protected DelegatingKD(Class<?> cls, JsonDeserializer<?> deser) {
+ _keyClass = cls;
+ _delegate = deser;
+ }
+
+/* METHOD forType */
+public static StringKD forType(Class<?> nominalType)
+ {
+ if (nominalType == String.class) {
+ return sString;
+ }
+ if (nominalType == Object.class) {
+ return sObject;
+ }
+ return new StringKD(nominalType);
+ }
+
+/* METHOD EnumKD */
+protected EnumKD(EnumResolver er, AnnotatedMethod factory) {
+ super(-1, er.getEnumClass());
+ _byNameResolver = er;
+ _factory = factory;
+ }
+
+/* METHOD getKeyClass */
+public Class<?> getKeyClass() { return _keyClass; }
+
+/* METHOD getKeyClass */
+public Class<?> getKeyClass() { return _keyClass; }
+
+/* METHOD _getToStringResolver */
+private EnumResolver _getToStringResolver(DeserializationContext ctxt)
+ {
+ EnumResolver res = _byToStringResolver;
+ if (res == null) {
+ synchronized (this) {
+ res = EnumResolver.constructUnsafeUsingToString(_byNameResolver.getEnumClass(),
+ ctxt.getAnnotationIntrospector());
+ }
+ }
+ return res;
+ }
+
+/* METHOD StringKD */
+private StringKD(Class<?> nominalType) { super(-1, nominalType); }

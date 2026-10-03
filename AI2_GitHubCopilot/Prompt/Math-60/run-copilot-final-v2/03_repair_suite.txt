@@ -1,0 +1,214 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 60  Version: Math-60b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-414
+Trigger failures:
+- org.apache.commons.math.distribution.NormalDistributionTest::testExtremeValues
+ --> org.apache.commons.math.ConvergenceException: Continued fraction diverged to NaN for value ∞
+Modified: org.apache.commons.math.distribution.NormalDistributionImpl
+
+Available API/signatures:
+[org.apache.commons.math.distribution.NormalDistributionImpl | java]
+package org.apache.commons.math.distribution;
+public class NormalDistributionImpl extends AbstractContinuousDistribution
+public static final double DEFAULT_INVERSE_ABSOLUTE_ACCURACY = 1e-9;
+private static final double SQRT2PI = FastMath.sqrt(2 * FastMath.PI);
+public NormalDistributionImpl(double mean, double sd){
+public NormalDistributionImpl(double mean, double sd, double inverseCumAccuracy) {
+public NormalDistributionImpl(){
+public double getMean() {
+public double getStandardDeviation() {
+@Override
+public double density(double x) {
+public double cumulativeProbability(double x) throws MathException {
+protected double getSolverAbsoluteAccuracy() {
+public double inverseCumulativeProbability(final double p)
+public double sample() throws MathException {
+protected double getDomainLowerBound(double p) {
+protected double getDomainUpperBound(double p) {
+protected double getInitialDomain(double p) {
+
+Generated JUnit Test:
+package org.apache.commons.math.distribution;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.assertFalse;
+
+ import org.apache.commons.math.MathException;
+ import org.junit.Test;
+
+ /**
+  * Tests for extreme-value behaviour of {@link NormalDistributionImpl}
+  * exposing MATH-414 (ConvergenceException from continued fraction for extreme arguments).
+  */
+ public class NormalDistributionExtremeTest {
+
+     private static final double MU = 2.5;
+     private static final double SIGMA = 3.0;
+     private static final double EPS = 1e-15;
+     private static final double TOL_CONSISTENCY = 1e-9;
+
+     // ----------------------------------------------------------------
+     // cumulativeProbability at infinities
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityAtPositiveInfinity() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double result = normal.cumulativeProbability(Double.POSITIVE_INFINITY);
+         assertEquals("CDF at +∞ must be 1.0", 1.0, result, EPS);
+     }
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityAtNegativeInfinity() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double result = normal.cumulativeProbability(Double.NEGATIVE_INFINITY);
+         assertEquals("CDF at -∞ must be 0.0", 0.0, result, EPS);
+     }
+
+     // ----------------------------------------------------------------
+     // cumulativeProbability at NaN – should not throw, exact result not mandated
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityAtNaN() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double result = normal.cumulativeProbability(Double.NaN);
+         assertTrue("CDF(NaN) should be NaN", Double.isNaN(result));
+     }
+
+     // ----------------------------------------------------------------
+     // asymptotics: deep tail finite values
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityLargePositiveFinite() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double[] xs = { MU + 38 * SIGMA, MU + 100 * SIGMA, MU + 1e6 * SIGMA, Double.MAX_VALUE / 2
+};
+         for (double x : xs) {
+             double p = normal.cumulativeProbability(x);
+             assertTrue("p should be >= 0 for x=" + x, p >= 0);
+             assertTrue("p should approach 1 for very large x=" + x, p > 0.999999999);
+             assertTrue("p <= 1", p <= 1.0);
+         }
+     }
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityLargeNegativeFinite() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double[] xs = { MU - 38 * SIGMA, MU - 100 * SIGMA, MU - 1e6 * SIGMA, -Double.MAX_VALUE / 2
+};
+         for (double x : xs) {
+             double p = normal.cumulativeProbability(x);
+             assertTrue("p should be >= 0 for x=" + x, p >= 0);
+             assertTrue("p should approach 0 for very negative x=" + x, p < 1e-12);
+             assertTrue("p <= 1", p <= 1.0);
+         }
+     }
+
+     // ----------------------------------------------------------------
+     // basic sanity: normal values
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityNormalValues() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         assertEquals(0.5, normal.cumulativeProbability(MU), 1e-6);
+         assertTrue(0.8 < normal.cumulativeProbability(MU + SIGMA));
+         assertTrue(normal.cumulativeProbability(MU - SIGMA) < 0.2);
+     }
+
+     // ----------------------------------------------------------------
+     // monotonicity
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testCumulativeProbabilityMonotonic() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(0, 1);
+         double[] testPoints = { -Double.MAX_VALUE / 2, -1e4, -38, -3, -1, 0, 0.5, 1, 3, 38, 1e4,
+Double.MAX_VALUE / 2 };
+         double prev = -1.0;
+         for (double x : testPoints) {
+             double p = normal.cumulativeProbability(x);
+             assertTrue("CDF must be non-decreasing: x=" + x + " p=" + p, p >= prev);
+             prev = p;
+         }
+     }
+
+     // ----------------------------------------------------------------
+     // density at extreme points must not be NaN
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testDensityExtremeValuesNotNaN() {
+         NormalDistributionImpl normal = new NormalDistributionImpl(0, 1);
+         double[] xs = { Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.MAX_VALUE,
+                 -Double.MAX_VALUE, 1e4, -1e4, 1000, -1000 };
+         for (double x : xs) {
+             double d = normal.density(x);
+             assertFalse("density at " + x + " must not be NaN", Double.isNaN(d));
+         }
+     }
+
+     // ----------------------------------------------------------------
+     // inverseCumulativeProbability at boundaries 0 and 1
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testInverseCumulativeProbabilityAtZero() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double result = normal.inverseCumulativeProbability(0.0);
+         assertEquals("InverseCDF(0) must be -∞", Double.NEGATIVE_INFINITY, result, 0);
+     }
+
+     @Test(timeout = 5000)
+     public void testInverseCumulativeProbabilityAtOne() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(MU, SIGMA);
+         double result = normal.inverseCumulativeProbability(1.0);
+         assertEquals("InverseCDF(1) must be +∞", Double.POSITIVE_INFINITY, result, 0);
+     }
+
+     // ----------------------------------------------------------------
+     // inverseCumulativeProbability for extreme probabilities near 0 and 1
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testInverseCumulativeProbabilityNearZeroAndOne() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(0, 1);
+         double vLow = normal.inverseCumulativeProbability(1e-300);
+         double vHigh = normal.inverseCumulativeProbability(1.0 - 1e-300);
+         assertTrue("extreme low inverse should be very negative", vLow < -30);
+         assertTrue("extreme high inverse should be large positive", vHigh > 30);
+         assertFalse("extreme inverse values must not be NaN", Double.isNaN(vLow) ||
+Double.isNaN(vHigh));
+     }
+
+     // ----------------------------------------------------------------
+     // consistency: CDF(inverseCDF(p)) ≈ p
+     // ----------------------------------------------------------------
+
+     @Test(timeout = 5000)
+     public void testInverseCumulativeConsistencyStandardNormal() throws MathException {
+         NormalDistributionImpl normal = new NormalDistributionImpl(0, 1);
+         double[] probabilities = { 0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999, 1e-100, 1 - 1e-100 };
+         for (double p : probabilities) {
+             double x = normal.inverseCumulativeProbability(p);
+             double pBack = normal.cumulativeProbability(x);
+             assertEquals("CDF(inverseCDF(" + p + ")) should be ≈ p", p, pBack, TOL_CONSISTENCY);
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.math.distribution.NormalDistributionExtremeTest::testInverseCumulativeProbabilityNearZeroAndOne
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.math.distribution.NormalDistributionExtremeTest::testInverseCumulativeProbabilityNearZeroAndOne

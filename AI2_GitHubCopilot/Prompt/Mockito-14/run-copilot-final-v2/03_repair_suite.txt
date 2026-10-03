@@ -1,0 +1,239 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 14  Version: Mockito-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 138
+Trigger failures:
+- org.mockitousage.bugs.VerifyingWithAnExtraCallToADifferentMockTest::shouldAllowVerifyingWhenOtherMockCallIsInTheSameLine
+ --> junit.framework.AssertionFailedError:
+Modified: org.mockito.internal.MockHandler, org.mockito.internal.MockitoCore
+
+Available API/signatures:
+[org.mockito.internal.MockHandler | java]
+package org.mockito.internal;
+public class MockHandler<T> implements MockitoInvocationHandler, MockHandlerInterface<T> {
+public MockHandler(MockSettingsImpl mockSettings) {
+public MockHandler(MockHandlerInterface<T> oldMockHandler) {
+public Object handle(Invocation invocation) throws Throwable {
+public VoidMethodStubbable<T> voidMethodStubbable(T mock) {
+public MockSettingsImpl getMockSettings() {
+@SuppressWarnings("unchecked")
+public void setAnswersForStubbing(List<Answer> answers) {
+public InvocationContainer getInvocationContainer() {
+
+[org.mockito.internal.MockitoCore | java]
+package org.mockito.internal;
+@SuppressWarnings("unchecked")
+public class MockitoCore {
+private final Reporter reporter = new Reporter();
+private final MockUtil mockUtil = new MockUtil();
+private final MockingProgress mockingProgress = new ThreadSafeMockingProgress();
+public <T> T mock(Class<T> classToMock, MockSettings mockSettings) {
+public IOngoingStubbing stub() {
+public <T> DeprecatedOngoingStubbing<T> stub(T methodCall) {
+public <T> OngoingStubbing<T> when(T methodCall) {
+public <T> T verify(T mock, VerificationMode mode) {
+public <T> void reset(T ... mocks) {
+public void verifyNoMoreInteractions(Object... mocks) {
+public void verifyNoMoreInteractionsInOrder(List<Object> mocks, InOrderContext inOrderContext) {
+private void assertMocksNotEmpty(Object[] mocks) {
+public InOrder inOrder(Object... mocks) {
+public Stubber doAnswer(Answer answer) {
+public <T> VoidMethodStubbable<T> stubVoid(T mock) {
+public void validateMockitoUsage() {
+public Invocation getLastInvocation() {
+
+Generated JUnit Test:
+package org.mockitousage.bugs;
+
+ import static org.junit.Assert.*;
+ import static org.mockito.Mockito.*;
+
+ import java.util.List;
+ import java.util.Map;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for bug 138: verify(...) fails with an extra call to a different mock
+  * inside the verification expression.
+  */
+ public class VerifyingWithExtraCallToDifferentMockTest {
+
+     /**
+      * The exact failing scenario from the bug report.
+      * verify(mock1).method(mock2.something()) must not throw.
+      */
+     @Test
+     public void shouldAllowVerifyingWhenOtherMockCallIsInTheSameLine() {
+         List<?> listMock = mock(List.class);
+         Map<?, ?> mapMock = mock(Map.class);
+
+         listMock.add(mapMock.get("key"));
+         verify(listMock).add(mapMock.get("key"));
+     }
+
+     /**
+      * Baseline: plain verification without any extra mock calls.
+      */
+     @Test
+     public void shouldVerifyWithoutExtraCalls() {
+         @SuppressWarnings("unchecked")
+         List<String> mock = mock(List.class);
+         mock.add("test");
+         verify(mock).add("test");
+     }
+
+     /**
+      * Extra call on the same mock in the argument position.
+      */
+     @Test
+     public void shouldVerifyWithExtraCallOnSameMock() {
+         @SuppressWarnings("unchecked")
+         List<Integer> mock = mock(List.class);
+         when(mock.size()).thenReturn(42);
+         mock.add(mock.size());
+         verify(mock).add(mock.size());
+     }
+
+     /**
+      * Two different other mocks are called inside the verification expression.
+      */
+     @SuppressWarnings("unchecked")
+     @Test
+     public void shouldVerifyWithMultipleExtraCallsToDifferentMocks() {
+         List<String> listMock = mock(List.class);
+         Map<String, Object> mapMock = mock(Map.class);
+         java.util.Set<?> setMock = mock(java.util.Set.class);
+
+         listMock.add(mapMock.get(setMock.iterator()));
+         verify(listMock).add(mapMock.get(setMock.iterator()));
+     }
+
+     /**
+      * verifyNoMoreInteractions after a verification line that contained an extra call.
+      */
+     @Test
+     public void shouldVerifyNoMoreInteractionsAfterExtraCalls() {
+         @SuppressWarnings("unchecked")
+         List<String> listMock = mock(List.class);
+         @SuppressWarnings("unchecked")
+         Map<String, String> mapMock = mock(Map.class);
+
+         listMock.add(mapMock.get("key"));
+         verify(listMock).add(mapMock.get("key"));
+         verifyNoMoreInteractions(listMock, mapMock);
+     }
+
+     /**
+      * The mock being verified has never received the expected invocation,
+      * but the verification expression still contains an extra call.
+      */
+     @Test
+     public void shouldFailVerificationWhenMockNeverCalledWithExtraCall() {
+         @SuppressWarnings("unchecked")
+         List<String> listMock = mock(List.class);
+         @SuppressWarnings("unchecked")
+         Map<String, String> mapMock = mock(Map.class);
+
+         try {
+             verify(listMock).add(mapMock.get("key"));
+             fail("Should have thrown verification error");
+         } catch (AssertionError expected) {
+             // expected behavior
+         }
+     }
+
+     /**
+      * Extra call returns a stubbed value and the verification matches the
+      * returned value.
+      */
+     @Test
+     public void shouldVerifyWithStubbedExtraCall() {
+         @SuppressWarnings("unchecked")
+         List<String> listMock = mock(List.class);
+         @SuppressWarnings("unchecked")
+         Map<String, String> mapMock = mock(Map.class);
+
+         when(mapMock.get("key")).thenReturn("value");
+
+         listMock.add(mapMock.get("key"));
+         verify(listMock).add("value");
+     }
+
+     /**
+      * Extra call returns null (default for mock without stubbing).
+      */
+     @Test
+     public void shouldVerifyWithExtraCallReturningNull() {
+         @SuppressWarnings("unchecked")
+         List<String> listMock = mock(List.class);
+         @SuppressWarnings("unchecked")
+         Map<String, String> mapMock = mock(Map.class);
+
+         listMock.add(mapMock.get("key"));
+         verify(listMock).add(null);
+     }
+
+     /**
+      * Extra call is inside an InOrder verification block.
+      */
+     @SuppressWarnings("unchecked")
+     @Test
+     public void shouldVerifyInOrderWithExtraCall() {
+         List<String> listMock = mock(List.class);
+         Map<String, String> mapMock = mock(Map.class);
+
+         listMock.add(mapMock.get("first"));
+         listMock.add(mapMock.get("second"));
+
+         org.mockito.InOrder inOrder = inOrder(listMock);
+         inOrder.verify(listMock).add(mapMock.get("first"));
+         inOrder.verify(listMock).add(mapMock.get("second"));
+     }
+
+     /**
+      * Extra call uses a real argument captor (or matcher) implicitly.
+      * Here we verify with eq() that requires an extra call.
+      */
+     @SuppressWarnings("unchecked")
+     @Test
+     public void shouldVerifyWithMatcherDerivedFromExtraCall() {
+         List<String> listMock = mock(List.class);
+         Map<String, String> mapMock = mock(Map.class);
+
+         String value = "matcherTest";
+         when(mapMock.get(anyString())).thenReturn(value);
+
+         listMock.add(mapMock.get("input"));
+         verify(listMock).add(eq(mapMock.get("input")));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Mockito-14f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Mockito-14f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Mockito-14f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] ^
+ [javac] /root/sqa-workspaces/Mockito-14f-copilot/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:7: warning: [deprecation] InitializationError in org.junit.internal.runners has been deprecated
+ [javac] import org.junit.internal.runners.InitializationError;
+ [javac] ^
+ [javac] /root/sqa-workspaces/Mockito-14f-copilot/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:8: warning: [deprecation] JUnit4ClassRunner in org.junit.internal.runners has been deprecated
+ [javac] import org.junit.internal.runners.JUnit4ClassRunner;
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Mockito-14f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Mockito-14f-copilot/.test_suite/org/mockitousage/bugs/VerifyingWithExtraCallToDifferentMockTest.java:26: error: incompatible types: Object cannot be converted to CAP#1
+ [javac] listMock.add(mapMock.get("key"));
+ [javac] where CAP#1 is a fresh type-variable:
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

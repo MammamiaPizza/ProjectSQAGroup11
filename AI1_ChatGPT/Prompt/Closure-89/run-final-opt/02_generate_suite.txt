@@ -1,0 +1,455 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 89  Version: Closure-89b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CollapseProperties, com.google.javascript.jscomp.GlobalNamespace
+Modified: com.google.javascript.jscomp.CollapseProperties, com.google.javascript.jscomp.GlobalNamespace
+Triggers: com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToChildOfUncollapsibleFunctionInLocalScope, com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_1, com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_2, com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_3, com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleNamedCtorInLocalScopeDepth1, com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleFunctionInLocalScopeDepth1, com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleFunctionInLocalScopeDepth2, com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth2
+
+Bug/specification summary:
+Bug report: 289
+Trigger failures:
+- com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToChildOfUncollapsibleFunctionInLocalScope
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_3
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleNamedCtorInLocalScopeDepth1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleFunctionInLocalScopeDepth1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleFunctionInLocalScopeDepth2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth2
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.CollapseProperties, com.google.javascript.jscomp.GlobalNamespace
+
+Prompt-01 test plan:
+TARGETS: CollapseProperties.process alias inlining and declaration/property collapsing through nested functions. 
+TARGETS: GlobalNamespace reference classification for global vs local names and namespace construction. 
+ORACLES: Existing CollapsePropertiesTest assertions and compiler output/diagnostics are the expected-result source. 
+CASES: Uncollapsible local function receives a property; child property must preserve expected transformation. 
+CASES: Alias creation in function depths 1 and 2, including variants covered by depth1_1/_2/_3 triggers. 
+CASES: Named constructor and function declarations in local scope with added properties at depths 1 and 2. 
+RISKS: Private helpers require exercising via CompilerPass/process rather than direct unit calls. 
+RISKS: Context provides no exact input/output assertions; derive expectations only from existing triggered tests.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CollapseProperties (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CollapseProperties implements CompilerPass {
+@Override
+public void process(Node externs, Node root) {
+private void inlineAliases(GlobalNamespace namespace) {
+private boolean inlineAliasIfPossible(Ref alias, GlobalNamespace namespace) {
+private void checkNamespaces() {
+private void warnAboutNamespaceAliasing(Name nameObj, Ref ref) {
+private void warnAboutNamespaceRedefinition(Name nameObj, Ref ref) {
+private void flattenReferencesTo(Name n, String alias) {
+private void flattenPrefixes(String alias, Name n, int depth) {
+private void collapseDeclarationOfNameAndDescendants(Name n, String alias) {
+private void updateSimpleDeclaration(String alias, Name refName, Ref ref) {
+private void updateObjLitOrFunctionDeclaration(Name n, String alias) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void updateObjLitOrFunctionDeclarationAtVarNode(Name n) {
+private void updateFunctionDeclarationAtFunctionNode(Name n) {
+private static String appendPropForAlias(String root, String prop) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.GlobalNamespace.Name;
+import com.google.javascript.jscomp.GlobalNamespace.Ref;
+import com.google.javascript.jscomp.GlobalNamespace.Ref.Type;
+import com.google.javascript.jscomp.ReferenceCollectingCallback;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.ReferenceCollection;
+import com.google.javascript.jscomp.Scope;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class CollapseProperties implements CompilerPass {
+
+/* METHOD CollapseProperties */
+CollapseProperties(AbstractCompiler compiler,
+ boolean collapsePropertiesOnExternTypes, boolean inlineAliases) {
+ this.compiler = compiler;
+ this.collapsePropertiesOnExternTypes = collapsePropertiesOnExternTypes;
+ this.inlineAliases = inlineAliases;
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ GlobalNamespace namespace;
+ if (collapsePropertiesOnExternTypes) {
+ namespace = new GlobalNamespace(compiler, externs, root);
+ } else {
+ namespace = new GlobalNamespace(compiler, root);
+ }
+
+ if (inlineAliases) {
+ inlineAliases(namespace);
+ }
+ nameMap = namespace.getNameIndex();
+ globalNames = namespace.getNameForest();
+ checkNamespaces();
+
+ for (Name n : globalNames) {
+ flattenReferencesToCollapsibleDescendantNames(n, n.name);
+ }
+
+ // We collapse property definitions after collapsing property references
+ // because this step can alter the parse tree above property references,
+ // invalidating the node ancestry stored with each reference.
+ for (Name n : globalNames) {
+ collapseDeclarationOfNameAndDescendants(n, n.name);
+ }
+ }
+
+/* METHOD checkForHosedThisReferences */
+private void checkForHosedThisReferences(Node function, JSDocInfo docInfo,
+ final Name name) {
+ // A function is getting collapsed. Make sure that if it refers to
+ // "this", it must be a constructor or documented with @this.
+ if (docInfo == null ||
+ (!docInfo.isConstructor() && !docInfo.hasThisType())) {
+ NodeTraversal.traverse(compiler, function.getLastChild(),
+ new NodeTraversal.AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.THIS) {
+ compiler.report(
+ JSError.make(name.declaration.sourceName, n,
+ UNSAFE_THIS, name.fullName()));
+ }
+ }
+ });
+ }
+ }
+
+/* METHOD visit */
+public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.THIS) {
+ compiler.report(
+ JSError.make(name.declaration.sourceName, n,
+ UNSAFE_
+...[truncated deterministically]...
+parent,
+ String originalName) {
+ // BEFORE:
+ // getprop
+ // getprop
+ // name a
+ // string b
+ // string c
+ // AFTER:
+ // name a$b$c
+ Node ref = NodeUtil.newName(
+ compiler.getCodingConvention(), alias, n, originalName);
+ NodeUtil.copyNameAnnotations(n.getLastChild(), ref);
+ parent.replaceChild(n, ref);
+ compiler.reportCodeChange();
+ }
+
+/* METHOD warnAboutNamespaceAliasing */
+private void warnAboutNamespaceAliasing(Name nameObj, Ref ref) {
+ compiler.report(
+ JSError.make(ref.sourceName, ref.node,
+ UNSAFE_NAMESPACE_WARNING, nameObj.fullName()));
+ }
+
+/* METHOD warnAboutNamespaceRedefinition */
+private void warnAboutNamespaceRedefinition(Name nameObj, Ref ref) {
+ compiler.report(
+ JSError.make(ref.sourceName, ref.node,
+ NAMESPACE_REDEFINED_WARNING, nameObj.fullName()));
+ }
+
+/* METHOD updateObjLitOrFunctionDeclarationAtAssignNode */
+private void updateObjLitOrFunctionDeclarationAtAssignNode(
+ Name n, String alias) {
+ // NOTE: It's important that we don't add additional nodes
+ // (e.g. a var node before the exprstmt) because the exprstmt might be
+ // the child of an if statement that's not inside a block).
+
+ Ref ref = n.declaration;
+ Node rvalue = ref.node.getNext();
+ Node varNode = new Node(Token.VAR);
+ Node varParent = ref.node.getAncestor(3);
+ Node gramps = ref.node.getAncestor(2);
+ boolean isObjLit = rvalue.getType() == Token.OBJECTLIT;
+
+ if (isObjLit && n.canEliminate()) {
+ // Eliminate the object literal altogether.
+ varParent.replaceChild(gramps, varNode);
+ ref.node = null;
+
+ } else {
+ if (rvalue.getType() == Token.FUNCTION) {
+ checkForHosedThisReferences(rvalu
+...[truncated deterministically]...
+amps.getChildBefore(varNode),
+ gramps);
+ }
+
+ numChanges += addStubsForUndeclaredProperties(n, name, gramps, varNode);
+
+ if (isObjLit && n.canEliminate()) {
+ varNode.removeChild(ref.node);
+ if (!varNode.hasChildren()) {
+ gramps.removeChild(varNode);
+ }
+ numChanges++;
+
+ // Clear out the object reference, since we've eliminated it from the
+ // parse tree.
+ ref.node = null;
+ }
+
+===== com.google.javascript.jscomp.GlobalNamespace (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class GlobalNamespace {
+private List<Name> globalNames = new ArrayList<Name>();
+private Map<String, Name> nameMap = new HashMap<String, Name>();
+private static class NodeFilter implements Predicate<Node> {
+public boolean apply(Node n) {
+private void process() {
+private boolean isGlobalNameReference(String name, Scope s) {
+private String getTopVarName(String name) {
+private boolean isGlobalVarReference(String name, Scope s) {
+private boolean isGlobalScope(Scope s) {
+private class BuildGlobalNamespace extends AbstractPostOrderCallback {
+@Override
+public void visit(NodeTraversal t, Node n, Node parent) {
+private boolean isConstructorOrEnumDeclaration(Node n, Node parent) {
+static class Name {
+enum Type {
+@Override public String toString() {
+private static JSDocInfo getDocInfoForDeclaration(Ref ref) {
+static class Ref {
+private Ref(Ref original, Type type) {
+private Ref(Type type) {
+static void markTwins(Ref a, Ref b) {
+static Ref createRefForTesting(Type type) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class GlobalNamespace {
+
+/* METHOD GlobalNamespace */
+GlobalNamespace(AbstractCompiler compiler, Node root) {
+ this(compiler, null, root);
+ }
+
+/* METHOD GlobalNamespace */
+GlobalNamespace(AbstractCompiler compiler, Node externsRoot, Node root) {
+ this.comp
+...[truncated deterministically]...
+ternsRoot;
+ this.root = root;
+ }
+
+/* METHOD process */
+private void process() {
+ if (externsRoot != null) {
+ inExterns = true;
+ NodeTraversal.traverse(compiler, externsRoot, new BuildGlobalNamespace());
+ }
+ inExterns = false;
+
+ NodeTraversal.traverse(compiler, root, new BuildGlobalNamespace());
+ generated = true;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (nodeFilter != null && !nodeFilter.apply(n)) {
+ return;
+ }
+
+ // If we are traversing the externs, then we save a pointer to the scope
+ // generated by them, so that we can do lookups in it later.
+ if (externsRoot != null && n == externsRoot) {
+ externsScope = t.getScope();
+ }
+
+ String name;
+ boolean isSet = false;
+ Name.Type type = Name.Type.OTHER;
+ boolean isPropAssign = false;
+
+ switch (n.getType()) {
+ case Token.STRING:
+ // This may be a key in an object literal declaration.
+ name = null;
+ if (parent != null && parent.getType() == Token.OBJECTLIT) {
+ name = getNameForObjLitKey(n);
+ }
+ if (name == null) return;
+ isSet = true;
+ type = getValueType(n.getFirstChild());
+ break;
+ case Token.NAME:
+ // This may be a variable get or set.
+ if (parent != null) {
+ switch (parent.getType()) {
+ case Token.VAR:
+ isSet = true;
+ Node rvalue = n.getFirstChild();
+ type = rvalue == null ? Name.Type.OTHER : getValueType(rvalue);
+ break;
+ case Token.ASSIGN:
+ if (parent.getFirstChild() == n) {
+ isSet = true;
+ type = getValueType(n.getNext());
+ }
+ break;
+ case Token.GETPROP:
+ return;
+ case Token.FUNCTION:
+ Node gramps = parent.getParent();
+ if (gramps == null ||
+ NodeUtil.isFunctionExpression(parent)) return;
+ isSet = true;
+ type = Name.Type.FUNCTION;
+ break;
+ }
+ }
+ name = n.getString();
+ break;
+ case Token.GETPROP:
+ // This may be a namespaced name get or set.
+ if (parent != null) {
+ switch (parent.getType()) {
+ case Token.ASSIGN:
+ if (parent.getFirstChild() == n) {
+ isSet = true;
+ type = getValueType(n.getNext());
+ isPropAssign = true;
+ }
+ break;
+ case Token.GETPROP:
+ return;
+ }
+ }
+ name = n.getQualifiedName();
+ if (name == null) return;
+ break;
+ default:
+ return;
+ }
+
+ // We are only interested in global names.
+ Scope scope = t.getScope();
+ if (!isGlobalNameReference(name, scope)) {
+ return;
+ }
+
+ if (isSet) {
+ if (isGlobalScope(scope)) {
+ handleSetFromGlobal(t, n, parent, name, isPropAssign, type);
+ } else {
+ handleSetFromLocal(t, n, parent, name);
+ }
+ } else {
+ handleGet(t, n, parent, name);
+ }
+ }
+
+/* METHOD scanNewNodes */
+void scanNewNodes(Scope scope, Set<Node> newNodes) {
+ NodeTraversal t = new NodeTraversal(compiler,
+ new BuildGlobalNamespace(new NodeFilter(newNodes)));
+ t.traverseAtScope(scope);
+ }
+
+/* METHOD apply */
+public boolean apply(Node n) {
+ if (!n.isQualifiedName()) {
+ return false;
+ }
+
+ Node current;
+ for (current = n;
+ current.getType() == Token.GETPROP;
+ current = current.getFirstChild()) {
+ if (newNodes.contains(current)) {
+ return true;
+ }
+ }
+
+ return current.getType() == Token.NAME && newNodes.contains(current);
+ }
+
+/* METHOD maybeHandlePrototypePrefix */
+boolean maybeHandlePrototypePrefix(NodeTraversal t, Node n, Node parent,
+ String name) {
+ // We use a string-based approach instead of inspecting the parse tree
+ // to avoid complexities with object literals, possibly nested, beneath
+ // assignments.
+
+ int numLevelsToRemove;
+ String prefix;
+ if (name.endsWith(".prototype")) {
+ numLevelsToRemove = 1;
+ prefix = name.substring(0, name.length() - 10);
+ } else {
+ int i = name.indexOf(".prototype.");
+ if (i == -1) {
+ return false;
+ }
+ prefix = name.substring(0, i);
+ numLevelsToRemove = 2;
+ i = name.indexOf('.', i + 11);
+ while (i >= 0) {
+ numLevelsToRemove++;
+ i = name.indexOf('.', i + 1);
+ }
+ }
+
+ if (parent != null && NodeUtil.isObjectLitKey(n, parent)) {
+ // Object literal keys have no prefix that's referenced directly per
+ // key, so we're done.
+ return true;
+ }
+
+ for (int i = 0; i < numLevelsToRemove; i++) {
+ parent = n;
+ n = n.getFirstChild();
+ }
+
+ handleGet(t, n, parent, prefix, Ref.Type.PROTOTYPE_GET);
+ return true;
+ }

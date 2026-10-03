@@ -1,0 +1,134 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 77  Version: JacksonDatabind-77b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1599
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.IllegalTypesCheckTest::testIssue1599
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([Illegal type]): got one with message "N/A
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializerFactory | java]
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializerFactory
+private final static Class<?>[] INIT_CAUSE_PARAMS = new Class<?>[] { Throwable.class };
+public BeanDeserializerFactory(DeserializerFactoryConfig config) {
+@Override
+public DeserializerFactory withConfig(DeserializerFactoryConfig config)
+if (getClass() != BeanDeserializerFactory.class) {
+final DeserializationConfig config = ctxt.getConfig();
+/* important: introspect actual implementation (abstract class or
+@SuppressWarnings("unchecked")
+final String buildMethodName = (builderConfig == null) ?
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+final boolean isConcrete = !beanDesc.getType().isAbstract();
+final boolean useGettersAsSetters = (ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS)
+if (Collection.class.isAssignableFrom(rawPropertyType)
+|| Map.class.isAssignableFrom(rawPropertyType)) {
+final String name = propDef.getName();
+throw ctxt.mappingException("Could not find creator property with name '%s' (in class %s)",
+/* Otherwise, method may specify more specific (sub-)class for
+&& Throwable.class.isAssignableFrom(propType0.getRawClass())) {
+final AnnotatedMethod getter = propDef.getGetter();
+protected boolean isPotentialBeanType(Class<?> type)
+throw new IllegalArgumentException("Can not deserialize Proxy class "+type.getName()+" as a Bean");
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser;
+
+import java.lang.reflect.Proxy;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.cfg.DeserializerFactoryConfig;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class BeanDeserializerFactoryIssue1599Test
+{
+    private static final String ILLEGAL_TYPE =
+            "com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl";
+
+    private static class ExposedBeanDeserializerFactory extends BeanDeserializerFactory {
+        public ExposedBeanDeserializerFactory() {
+            super(new DeserializerFactoryConfig());
+        }
+
+        public boolean potentialBeanType(Class<?> type) {
+            return isPotentialBeanType(type);
+        }
+    }
+
+    public static class SimpleBean {
+        public int value;
+    }
+
+    @Test
+    public void rejectsIssue1599IllegalTypeDuringBeanEligibility() throws Exception {
+        ExposedBeanDeserializerFactory factory = new ExposedBeanDeserializerFactory();
+
+        try {
+            factory.potentialBeanType(Class.forName(ILLEGAL_TYPE));
+            fail("Expected illegal type to be rejected");
+        } catch (IllegalArgumentException e) {
+            assertNotNull(e.getMessage());
+            assertTrue(e.getMessage().contains("Illegal type"));
+        }
+    }
+
+    @Test
+    public void rejectsIssue1599IllegalTypeDuringPolymorphicDeserialization() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping();
+
+        try {
+            mapper.readValue("[\"" + ILLEGAL_TYPE + "\",{}]", Object.class);
+            fail("Expected illegal polymorphic type to be rejected");
+        } catch (Exception e) {
+            assertNotNull(e.getMessage());
+            assertTrue(e.getMessage().contains("Illegal type"));
+        }
+    }
+
+    @Test
+    public void rejectsJdkProxyAsBeanType() {
+        ExposedBeanDeserializerFactory factory = new ExposedBeanDeserializerFactory();
+        Class<?> proxyType = Proxy.getProxyClass(
+                BeanDeserializerFactoryIssue1599Test.class.getClassLoader(),
+                new Class<?>[] { Runnable.class });
+
+        try {
+            factory.potentialBeanType(proxyType);
+            fail("Expected proxy type to be rejected");
+        } catch (IllegalArgumentException e) {
+            assertNotNull(e.getMessage());
+            assertTrue(e.getMessage().contains("Proxy class"));
+        }
+    }
+
+    @Test
+    public void acceptsAndDeserializesOrdinaryBeanType() throws Exception {
+        ExposedBeanDeserializerFactory factory = new ExposedBeanDeserializerFactory();
+        assertTrue(factory.potentialBeanType(SimpleBean.class));
+
+        SimpleBean bean = new ObjectMapper().readValue("{\"value\":13}", SimpleBean.class);
+        assertEquals(13, bean.value);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryIssue1599Test::rejectsJdkProxyAsBeanType
+ - com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryIssue1599Test::rejectsIssue1599IllegalTypeDuringBeanEligibility
+
+Failing generated tests: com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryIssue1599Test::rejectsIssue1599IllegalTypeDuringBeanEligibility, com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryIssue1599Test::rejectsJdkProxyAsBeanType

@@ -1,0 +1,382 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 18  Version: JacksonCore-18b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.base.GeneratorBase, com.fasterxml.jackson.core.json.UTF8JsonGenerator, com.fasterxml.jackson.core.json.WriterBasedJsonGenerator
+Modified: com.fasterxml.jackson.core.base.GeneratorBase, com.fasterxml.jackson.core.json.UTF8JsonGenerator, com.fasterxml.jackson.core.json.WriterBasedJsonGenerator
+Triggers: com.fasterxml.jackson.core.json.TestJsonGeneratorFeatures::testTooBigBigDecimal
+
+Bug/specification summary:
+Bug report: 315
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestJsonGeneratorFeatures::testTooBigBigDecimal
+ --> junit.framework.AssertionFailedError: Should not have written without exception: 1E+10000
+Modified: com.fasterxml.jackson.core.base.GeneratorBase, com.fasterxml.jackson.core.json.UTF8JsonGenerator, com.fasterxml.jackson.core.json.WriterBasedJsonGenerator
+
+Prompt-01 test plan:
+TARGETS: GeneratorBase._asString(BigDecimal) and BigDecimal write paths in UTF8JsonGenerator/WriterBasedJsonGenerator.
+ORACLES: Trigger requires an exception, not output, for BigDecimal 1E+10000 under plain-number serialization.
+CASES: Exercise 1E+10000 through both byte-stream and Writer generators with plain BigDecimal output enabled.
+CASES: Check allowed-scale boundary versus out-of-range exponent/scale values if feature setup is available.
+RISKS: Context omits full feature setup, exception type/message, exact scale limit, and complete writeNumber signatures.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.base.GeneratorBase (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.base;
+public abstract class GeneratorBase extends JsonGenerator
+public final static int SURR1_FIRST = 0xD800;
+public final static int SURR1_LAST = 0xDBFF;
+public final static int SURR2_FIRST = 0xDC00;
+public final static int SURR2_LAST = 0xDFFF;
+protected final static String WRITE_BINARY = "write a binary value";
+protected final static String WRITE_BOOLEAN = "write a boolean value";
+protected final static String WRITE_NULL = "write a null";
+protected final static String WRITE_NUMBER = "write a number";
+protected final static String WRITE_RAW = "write a raw (unencoded) value";
+protected final static String WRITE_STRING = "write a string";
+protected ObjectCodec _objectCodec;
+protected int _features;
+protected boolean _cfgNumbersAsStrings;
+protected JsonWriteContext _writeContext;
+protected boolean _closed;
+protected GeneratorBase(int features,
+...[truncated deterministically]...
+erride public void close() throws IOException { _closed = true; }
+@Override public boolean isClosed() { return _closed; }
+protected abstract void _releaseBuffers();
+protected abstract void _verifyValueWrite(String typeMsg) throws IOException;
+protected PrettyPrinter _constructDefaultPrettyPrinter() {
+protected String _asString(BigDecimal value) throws IOException {
+protected final int _decodeSurrogate(int surr1, int surr2) throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.base;
+import java.io.*;
+import java.math.BigDecimal;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.json.DupDetector;
+import com.fasterxml.jackson.core.json.JsonWriteContext;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.core.util.VersionUtil;
+
+/* METHOD GeneratorBase */
+protected GeneratorBase(int features, ObjectCodec codec) {
+ super();
+ _features = features;
+ _objectCodec = codec;
+ DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
+ ? DupDetector.rootDetector(this) : null;
+ _writeContext = JsonWriteContext.createRootContext(dups);
+ _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(features);
+ }
+
+/* METHOD GeneratorBase */
+protected GeneratorBase(int features, ObjectCodec codec, JsonWriteContext ctxt) {
+ super();
+ _features = features;
+ _objectCodec = codec;
+ _writeContext = ctxt;
+ _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(features);
+ }
+
+/* METHOD enable */
+@Override
+ public JsonGenerator enable(Feature f) {
+ final int mask = f.getMask();
+ _features |= mask;
+ if ((mask & DERIVED_FEATURES_MASK) != 0) {
+ // why not switch? Requires addition of a generated class, alas
+ if (f ==
+...[truncated deterministically]...
+e if (f == Feature.ESCAPE_NON_ASCII) {
+ setHighestNonEscapedChar(127);
+ } else if (f == Feature.STRICT_DUPLICATE_DETECTION) {
+ if (_writeContext.getDupDetector() == null) { // but only if disabled currently
+ _writeContext = _writeContext.withDupDetector(DupDetector.rootDetector(this));
+ }
+ }
+ }
+ return this;
+ }
+
+/* METHOD writeNumber */
+public abstract void writeNumber(int i)
+ public abstract void writeNumber(long l)
+ public abstract void writeNumber(double d)
+ public abstract void writeNumber(float f)
+ public abstract void writeNumber(BigDecimal dec)
+ public abstract void writeBoolean(boolean state)
+ public abstract void writeNull()
+ */
+
+ /*
+ /**********************************************************
+ /* Public API, write methods, POJOs, trees
+ /**********************************************************
+ */
+
+ @Override
+ public void writeObject(Object value) throws IOException {
+ if (value == null) {
+ // important: call method that does check value write:
+ write
+...[truncated deterministically]...
+09, tatu: we are NOT to call _verifyValueWrite here,
+ * because that will be done when codec actually serializes
+ * contained POJO. If we did call it it would advance state
+ * causing exception later on
+ */
+ if (_objectCodec != null) {
+ _objectCodec.writeValue(this, value);
+ return;
+ }
+ _writeSimpleObject(value);
+ }
+ }
+
+===== com.fasterxml.jackson.core.json.UTF8JsonGenerator (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json;
+public class UTF8JsonGenerator
+private final static byte BYTE_u = (byte) 'u';
+private final static byte BYTE_0 = (byte) '0';
+private final static byte BYTE_LBRACKET = (byte) '[';
+private final static byte BYTE_RBRACKET = (byte) ']';
+private final static byte BYTE_LCURLY = (byte) '{';
+private final static byte BYTE_RCURLY = (byte) '}';
+private final static byte BYTE_BACKSLASH = (byte) '\\';
+private final static byte BYTE_COMMA = (byte) ',';
+private final static byte BYTE_COLON = (byte) ':';
+private final static byte BYTE_QUOTE = (byte) '"';
+private final static byte[] HEX_CHARS = CharTypes.copyHexBytes();
+final protected OutputStream _outputStream;
+protected byte[] _outputBuffer;
+protected int _outputTail;
+protected final int _outputEnd;
+protected final int _outputMaxContiguous;
+protected char[] _charBuffer;
+protected final int _charBuf
+...[truncated deterministically]...
+private final int _outputRawMultiByteChar(int ch, char[] cbuf, int inputOffset, int inputEnd)
+protected final void _outputSurrogates(int surr1, int surr2) throws IOException
+private final int _outputMultiByteChar(int ch, int outputPtr) throws IOException
+private final void _writeNull() throws IOException
+private int _writeGenericEscape(int charToEscape, int outputPtr) throws IOException
+protected final void _flushBuffer() throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.json;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.io.*;
+public class UTF8JsonGenerator
+
+/* METHOD UTF8JsonGenerator */
+public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
+ OutputStream out)
+ {
+ super(ctxt, features, codec);
+ _outputStream = out;
+ _bufferRecyclable = true;
+ _outputBuffer = ctxt.allocWriteEncodingBuffer();
+ _outputEnd = _outputBuffer.length;
+
+ /* To be exact, each char can take up to 6 bytes when escaped (Unicode
+ * escape with backslash, 'u' and 4 hex digits); but to avoid fluctuation,
+ * we will actually round down to only do up to 1/8 number of chars
+ */
+ _outputMaxContiguous = _outputEnd >> 3;
+ _charBuffer = ctxt.allocConcatBuffer();
+ _charBufferLength = _charBuffer.length;
+
+ // By default we use this feature to determine additional quoting
+ if (isEnabled(Feature.ESCAPE_NON_ASCII)) {
+ setHighestNonEscapedChar(127);
+ }
+ }
+
+/* METHOD UTF8JsonGenerator */
+public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
+ OutputStream out,
+ byte[] outputBuffer, int outputOffset, boolean bufferRecyclable)
+ {
+ 
+ super(ctxt, features, codec);
+ _outputStream = out;
+...[truncated deterministically]...
+putBuffer = outputBuffer;
+ _outputEnd = _outputBuffer.length;
+ // up to 6 bytes per char (see above), rounded up to 1/8
+ _outputMaxContiguous = (_outputEnd >> 3);
+ _charBuffer = ctxt.allocConcatBuffer();
+ _charBufferLength = _charBuffer.length;
+ }
+
+/* METHOD writeFieldName */
+@Override
+ public void writeFieldName(String name) throws IOException
+ {
+ if (_cfgPrettyPrinter != null) {
+ _writePPFieldName(name);
+ return;
+ }
+ final int status = _writeContext.writeFieldName(name);
+ if (status == JsonWriteContext.STATUS_EXPECT_VALUE) {
+ _reportError("Can not write a field name, expecting a value");
+ }
+ if (status == JsonWriteContext.STATUS_OK_AFTER_COMMA) { // need comma
+ if (_outputTail >= _outputEnd) {
+ _flushBuffer();
+ }
+ _outputBuffer[_outputTail++] = BYTE_COMMA;
+ }
+ /* To support [JACKSON-46], we'll do this:
+ * (Question: should quoting of spaces (etc) still be enabled?)
+ */
+ if (_cfgUnqNames) {
+ _writeStringSegments(name, false);
+ return;
+ }
+ fin
+...[truncated deterministically]...
+r[_outputTail++] = BYTE_COMMA;
+ }
+ if (_cfgUnqNames) {
+ _writeUnq(name);
+ return;
+ }
+ if (_outputTail >= _outputEnd) {
+ _flushBuffer
+...[truncated deterministically]...
+er[_outputTail++] = BYTE_QUOTE;
+ int len = name.appendQuotedUTF8(_outputBuffer, _outputTail);
+ if (len < 0) { // couldn't append, bit longer processing
+ _writeBytes(name.asQuotedUTF8());
+ }
+
+===== com.fasterxml.jackson.core.json.WriterBasedJsonGenerator (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json;
+public final class WriterBasedJsonGenerator
+final protected static int SHORT_WRITE = 32;
+final protected static char[] HEX_CHARS = CharTypes.copyHexChars();
+final protected Writer _writer;
+protected char[] _outputBuffer;
+protected int _outputHead;
+protected int _outputTail;
+protected int _outputEnd;
+protected char[] _entityBuffer;
+protected SerializableString _currentEscape;
+@Override
+public Object getOutputTarget() {
+public int getOutputBuffered() {
+public void writeFieldName(String name) throws IOException
+public void writeFieldName(SerializableString name) throws IOException
+protected void _writeFieldName(String name, boolean commaBefore) throws IOException
+protected void _writeFieldName(SerializableString name, boolean commaBefore) throws IOException
+final char[] quoted = name.asQuotedChars();
+public void writeStartArray() throws I
+...[truncated deterministically]...
+ustom(int end)
+private void _writeStringCustom(char[] text, int offset, int len)
+protected void _writeBinary(Base64Variant b64variant, byte[] input, int inputPtr, final int inputEnd)
+private final void _writeNull() throws IOException
+private void _prependOrWriteCharacterEscape(char ch, int escCode)
+private void _appendCharacterEscape(char ch, int escCode)
+private char[] _allocateEntityBuffer()
+protected void _flushBuffer() throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.json;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.io.*;
+
+/* METHOD WriterBasedJsonGenerator */
+public WriterBasedJsonGenerator(IOContext ctxt, int features,
+ ObjectCodec codec, Writer w)
+ {
+ super(ctxt, features, codec);
+ _writer = w;
+ _outputBuffer = ctxt.allocConcatBuffer();
+ _outputEnd = _outputBuffer.length;
+ }
+
+/* METHOD _verifyPrettyValueWrite */
+protected void _verifyPrettyValueWrite(String typeMsg) throws IOException
+ {
+ final int status = _writeContext.writeValue();
+ if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
+ _reportError("Can not "+typeMsg+", expecting field name");
+ }
+
+ // If we have a pretty printer, it knows what to do:
+ switch (status) {
+ case JsonWriteContext.STATUS_OK_AFTER_COMMA: // array
+ _cfgPrettyPrinter.writeArrayValueSeparator(this);
+ break;
+ case JsonWriteContext.STATUS_OK_AFTER_COLON:
+ _cfgPrettyPrinter.writeObjectFieldValueSeparator(this);
+ break;
+ case JsonWriteContext.STATUS_OK_AFTER_SPACE:
+ _cfgPrettyPrinter.writeRootValueSeparator(this);
+ break;
+ case JsonWriteContext.STATUS_OK_AS_IS:
+ // First entry, but of which context?
+ if (_writeContext.inArray()) {
+ _cfgPrettyPrinter.beforeArrayValues(this);
+ } else if (_writeContext.inObject()) {
+ _cfgPrettyPrinter.beforeObjectEntries(this);
+ }
+ break;
+ default:
+ _throwInternal();
+ break;
+ }
+ }
+
+/* METHOD _verifyValueWrite */
+@Override
+ protected void _verifyValueWrite(String typeMsg) throws IOException
+ {
+ if (_cfgPrettyPrinter != null) {
+ // Otherwise, pretty printer knows what to do...
+ _verifyPrettyValueWrite(typeMsg);
+ return;
+ }
+ char c;
+ final int status = _writeContext.writeValue();
+ if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
+ _reportError("Can not "+typeMsg+", expecting field name");
+ }
+ switch (status) {
+ case JsonWriteContext.STATUS_OK_AFTER_COMMA:
+ c = ',';
+ break;
+ case JsonWriteContext.STATUS_OK_AFTER_COLON:
+ c = ':';
+ break;
+ case JsonWriteContext.STATUS_OK_AFTER_SPACE: // root-value separator
+ if (_rootValueSeparator != null) {
+ writeRaw(_rootValueSeparator.getValue());
+ }
+ return;
+ case JsonWriteContext.STATUS_OK_AS_IS:
+ default:
+ return;
+ }
+ if (_outputTail >= _outputEnd) {
+ _flushBuffer();
+ }
+ _outputBuffer[_outputTail] = c;
+ ++_outputTail;
+ }

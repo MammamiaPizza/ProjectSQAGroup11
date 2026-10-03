@@ -1,0 +1,422 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 11  Version: Jsoup-11b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.select.Selector
+Modified: org.jsoup.select.Selector
+Triggers: org.jsoup.select.SelectorTest::notAll, org.jsoup.select.SelectorTest::testPseudoHas, org.jsoup.select.SelectorTest::notClass, org.jsoup.select.SelectorTest::notParas
+
+Bug/specification summary:
+Bug report: 36
+Trigger failures:
+- org.jsoup.select.SelectorTest::notAll
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query ':not(p)': unexpected token at ':not(p)'
+ - org.jsoup.select.SelectorTest::testPseudoHas
+ --> junit.framework.AssertionFailedError: expected:<3> but was:<0>
+ - org.jsoup.select.SelectorTest::notClass
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'div:not(.left)': unexpected token at ':not(.left)'
+ - org.jsoup.select.SelectorTest::notParas
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'p:not([id=1])': unexpected token at ':not([id=1])'
+Modified: org.jsoup.select.Selector
+
+Prompt-01 test plan:
+TARGETS: Selector.select(query,root): parse :not(sel) and :has(sel) pseudo-classes in select()
+combinator loop.
+TARGETS: findElements() and combinator() methods that process tokenizer output for pseudo-classes.
+ORACLES: :not(sel) excludes elements matching sel; :has(sel) selects elements with descendant
+matching sel.
+ORACLES: Test expectations: notAll selects all non-p; testPseudoHas expects 3 div:has(span) results.
+CASES: Normal: div:not(.left), p:not([id=1]), :not(p); span:has(a), div:has(span), ul:has(li).
+CASES: Boundary: :not(:not(p)) nested negation; :has(>child) child combinator; empty :not().
+CASES: Error: missing ')' in ':not(p' ; invalid inner selector ':not(!!)' ; missing selector after
+:has.
+RISKS: Internal tokenizer details unknown; fix might affect other pseudo-classes like :contains,
+:matches.
+RISKS: :not() limited to simple selectors per CSS3; compound inner selectors may need recursive
+parse.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.select.Selector (java) =====
+/* API SIGNATURES */
+package org.jsoup.select;
+<tr><td><code>.class</code></td><td>elements with a class name of "class"</td><td><code>div.left</code>, <code>.result</code></td></tr>
+<tr><td><code>:not(<em>selector</em>)</code></td><td>elements that do not match the <em>selector</em></td><code>div:not(.logo)</code> finds all divs that do not have the "logo" class</td></tr>
+@see Element#select(String)
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Selector {
+private Selector(String query, Element root) {
+@param query CSS selector
+@param root root element to descend into
+@return matching elements, empty if not
+public static Elements select(String query, Element root) {
+@param roots root elements to descend into
+public static Elements select(String query, Iterable<Element> roots) {
+private Elements select() {
+} else { // E.class, E#id, E[attr] etc. AND
+private void combinator(String combinator) {
+private Elements findElements() {
+private void addElements(Collection<Element> add) {
+private void intersectElements(Collection<Element> intersect) {
+private Elements byId() {
+private Elements byClass() {
+private Elements byTag() {
+private Elements byAttribute() {
+private Elements allElements() {
+private Elements indexLessThan() {
+private Elements indexGreaterThan() {
+private Elements indexEquals() {
+private int consumeIndex() {
+private Elements has() {
+private Elements contains(boolean own) {
+private Elements matches(boolean own) {
+private static Elements filterForChildren(Collection<Element> parents, Collection<Element> candidates) {
+private static Elements filterForDescendants(Collection<Element> parents, Collection<Element> candidates) {
+private static Elements filterForParentsOfDescendants(Collection<Element> parents, Collection<Element> children) {
+private static Elements filterForAdjacentSiblings(Collection<Element> elements, Collection<Element> candidates) {
+private static Elements filterForGeneralSiblings(Collection<Element> elements, Collection<Element> candidates) {
+private static Elements filterForSelf(Collection<Element> parents, Collection<Element> candidates) {
+public static class SelectorParseException extends IllegalStateException {
+public SelectorParseException(String msg, Object... params) {
+
+/* HEADER */
+package org.jsoup.select;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Element;
+import org.jsoup.parser.TokenQueue;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+public class Selector {
+
+/* METHOD select */
+public static Elements select(String query, Iterable<Element> roots) {
+ Validate.notEmpty(query);
+ Validate.notNull(roots);
+ LinkedHashSet<Element> elements = new LinkedHashSet<Element>();
+
+ for (Element root : roots) {
+ elements.addAll(select(query, root));
+ }
+ return new Elements(elements);
+ }
+
+/* METHOD select */
+public static Elements select(String query, Element root) {
+ return new Selector(query, root).select();
+ }
+
+/* METHOD Selector */
+private Selector(String query, Element root) {
+ Validate.notNull(query);
+ query = query.trim();
+ Validate.notEmpty(query);
+ Validate.notNull(root);
+
+ this.elements = new LinkedHashSet<Element>();
+ this.query = query;
+ this.root = root;
+ this.tq = new TokenQueue(query);
+ }
+
+/* METHOD select */
+private Elements select() {
+ tq.consumeWhitespace();
+ 
+ if (tq.matchesAny(combinators)) { // if starts with a combinator, use root as elements
+ elements.add(root);
+ combinator(tq.consume().toString());
+ } else {
+ addElements(findElements()); // chomp first element matcher off queue 
+ } 
+ 
+ while (!tq.isEmpty()) {
+ // hierarchy and extras
+ boolean seenWhite = tq.consumeWhitespace();
+ 
+ if (tq.matchChomp(",")) { // group or
+ while (!tq.isEmpty()) {
+ String subQuery = tq.chompTo(",");
+ elements.addAll(select(subQuery, root));
+ }
+ } else if (tq.matchesAny(combinators)) {
+ combinator(tq.consume().toString());
+ } else if (seenWhite) {
+ combinator(" ");
+ } else { // E.class, E#id, E[attr] etc. AND
+ Elements candidates = findElements(); // take next el, #. etc off queue
+ intersectElements(filterForSelf(elements, candidates));
+ }
+ }
+ return new Elements(elements);
+ }
+
+/* METHOD findElements */
+private Elements findElements() {
+ if (tq.matchChomp("#")) {
+ return byId();
+ } else if (tq.matchChomp(".")) {
+ return byClass();
+ } else if (tq.matchesWord()) {
+ return byTag();
+ } else if (tq.matches("[")) {
+ return byAttribute();
+ } else if (tq.matchChomp("*")) {
+ return allElements();
+ } else if (tq.matchChomp(":lt(")) {
+ return indexLessThan();
+ } else if (tq.matchChomp(":gt(")) {
+ return indexGreaterThan();
+ } else if (tq.matchChomp(":eq(")) {
+ return indexEquals();
+ } else if (tq.matches(":has(")) {
+ return has();
+ } else if (tq.matches(":contains(")) {
+ return contains(false);
+ } else if (tq.matches(":containsOwn(")) {
+ return contains(true);
+ } else if (tq.matches(":matches(")) {
+ return matches(false);
+ } else if (tq.matches(":matchesOwn(")) {
+ return matches(true);
+ } else { // unhandled
+ throw new SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, tq.remainder());
+ }
+ }
+
+/* METHOD SelectorParseException */
+public SelectorParseException(String msg, Object... params) {
+ super(String.format(msg, params));
+ }
+
+/* METHOD combinator */
+private void combinator(String combinator) {
+ tq.consumeWhitespace();
+ String subQuery = tq.consumeToAny(combinators); // support multi > childs
+ 
+ Elements output;
+ if (combinator.equals(">"))
+ output = filterForChildren(elements, select(subQuery, elements));
+ else if (combinator.equals(" "))
+ output = filterForDescendants(elements, select(subQuery, elements));
+ else if (combinator.equals("+"))
+ output = filterForAdjacentSiblings(elements, select(subQuery, root));
+ else if (combinator.equals("~"))
+ output = filterForGeneralSiblings(elements, select(subQuery, root));
+ else
+ throw new IllegalStateException("Unknown combinator: " + combinator);
+ 
+ elements.clear(); elements.addAll(output);
+ }
+
+/* METHOD byTag */
+private Elements byTag() {
+ String tagName = tq.consumeElementSelector();
+ Validate.notEmpty(tagName);
+ 
+ // namespaces: if element name is "abc:def", selector must be "abc|def", so flip:
+ if (tagName.contains("|"))
+ tagName = tagName.replace("|", ":");
+ return root.getElementsByTag(tagName);
+ }
+
+/* METHOD byAttribute */
+private Elements byAttribute() {
+ TokenQueue cq = new TokenQueue(tq.chompBalanced('[', ']')); // content queue
+ String key = cq.consumeToAny("=", "!=", "^=", "$=", "*=", "~="); // eq, not, start, end, contain, match, (no val)
+ Validate.notEmpty(key);
+ cq.consumeWhitespace();
+
+ if (cq.isEmpty()) {
+ return key.startsWith("^") ? root.getElementsByAttributeStarting(key.substring(1)) : root.getElementsByAttribute(key);
+ } else {
+ if (cq.matchChomp("="))
+ return root.getElementsByAttributeValue(key, cq.remainder());
+
+ else if (cq.matchChomp("!="))
+ return root.getElementsByAttributeValueNot(key, cq.remainder());
+
+ else if (cq.matchChomp("^="))
+ return root.getElementsByAttributeValueStarting(key, cq.remainder());
+
+ else if (cq.matchChomp("$="))
+ return root.getElementsByAttributeValueEnding(key, cq.remainder());
+
+ else if (cq.matchChomp("*="))
+ return root.getElementsByAttributeValueContaining(key, cq.remainder());
+ 
+ else if (cq.matchChomp("~="))
+ return root.getElementsByAttributeValueMatching(key, cq.remainder());
+ 
+ else
+ throw new SelectorParseException("Could not parse attribute query '%s': unexpected token at '%s'", query, cq.remainder());
+ }
+ }
+
+/* METHOD contains */
+private Elements contains(boolean own) {
+ tq.consume(own ? ":containsOwn" : ":contains");
+ String searchText = TokenQueue.unescape(tq.chompBalanced('(',')'));
+ Validate.notEmpty(searchText, ":contains(text) query must not be empty");
+ 
+ return own ? root.getElementsContainingOwnText(searchText) : root.getElementsContainingText(searchText);
+ }
+
+/* METHOD has */
+private Elements has() {
+ tq.consume(":has");
+ String subQuery = tq.chompBalanced('(',')');
+ Validate.notEmpty(subQuery, ":has(el) subselect must not be empty");
+
+ return filterForParentsOfDescendants(elements, select(subQuery, elements));
+ }
+
+/* METHOD byId */
+private Elements byId() {
+ String id = tq.consumeCssIdentifier();
+ Validate.notEmpty(id);
+
+ Element found = root.getElementById(id);
+ Elements byId = new Elements();
+ if(found != null)
+ byId.add(found);
+ return byId;
+ }
+
+/* METHOD byClass */
+private Elements byClass() {
+ String className = tq.consumeCssIdentifier();
+ Validate.notEmpty(className);
+
+ return root.getElementsByClass(className);
+ }
+
+/* METHOD consumeIndex */
+private int consumeIndex() {
+ String indexS = tq.chompTo(")").trim();
+ Validate.isTrue(StringUtil.isNumeric(indexS), "Index must be numeric");
+ return Integer.parseInt(indexS);
+ }
+
+/* METHOD filterForGeneralSiblings */
+private static Elements filterForGeneralSiblings(Collection<Element> elements, Collection<Element> candidates) {
+ Elements output = new Elements();
+ SIBLING: for (Element c: candidates) {
+ for (Element e: elements) {
+ if (!e.parent().equals(c.parent()))
+ continue;
+ int ePos = e.elementSiblingIndex();
+ int cPos = c.elementSiblingIndex();
+ if (cPos > ePos) {
+ output.add(c);
+ continue SIBLING;
+ }
+ }
+ }
+ return output;
+ }
+
+/* METHOD allElements */
+private Elements allElements() {
+ return root.getAllElements();
+ }
+
+/* METHOD indexLessThan */
+private Elements indexLessThan() {
+ return root.getElementsByIndexLessThan(consumeIndex());
+ }
+
+/* METHOD indexGreaterThan */
+private Elements indexGreaterThan() {
+ return root.getElementsByIndexGreaterThan(consumeIndex());
+ }
+
+/* METHOD indexEquals */
+private Elements indexEquals() {
+ return root.getElementsByIndexEquals(consumeIndex());
+ }
+
+/* METHOD filterForChildren */
+private static Elements filterForChildren(Collection<Element> parents, Collection<Element> candidates) {
+ Elements children = new Elements();
+ CHILD: for (Element c : candidates) {
+ for (Element p : parents) {
+ if (c.parent() != null && c.parent().equals(p)) {
+ children.add(c);
+ continue CHILD;
+ }
+ }
+ }
+ return children;
+ }
+
+/* METHOD filterForDescendants */
+private static Elements filterForDescendants(Collection<Element> parents, Collection<Element> candidates) {
+ Elements children = new Elements();
+ CHILD: for (Element c : candidates) {
+ for (Element p : parents) {
+ if (c.equals(p)) {
+ continue CHILD;
+ }
+ }
+ children.add(c);
+ }
+ return children;
+ }
+
+/* METHOD filterForAdjacentSiblings */
+private static Elements filterForAdjacentSiblings(Collection<Element> elements, Collection<Element> candidates) {
+ Elements siblings = new Elements();
+ SIBLING: for (Element c: candidates) {
+ for (Element e: elements) {
+ if (!e.parent().equals(c.parent()))
+ continue;
+ Element previousSib = c.previousElementSibling();
+ if (previousSib != null && previousSib.equals(e)) {
+ siblings.add(c);
+ continue SIBLING;
+ }
+ }
+ }
+ return siblings;
+ }
+
+/* METHOD filterForSelf */
+private static Elements filterForSelf(Collection<Element> parents, Collection<Element> candidates) {
+ Elements children = new Elements();
+ CHILD: for (Element c : candidates) {
+ for (Element p : parents) {
+ if (c.equals(p)) {
+ children.add(c);
+ continue CHILD;
+ }
+ } 
+ }
+ return children;
+ }
+
+/* METHOD addElements */
+private void addElements(Collection<Element> add) {
+ elements.addAll(add);
+ }
+
+/* METHOD intersectElements */
+private void intersectElements(Collection<Element> intersect) {
+ elements.retainAll(intersect);
+ }
+
+/* METHOD filterForParentsOfDescendants */
+private static Elements filterForParentsOfDescendants(Collection<Element> parents, Collection<Element> children) {
+ Elements filteredParents = new Elements();
+ for (Element p : parents) {
+ for (Element c : children) {
+ if (c.parents().contains(p)) {
+ filteredParents.add(p);
+ }
+ }
+ }
+ return filteredParents;
+ }

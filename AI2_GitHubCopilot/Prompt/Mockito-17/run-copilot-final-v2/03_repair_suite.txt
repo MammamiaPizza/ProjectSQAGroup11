@@ -1,0 +1,190 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 17  Version: Mockito-17b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 152
+Trigger failures:
+- org.mockitousage.basicapi.MocksSerializationTest::shouldBeSerializeAndHaveExtraInterfaces
+ --> java.io.NotSerializableException: org.mockitousage.IMethods$$EnhancerByMockitoWithCGLIB$$a155cf16
+Modified: org.mockito.internal.creation.MockSettingsImpl, org.mockito.internal.util.MockUtil
+
+Available API/signatures:
+[org.mockito.internal.creation.MockSettingsImpl | java]
+package org.mockito.internal.creation;
+public class MockSettingsImpl implements MockSettings {
+public MockSettings serializable() {
+return this.extraInterfaces(java.io.Serializable.class);
+public MockSettings extraInterfaces(Class<?>... extraInterfaces) {
+public MockName getMockName() {
+public Class<?>[] getExtraInterfaces() {
+public Object getSpiedInstance() {
+public MockSettings name(String name) {
+public MockSettings spiedInstance(Object spiedInstance) {
+@SuppressWarnings("unchecked")
+public MockSettings defaultAnswer(Answer defaultAnswer) {
+public Answer<Object> getDefaultAnswer() {
+public boolean isSerializable() {
+return extraInterfaces != null && java.util.Arrays.asList(extraInterfaces).contains(java.io.Serializable.class);
+public void initiateMockName(Class classToMock) {
+
+[org.mockito.internal.util.MockUtil | java]
+package org.mockito.internal.util;
+@SuppressWarnings("unchecked")
+public class MockUtil {
+public MockUtil(CreationValidator creationValidator) {
+public MockUtil() {
+public <T> T createMock(Class<T> classToMock, MockSettingsImpl settings) {
+public <T> void resetMock(T mock) {
+public <T> MockHandlerInterface<T> getMockHandler(T mock) {
+private <T> boolean isMockitoMock(T mock) {
+public boolean isMock(Object mock) {
+private <T> MethodInterceptorFilter getInterceptor(T mock) {
+public MockName getMockName(Object mock) {
+
+Generated JUnit Test:
+package org.mockito.internal.creation;
+
+ import static org.junit.Assert.*;
+ import static org.mockito.Mockito.*;
+
+ import java.io.Serializable;
+ import java.util.Arrays;
+
+ import org.junit.Test;
+ import org.mockito.exceptions.base.MockitoException;
+ import org.mockito.internal.util.MockUtil;
+
+ /**
+  * Tests for MockSettingsImpl serialization behaviour (related to bug #152).
+  * The main defect: {@code serializable()} followed by {@code extraInterfaces(...)}
+  * overwrites the {@code Serializable} interface instead of merging it.
+  */
+ public class MockSettingsImplSerializableTest {
+
+     // Helper interfaces for testing
+     interface Foo {}
+     interface Bar {}
+     class NonInterfaceClass {}
+
+     // -- MockSettingsImpl tests --
+
+     @Test
+     public void serializableShouldMakeSettingsSerializable() {
+         MockSettingsImpl settings = new MockSettingsImpl();
+         settings.serializable();
+         assertTrue(settings.isSerializable());
+     }
+
+     @Test
+     public void serializableShouldAddSerializableToExtraInterfaces() {
+         MockSettingsImpl settings = new MockSettingsImpl();
+         settings.serializable();
+         Class<?>[] extraInterfaces = settings.getExtraInterfaces();
+         assertNotNull(extraInterfaces);
+         assertTrue(Arrays.asList(extraInterfaces).contains(Serializable.class));
+     }
+
+     @Test
+     public void serializableAndExtraInterfacesShouldContainBoth() {
+         // This exposes the bug: at b17 serializable() then extraInterfaces() loses Serializable
+         MockSettingsImpl settings = new MockSettingsImpl();
+         settings.serializable().extraInterfaces(Foo.class);
+         Class<?>[] extraInterfaces = settings.getExtraInterfaces();
+         assertNotNull(extraInterfaces);
+         assertTrue("Should still contain Serializable after extraInterfaces call",
+                 Arrays.asList(extraInterfaces).contains(Serializable.class));
+         assertTrue("Should also contain Foo",
+                 Arrays.asList(extraInterfaces).contains(Foo.class));
+     }
+
+     @Test
+     public void isSerializableShouldBeFalseByDefault() {
+         MockSettingsImpl settings = new MockSettingsImpl();
+         assertFalse(settings.isSerializable());
+     }
+
+     @Test(expected = MockitoException.class)
+     public void extraInterfacesWithNullShouldThrow() {
+         new MockSettingsImpl().extraInterfaces((Class<?>[]) null);
+     }
+
+     @Test(expected = MockitoException.class)
+     public void extraInterfacesWithEmptyArrayShouldThrow() {
+         new MockSettingsImpl().extraInterfaces(new Class<?>[0]);
+     }
+
+     @Test(expected = MockitoException.class)
+     public void extraInterfacesWithNonInterfaceShouldThrow() {
+         new MockSettingsImpl().extraInterfaces(NonInterfaceClass.class);
+     }
+
+     @Test
+     public void multipleExtraInterfacesCallsShouldTakeLatest() {
+         MockSettingsImpl settings = new MockSettingsImpl();
+         settings.extraInterfaces(Foo.class);
+         settings.extraInterfaces(Bar.class);
+         Class<?>[] extras = settings.getExtraInterfaces();
+         assertEquals(1, extras.length);
+         assertEquals(Bar.class, extras[0]);
+     }
+
+     // -- MockUtil / Mock creation tests --
+
+     @Test
+     public void mockCreatedWithSerializableShouldBeSerializable() {
+         MockSettingsImpl settings = new MockSettingsImpl();
+         settings.serializable();
+
+         MockUtil mockUtil = new MockUtil();
+         Foo mock = mockUtil.createMock(Foo.class, settings);
+         assertTrue(mock instanceof Serializable);
+     }
+
+     @Test
+     public void mockCreatedWithSerializableAndExtraInterfaceShouldBeSerializable() {
+         // Bug-exposing: mock should implement both Serializable and the extra interface
+         MockSettingsImpl settings = new MockSettingsImpl();
+         settings.serializable().extraInterfaces(Foo.class);
+
+         MockUtil mockUtil = new MockUtil();
+         Object mock = mockUtil.createMock(Bar.class, settings); // mock a different interface to
+avoid confusion
+         assertTrue(mock instanceof Serializable);
+         assertTrue(mock instanceof Foo);
+     }
+
+     @Test
+     public void mockCreatedWithoutSerializableShouldNotBeSerializable() {
+         MockSettingsImpl settings = new MockSettingsImpl();
+         MockUtil mockUtil = new MockUtil();
+         Foo mock = mockUtil.createMock(Foo.class, settings);
+         assertFalse(mock instanceof Serializable);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Mockito-17f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Mockito-17f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Mockito-17f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] ^
+ [javac] /root/sqa-workspaces/Mockito-17f-copilot/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:7: warning: [deprecation] InitializationError in org.junit.internal.runners has been deprecated
+ [javac] import org.junit.internal.runners.InitializationError;
+ [javac] ^
+ [javac] /root/sqa-workspaces/Mockito-17f-copilot/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:8: warning: [deprecation] JUnit4ClassRunner in org.junit.internal.runners has been deprecated
+ [javac] import org.junit.internal.runners.JUnit4ClassRunner;
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Mockito-17f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Mockito-17f-copilot/.test_suite/org/mockito/internal/creation/MockSettingsImplSerializableTest.java:107: error: ';' expected
+ [javac] avoid confusion
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 10 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

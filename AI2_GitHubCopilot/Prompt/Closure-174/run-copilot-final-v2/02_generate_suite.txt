@@ -1,0 +1,387 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 174  Version: Closure-174b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.JsAst, com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.ScopedAliases
+Modified: com.google.javascript.jscomp.JsAst, com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.ScopedAliases
+Triggers: com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103a, com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103b, com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103c
+
+Bug/specification summary:
+Bug report: 1103
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103a
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable a is in a goog.scope and is not an alias. at testcode line 1 : 30 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103b
+ --> java.lang.RuntimeException: INTERNAL COMPILER ERROR.
+ - com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103c
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable a is in a goog.scope and is not an alias. at testcode line 1 : 52 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.JsAst, com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.ScopedAliases
+
+Prompt-01 test plan:
+TARGETS: ScopedAliases.validateScopeCall: detecting non-alias locals incorrectly triggers
+JSC_GOOG_SCOPE_NON_ALIAS_LOCAL
+TARGETS: ScopedAliases.Traversal.visit: handling of VAR nodes inside goog.scope;
+NodeUtil.isNameOrGetProp for alias detection
+TARGETS: JsAst.getAstRoot/parse: parsing of JS with goog.scope to produce correct AST nodes for
+alias analysis
+ORACLES: compiler should not emit JSC_GOOG_SCOPE_NON_ALIAS_LOCAL for non-alias var inside
+goog.scope; expected 0 errors
+CASES: goog.scope with goog.provide and only aliases → 0 errors; with plain var a=10; → 0 errors
+(after fix)
+CASES: goog.scope with both alias (a=goog.require(...)) and non-alias local var b=5 → verify no
+false positive
+CASES: nested goog.scope, function inside scope with alias, or multiple goog.scope calls → no
+internal compiler error
+RISKS: need full Compiler harness to invoke ScopedAliases pass; limited insight into exact NodeUtil
+changes for false-positive fix
+RISKS: without access to testIssue1103a sample input, reproducing the exact AST structure that
+triggers the bug may be difficult
+RISKS: error reporting mechanism (JSError, WarningLevel) may require specific Compiler flags or
+error manager setup for assertion
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.JsAst (java) =====
+/*
+ * Copyright 2009 The Closure Compiler Authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.javascript.jscomp;
+
+import com.google.common.base.Preconditions;
+import com.google.javascript.jscomp.parsing.ParserRunner;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.InputId;
+import com.google.javascript.rhino.Node;
+
+import java.io.IOException;
+import java.util.logging.Logger;
+
+/**
+ * Generates an AST for a JavaScript source file.
+ *
+ */
+public class JsAst implements SourceAst {
+ private static final Logger logger_ = Logger.getLogger(JsAst.class.getName());
+ private static final long serialVersionUID = 1L;
+
+ private transient InputId inputId;
+ private transient SourceFile sourceFile;
+ private String fileName;
+ private Node root;
+
+ public JsAst(SourceFile sourceFile) {
+ this.inputId = new InputId(sourceFile.getName());
+ this.sourceFile = sourceFile;
+ this.fileName = sourceFile.getName();
+ }
+
+ @Override
+ public Node getAstRoot(AbstractCompiler compiler) {
+ if (root == null) {
+ parse(compiler);
+ root.setInputId(inputId);
+ }
+ return root;
+ }
+
+ @Override
+ public void clearAst() {
+ root = null;
+ // While we're at it, clear out any saved text in the source file on
+ // the assumption that if we're dumping the parse tree, then we probably
+ // assume regenerating everything else is a smart idea also.
+ sourceFile.clearCachedSource();
+ }
+
+ @Override
+ public InputId getInputId() {
+ return inputId;
+ }
+
+ @Override
+ public SourceFile getSourceFile() {
+ return sourceFile;
+ }
+
+ @Override
+ public void setSourceFile(SourceFile file) {
+ Preconditions.checkState(fileName.equals(file.getName()));
+ sourceFile = file;
+ }
+
+ private void parse(AbstractCompiler compiler) {
+ try {
+ ParserRunner.ParseResult result = ParserRunner.parse(sourceFile, sourceFile.getCode(),
+ compiler.getParserConfig(),
+ compiler.getDefaultErrorReporter(),
+ logger_);
+ root = result.ast;
+ compiler.setOldParseTree(sourceFile.getName(), result.oldAst);
+ } catch (IOException e) {
+ compiler.report(
+ JSError.make(AbstractCompiler.READ_ERROR, sourceFile.getName()));
+ }
+
+ if (root == null || compiler.hasHaltingErrors()) {
+ // Most passes try to report as many errors as possible,
+ // so there may already be errors. We only care if there were
+ // errors in the code we just parsed.
+ // There was a parse error or IOException, so use a dummy block.
+ root = IR.script();
+ } else {
+ compiler.prepareAst(root);
+ }
+
+ // Set the source name so that the compiler passes can track
+ // the source file and module.
+ root.setStaticSourceFile(sourceFile);
+ }
+}
+
+===== com.google.javascript.jscomp.NodeUtil (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public final class NodeUtil {
+static final long MAX_POSITIVE_INTEGER_NUMBER = (long) Math.pow(2, 53);
+private NodeUtil() {}
+static TernaryValue getImpureBooleanValue(Node n) {
+static TernaryValue getPureBooleanValue(Node n) {
+static String getStringValue(Node n) {
+static String getStringValue(double value) {
+static String getArrayElementStringValue(Node n) {
+static String arrayToString(Node literal) {
+static Double getNumberValue(Node n) {
+static Double getStringNumberValue(String rawJsString) {
+static String trimJsWhiteSpace(String s) {
+public static TernaryValue isStrWhiteSpaceChar(int c) {
+static String getFunctionName(Node n) {
+public static String getNearestFunctionName(Node n) {
+static boolean isImmutableValue(Node n) {
+static boolean isSymmetricOperation(Node n) {
+static boolean isRelationalOperation(Node n) {
+static int getInverse
+...[truncated deterministically]...
+able Node lValue) {
+static String getBestLValueName(@Nullable Node lValue) {
+static boolean isExpressionResultUsed(Node expr) {
+static boolean isExecutedExactlyOnce(Node n) {
+static Node booleanNode(boolean value) {
+static Node numberNode(double value, Node srcref) {
+static boolean isNaN(Node n) {
+public static Map<Node, Node> mapMainToClone(Node main, Node clone) {
+private static void mtocHelper(Map<Node, Node> map, Node main, Node clone) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.InputId;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import com.google.javascript.rhino.jstype.TernaryValue;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import javax.annotation.Nullable;
+
+/* METHOD NodeUtil */
+private NodeUtil() {}
+
+/* METHOD getNearestFunctionName */
+public static String getNearestFunctionName(Node n) {
+ if (!n.isFunction()) {
+ return null;
+ }
+
+ String name = getFunctionName(n);
+ if (name != null) {
+ return name;
+ }
+
+ // Check for the form { 'x' : function() { } }
+ Node parent = n.getParent();
+ switch (parent.getType()) {
+ case Token.SETTER_DEF:
+ case Token.GETTER_DEF:
+ case Token.STRING_KEY:
+ // Return the name of the literal's key.
+ return parent.getString();
+ case Token.NUMBER:
+ return getStringValue(parent);
+ }
+
+ return null;
+ }
+
+ /**
+ * Returns true if this is an immutable value.
+ */
+ static boolean isImmutableValue(Node n) {
+ switch (n.getType()) {
+ case Token.STRING:
+ case Token.NUMBER:
+ case Token.NULL:
+ case Token.TRUE:
+ case Token.FALSE:
+ return true;
+ case Token.CAST:
+ case Token.NOT:
+ return isImmutableValue(n.getFirstChild());
+ case Token.VOID:
+ case Token.NEG:
+ return isImmutableValue(n.getFirstChild());
+ case Token.NAME:
+ String name = n.getString();
+ // We assume here that programs don't change the value of the keyword
+ // undefined to something other than the value undefined.
+ return "undefined".equals(name)
+ || "Infinity".equals(name)
+ || "NaN".equals(name);
+ }
+
+ return false;
+ }
+
+===== com.google.javascript.jscomp.ScopedAliases (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class ScopedAliases implements HotSwapCompilerPass {
+private Multiset<String> scopedAliasNames = HashMultiset.create();
+@Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node root, Node originalRoot) {
+private abstract class AliasUsage {
+public boolean referencesOtherAlias() {
+public abstract void applyAlias();
+private class AliasedNode extends AliasUsage {
+public void applyAlias() {
+private class AliasedTypeNode extends AliasUsage {
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> aliasUsages = Lists.newArrayList();
+private final Map<String, Var> aliases = Maps.newHashM
+...[truncated deterministically]...
+e parent) {
+private SourcePosition<AliasTransformation> getSourceRegion(Node n) {
+private void findAliases(NodeTraversal t) {
+private void recordAlias(Var aliasVar) {
+private void findNamespaceShadows(NodeTraversal t) {
+private void renameNamespaceShadows(NodeTraversal t) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformation;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformationHandler;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.SourcePosition;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import javax.annotation.Nullable;
+class ScopedAliases implements HotSwapCompilerPass {
+
+/* METHOD ScopedAliases */
+ScopedAliases(AbstractCompiler compiler,
+ @Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+ AliasTransformationHandler transformationHandler) {
+ this.compiler = compiler;
+ this.preprocessorSymbolTable = preprocessorSymbolTable;
+ this.transformationHandler = transformationHandler;
+ }
+
+/* METHOD hotSwapScript */
+@Override
+ public void hotSwapScript(Node root, Node ori
+...[truncated deterministically]...
+averse(compiler, root, traversal);
+
+ if (!traversal.hasErrors()) {
+
+ // Apply the aliases.
+ List<AliasUsage> aliasWorkQueue =
+ Lists.newArrayList(traversal.getAliasUsages());
+ while (!aliasWorkQueue.isEmpty()) {
+ List<AliasUsage> newQueue = Lists.newArrayList();
+ for (AliasUsage aliasUsage : aliasWorkQueue) {
+ if (aliasUsage.referencesOtherAlias()) {
+ newQueue.add(aliasUsage);
+ } else {
+ aliasUsage.applyAlias();
+ }
+ }
+
+ // Prevent an infinite loop.
+ if (newQueue.size() == aliasWorkQueue.size()) {
+ Var cycleVar = newQueue.get(0).aliasVar;
+ compiler.report(JSError.make(
+ cycleVar.getNode(), GOOG_SCOPE_ALIAS_CYCLE, cycleVar.getName()));
+ break;
+ } else {
+ aliasWorkQueue = newQueue;
+ }
+ }
+
+ // Remove the alias definitions.
+ for (Node aliasDefinition : traversal.getAliasDefinitionsInOrder()) {
+ if (aliasDefinition.g
+...[truncated deterministically]...
+ssionWithScopeCall = scopeCall.getParent();
+ Node scopeClosureBlock = scopeCall.getLastChild().getLastChild();
+ scopeClosureBlock.detachFromParent();
+ expressionWithScopeCall.getParent().replaceChild(
+ expressionWithScopeCall,
+ scopeClosureBlock);
+ NodeUtil.tryMergeBlock(scopeClosureBlock);
+ }
+
+ if (traversal.getAliasUsages().size() > 0 ||
+ traversal.getAliasDefinitionsInOrder().size() > 0 ||
+ traversal.getScopeCalls().size() > 0) {
+ compiler.reportCodeChange();
+ }
+ }
+ }

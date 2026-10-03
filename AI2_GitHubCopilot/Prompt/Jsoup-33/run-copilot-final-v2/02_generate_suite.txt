@@ -1,0 +1,424 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 33  Version: Jsoup-33b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.parser.HtmlTreeBuilder
+Modified: org.jsoup.parser.HtmlTreeBuilder
+Triggers: org.jsoup.parser.HtmlParserTest::handlesKnownEmptyBlocks
+
+Bug/specification summary:
+Bug report: 305
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::handlesKnownEmptyBlocks
+ --> junit.framework.AssertionFailedError: expected:<...src="/foo"></script>[<div id="2"><img /><img /></div><a id="3"></a><i></i><foo /><foo>One</foo> <hr /> hr text <hr />] hr text two> but was:<...src="/foo"></script>[&lt;div id=2&gt;&lt;img /&gt;&lt;img&gt;&lt;/div&gt;&lt;a id=3 /&gt;&lt;i /&gt;&lt;foo /&gt;&lt;foo&gt;One&lt;/foo&gt; &lt;hr /&gt; hr text &lt;hr&gt;] hr text two>
+Modified: org.jsoup.parser.HtmlTreeBuilder
+
+Prompt-01 test plan:
+TARGETS: process(Token) token handling; insertNode for empty-block insertion; formattingElements
+management.
+ORACLES: HtmlParserTest::handlesKnownEmptyBlocks expected output (comparison of parsed HTML
+strings).
+CASES: Known empty blocks (img, hr, br, input, etc.) alone, nested, with attributes, with text
+siblings, self-closing tags.
+RISKS: Only bug-trigger test visible; exact fix unknown; need to infer empty-block handling from
+actual/expected diff.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.HtmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+class HtmlTreeBuilder extends TreeBuilder {
+private DescendableLinkedList<Element> formattingElements = new DescendableLinkedList<Element>(); // active (open) formatting elements
+private List<Token.Character> pendingTableCharacters = new ArrayList<Token.Character>(); // chars in table to be shifted out
+@Override
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(DescendableLinkedList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(LinkedList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.DescendableLinkedList;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.*;
+import org.jsoup.select.Elements;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+class HtmlTreeBuilder extends TreeBuilder {
+
+/* METHOD HtmlTreeBuilder */
+HtmlTreeBuilder() {}
+
+/* METHOD isSpecial */
+boolean isSpecial(Element el) {
+ // todo: mathml's mi, mo, mn
+ // todo: svg's foreigObject, desc, title
+ String name = el.nodeName();
+ return StringUtil.in(name, "address", "applet", "area", "article", "aside", "base", "basefont", "bgsound",
+ "blockquote", "body", "br", "button", "caption", "center", "col", "colgroup", "command", "dd",
+ "details", "dir", "div", "dl", "dt", "embed", "fieldset", "figcaption", "figure", "footer", "form",
+ "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html",
+ "iframe", "img", "input", "isindex", "li", "link", "listing", "marquee", "menu", "meta", "nav",
+ "noembed", "noframes", "noscript", "object", "ol", "p", "param", "plaintext", "pre", "script",
+ "section", "select", "style", "summary", "table", "tbody", "td", "textarea", "tfoot", "th", "thead",
+ "title", "tr", "ul", "wbr", "xmp");
+ }
+
+/* METHOD parseFragment */
+List<Node> parseFragment(String inputFragment, Element context, String baseUri, ParseErrorList errors) {
+ // context may be null
+ state = HtmlTreeBuilderState.Initial;
+ initialiseParse(inputFragment, baseUri, errors);
+ contextElement = context;
+ fragmentParsing = true;
+ Element root = null;
+
+ if (context != null) {
+ if (context.ownerDocument() != null) // quirks setup:
+ doc.quirksMode(context.ownerDocument().quirksMode());
+
+ // initialise the tokeniser state:
+ String contextTag = context.tagName();
+ if (StringUtil.in(contextTag, "title", "textarea"))
+ tokeniser.transition(TokeniserState.Rcdata);
+ else if (StringUtil.in(contextTag, "iframe", "noembed", "noframes", "style", "xmp"))
+ tokeniser.transition(TokeniserState.Rawtext);
+ else if (contextTag.equals("script"))
+ tokeniser.transition(TokeniserState.ScriptData);
+ else if (contextTag.equals(("noscript")))
+ tokeniser.transition(TokeniserState.Data); // if scripting enabled, rawtext
+ else if (contextTag.equals("plaintext"))
+ tokeniser.transition(TokeniserState.Data);
+ else
+ tokeniser.transition(TokeniserState.Data); // default
+
+ root = new Element(Tag.valueOf("html"), baseUri);
+ doc.appendChild(root);
+ stack.push(root);
+ resetInsertionMode();
+
+ // setup form element to nearest form on context (up ancestor chain). ensures form controls are associated
+ // with form correctly
+ Elements contextChain = context.parents();
+ contextChain.add(0, context);
+ for (Element parent: contextChain) {
+ if (parent instanceof FormElement) {
+ formElement = (FormElement) parent;
+ break;
+ }
+ }
+ }
+
+ runParser();
+ if (context != null)
+ return root.childNodes();
+ else
+ return doc.childNodes();
+ }
+
+/* METHOD resetInsertionMode */
+void resetInsertionMode() {
+ boolean last = false;
+ Iterator<Element> it = stack.descendingIterator();
+ while (it.hasNext()) {
+ Element node = it.next();
+ if (!it.hasNext()) {
+ last = true;
+ node = contextElement;
+ }
+ String name = node.nodeName();
+ if ("select".equals(name)) {
+ transition(HtmlTreeBuilderState.InSelect);
+ break; // frag
+ } else if (("td".equals(name) || "td".equals(name) && !last)) {
+ transition(HtmlTreeBuilderState.InCell);
+ break;
+ } else if ("tr".equals(name)) {
+ transition(HtmlTreeBuilderState.InRow);
+ break;
+ } else if ("tbody".equals(name) || "thead".equals(name) || "tfoot".equals(name)) {
+ transition(HtmlTreeBuilderState.InTableBody);
+ break;
+ } else if ("caption".equals(name)) {
+ transition(HtmlTreeBuilderState.InCaption);
+ break;
+ } else if ("colgroup".equals(name)) {
+ transition(HtmlTreeBuilderState.InColumnGroup);
+ break; // frag
+ } else if ("table".equals(name)) {
+ transition(HtmlTreeBuilderState.InTable);
+ break;
+ } else if ("head".equals(name)) {
+ transition(HtmlTreeBuilderState.InBody);
+ break; // frag
+ } else if ("body".equals(name)) {
+ transition(HtmlTreeBuilderState.InBody);
+ break;
+ } else if ("frameset".equals(name)) {
+ transition(HtmlTreeBuilderState.InFrameset);
+ break; // frag
+ } else if ("html".equals(name)) {
+ transition(HtmlTreeBuilderState.BeforeHead);
+ break; // frag
+ } else if (last) {
+ transition(HtmlTreeBuilderState.InBody);
+ break; // frag
+ }
+ }
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "TreeBuilder{" +
+ "currentToken=" + currentToken +
+ ", state=" + state +
+ ", currentElement=" + currentElement() +
+ '}';
+ }
+
+/* METHOD parse */
+@Override
+ Document parse(String input, String baseUri, ParseErrorList errors) {
+ state = HtmlTreeBuilderState.Initial;
+ return super.parse(input, baseUri, errors);
+ }
+
+/* METHOD process */
+@Override
+ protected boolean process(Token token) {
+ currentToken = token;
+ return this.state.process(token, this);
+ }
+
+/* METHOD maybeSetBaseUri */
+void maybeSetBaseUri(Element base) {
+ if (baseUriSetFromDoc) // only listen to the first <base href> in parse
+ return;
+
+ String href = base.absUrl("href");
+ if (href.length() != 0) { // ignore <base target> etc
+ baseUri = href;
+ baseUriSetFromDoc = true;
+ doc.setBaseUri(href); // set on the doc so doc.createElement(Tag) will get updated base, and to update all descendants
+ }
+ }
+
+/* METHOD insert */
+void insert(Token.Character characterToken) {
+ Node node;
+ // characters in script and style go in as datanodes, not text nodes
+ if (StringUtil.in(currentElement().tagName(), "script", "style"))
+ node = new DataNode(characterToken.getData(), baseUri);
+ else
+ node = new TextNode(characterToken.getData(), baseUri);
+ currentElement().appendChild(node); // doesn't use insertNode, because we don't foster these; and will always have a stack.
+ }
+
+/* METHOD insert */
+Element insert(Token.StartTag startTag) {
+ // handle empty unknown tags
+ // when the spec expects an empty tag, will directly hit insertEmpty, so won't generate this fake end tag.
+ if (startTag.isSelfClosing()) {
+ Element el = insertEmpty(startTag);
+ stack.add(el);
+ tokeniser.emit(new Token.EndTag(el.tagName())); // ensure we get out of whatever state we are in. emitted for yielded processing
+ return el;
+ }
+ 
+ Element el = new Element(Tag.valueOf(startTag.name()), baseUri, startTag.attributes);
+ insert(el);
+ return el;
+ }
+
+ Element insert(String startTagName) {
+ Element el = new Element(Tag.valueOf(startTagName), baseUri);
+ insert(el);
+ return el;
+ }
+
+ void insert(Element el) {
+ insertNode(el);
+ stack.add(el);
+ }
+
+ Element insertEmpty(Token.StartTag startTag) {
+ Tag tag = Tag.valueOf(startTag.name());
+ Element el = new Element(tag, baseUri, startTag.attributes);
+ insertNode(el);
+ if (startTag.isSelfClosing()) {
+ if (tag.isKnownTag()) {
+ if (tag.isSelfClosing()) tokeniser.acknowledgeSelfClosingFlag(); // if
+...[truncated deterministically]...
+owledgeSelfClosingFlag(); // not an distinct error
+ }
+ }
+ return el;
+ }
+
+ FormElement insertForm(Token.StartTag startTag, boolean onStack) {
+ Tag tag = Tag.valueOf(startTag.name());
+ FormElement el = new FormElement(tag, baseUri, startTag.attributes);
+ setFormElement(el);
+ insertNode(el);
+ if (onStack)
+ stack.add(el);
+ return el;
+ }
+
+ void insert(Token.Comment commentToken) {
+ Comment comment = new Comment(commentToken.getData(), baseUri);
+ insertNode(comment);
+ }
+
+ void insert(Token.Character characterToken) {
+ Node node;
+ // characters in script and style go in as datanodes, not text nodes
+ if (StringUtil.in(currentElement().tagName(), "script", "style"))
+ node = new DataNode(characterToken.getData(), baseUri);
+ else
+ node = new TextNode(characterToken.getData(), baseUri);
+ currentElement().appendChild(node); // doesn't use insertNode, because we don't foster these; and will always have a stack.
+ }
+
+ private void insertNode(Node node) {
+ // if the stack hasn't been set up yet, elements (doctype, comments) go into the doc
+ if (stack.size() == 0)
+ doc.appendChild(node);
+ else if (isFosterInserts())
+ insertInFosterParent(node);
+ else
+ currentElement().appendChild(node);
+
+ // connect form controls to their form element
+ if (node instanceof Element && ((Element) node).tag().isFormListed()) {
+ if (formElement != null)
+ formElement.addElement((Element) node);
+ }
+ }
+
+/* METHOD insertNode */
+private void insertNode(Node node) {
+ // if the stack hasn't been set up yet, elements (doctype, comments) go into the doc
+ if (stack.size() == 0)
+ doc.appendChild(node);
+ else if (isFosterInserts())
+ insertInFosterParent(node);
+ else
+ currentElement().appendChild(node);
+
+ // connect form controls to their form element
+ if (node instanceof Element && ((Element) node).tag().isFormListed()) {
+ if (formElement != null)
+ formElement.addElement((Element) node);
+ }
+ }
+
+ Element pop() {
+ // todo - dev, remove validation check
+ if (stack.peekLast().nodeName().equals("td") && !state.name().equals("InCell"))
+ Validate.isFalse(true, "pop td not in cell");
+ if (stack.peekLast().nodeName().equals("html"))
+ Validate.isFalse(true, "popping html!");
+ return stack.pollLast();
+ }
+
+ void push(Element element) {
+ stack.add(element);
+ }
+
+ DescendableLinkedList<Element> getStack() {
+ return stack;
+ }
+
+ boolean onStack(Element el) {
+ return isElementInQueue(stack, el);
+ }
+
+ private boolean isElementInQueue(DescendableLinkedList<Element> queue, Element element) {
+ Iterator<Element> it = queue.descendingIterator();
+ while (it.hasNext()) {
+ Element next = it.next();
+ if (next == element) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+ Element getFromStack(String elName) {
+ Iterator<Element> it = stack.descendingIterator();
+ while (it.hasNext()) {
+ Element next = it.next();
+ if (next.nodeName().equals(elName)) {
+ return next;
+ }
+ }
+ return null;
+ }
+
+ boolean removeFromStack(Element el) {
+ Iterator<Element> it = stack.descendingIterator();
+ while (it.hasNext()) {
+ Element next = it.next();
+ if (next == el) {
+ it.remove();
+ return true;
+ }
+ }
+ return false;
+ }
+
+ void popStackToClose(String elName) {
+ Iterator<
+...[truncated deterministically]...
+in) {
+ replaceInQueue(formattingElements, out, in);
+ }
+
+ void insertMarkerToFormattingElements() {
+ formattingElements.add(null);
+ }
+
+ void insertInFosterParent(Node in) {
+ Element fosterParent = null;
+ Element lastTable = getFromStack("table");
+ boolean isLastTableParent = false;
+ if (lastTable != null) {
+ if (lastTable.parent() != null) {
+ fosterParent = lastTable.parent();
+ isLastTableParent = true;
+ } else
+ fosterParent = aboveOnStack(lastTable);
+ } else { // no table == frag
+ fosterParent = stack.get(0);
+ }
+
+ if (isLastTableParent) {
+ Validate.notNull(lastTable); // last table cannot be null by this point.
+ lastTable.before(in);
+ }
+ else
+ fosterParent.appendChild(in);
+ }
+
+ @Override
+ public String toString() {
+ return "TreeBuilder{" +
+ "currentToken=" + currentToken +
+ ", state=" + state +
+ ", currentElement=" + currentElement() +
+ '}

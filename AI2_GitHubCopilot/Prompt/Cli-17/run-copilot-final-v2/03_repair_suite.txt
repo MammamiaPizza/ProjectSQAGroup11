@@ -1,0 +1,257 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 17  Version: Cli-17b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-163
+Trigger failures:
+- org.apache.commons.cli.PosixParserTest::testStopBursting
+ --> junit.framework.AssertionFailedError: Confirm 1 extra arg: 2
+Modified: org.apache.commons.cli.PosixParser
+
+Available API/signatures:
+[org.apache.commons.cli.PosixParser | java]
+package org.apache.commons.cli;
+public class PosixParser extends Parser {
+private List tokens = new ArrayList();
+private void init()
+protected String[] flatten(Options options, String[] arguments, boolean stopAtNonOption)
+private void gobble(Iterator iter)
+private void process(String value)
+private void processSingleHyphen(String hyphen)
+private void processOptionToken(String token, boolean stopAtNonOption)
+protected void burstToken(String token, boolean stopAtNonOption)
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Tests for {@link PosixParser} focusing on the stop-at-non-option bursting
+  * bug (CLI-163) and other normal/boundary/exception behaviors.
+  */
+ public class PosixParserTest extends TestCase {
+
+     // ----------------------------------------------------------------
+     // 1. Normal bursting without stopAtNonOption
+     // ----------------------------------------------------------------
+     public void testBurstSimple() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+         opts.addOption("v", false, "verbose");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"-av"}, false);
+
+         assertTrue("Option a must be present", cmd.hasOption("a"));
+         assertTrue("Option v must be present", cmd.hasOption("v"));
+         assertEquals("No extra arguments expected", 0, cmd.getArgList().size());
+     }
+
+     // ----------------------------------------------------------------
+     // 2. Bursting with an argument attached to an option
+     // ----------------------------------------------------------------
+     public void testBurstWithArgument() {
+         Options opts = new Options();
+         opts.addOption("a", true, "alpha");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"-afile"}, false);
+
+         assertTrue(cmd.hasOption("a"));
+         assertEquals("file", cmd.getOptionValue("a"));
+         assertEquals(0, cmd.getArgList().size());
+     }
+
+     // ----------------------------------------------------------------
+     // 3. stopAtNonOption=true, non-option at the end of a burst token
+     // ----------------------------------------------------------------
+     public void testStopBurstingNonOptionEnd() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+
+         PosixParser parser = new PosixParser();
+         // "-ac" : 'a' valid, 'c' not an option; stopAtNonOption=true
+         CommandLine cmd = parser.parse(opts, new String[]{"-ac", "file"}, true);
+
+         assertTrue(cmd.hasOption("a"));
+         // The rest of the burst token ("c") and the following token ("file")
+         // should both be added as arguments.
+         assertEquals(2, cmd.getArgList().size());
+         assertEquals("c", cmd.getArgList().get(0));
+         assertEquals("file", cmd.getArgList().get(1));
+     }
+
+     // ----------------------------------------------------------------
+     // 4. The CLI-163 duplicate-token bug: non-option char followed by
+     //    a valid option char inside a burst token with stopAtNonOption
+     // ----------------------------------------------------------------
+     public void testStopBurstingDuplicateBug() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+         opts.addOption("v", false, "verbose");
+
+         PosixParser parser = new PosixParser();
+         // "-acv" : 'a' valid, 'c' unknown, 'v' valid (but must not be recognised)
+         CommandLine cmd = parser.parse(opts, new String[]{"-acv"}, true);
+
+         // The non-option 'c' should stop bursting; the whole rest "cv" must
+         // be treated as a single argument.  The buggy implementation
+         // incorrectly continues and adds "-v" as well, producing 2 args.
+         assertTrue(cmd.hasOption("a"));
+         assertFalse("v must not become an option", cmd.hasOption("v"));
+         assertEquals("Expected exactly 1 argument (cv)", 1, cmd.getArgList().size());
+         assertEquals("cv", cmd.getArgList().get(0));
+     }
+
+     // ----------------------------------------------------------------
+     // 5. Non-option as first char in a burst token; no later char may
+     //    become an option.
+     // ----------------------------------------------------------------
+     public void testStopBurstingFirstCharNonOption() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+         opts.addOption("b", false, "beta");
+
+         PosixParser parser = new PosixParser();
+         // "-cab" : 'c' unknown, 'a' and 'b' valid
+         CommandLine cmd = parser.parse(opts, new String[]{"-cab"}, true);
+
+         // Everything after '-' must be treated as a single argument "cab".
+         assertFalse("a must not become an option", cmd.hasOption("a"));
+         assertFalse("b must not become an option", cmd.hasOption("b"));
+         assertEquals(1, cmd.getArgList().size());
+         assertEquals("cab", cmd.getArgList().get(0));
+     }
+
+     // ----------------------------------------------------------------
+     // 6. Long option (--opt)
+     // ----------------------------------------------------------------
+     public void testLongOption() {
+         Options opts = new Options();
+         opts.addOption("a", "alpha", false, "alpha option");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"--alpha"}, false);
+
+         assertTrue(cmd.hasOption("alpha"));
+         assertEquals(0, cmd.getArgList().size());
+     }
+
+     // ----------------------------------------------------------------
+     // 7. Long option with equals sign (--opt=value)
+     // ----------------------------------------------------------------
+     public void testLongOptionWithEquals() {
+         Options opts = new Options();
+         opts.addOption("a", "alpha", true, "alpha option");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"--alpha=value"}, false);
+
+         assertTrue(cmd.hasOption("alpha"));
+         assertEquals("value", cmd.getOptionValue("alpha"));
+         assertEquals(0, cmd.getArgList().size());
+     }
+
+     // ----------------------------------------------------------------
+     // 8. "--" stops option processing unconditionally
+     // ----------------------------------------------------------------
+     public void testDoubleHyphenStop() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"-a", "--", "-b", "arg"}, false);
+
+         assertTrue(cmd.hasOption("a"));
+         assertFalse("Options after -- must be arguments", cmd.hasOption("b"));
+         assertEquals(2, cmd.getArgList().size());
+         assertEquals("-b", cmd.getArgList().get(0));
+         assertEquals("arg", cmd.getArgList().get(1));
+     }
+
+     // ----------------------------------------------------------------
+     // 9. Lone hyphen ("-") is treated as a literal argument
+     // ----------------------------------------------------------------
+     public void testSingleHyphen() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"-a", "-"}, false);
+
+         assertTrue(cmd.hasOption("a"));
+         assertEquals(1, cmd.getArgList().size());
+         assertEquals("-", cmd.getArgList().get(0));
+     }
+
+     // ----------------------------------------------------------------
+     // 10. stopAtNonOption without bursting: first token is non-option
+     // ----------------------------------------------------------------
+     public void testStopAtNonOptionNoBurst() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+
+         PosixParser parser = new PosixParser();
+         CommandLine cmd = parser.parse(opts, new String[]{"foo", "-a", "bar"}, true);
+
+         assertFalse(cmd.hasOption("a"));
+         assertEquals(3, cmd.getArgList().size());
+     }
+
+     // ----------------------------------------------------------------
+     // 11. Unrecognized option (stopAtNonOption=false) → ParseException
+     // ----------------------------------------------------------------
+     public void testUnrecognizedOptionThrows() {
+         Options opts = new Options();
+         opts.addOption("a", false, "alpha");
+
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(opts, new String[]{"-x"}, false);
+             fail("Expected ParseException for unrecognized option -x");
+         } catch (ParseException e) {
+             // expected
+         }
+     }
+
+     // ----------------------------------------------------------------
+     // 12. Missing required option → ParseException
+     // ----------------------------------------------------------------
+     public void testMissingRequiredOptionThrows() {
+         Options opts = new Options();
+         Option req = new Option("a", "alpha", true, "required alpha");
+         req.setRequired(true);
+         opts.addOption(req);
+
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(opts, new String[]{}, false);
+             fail("Expected ParseException for missing required option");
+         } catch (ParseException e) {
+             // expected
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-17f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-17f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Cli-17f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+ [mkdir] Created dir: /root/sqa-workspaces/Cli-17f-copilot/target
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-17f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-17f-copilot/.test_suite/org/apache/commons/cli/PosixParserTest.java:20: error: unreported exception ParseException; must be caught or declared to be thrown
+ [javac] CommandLine cmd = parser.parse(opts, new String[]{"-av"}, false);
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

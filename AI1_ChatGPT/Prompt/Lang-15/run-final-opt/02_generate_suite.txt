@@ -1,0 +1,411 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Lang  Bug: 15  Version: Lang-15b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.lang3.reflect.TypeUtils
+Modified: org.apache.commons.lang3.reflect.TypeUtils
+Triggers: org.apache.commons.lang3.reflect.TypeUtilsTest::testGetTypeArguments, org.apache.commons.lang3.reflect.TypeUtilsTest::testIsAssignable
+
+Bug/specification summary:
+Bug report: LANG-775
+Trigger failures:
+- org.apache.commons.lang3.reflect.TypeUtilsTest::testGetTypeArguments
+ --> junit.framework.AssertionFailedError: expected:<2> but was:<0>
+ - org.apache.commons.lang3.reflect.TypeUtilsTest::testIsAssignable
+ --> junit.framework.AssertionFailedError: type class org.apache.commons.lang3.reflect.TypeUtilsTest$Thing not assignable to org.apache.commons.lang3.reflect.TypeUtilsTest$This<java.lang.String, java.lang.String>!
+Modified: org.apache.commons.lang3.reflect.TypeUtils
+
+Prompt-01 test plan:
+TARGETS: TypeUtils.getTypeArguments(Type, Class) generic superclass/interface variable resolution 
+TARGETS: TypeUtils.isAssignable(Type, Type) for inherited parameterized types 
+ORACLES: Existing trigger assertions: expected type-argument map size 2; Thing assignable to This<String,String> 
+CASES: Resolve type variables through multi-level generic inheritance and interface parents 
+CASES: Assignability where source class inherits concrete bindings for target parameterized interface/class 
+CASES: Normal direct parameterized source/target; boundary raw class and Object target 
+RISKS: Private parent-selection/substitution helpers may affect both APIs; avoid asserting unspecified map order 
+RISKS: Context lacks nested test fixture declarations and exact generic hierarchy/bindings
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.lang3.reflect.TypeUtils (java) =====
+/* API SIGNATURES */
+package org.apache.commons.lang3.reflect;
+public class TypeUtils {
+public TypeUtils() {
+public static boolean isAssignable(Type type, Type toType) {
+private static boolean isAssignable(Type type, Class<?> toClass) {
+return toClass.equals(Object.class)
+private static Type unrollVariableAssignments(TypeVariable<?> var, Map<TypeVariable<?>, Type> typeVarAssigns) {
+private static Type substituteTypeVariables(Type type, Map<TypeVariable<?>, Type> typeVarAssigns) {
+public static Map<TypeVariable<?>, Type> getTypeArguments(ParameterizedType type) {
+public static Map<TypeVariable<?>, Type> getTypeArguments(Type type, Class<?> toClass) {
+private static Type getClosestParentType(Class<?> cls, Class<?> superClass) {
++ " interface type found: " + midType);
+public static boolean isInstance(Object value, Type type) {
+public static Type[] normalizeUpperBounds(Type[] bounds) {
+public static Type[] getImplicitBounds(TypeVariable<?> typeVariable) {
+return bounds.length == 0 ? new Type[] { Object.class } : normalizeUpperBounds(bounds);
+public static Type[] getImplicitUpperBounds(WildcardType wildcardType) {
+public static Type[] getImplicitLowerBounds(WildcardType wildcardType) {
+public static boolean typesSatisfyVariables(Map<TypeVariable<?>, Type> typeVarAssigns) {
+private static Class<?> getRawType(ParameterizedType parameterizedType) {
+public static Class<?> getRawType(Type type, Type assigningType) {
+public static boolean isArrayType(Type type) {
+public static Type getArrayComponentType(Type type) {
+
+/* HEADER */
+package org.apache.commons.lang3.reflect;
+import java.lang.reflect.Array;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.apache.commons.lang3.ClassUtils;
+public class TypeUtils {
+
+/* METHOD TypeUtils */
+public TypeUtils() {
+ super();
+ }
+
+/* METHOD isAssignable */
+public static boolean isAssignable(Type type, Type toType) {
+ return isAssignable(type, toType, null);
+ }
+
+/* METHOD determineTypeArguments */
+public static Map<TypeVariable<?>, Type> determineTypeArguments(Class<?> cls,
+ ParameterizedType superType) {
+ Class<?> superClass = getRawType(superType);
+
+ // compatibility check
+ if (!isAssignable(cls, superClass)) {
+ return null;
+ }
+
+ if (cls.equals(superClass)) {
+ return getTypeArguments(superType, superClass, null);
+ }
+
+ // get the next class in the inheritance hierarchy
+ Type midType = getClosestParentType(cls, superClass);
+
+ // can only be a class or a parameterized type
+ if (midType instanceof Class<?>) {
+ return determineTypeArguments((Class<?>) midType, superType);
+ }
+
+ ParameterizedType midParameterizedType = (ParameterizedType) midType;
+ Class<?> midClass = getRawType(midParameterizedType);
+ // get the type variables of the mid class that map to the type
+ // arguments of the super class
+ Map<TypeVariable<?>, Type> typeVarAssigns = determineTypeArguments(midClass, superType);
+ // map the arguments of the mid type to the class type variables
+ mapTypeVariablesToArguments(cls, midParameterizedType, typeVarAssigns);
+
+ return typeVarAssigns;
+ }
+
+/* METHOD isInstance */
+public static boolean isInstance(Object value, Type type) {
+ if (type == null) {
+ return false;
+ }
+
+ return value == null ? !(type instanceof Class<?>) || !((Class<?>) type).isPrimitive()
+ : isAssignable(value.getClass(), type, null);
+ }
+
+/* METHOD normalizeUpperBounds */
+public static Type[] normalizeUpperBounds(Type[] bounds) {
+ // don't bother if there's only one (or none) type
+ if (bounds.length < 2) {
+ return bounds;
+ }
+
+ Set<Type> types = new HashSet<Type>(bounds.length);
+
+ for (Type type1 : bounds) {
+ boolean subtypeFound = false;
+
+ for (Type type2 : bounds) {
+ if (type1 != type2 && isAssignable(type2, type1, null)) {
+ subtypeFound = true;
+ break;
+ }
+ }
+
+ if (!subtypeFound) {
+ types.add(type1);
+ }
+ }
+
+ return types.toArray(new Type[types.size()]);
+ }
+
+/* METHOD typesSatisfyVariables */
+public static boolean typesSatisfyVariables(Map<TypeVariable<?>, Type> typeVarAssigns) {
+ // all types must be assignable to all the bounds of the their mapped
+ // type variable.
+ for (Map.Entry<TypeVariable<?>, Type> entry : typeVarAssigns.entrySet()) {
+ TypeVariable<?> typeVar = entry.getKey();
+ Type type = entry.getValue();
+
+ for (Type bound : getImplicitBounds(typeVar)) {
+ if (!isAssignable(type, substituteTypeVariables(bound, typeVarAssigns),
+ typeVarAssigns)) {
+ return false;
+ }
+ }
+ }
+
+ return true;
+ }
+
+/* METHOD getRawType */
+public static Class<?> getRawType(Type type, Type assigningType) {
+ if (type instanceof Class<?>) {
+ // it is raw, no problem
+ return (Class<?>) type;
+ }
+
+ if (type instanceof ParameterizedType) {
+ // simple enough to get the raw type of a ParameterizedType
+ return getRawType((ParameterizedType) type);
+ }
+
+ if (type instanceof TypeVariable<?>) {
+ if (assigningType == null) {
+ return null;
+ }
+
+ // get the entity declaring this type variable
+ Object genericDeclaration = ((TypeVariable<?>) type).getGenericDeclaration();
+
+ // can't get the raw type of a method- or constructor-declared type
+ // variable
+ if (!(genericDeclaration instanceof Class<?>)) {
+ return null;
+ }
+
+ // get the type arguments for the declaring class/interface based
+ // on the enclosing type
+ Map<TypeVariable<?>, Type> typeVarAssigns = getTypeArguments(assigningType,
+ (Class<?>) genericDeclaration);
+
+ // enclosingType has to be a subclass (or subinterface) of the
+ // declaring type
+ if (typeVarAssigns == null) {
+ return null;
+ }
+
+ // get the argument assigned to this type variable
+ Type typeArgument = typeVarAssigns.get(type);
+
+ if (typeArgument == null) {
+ return null;
+ }
+
+ // get the argument for this type variable
+ return getRawType(typeArgument, assigningType);
+ }
+
+ if (type instanceof GenericArrayType) {
+ // get raw component type
+ Class<?> rawComponentType = getRawType(((GenericArrayType) type)
+ .getGenericComponentType(), assigningType);
+
+ // create array type from raw component type and return its class
+ return Array.newInstance(rawComponentType, 0).getClass();
+ }
+
+ // (hand-waving) this is not the method you're looking for
+ if (type instanceof WildcardType) {
+ return null;
+ }
+
+ throw new IllegalArgumentException("unknown type: " + type);
+ }
+
+ /**
+ * Learn whether the specified type denotes an array type.
+ * @param type the type to be checked
+ * @return <code>true</code> if <code>type</code> is an array class or a {@link GenericArrayType}.
+ */
+ public static boolean isArrayType(Type type) {
+ return type instanceof GenericArrayType || type instanceof Class<?> && ((Class<?>) type).isArray();
+ }
+
+ /**
+ * Get the array component type of <code>type</code>.
+ * @param type the type to be checked
+ * @return component type or null if type is not an array type
+ */
+ public static Type getArrayComponentType(Type type) {
+ if (type instanceof Class<?>) {
+ Class<?> clazz = (Class<?>) type;
+ return clazz.isArray() ? clazz.getComponentType() : null;
+ }
+ if (type instanceof GenericArrayType) {
+ return ((GenericArrayType) type).getGenericComponentType();
+ }
+ return null;
+ }
+
+}
+
+/* METHOD isAssignable */
+private static boolean isAssignable(Type type, ParameterizedType toParameterizedType,
+ Map<TypeVariable<?>, Type> typeVarAssigns) {
+ if (type == null) {
+ return true;
+ }
+
+ // only a null type can be assigned to null type which
+ // would have cause the previous to return true
+ if (toParameterizedType == null) {
+ return false;
+ }
+
+ // all types are assignable to themselves
+ if (toParameterizedType.equals(type)) {
+ return true;
+ }
+
+ // get the target type's raw type
+ Class<?> toClass = getRawType(toParameterizedType);
+ // get the subject type's type arguments including owner type arguments
+ // and supertype arguments up to and including the target class.
+ Map<TypeVariable<?>, Type> fromTypeVarAssigns = getTypeArguments(type, toClass, null);
+
+ // null means the two types are not compatible
+ if (fromTypeVarAssigns == null) {
+ return false;
+ }
+
+ // compatible types, but there's no type arguments. this is equivalent
+ // to comparing Map< ?, ? > to Map, and raw types are always assignable
+ // to parameterized types.
+ if (fromTypeVarAssigns.isEmpty()) {
+ return true;
+ }
+
+ // get the target type's type arguments including owner type arguments
+ Map<TypeVariable<?>, Type> toTypeVarAssigns = getTypeArguments(toParameterizedType,
+ toClass, typeVarAssigns);
+
+ // now to check each type argument
+ for (Map.Entry<TypeVariable<?>, Type> entry : toTypeVarAssigns.entrySet()) {
+ Type toTypeArg = entry.getValue();
+ Type fromTypeArg = fromTypeVarAssigns.get(entry.getKey());
+
+ // parameters must either be absent from the subject type, within
+ // the bounds of the wildcard type, or be an exact match to the
+ // parameters of the target type.
+ if (fromTypeArg != null
+ && !toTypeArg.equals(fromTypeArg)
+ && !(toTypeArg instanceof WildcardType && isAssignable(fromTypeArg, toTypeArg,
+ typeVarAssigns))) {
+ return false;
+ }
+ }
+
+ return true;
+ }
+
+/* METHOD getTypeArguments */
+public static Map<TypeVariable<?>, Type> getTypeArguments(ParameterizedType type) {
+ return getTypeArguments(type, getRawType(type), null);
+ }
+
+/* METHOD getTypeArguments */
+public static Map<TypeVariable<?>, Type> getTypeArguments(Type type, Class<?> toClass) {
+ return getTypeArguments(type, toClass, null);
+ }
+
+/* METHOD getImplicitBounds */
+public static Type[] getImplicitBounds(TypeVariable<?> typeVariable) {
+ Type[] bounds = typeVariable.getBounds();
+
+ return bounds.length == 0 ? new Type[] { Object.class } : normalizeUpperBounds(bounds);
+ }
+
+/* METHOD getImplicitUpperBounds */
+public static Type[] getImplicitUpperBounds(WildcardType wildcardType) {
+ Type[] bounds = wildcardType.getUpperBounds();
+
+ return bounds.length == 0 ? new Type[] { Object.class } : normalizeUpperBounds(bounds);
+ }
+
+/* METHOD getImplicitLowerBounds */
+public static Type[] getImplicitLowerBounds(WildcardType wildcardType) {
+ Type[] bounds = wildcardType.getLowerBounds();
+
+ return bounds.length == 0 ? new Type[] { null } : bounds;
+ }
+
+/* METHOD isArrayType */
+public static boolean isArrayType(Type type) {
+ return type instanceof GenericArrayType || type instanceof Class<?> && ((Class<?>) type).isArray();
+ }
+
+/* METHOD getArrayComponentType */
+public static Type getArrayComponentType(Type type) {
+ if (type instanceof Class<?>) {
+ Class<?> clazz = (Class<?>) type;
+ return clazz.isArray() ? clazz.getComponentType() : null;
+ }
+ if (type instanceof GenericArrayType) {
+ return ((GenericArrayType) type).getGenericComponentType();
+ }
+ return null;
+ }
+
+/* METHOD isAssignable */
+private static boolean isAssignable(Type type, TypeVariable<?> toTypeVariable,
+ Map<TypeVariable<?>, Type> typeVarAssigns) {
+ if (type == null) {
+ return true;
+ }
+
+ // only a null type can be assigned to null type which
+ // would have cause the previous to return true
+ if (toTypeVariable == null) {
+ return false;
+ }
+
+ // all types are assignable to themselves
+ if (toTypeVariable.equals(type)) {
+ return true;
+ }
+
+ if (type instanceof TypeVariable<?>) {
+ // a type variable is assignable to another type variable, if
+ // and only if the former is the latter, extends the latter, or
+ // is otherwise a descendant of the latter.
+ Type[] bounds = getImplicitBounds((TypeVariable<?>) type);
+
+ for (Type bound : bounds) {
+ if (isAssignable(bound, toTypeVariable, typeVarAssigns)) {
+ return true;
+ }
+ }
+ }
+
+ if (type instanceof Class<?> || type instanceof ParameterizedType
+ || type instanceof GenericArrayType || type instanceof WildcardType) {
+ return false;
+ }
+
+ throw new IllegalStateException("found an unhandled type: " + type);
+ }

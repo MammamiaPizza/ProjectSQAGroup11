@@ -1,0 +1,198 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 6  Version: Time-6b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 28
+Trigger failures:
+- org.joda.time.chrono.TestGJDate::test_cutoverPreZero
+ --> junit.framework.AssertionFailedError
+ - org.joda.time.chrono.TestGJDate::test_plusWeekyears_positiveToNegative_crossCutover
+ --> junit.framework.AssertionFailedError: expected:<-0002-06-30> but was:<-0001-06-28>
+ - org.joda.time.chrono.TestGJDate::test_plusYears_positiveToZero_crossCutover
+ --> org.joda.time.IllegalFieldValueException: Value 0 for year is not supported
+ - org.joda.time.chrono.TestGJDate::test_plusYears_positiveToNegative_crossCutover
+ --> junit.framework.AssertionFailedError: expected:<-0002-06-30> but was:<-0001-06-30>
+ - org.joda.time.chrono.TestGJDate::test_plusWeekyears_positiveToZero_crossCutover
+ --> org.joda.time.IllegalFieldValueException: Value 0 for year is not supported
+Modified: org.joda.time.chrono.GJChronology
+
+Available API/signatures:
+[org.joda.time.chrono.GJChronology | java]
+package org.joda.time.chrono;
+public final class GJChronology extends AssembledChronology {
+private static long convertByYear(long instant, Chronology from, Chronology to) {
+private static long convertByWeekyear(final long instant, Chronology from, Chronology to) {
+static final Instant DEFAULT_CUTOVER = new Instant(-12219292800000L);
+private static final Map<DateTimeZone, ArrayList<GJChronology>> cCache = new HashMap<DateTimeZone, ArrayList<GJChronology>>();
+public static GJChronology getInstanceUTC() {
+public static GJChronology getInstance() {
+public static GJChronology getInstance(DateTimeZone zone) {
+synchronized (cCache) {
+private Object readResolve() {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public Instant getGregorianCutover() {
+public int getMinimumDaysInFirstWeek() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+protected void assemble(Fields fields) {
+private class CutoverField extends BaseDateTimeField {
+protected DurationField iDurationField;
+protected DurationField iRangeDurationField;
+public boolean isLenient() {
+public int get(long instant) {
+public String getAsText(long instant, Locale locale) {
+public String getAsText(int fieldValue, Locale locale) {
+public String getAsShortText(long instant, Locale locale) {
+public String getAsShortText(int fieldValue, Locale locale) {
+public long add(long instant, int value) {
+public long add(long instant, long value) {
+public int[] add(ReadablePartial partial, int fieldIndex, int[] values, int valueToAdd) {
+public int getDifference(lo
+...[truncated deterministically]...
+tLeapDurationField() {
+public int getMinimumValue() {
+public int getMinimumValue(ReadablePartial partial) {
+public int getMinimumValue(ReadablePartial partial, int[] values) {
+public int getMinimumValue(long instant) {
+public int getMaximumValue() {
+public int getMaximumValue(long instant) {
+public int getMaximumValue(ReadablePartial partial) {
+public int getMaximumValue(ReadablePartial partial, int[] values) {
+public long roundFloor(long instant) {
+public long roundCeiling(long instant) {
+public int getMaximumTextLength(Locale locale) {
+public int getMaximumShortTextLength(Locale locale) {
+protected long julianToGregorian(long instant) {
+protected long gregorianToJulian(long instant) {
+private final class ImpreciseCutoverField extends CutoverField {
+private static class LinkedDurationField extends DecoratedDurationField {
+
+Generated JUnit Test:
+package org.joda.time.chrono;
+
+import junit.framework.TestCase;
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeZone;
+import org.joda.time.Instant;
+import org.joda.time.LocalDate;
+
+public class GJChronologyYearZeroCutoverTest extends TestCase {
+
+    private Chronology chronologyWithCutoverAtYearOne() {
+        Chronology gregorian = GregorianChronology.getInstanceUTC();
+        long cutoverMillis = gregorian.getDateTimeMillis(1, 1, 1, 0);
+        return GJChronology.getInstance(DateTimeZone.UTC, new Instant(cutoverMillis), 4);
+    }
+
+    private LocalDate date(Chronology chronology, long instant) {
+        return new LocalDate(instant, chronology);
+    }
+
+    private void assertDate(LocalDate actual, int year, int month, int day) {
+        assertEquals(year, actual.getYear());
+        assertEquals(month, actual.getMonthOfYear());
+        assertEquals(day, actual.getDayOfMonth());
+    }
+
+    public void testPreZeroDatesUseJulianSideOfCutover() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+
+        long actual = chronology.getDateTimeMillis(-1, 6, 30, 0);
+        long expected = JulianChronology.getInstanceUTC()
+                .getDateTimeMillis(-1, 6, 30, 0);
+
+        assertEquals(expected, actual);
+        assertDate(date(chronology, actual), -1, 6, 30);
+    }
+
+    public void testDateAtCutoverUsesGregorianSide() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+
+        long actual = chronology.getDateTimeMillis(1, 1, 1, 0);
+        long expected = GregorianChronology.getInstanceUTC()
+                .getDateTimeMillis(1, 1, 1, 0);
+
+        assertEquals(expected, actual);
+        assertDate(date(chronology, actual), 1, 1, 1);
+    }
+
+    public void testAddYearsAcrossCutoverFromPositiveToZeroSkipsUnsupportedYearZero() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(1, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.year().add(start, -1));
+
+        assertDate(result, -1, 6, 30);
+    }
+
+    public void testAddYearsAcrossCutoverFromPositiveToNegativePreservesDate() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(1, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.year().add(start, -2));
+
+        assertDate(result, -2, 6, 30);
+    }
+
+    public void testAddWeekyearsAcrossCutoverFromPositiveToZeroSkipsUnsupportedYearZero() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(1, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.weekyear().add(start, -1));
+
+        assertDate(result, -1, 6, 30);
+        assertEquals(-1, chronology.weekyear().get(result.toDateTimeAtStartOfDay().getMillis()));
+    }
+
+    public void testAddWeekyearsAcrossCutoverFromPositiveToNegativePreservesDate() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(1, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.weekyear().add(start, -2));
+
+        assertDate(result, -2, 6, 30);
+        assertEquals(-2, chronology.weekyear().get(result.toDateTimeAtStartOfDay().getMillis()));
+    }
+
+    public void testSetYearAcrossCutoverDoesNotAttemptYearZero() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(1, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.year().set(start, -1));
+
+        assertDate(result, -1, 6, 30);
+    }
+
+    public void testSetWeekyearAcrossCutoverPreservesDate() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(1, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.weekyear().set(start, -2));
+
+        assertDate(result, -2, 6, 30);
+        assertEquals(-2, chronology.weekyear().get(result.toDateTimeAtStartOfDay().getMillis()));
+    }
+
+    public void testYearAdditionRemainingOnGregorianSidePreservesDate() {
+        Chronology chronology = chronologyWithCutoverAtYearOne();
+        long start = chronology.getDateTimeMillis(2, 6, 30, 0);
+
+        LocalDate result = date(chronology, chronology.year().add(start, 3));
+
+        assertDate(result, 5, 6, 30);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - org.joda.time.chrono.GJChronologyYearZeroCutoverTest::testAddWeekyearsAcrossCutoverFromPositiveToZeroSkipsUnsupportedYearZero
+ - org.joda.time.chrono.GJChronologyYearZeroCutoverTest::testSetWeekyearAcrossCutoverPreservesDate
+ - org.joda.time.chrono.GJChronologyYearZeroCutoverTest::testAddWeekyearsAcrossCutoverFromPositiveToNegativePreservesDate
+Failing generated tests: org.joda.time.chrono.GJChronologyYearZeroCutoverTest::testAddWeekyearsAcrossCutoverFromPositiveToNegativePreservesDate, org.joda.time.chrono.GJChronologyYearZeroCutoverTest::testAddWeekyearsAcrossCutoverFromPositiveToZeroSkipsUnsupportedYearZero, org.joda.time.chrono.GJChronologyYearZeroCutoverTest::testSetWeekyearAcrossCutoverPreservesDate

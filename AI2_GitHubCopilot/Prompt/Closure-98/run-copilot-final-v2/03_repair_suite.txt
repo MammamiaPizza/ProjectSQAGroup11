@@ -1,0 +1,228 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 98  Version: Closure-98b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 174
+Trigger failures:
+- com.google.javascript.jscomp.InlineVariablesTest::testNoInlineAliasesInLoop
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.ReferenceCollectingCallback
+
+Available API/signatures:
+[com.google.javascript.jscomp.ReferenceCollectingCallback | java]
+package com.google.javascript.jscomp;
+class ReferenceCollectingCallback implements ScopedCallback, CompilerPass {
+private final Deque<BasicBlock> blockStack = new ArrayDeque<BasicBlock>();
+public void process(Node externs, Node root) {
+public ReferenceCollection getReferenceCollection(Var v) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+private static boolean isBlockBoundary(Node n, Node parent) {
+private void addReference(NodeTraversal t, Var v, Reference reference) {
+interface Behavior {
+static Behavior DO_NOTHING_BEHAVIOR = new Behavior() {
+@Override
+static class ReferenceCollection {
+protected boolean isWellDefined() {
+private boolean isInitializingDeclarationAt(int index) {
+private boolean isInitializingAssignmentAt(int index) {
+private Reference getOneAndOnlyAssignment() {
+static final class Reference {
+private static boolean isLhsOfForInExpression(Node n) {
+public String getSourceName() {
+static final class BasicBlock {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.javascript.rhino.Node;
+ import com.google.javascript.rhino.Token;
+ import com.google.javascript.jscomp.Scope.Var;
+ import junit.framework.TestCase;
+
+ /**
+  * Tests for ReferenceCollectingCallback focusing on loop-related assignment detection.
+  * The bug (issue 174) causes incorrect block-boundary tracking inside for-loops,
+  * leading to isAssignedOnceInLifetime returning true when assignments are inside loops.
+  */
+ public class ReferenceCollectingCallbackTest extends TestCase {
+
+     // ----------- Tests for isAssignedOnceInLifetime -----------
+
+     /**
+      * A variable assigned once inside a for-loop body must NOT be considered
+      * assigned-once-in-lifetime. The buggy version returns true here because
+      * it does not check whether the assignment is inside a loop.
+      */
+     public void testIsAssignedOnceInLifetime_ForLoop() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x; for (var i=0; i<5; i++) { x = i; } }", "x");
+         assertFalse("Assignment inside a loop should not be considered assigned-once-in-lifetime",
+                 refs.isAssignedOnceInLifetime());
+     }
+
+     /**
+      * A variable assigned exactly once, outside any loop, should be considered
+      * assigned-once-in-lifetime.
+      */
+     public void testIsAssignedOnceInLifetime_NoLoop() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x = 1; }", "x");
+         assertTrue("A single assignment outside a loop should be assigned-once-in-lifetime",
+                 refs.isAssignedOnceInLifetime());
+     }
+
+     /**
+      * Multiple assignments to the same variable mean it is not assigned-once-in-lifetime.
+      */
+     public void testIsAssignedOnceInLifetime_MultipleAssignments() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x; x=1; x=2; }", "x");
+         assertFalse("Multiple assignments disqualify assigned-once-in-lifetime",
+                 refs.isAssignedOnceInLifetime());
+     }
+
+     /**
+      * A variable assigned inside a for-in loop (aliased) must not be
+      * considered assigned-once-in-lifetime.
+      */
+     public void testIsAssignedOnceInLifetime_ForInLoop() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var obj={}; var x = obj; for (var y in x) { x = y; } }", "x");
+         assertFalse("Assignment inside a for-in loop blocks single-assignment status",
+                 refs.isAssignedOnceInLifetime());
+     }
+
+     /**
+      * Null check: a variable that is never assigned has no assignments,
+      * so isAssignedOnceInLifetime should be false.
+      */
+     public void testIsAssignedOnceInLifetime_NeverAssigned() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x; }", "x");
+         assertFalse("Never-assigned variable cannot be assigned-once-in-lifetime",
+                 refs.isAssignedOnceInLifetime());
+     }
+
+     // ----------- Tests for isWellDefined -----------
+
+     /**
+      * A variable that is assigned before any use is well-defined.
+      */
+     public void testIsWellDefined_AssignedBeforeUse() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x = 1; x; }", "x");
+         assertTrue("Variable assigned before use should be well-defined",
+                 refs.isWellDefined());
+     }
+
+     /**
+      * A variable that is used before being assigned is not well-defined.
+      */
+     public void testIsWellDefined_UseBeforeAssign() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x; x; x=1; }", "x");
+         assertFalse("Variable used before assignment should not be well-defined",
+                 refs.isWellDefined());
+     }
+
+     /**
+      * A variable only declared (no assignment, no use) is arguably well-defined.
+      */
+     public void testIsWellDefined_OnlyDeclared() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { var x; }", "x");
+         assertTrue("Declared-only variable is vacuously well-defined",
+                 refs.isWellDefined());
+     }
+
+     // ----------- Boundary / basic-block consistency -----------
+
+     /**
+      * Variables declared inside a for-loop initializer and used in the loop body
+      * should have a well-defined reference collection.  The block-boundary bug
+      * would cause mis-placed basic blocks, potentially making isWellDefined
+      * return false when it should return true.
+      */
+     public void testForLoopVarInitIsWellDefined() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { for (var i=0; i<5; i++) { i; } }", "i");
+         assertTrue("Loop-initializer variable should be well-defined inside the loop",
+                 refs.isWellDefined());
+     }
+
+     /**
+      * A variable declared in the entire for-loop header (init/condition/increment)
+      * and only used there should be considered well-defined.
+      */
+     public void testForLoopHeaderVarIsWellDefined() throws Exception {
+         ReferenceCollection refs = collectReferences(
+                 "function f() { for (var j=0; j<10; j++) {} }", "j");
+         assertTrue("Variable used only in loop header should be well-defined",
+                 refs.isWellDefined());
+     }
+
+     // ----------- Helper methods -----------
+
+     /**
+      * Compiles the given JavaScript, runs ReferenceCollectingCallback, and returns
+      * the ReferenceCollection for the first variable found with the given name
+      * in the innermost scope.
+      */
+     private ReferenceCollection collectReferences(String js, String varName) throws Exception {
+         Compiler compiler = new Compiler();
+         compiler.initOptions(new CompilerOptions());
+         Node script = compiler.parseTestCode(js);
+         Node externs = new Node(Token.SCRIPT);
+
+         ReferenceCollectingCallback callback =
+                 new ReferenceCollectingCallback(compiler, Behavior.DO_NOTHING_BEHAVIOR);
+         callback.process(externs, script);
+
+         // Find a scope that contains varName; prefer the innermost function scope.
+         Var variable = findVar(compiler, script, varName);
+         assertNotNull("Variable " + varName + " not found in any scope", variable);
+         return callback.getReferenceCollection(variable);
+     }
+
+     /** Asks the compiler for the Var by walking the AST to find a relevant node. */
+     private Var findVar(Compiler compiler, Node root, String name) {
+         if (root.getType() == Token.NAME && root.getString().equals(name)) {
+             Scope scope = compiler.getScope(root);
+             if (scope != null) {
+                 Var var = scope.getVar(name);
+                 if (var != null) return var;
+             }
+         }
+         for (Node child = root.getFirstChild(); child != null; child = child.getNext()) {
+             Var result = findVar(compiler, child, name);
+             if (result != null) return result;
+         }
+         return null;
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-98f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-98f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-98f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-98f-copilot/.test_suite/com/google/javascript/jscomp/ReferenceCollectingCallbackTest.java:137: error: cannot find symbol
+ [javac] private ReferenceCollection collectReferences(String js, String varName) throws Exception {
+ [javac] ^
+ [javac] symbol: class ReferenceCollection
+ [javac] location: class ReferenceCollectingCallbackTest
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 26 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

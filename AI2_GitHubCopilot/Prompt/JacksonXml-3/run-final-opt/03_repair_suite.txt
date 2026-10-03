@@ -1,0 +1,223 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonXml  Bug: 3  Version: JacksonXml-3b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 204
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.stream.XmlParserNextXxxTest::testXmlAttributesWithNextTextValue
+ --> junit.framework.ComparisonFailure: expected:<7> but was:<null>
+Modified: com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser
+
+Available API/signatures:
+[com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser | java]
+package com.fasterxml.jackson.dataformat.xml.deser;
+public class FromXmlParser
+public final static String DEFAULT_UNNAMED_TEXT_PROPERTY = "";
+public enum Feature implements FormatFeature
+public static int collectDefaults()
+private Feature(boolean defaultState) {
+@Override public boolean enabledByDefault() { return _defaultState; }
+@Override public int getMask() { return _mask; }
+@Override public boolean enabledIn(int flags) { return (flags & getMask()) != 0; }
+protected String _cfgNameForTextElement = DEFAULT_UNNAMED_TEXT_PROPERTY;
+protected int _formatFeatures;
+protected ObjectCodec _objectCodec;
+protected boolean _closed;
+final protected IOContext _ioContext;
+protected XmlReadContext _parsingContext;
+protected final XmlTokenStream _xmlTokens;
+protected boolean _mayBeLeaf;
+protected JsonToken _nextToken;
+protected String _currText;
+protected Set<String> _namesToWrap;
+protected ByteArrayBuilder _byteArrayBuilder = null;
+protected byte[] _binaryValue;
+@Override
+public Version version() {
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public void setXMLTextElementName(String name) {
+public boolean requiresCustomCodec() {
+public FromXmlParser enable(Feature f) {
+public FromXmlParser disable(Feature f) {
+public final boolean isEnabled(Feature f) {
+public FromXmlParser configure(Feature f, boolean state) {
+public int getFormatFeatures() {
+public JsonParser overrideFormatFeatures(int values, int mask) {
+public XMLStreamReader getStaxReader() {
+public void addVirtualWrapping(Set<String> namesToWrap)
+public String getCurrentName() throws IOException
+public vo
+...[truncated deterministically]...
+ption {
+public byte[] getBinaryValue(Base64Variant b64variant) throws IOException
+@SuppressWarnings("resource")
+protected byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+final String str = getText();
+public BigInteger getBigIntegerValue() throws IOException {
+public BigDecimal getDecimalValue() throws IOException {
+public double getDoubleValue() throws IOException {
+public float getFloatValue() throws IOException {
+public int getIntValue() throws IOException {
+public long getLongValue() throws IOException {
+public NumberType getNumberType() throws IOException {
+public Number getNumberValue() throws IOException {
+protected void _handleEOF() throws JsonParseException
+protected void _releaseBuffers() throws IOException {
+protected ByteArrayBuilder _getByteArrayBuilder()
+protected boolean _isEmpty(String str)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.dataformat.xml.deser;
+
+ import static org.junit.Assert.*;
+
+ import java.io.StringReader;
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.JsonToken;
+ import com.fasterxml.jackson.dataformat.xml.XmlFactory;
+
+ public class FromXmlParserNextTextValueTest {
+
+     private FromXmlParser createParser(String xml) throws Exception {
+         return (FromXmlParser) new XmlFactory().createParser(new StringReader(xml));
+     }
+
+     private void assertToken(JsonToken expected, JsonToken actual) {
+         assertEquals("Expected token " + expected + " but was " + actual, expected, actual);
+     }
+
+     @Test
+     public void testNextTextValueAfterAttribute() throws Exception {
+         String xml = "<root><child attr='val'>7</child></root>";
+         FromXmlParser p = createParser(xml);
+         assertToken(JsonToken.START_OBJECT, p.nextToken());
+         assertToken(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("child", p.getCurrentName());
+         assertToken(JsonToken.START_OBJECT, p.nextToken());
+         assertToken(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("attr", p.getCurrentName());
+         assertToken(JsonToken.VALUE_STRING, p.nextToken());
+         assertEquals("val", p.getText());
+         String text = p.nextTextValue();
+         assertEquals("7", text);
+         assertEquals(JsonToken.VALUE_STRING, p.getCurrentToken());
+         assertEquals("7", p.getText());
+     }
+
+     @Test
+     public void testNextTextValueMultipleAttributes() throws Exception {
+         String xml = "<root><child attr1='a' attr2='b'>7</child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME child
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME attr1
+         p.nextToken(); // VALUE_STRING a
+         p.nextToken(); // FIELD_NAME attr2
+         p.nextToken(); // VALUE_STRING b
+         assertEquals("7", p.nextTextValue());
+     }
+
+     @Test
+     public void testNextTextValueNoAttribute() throws Exception {
+         String xml = "<root><child>7</child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME child
+         p.nextToken(); // START_OBJECT
+         assertEquals("7", p.nextTextValue());
+         assertEquals(JsonToken.VALUE_STRING, p.getCurrentToken());
+     }
+
+     @Test
+     public void testNextTextValueEmptyElement() throws Exception {
+         String xml = "<root><child attr='val'></child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME child
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME attr
+         p.nextToken(); // VALUE_STRING val
+         assertNull(p.nextTextValue());
+         assertEquals(JsonToken.END_OBJECT, p.getCurrentToken());
+     }
+
+     @Test
+     public void testNextTextValueCData() throws Exception {
+         String xml = "<root><child attr='val'><![CDATA[7]]></child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME child
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME attr
+         p.nextToken(); // VALUE_STRING val
+         assertEquals("7", p.nextTextValue());
+     }
+
+     @Test
+     public void testNextTextValueLargeText() throws Exception {
+         StringBuilder sb = new StringBuilder();
+         for (int i = 0; i < 1000; i++) sb.append("a");
+         String large = sb.toString();
+         String xml = "<root><child>" + large + "</child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); p.nextToken(); p.nextToken(); // to START_OBJECT of child
+         assertEquals(large, p.nextTextValue());
+     }
+
+     @Test
+     public void testNextTextValueAfterFieldName() throws Exception {
+         String xml = "<root><child>7</child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); // START_OBJECT
+         p.nextToken(); // FIELD_NAME child
+         p.nextToken(); // START_OBJECT
+         assertToken(JsonToken.FIELD_NAME, p.nextToken());
+         assertEquals("7", p.nextTextValue());
+     }
+
+     @Test
+     public void testNextTextValueOnNonTextToken() throws Exception {
+         String xml = "<root><child attr='val'>7</child></root>";
+         FromXmlParser p = createParser(xml);
+         // at START_OBJECT (initial token after construction is not guaranteed to be start? we
+advance a bit)
+         p.nextToken(); // START_OBJECT (root)
+         assertNull(p.nextTextValue()); // current=root START_OBJECT, not text
+         // now navigate through, then call on non-text
+         while (p.nextToken() != null) {}
+         assertNull(p.nextTextValue()); // at end of stream
+     }
+
+     @Test
+     public void testNextTextValueWithSpecialChars() throws Exception {
+         String xml = "<root><child attr='val'>&lt;7&gt;</child></root>";
+         FromXmlParser p = createParser(xml);
+         p.nextToken(); p.nextToken(); p.nextToken(); // root FIELD_NAME START_OBJECT child
+         p.nextToken(); p.nextToken(); // attr pair
+         assertEquals("<7>", p.nextTextValue());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonXml-3f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonXml-3f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonXml-3f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonXml-3f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonXml-3f-copilot/.test_suite/com/fasterxml/jackson/dataformat/xml/deser/FromXmlParserNextTextValueTest.java:116: error: ';' expected
+ [javac] advance a bit)
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 2 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

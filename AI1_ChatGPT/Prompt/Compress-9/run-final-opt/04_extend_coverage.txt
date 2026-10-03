@@ -1,0 +1,191 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: Compress  Bug: 9  Version: Compress-9b
+JUnit: junit-4.8.2.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+Bug/specification summary:
+Bug report: COMPRESS-160
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamTest::testCount
+ --> junit.framework.AssertionFailedError: expected:<10240> but was:<76>
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarArchiveOutputStream | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveOutputStream extends ArchiveOutputStream {
+public static final int LONGFILE_ERROR = 0;
+public static final int LONGFILE_TRUNCATE = 1;
+public static final int LONGFILE_GNU = 2;
+protected final TarBuffer buffer;
+public TarArchiveOutputStream(OutputStream os) {
+public TarArchiveOutputStream(OutputStream os, int blockSize) {
+public TarArchiveOutputStream(OutputStream os, int blockSize, int recordSize) {
+public void setLongFileMode(int longFileMode) {
+@Override
+public void finish() throws IOException {
+public void close() throws IOException {
+public int getRecordSize() {
+public void putArchiveEntry(ArchiveEntry archiveEntry) throws IOException {
+final byte[] nameBytes = ArchiveUtils.toAsciiBytes(entry.getName());
+public void closeArchiveEntry() throws IOException {
+public void write(byte[] wBuf, int wOffset, int numToWrite) throws IOException {
+private void writeEOFRecord() throws IOException {
+public void flush() throws IOException {
+public ArchiveEntry createArchiveEntry(File inputFile, String entryName)
+
+Existing test summary (method names/assertions only):
+Test methods: writesAndCountsCompleteDefaultBlockForSmallEntry, writesAndCountsAdditionalBlockWhenEntryCrossesBlockBoundary, closeAlsoFinishesAndCountsCompleteArchiveBlock, rejectsWritingMoreBytesThanDeclaredEntrySize, rejectsClosingEntryBeforeAllDeclaredBytesHaveBeenWritten, rejectsFinishingArchiveWithUnclosedEntry
+Representative assertions:
+assertEquals(10240, bytes.size());
+assertEquals(10240, out.getBytesWritten());
+assertEquals(20480, bytes.size());
+assertEquals(20480, out.getBytesWritten());
+assertEquals(10240, bytes.size());
+assertEquals(10240, out.getBytesWritten());
+fail("Writing beyond the declared entry size must fail");
+assertEquals(true, expected.getMessage().contains("exceeds size"));
+fail("Closing an undersized entry must fail");
+assertEquals(true, expected.getMessage().contains("before the"));
+fail("Finishing an archive with an open entry must fail");
+assertEquals(true, expected.getMessage().contains("unclosed entries"));
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+111,71,42,25
+
+Line/branch gaps:
+Class: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+Uncovered lines: 78, 79, 236, 239, 362, 363, 365, 131, 355, 356, 111, 166, 185, 190, 193, 196, 197, 198, 199, 200, 201, 202, 203, 215, 104, 105, 293, 294, 296, 298 ... (+50 more)
+Partially covered branch lines: 149 (50% (1/2)), 153 (50% (1/2)), 235 (50% (1/2)), 238 (50% (1/2)), 130 (50% (1/2)), 184 (50% (1/2)), 188 (50% (1/2)), 214 (50% (1/2)), 292 (50% (1/2)), 130 (50% (1/2)), 149 (50% (1/2)), 153 (50% (1/2)), 184 (50% (1/2)), 188 (50% (1/2)), 214 (50% (1/2)), 235 (50% (1/2)), 238 (50% (1/2)), 292 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[org.apache.commons.compress.archivers.tar.TarArchiveOutputStream]
+76: */
+77: public TarArchiveOutputStream(OutputStream os, int blockSize) {
+78: this(os, blockSize, TarBuffer.DEFAULT_RCDSIZE);
+79: }
+80: 
+---
+77: public TarArchiveOutputStream(OutputStream os, int blockSize) {
+78: this(os, blockSize, TarBuffer.DEFAULT_RCDSIZE);
+79: }
+80: 
+81: /**
+---
+234: assemBuf[i] = 0;
+235: }
+236: 
+237: buffer.writeRecord(assemBuf);
+238: 
+---
+237: buffer.writeRecord(assemBuf);
+238: 
+239: currBytes += assemLen;
+240: assemLen = 0;
+241: }
+---
+129: writeEOFRecord();
+130: buffer.flushBlock();
+131: finished = true;
+132: }
+133: 
+---
+353: throws IOException {
+354: if(finished) {
+355: throw new IOException("Stream has already been finished");
+356: }
+357: return new TarArchiveEntry(inputFile, entryName);
+---
+354: if(finished) {
+355: throw new IOException("Stream has already been finished");
+356: }
+357: return new TarArchiveEntry(inputFile, entryName);
+358: }
+---
+109: 
+110: /**
+111: * Ends the TAR archive without closing the underlying OutputStream.
+112: * 
+113: * An archive consists of a series of file entries terminated by an
+---
+164: * stream is ready for calls to write() to write the entry's
+165: * contents. Once the contents are written, closeArchiveEntry()
+166: * <B>MUST</B> be called to ensure that all buffered data
+167: * is completely written to the output stream.
+168: *
+---
+183: // of which are the entry's name
+184: TarArchiveEntry longLinkEntry = new TarArchiveEntry(TarConstants.GNU_LONGLINK,
+185: TarConstants.LF_GNUTYPE_LONGNAME);
+186: 
+187: final byte[] nameBytes = ArchiveUtils.toAsciiBytes(entry.getName());
+---
+188: longLinkEntry.setSize(nameBytes.length + 1); // +1 for NUL
+189: putArchiveEntry(longLinkEntry);
+190: write(nameBytes);
+191: write(0); // NUL terminator
+192: closeArchiveEntry();
+---
+191: write(0); // NUL terminator
+192: closeArchiveEntry();
+193: } else if (longFileMode != LONGFILE_TRUNCATE) {
+194: throw new RuntimeException("file name '" + entry.getName()
+195: + "' is too long ( > "
+---
+194: throw new RuntimeException("file name '" + entry.getName()
+195: + "' is too long ( > "
+196: + TarConstants.NAMELEN + " bytes)");
+197: }
+198: }
+---
+195: + "' is too long ( > "
+196: + TarConstants.NAMELEN + " bytes)");
+197: }
+198: }
+199: 
+---
+196: + TarConstants.NAMELEN + " bytes)");
+197: }
+198: }
+199: 
+200: entry.writeEntryHeader(recordBuf);
+---
+197: }
+198: }
+199: 
+200: entry.writeEntryHeader(recordBuf);
+201: buffer.writeRecord(recordBuf);
+---
+198: }
+199: 
+200: entry.writeEntryHeader(recordBuf);
+201: buffer.writeRecord(recordBuf);
+202: 
+---
+199: 
+200: entry.writeEntryHeader(recordBuf);
+201: buffer.writeRecord(recordBuf);
+202: 
+203: currBytes = 0;
+---
+200: entry.writeEntryHeader(recordBuf);
+201: buffer.writeRecord(recordBuf);
+202: 
+203: currBytes = 0;
+204: 
+---
+201: buffer.writeRecord(recordBuf);
+202: 
+203: currBytes = 0;
+204: 
+205: if (entry.isDirectory()) {
+---
+213: 
+214: /**
+215: * Close an entry. This method MUST be called for all file
+216: * entries that contain data. The reason is that we must
+217: * buffer data written to the stream in order to satisfy

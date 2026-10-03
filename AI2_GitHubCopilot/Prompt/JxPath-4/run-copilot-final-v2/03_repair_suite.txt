@@ -1,0 +1,280 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 4  Version: JxPath-4b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: JXPATH-83
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.XMLSpaceTest::testPreserveDOM
+ --> junit.framework.AssertionFailedError: expected:<foo> but was:< foo >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedJDOM
+ --> junit.framework.AssertionFailedError: expected:<> but was:<foo;bar; baz >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedWithCommentsJDOM
+ --> junit.framework.AssertionFailedError: expected:<> but was:<foo;bar; baz >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testPreserveJDOM
+ --> junit.framework.AssertionFailedError: expected:<foo> but was:< foo >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedDOM
+ --> junit.framework.AssertionFailedError: expected:<foo
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedWithCommentsDOM
+ --> junit.framework.AssertionFailedError: expected:<foo
+Modified: org.apache.commons.jxpath.ri.model.dom.DOMNodePointer, org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.model.dom.DOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.dom;
+public class DOMNodePointer extends NodePointer {
+public DOMNodePointer(Node node, Locale locale) {
+public DOMNodePointer(Node node, Locale locale, String id) {
+public DOMNodePointer(NodePointer parent, Node node) {
+public boolean testNode(NodeTest test) {
+public static boolean testNode(Node node, NodeTest test) {
+private static boolean equalStrings(String s1, String s2) {
+public QName getName() {
+public String getNamespaceURI() {
+public NodeIterator attributeIterator(QName name) {
+public NodePointer namespacePointer(String prefix) {
+public NodeIterator namespaceIterator() {
+public String getNamespaceURI(String prefix) {
+public String getDefaultNamespaceURI() {
+public Object getBaseValue() {
+public Object getImmediateNode() {
+public boolean isActual() {
+public boolean isColl
+...[truncated deterministically]...
+ng target) {
+public int hashCode() {
+public boolean equals(Object object) {
+public static String getPrefix(Node node) {
+public static String getLocalName(Node node) {
+public static String getNamespaceURI(Node node) {
+public Object getValue() {
+private String stringValue(Node node) {
+public Pointer getPointerByID(JXPathContext context, String id) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+[org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.jdom;
+public class JDOMNodePointer extends NodePointer {
+public JDOMNodePointer(Object node, Locale locale) {
+public JDOMNodePointer(Object node, Locale locale, String id) {
+public JDOMNodePointer(NodePoint
+...[truncated deterministically]...
+{
+private static String getNamespaceURI(Object node) {
+public String getNamespaceURI(String prefix) {
+public Object getBaseValue() {
+public boolean isCollection() {
+public int getLength() {
+public boolean isLeaf() {
+public QName getName() {
+public Object getImmediateNode() {
+public Object getValue() {
+public void setValue(Object value) {
+String string = (String) TypeUtils.conv
+...[truncated deterministically]...
+QName name) {
+public void remove() {
+public String asPath() {
+private String escape(String string) {
+private int getRelativePositionByName() {
+private int getRelativePositionOfElement() {
+private int getRelativePositionOfTextNode() {
+private int getRelativePositionOfPI(String target) {
+public int hashCode() {
+public boolean equals(Object object) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model;
+
+ import junit.framework.TestCase;
+ import java.io.StringReader;
+ import java.util.Locale;
+ import javax.xml.parsers.DocumentBuilder;
+ import javax.xml.parsers.DocumentBuilderFactory;
+ import org.apache.commons.jxpath.ri.model.dom.DOMNodePointer;
+ import org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer;
+ import org.jdom.input.SAXBuilder;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.Node;
+ import org.xml.sax.InputSource;
+
+ /**
+  * Tests for JXPATH-83: xml:space="preserve" handling and nested text
+  * accumulation in DOMNodePointer and JDOMNodePointer.
+  */
+ public class XMLSpaceTest extends TestCase {
+
+     public XMLSpaceTest(String name) {
+         super(name);
+     }
+
+     // ---- helpers ----
+
+     private static Document parseDOM(String xml) throws Exception {
+         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+         dbf.setNamespaceAware(true);
+         dbf.setIgnoringElementContentWhitespace(false);
+         DocumentBuilder db = dbf.newDocumentBuilder();
+         return db.parse(new InputSource(new StringReader(xml)));
+     }
+
+     private static org.jdom.Document parseJDOM(String xml) throws Exception {
+         SAXBuilder builder = new SAXBuilder(false);
+         builder.setFeature("]8;id=md-va5ho4;http://apache.org/xml/features/nonvalidating/load-external-dtdhttp://apache.org/xml/features/nonvalidating/load-external-dtd]8;;]8;;", ]8;;
+false);
+         return builder.build(new StringReader(xml));
+     }
+
+     private static DOMNodePointer domPointer(Document doc, String path) {
+         // XPath /root, /child, etc. — use simple traversal
+         Node cur = doc.getDocumentElement();
+         if (path.startsWith("/")) path = path.substring(1);
+         String[] segs = path.split("/");
+         for (String seg : segs) {
+             if (seg.length() == 0) continue;
+             org.w3c.dom.NodeList children = cur.getChildNodes();
+             Node found = null;
+             for (int i = 0; i < children.getLength(); i++) {
+                 Node n = children.item(i);
+                 if (n.getNodeType() == Node.ELEMENT_NODE && seg.equals(n.getLocalName())) {
+                     found = n;
+                     break;
+                 }
+             }
+             if (found == null) throw new RuntimeException("Element " + seg + " not found");
+             cur = found;
+         }
+         return new DOMNodePointer(cur, Locale.getDefault());
+     }
+
+     private static JDOMNodePointer jdomPointer(org.jdom.Document doc, String path) {
+         org.jdom.Element cur = doc.getRootElement();
+         if (path.startsWith("/")) path = path.substring(1);
+         String[] segs = path.split("/");
+         for (String seg : segs) {
+             if (seg.length() == 0) continue;
+             cur = cur.getChild(seg);
+             if (cur == null) throw new RuntimeException("Element " + seg + " not found");
+         }
+         return new JDOMNodePointer(cur, Locale.getDefault());
+     }
+
+     // ---- xml:space="preserve" tests ----
+
+     public void testPreserveDOM() throws Exception {
+         Document doc = parseDOM("<root xml:space=\"preserve\"> foo </root>");
+         DOMNodePointer ptr = domPointer(doc, "/root");
+         // JXPATH-83 bug: extra surrounding spaces; expected just "foo"
+         assertEquals("foo", ptr.getValue());
+     }
+
+     public void testPreserveJDOM() throws Exception {
+         org.jdom.Document doc = parseJDOM("<root xml:space=\"preserve\"> foo </root>");
+         JDOMNodePointer ptr = jdomPointer(doc, "/root");
+         assertEquals("foo", ptr.getValue());
+     }
+
+     // ---- nested mixed content tests ----
+
+     public void testNestedDOM() throws Exception {
+         Document doc = parseDOM("<root xml:space=\"preserve\"><a>foo</a><a>bar</a> baz </root>");
+         DOMNodePointer ptr = domPointer(doc, "/root");
+         // nested child text concatenation; no extra spaces
+         assertEquals("foobar baz", ptr.getValue());
+     }
+
+     public void testNestedJDOM() throws Exception {
+         org.jdom.Document doc = parseJDOM("<root xml:space=\"preserve\"><a>foo</a><a>bar</a> baz
+</root>");
+         JDOMNodePointer ptr = jdomPointer(doc, "/root");
+         assertEquals("foobar baz", ptr.getValue());
+     }
+
+     // ---- nested with comments ----
+
+     public void testNestedWithCommentsDOM() throws Exception {
+         String xml = "<root xml:space=\"preserve\"><!-- comment --><a>foo</a><!-- another
+--><a>bar</a> baz </root>";
+         Document doc = parseDOM(xml);
+         DOMNodePointer ptr = domPointer(doc, "/root");
+         assertEquals("foobar baz", ptr.getValue());
+     }
+
+     public void testNestedWithCommentsJDOM() throws Exception {
+         String xml = "<root xml:space=\"preserve\"><!-- comment --><a>foo</a><!-- another
+--><a>bar</a> baz </root>";
+         org.jdom.Document doc = parseJDOM(xml);
+         JDOMNodePointer ptr = jdomPointer(doc, "/root");
+         assertEquals("foobar baz", ptr.getValue());
+     }
+
+     // ---- boundary / whitespace-only ----
+
+     public void testWhitespaceOnlyPreserveDOM() throws Exception {
+         Document doc = parseDOM("<root xml:space=\"preserve\">   </root>");
+         DOMNodePointer ptr = domPointer(doc, "/root");
+         String v = (String) ptr.getValue();
+         // With xml:space="preserve", whitespace-only content should be preserved,
+         // but not trimmed to empty unconditionally.
+         assertNotNull(v);
+         // In JDOM analogous test we check the same string.
+     }
+
+     public void testWhitespaceOnlyPreserveJDOM() throws Exception {
+         org.jdom.Document doc = parseJDOM("<root xml:space=\"preserve\">   </root>");
+         JDOMNodePointer ptr = jdomPointer(doc, "/root");
+         String v = (String) ptr.getValue();
+         assertNotNull(v);
+     }
+
+     // ---- empty element ----
+
+     public void testEmptyElementDOM() throws Exception {
+         Document doc = parseDOM("<root xml:space=\"preserve\"></root>");
+         DOMNodePointer ptr = domPointer(doc, "/root");
+         assertEquals("", ptr.getValue());
+     }
+
+     public void testEmptyElementJDOM() throws Exception {
+         org.jdom.Document doc = parseJDOM("<root xml:space=\"preserve\"></root>");
+         JDOMNodePointer ptr = jdomPointer(doc, "/root");
+         assertEquals("", ptr.getValue());
+     }
+
+     // ---- deep nesting ----
+
+     public void testDeepNestedDOM() throws Exception {
+         String xml = "<a xml:space=\"preserve\">x<b>y</b>z</a>";
+         Document doc = parseDOM(xml);
+         DOMNodePointer ptr = domPointer(doc, "/a");
+         assertEquals("xyz", ptr.getValue());
+     }
+
+     public void testDeepNestedJDOM() throws Exception {
+         String xml = "<a xml:space=\"preserve\">x<b>y</b>z</a>";
+         org.jdom.Document doc = parseJDOM(xml);
+         JDOMNodePointer ptr = jdomPointer(doc, "/a");
+         assertEquals("xyz", ptr.getValue());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JxPath-4f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JxPath-4f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JxPath-4f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JxPath-4f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JxPath-4f-copilot/.test_suite/org/apache/commons/jxpath/ri/model/XMLSpaceTest.java:37: error: illegal character: '\u001b'
+ [javac] builder.setFeature("]8;id=md-va5ho4;http://apache.org/xml/features/nonvalidating/load-external-dtdhttp://apache.org/xml/features/nonvalidating/load-external-dtd]8;;]8;;", ]8;;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 52 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

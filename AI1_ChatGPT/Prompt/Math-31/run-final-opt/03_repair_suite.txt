@@ -1,0 +1,172 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 31  Version: Math-31b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-718
+Trigger failures:
+- org.apache.commons.math3.distribution.BinomialDistributionTest::testMath718
+ --> org.apache.commons.math3.exception.ConvergenceException: illegal state: Continued fraction diverged to NaN for value 0.5
+ - org.apache.commons.math3.distribution.FDistributionTest::testMath785
+ --> junit.framework.AssertionFailedError: Failing to calculate inverse cumulative probability
+Modified: org.apache.commons.math3.util.ContinuedFraction
+
+Available API/signatures:
+[org.apache.commons.math3.util.ContinuedFraction | java]
+package org.apache.commons.math3.util;
+public abstract class ContinuedFraction {
+protected ContinuedFraction() {
+protected abstract double getA(int n, double x);
+protected abstract double getB(int n, double x);
+public double evaluate(double x) {
+public double evaluate(double x, double epsilon) {
+public double evaluate(double x, int maxIterations) {
+public double evaluate(double x, double epsilon, int maxIterations) {
+final double a = getA(n, x);
+final double b = getB(n, x);
+final double scale = FastMath.max(a,b);
+
+Generated JUnit Test:
+package org.apache.commons.math3.util;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
+
+import org.apache.commons.math3.exception.ConvergenceException;
+import org.apache.commons.math3.exception.MaxCountExceededException;
+import org.junit.Test;
+
+public class ContinuedFractionRegressionTest {
+
+    @Test
+    public void testAllEvaluationOverloadsForTerminatingFraction() {
+        ContinuedFraction fraction = new ContinuedFraction() {
+            @Override
+            protected double getA(int n, double x) {
+                return n == 0 ? 2.0 * x : 1.0;
+            }
+
+            @Override
+            protected double getB(int n, double x) {
+                return 0.0;
+            }
+        };
+
+        assertEquals(1.0, fraction.evaluate(0.5), 0.0);
+        assertEquals(1.0, fraction.evaluate(0.5, 1.0e-12), 0.0);
+        assertEquals(1.0, fraction.evaluate(0.5, 2), 0.0);
+        assertEquals(1.0, fraction.evaluate(0.5, 1.0e-12, 2), 0.0);
+    }
+
+    @Test
+    public void testConvergesForSimpleContinuedFraction() {
+        ContinuedFraction fraction = new ContinuedFraction() {
+            @Override
+            protected double getA(int n, double x) {
+                return 1.0;
+            }
+
+            @Override
+            protected double getB(int n, double x) {
+                return 1.0;
+            }
+        };
+
+        assertEquals((1.0 + Math.sqrt(5.0)) / 2.0,
+                     fraction.evaluate(0.5, 1.0e-12, 1000),
+                     1.0e-11);
+    }
+
+    @Test
+    public void testNegativeOverflowCoefficientsAreScaledRatherThanRejected() {
+        ContinuedFraction fraction = new ContinuedFraction() {
+            @Override
+            protected double getA(int n, double x) {
+                return n == 0 ? 1.0e200 : -1.0e200;
+            }
+
+            @Override
+            protected double getB(int n, double x) {
+                return -1.0e200;
+            }
+        };
+
+        double value = fraction.evaluate(0.5, 1.0e-12, 10);
+
+        assertFalse(Double.isInfinite(value));
+        assertFalse(Double.isNaN(value));
+        assertEquals(1.0e200, value, 0.0);
+    }
+
+    @Test
+    public void testPositiveOverflowCoefficientsAreScaled() {
+        ContinuedFraction fraction = new ContinuedFraction() {
+            @Override
+            protected double getA(int n, double x) {
+                return 1.0e200;
+            }
+
+            @Override
+            protected double getB(int n, double x) {
+                return 0.0;
+            }
+        };
+
+        assertEquals(1.0e200, fraction.evaluate(0.5, 1.0e-12, 10), 0.0);
+    }
+
+    @Test
+    public void testIterationLimitIsReportedForNonConvergentFraction() {
+        ContinuedFraction fraction = new ContinuedFraction() {
+            @Override
+            protected double getA(int n, double x) {
+                return 1.0;
+            }
+
+            @Override
+            protected double getB(int n, double x) {
+                return 1.0;
+            }
+        };
+
+        try {
+            fraction.evaluate(0.5, 1);
+            fail("Expected the iteration limit to be reported");
+        } catch (MaxCountExceededException expected) {
+            assertEquals(Integer.valueOf(1), expected.getMax());
+        }
+    }
+
+    @Test
+    public void testNaNConvergentIsReportedAsDivergence() {
+        ContinuedFraction fraction = new ContinuedFraction() {
+            @Override
+            protected double getA(int n, double x) {
+                return n == 0 ? 1.0 : 0.0;
+            }
+
+            @Override
+            protected double getB(int n, double x) {
+                return 0.0;
+            }
+        };
+
+        try {
+            fraction.evaluate(0.5, 1.0e-12, 10);
+            fail("Expected NaN divergence to be reported");
+        } catch (ConvergenceException expected) {
+            assertFalse(expected.getMessage().length() == 0);
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.math3.util.ContinuedFractionRegressionTest::testNaNConvergentIsReportedAsDivergence
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.math3.util.ContinuedFractionRegressionTest::testNaNConvergentIsReportedAsDivergence

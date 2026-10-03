@@ -1,0 +1,188 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 111  Version: JacksonDatabind-111b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2303
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.jdk.JDKAtomicTypesDeserTest::testNullWithinNested
+ --> junit.framework.AssertionFailedError
+Modified: com.fasterxml.jackson.databind.deser.CreatorProperty, com.fasterxml.jackson.databind.deser.impl.FieldProperty, com.fasterxml.jackson.databind.deser.impl.MethodProperty, com.fasterxml.jackson.databind.deser.impl.ObjectIdReferenceProperty, com.fasterxml.jackson.databind.deser.impl.ObjectIdValueProperty, com.fasterxml.jackson.databind.deser.impl.SetterlessProperty, com.fasterxml.jackson.databind.deser.std.AtomicReferenceDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.CreatorProperty | java]
+package com.fasterxml.jackson.databind.deser;
+public class CreatorProperty
+protected final AnnotatedParameter _annotated;
+protected final Object _injectableValueId;
+protected SettableBeanProperty _fallbackSetter;
+protected final int _creatorIndex;
+protected boolean _ignorable;
+protected CreatorProperty(CreatorProperty src, PropertyName newName) {
+@Override
+public SettableBeanProperty withName(PropertyName newName) {
+public SettableBeanProperty withValueDeserializer(JsonDeserializer<?> deser) {
+public SettableBeanProperty withNullProvider(NullValueProvider nva) {
+public void fixAccess(DeserializationConfig config) {
+public void setFallbackSetter(SettableBeanProperty fallbackSetter) {
+public void markAsIgnorable() {
+public boolean isIgnorable() {
+public Object findInjectableValue(Deserializa
+...[truncated deterministically]...
+n
+public Object getInjectableValueId() {
+public String toString() { return "[creator property, name '"+getName()+"'; inject id '"+_injectableValueId+"']"; }
+private final void _verifySetter() throws IOException {
+private void _reportMissingSetter(JsonParser p, DeserializationContext ctxt) throws IOException
+final String msg = "No fallback setter/field defined for creator property '"+getName()+"'";
+
+[com.fasterxml.jackson.databind.deser.impl.FieldProperty | java]
+package com.fasterxml.jackson.databind.deser.impl;
+public final class FieldProperty
+final protected AnnotatedField _annotated;
+final protected transient Field _field;
+final protected boolean _skipNulls;
+protected FieldProperty(FieldProperty src, PropertyName newName) {
+protected FieldProperty(FieldP
+...[truncated deterministically]...
+ect setAndReturn(Object instance, Object value) throws IOException
+
+[com.fasterxml.jackson.databind.deser.std.AtomicReferenceDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+public class AtomicReferenceDeserializer
+@Override
+public AtomicReferenceDeserializer withResolved(TypeDeserializer typeDeser, JsonDeserializer<?> valueDeser) {
+public AtomicReference<Object> getNullValue(DeserializationContext ctxt) throws JsonMappingException {
+public Object getEmptyValue(DeserializationContext ctxt) {
+public AtomicReference<Object> referenceValue(Object contents) {
+public Object getReferenced(AtomicReference<Object> reference) {
+@Override // since 2.9
+public AtomicReference<Object> updateReference(AtomicReference<Object> reference, Object contents) {
+public Boolean supportsUpdate(DeserializationConfig config) {
+
+Generated JUnit Test:
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.std.AtomicReferenceDeserializer;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+
+public class AtomicReferenceNullHandlingTest
+{
+    private final ObjectMapper MAPPER = new ObjectMapper();
+
+    @Test
+    public void testNullWithinNestedAtomicReferenceCreatesOuterReference() throws Exception
+    {
+        AtomicReference<AtomicReference<String>> result = MAPPER.readValue("null",
+                new TypeReference<AtomicReference<AtomicReference<String>>>() { });
+
+        assertNotNull(result);
+        assertNull(result.get());
+    }
+
+    @Test
+    public void testNestedAtomicReferenceRetainsBothReferenceLevelsForValue() throws Exception
+    {
+        AtomicReference<AtomicReference<String>> result = MAPPER.readValue("\"value\"",
+                new TypeReference<AtomicReference<AtomicReference<String>>>() { });
+
+        assertNotNull(result);
+        assertNotNull(result.get());
+        assertEquals("value", result.get().get());
+    }
+
+    @Test
+    public void testCreatorPropertyReceivesEmptyAtomicReferenceForJsonNull() throws Exception
+    {
+        CreatorBean result = MAPPER.readValue("{\"value\":null}", CreatorBean.class);
+
+        assertNotNull(result.value);
+        assertNull(result.value.get());
+    }
+
+    @Test
+    public void testFieldAndMethodPropertiesRespectNullsSkip() throws Exception
+    {
+        FieldSkipBean fieldBean = MAPPER.readValue("{\"value\":null}", FieldSkipBean.class);
+        MethodSkipBean methodBean = MAPPER.readValue("{\"value\":null}", MethodSkipBean.class);
+
+        assertEquals("field-original", fieldBean.value.get());
+        assertEquals("method-original", methodBean.getValue().get());
+        assertEquals(0, methodBean.setCalls);
+    }
+
+    @Test
+    public void testAtomicReferenceDeserializerPublicReferenceOperations() throws Exception
+    {
+        JavaType type = MAPPER.getTypeFactory().constructReferenceType(
+                AtomicReference.class, MAPPER.getTypeFactory().constructType(Object.class));
+        AtomicReferenceDeserializer deser = new AtomicReferenceDeserializer(type, null, null, null);
+
+        AtomicReference<Object> nullValue = deser.getNullValue(null);
+        AtomicReference<Object> emptyValue = (AtomicReference<Object>) deser.getEmptyValue(null);
+        AtomicReference<Object> reference = deser.referenceValue("before");
+
+        assertNotNull(nullValue);
+        assertNull(nullValue.get());
+        assertNotNull(emptyValue);
+        assertNull(emptyValue.get());
+        assertEquals("before", deser.getReferenced(reference));
+
+        AtomicReference<Object> updated = deser.updateReference(reference, "after");
+        assertSame(reference, updated);
+        assertEquals("after", reference.get());
+        assertEquals(Boolean.TRUE, deser.supportsUpdate(null));
+    }
+
+    public static class CreatorBean {
+        public final AtomicReference<String> value;
+
+        @JsonCreator
+        public CreatorBean(@JsonProperty("value") AtomicReference<String> value) {
+            this.value = value;
+        }
+    }
+
+    public static class FieldSkipBean {
+        @JsonSetter(nulls = Nulls.SKIP)
+        public AtomicReference<String> value = new AtomicReference<String>("field-original");
+    }
+
+    public static class MethodSkipBean {
+        private AtomicReference<String> value = new AtomicReference<String>("method-original");
+        public int setCalls;
+
+        @JsonSetter(nulls = Nulls.SKIP)
+        public void setValue(AtomicReference<String> value) {
+            ++setCalls;
+            this.value = value;
+        }
+
+        public AtomicReference<String> getValue() {
+            return value;
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - AtomicReferenceNullHandlingTest::testNullWithinNestedAtomicReferenceCreatesOuterReference
+ - AtomicReferenceNullHandlingTest::testAtomicReferenceDeserializerPublicReferenceOperations
+
+Failing generated tests: AtomicReferenceNullHandlingTest::testAtomicReferenceDeserializerPublicReferenceOperations, AtomicReferenceNullHandlingTest::testNullWithinNestedAtomicReferenceCreatesOuterReference

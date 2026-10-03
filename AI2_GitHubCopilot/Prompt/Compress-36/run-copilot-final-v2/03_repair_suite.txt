@@ -1,0 +1,221 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 36  Version: Compress-36b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-348
+Trigger failures:
+- org.apache.commons.compress.archivers.sevenz.SevenZFileTest::readEntriesOfSize0
+ --> java.lang.IllegalStateException: No current 7z entry (call getNextEntry() first).
+Modified: org.apache.commons.compress.archivers.sevenz.SevenZFile
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.sevenz.SevenZFile | java]
+package org.apache.commons.compress.archivers.sevenz;
+public class SevenZFile implements Closeable {
+private final ArrayList<InputStream> deferredBlockStreams = new ArrayList<InputStream>();
+public SevenZFile(final File filename, final byte[] password) throws IOException {
+public SevenZFile(final File filename) throws IOException {
+@Override
+public void close() throws IOException {
+public SevenZArchiveEntry getNextEntry() throws IOException {
+public Iterable<SevenZArchiveEntry> getEntries() {
+private Archive readHeaders(final byte[] password) throws IOException {
+final byte archiveVersionMajor = file.readByte();
+final byte archiveVersionMinor = file.readByte();
+final long startHeaderCrc = 0xffffFFFFL & Integer.reverseBytes(file.readInt());
+final StartHeader startHeader = readStartHeader(startHeaderCrc);
+final int nextHeaderSizeInt = (int) startHeader.nextHeaderSize;
+final CRC32 crc = new CRC32();
+final ByteArrayInputStream byteStream = new ByteArrayInputStream(nextHeader);
+private StartHeader readStartHeader(final long startHeaderCrc) throws IOException {
+final StartHeader startHeader = new StartHeader();
+private void readHeader(final DataInput header, final Archive archive) throws IOException {
+private void readArchiveProperties(final DataInput input) throws IOException {
+final long propertySize = readUint64(input);
+final byte[] property = new byte[(int)propertySize];
+for (final Coder coder : folder.getOrderedCoders()) {
+final byte[] nextHeader = new byte[(int)folder.getUnpackSize()];
+final DataInputStream nextHeaderInputStream = new DataInputStream(inputStreamStack);
+priva
+...[truncated deterministically]...
+thod = SevenZMethod.byId(coder.decompressionMethodId);
+public int read() throws IOException {
+private InputStream getCurrentStream() throws IOException {
+final InputStream stream = deferredBlockStreams.remove(0);
+public int read(final byte[] b) throws IOException {
+public int read(final byte[] b, final int off, final int len) throws IOException {
+private static long readUint64(final DataInput in) throws IOException {
+final long firstByte = in.readUnsignedByte();
+final long nextByte = in.readUnsignedByte();
+public static boolean matches(final byte[] signature, final int length) {
+private static long skipBytesFully(final DataInput input, long bytesToSkip) throws IOException {
+final long skippedNow = skipBytesFully(input, Integer.MAX_VALUE);
+final int skippedNow = input.skipBytes((int) bytesToSkip);
+public String toString() {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.sevenz;
+
+ import static org.junit.Assert.*;
+
+ import java.io.File;
+ import java.io.IOException;
+ import java.net.URISyntaxException;
+ import java.net.URL;
+
+ import org.junit.Test;
+
+ /**
+  * Test class for {@link SevenZFile} targeting the zero-size entry bug (COMPRESS-348).
+  * The buggy version throws {@link IllegalStateException} when trying to read
+  * from an entry whose size is zero, instead of correctly returning -1.
+  */
+ public class SevenZFileTest {
+
+     private static final String TEST_RESOURCE =
+             "org/apache/commons/compress/archivers/sevenz/multiple-files-empty-file.7z";
+
+     private static File getTestFile() throws IOException {
+         URL url = SevenZFileTest.class.getClassLoader().getResource(TEST_RESOURCE);
+         if (url == null) {
+             throw new IOException("Test resource not found: " + TEST_RESOURCE);
+         }
+         try {
+             return new File(url.toURI());
+         } catch (URISyntaxException e) {
+             throw new IOException(e);
+         }
+     }
+
+     @Test(expected = IllegalStateException.class)
+     public void testReadWithoutNextEntry() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             file.read();
+         }
+     }
+
+     @Test(expected = IllegalStateException.class)
+     public void testReadByteArrayWithoutNextEntry() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             file.read(new byte[10]);
+         }
+     }
+
+     @Test
+     public void testZeroSizeEntryReadReturnsMinusOne() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             SevenZArchiveEntry entry;
+             boolean foundZero = false;
+             while ((entry = file.getNextEntry()) != null) {
+                 if (entry.getSize() == 0) {
+                     foundZero = true;
+                     assertEquals(-1, file.read());
+                     assertEquals(-1, file.read(new byte[10]));
+                     assertEquals(-1, file.read(new byte[10], 0, 5));
+                 }
+             }
+             assertTrue("Should have at least one zero-size entry", foundZero);
+         }
+     }
+
+     @Test
+     public void testNonZeroEntryReadContent() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             SevenZArchiveEntry entry;
+             boolean foundNonZero = false;
+             while ((entry = file.getNextEntry()) != null) {
+                 if (entry.getSize() > 0) {
+                     foundNonZero = true;
+                     int first = file.read();
+                     assertTrue("First byte should be non-negative", first >= 0);
+                     byte[] rest = new byte[(int) entry.getSize() - 1];
+                     int bytesRead = file.read(rest);
+                     assertEquals(entry.getSize() - 1, bytesRead);
+                     assertEquals(-1, file.read());
+                 }
+             }
+             assertTrue("Should have at least one non-zero entry", foundNonZero);
+         }
+     }
+
+     @Test
+     public void testReadAfterEndOfEntryReturnsMinusOne() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             SevenZArchiveEntry entry;
+             while ((entry = file.getNextEntry()) != null) {
+                 if (entry.getSize() > 0) {
+                     byte[] buf = new byte[(int) entry.getSize()];
+                     int totalRead = 0;
+                     int read;
+                     while (totalRead < buf.length
+                             && (read = file.read(buf, totalRead, buf.length - totalRead)) != -1) {
+                         totalRead += read;
+                     }
+                     assertEquals(entry.getSize(), totalRead);
+                     assertEquals(-1, file.read());
+                     assertEquals(-1, file.read(new byte[10]));
+                     break;
+                 }
+             }
+         }
+     }
+
+     @Test
+     public void testMultipleZeroSizeEntries() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             SevenZArchiveEntry entry;
+             int zeroCount = 0;
+             while ((entry = file.getNextEntry()) != null) {
+                 if (entry.getSize() == 0) {
+                     zeroCount++;
+                     assertEquals(-1, file.read());
+                 }
+             }
+             assertTrue("Expected at least two zero-size entries", zeroCount >= 2);
+         }
+     }
+
+     @Test
+     public void testGetNextEntryReturnsNullAtEnd() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             while (file.getNextEntry() != null) {
+                 // exhaust entries
+             }
+             assertNull(file.getNextEntry());
+         }
+     }
+
+     @Test
+     public void testGetEntriesConsistency() throws IOException {
+         try (SevenZFile file = new SevenZFile(getTestFile())) {
+             int entryCount = 0;
+             for (@SuppressWarnings("unused") SevenZArchiveEntry e : file.getEntries()) {
+                 entryCount++;
+             }
+             int iterCount = 0;
+             while (file.getNextEntry() != null) {
+                 iterCount++;
+             }
+             assertEquals("getEntries() and getNextEntry() should return same count",
+                     entryCount, iterCount);
+         }
+     }
+
+     @Test
+     public void testCloseIsIdempotent() throws IOException {
+         SevenZFile file = new SevenZFile(getTestFile());
+         file.close();
+         file.close(); // second close must not throw
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 9
+ - org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testReadWithoutNextEntry
+ - org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testZeroSizeEntryReadReturnsMinusOne
+ - org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testNonZeroEntryReadContent
+Failing generated tests: org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testCloseIsIdempotent, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testGetEntriesConsistency, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testGetNextEntryReturnsNullAtEnd, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testMultipleZeroSizeEntries, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testNonZeroEntryReadContent, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testReadAfterEndOfEntryReturnsMinusOne, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testReadByteArrayWithoutNextEntry, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testReadWithoutNextEntry, org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testZeroSizeEntryReadReturnsMinusOne

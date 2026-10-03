@@ -1,0 +1,343 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 52  Version: Jsoup-52b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.helper.DataUtil, org.jsoup.nodes.XmlDeclaration, org.jsoup.parser.XmlTreeBuilder
+Modified: org.jsoup.helper.DataUtil, org.jsoup.nodes.XmlDeclaration, org.jsoup.parser.XmlTreeBuilder
+Triggers: org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlNoCharset, org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlIso8859, org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlUtf8, org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlDisabledNoChanges, org.jsoup.parser.XmlTreeBuilderTest::handlesXmlDeclarationAsDeclaration, org.jsoup.parser.XmlTreeBuilderTest::testDetectCharsetEncodingDeclaration, org.jsoup.parser.XmlTreeBuilderTest::testParseDeclarationAttributes
+
+Bug/specification summary:
+Bug report: 701
+Trigger failures:
+- org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlNoCharset
+ --> junit.framework.AssertionFailedError: expected:<....0" encoding="UTF-8"[?]>
+ - org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlIso8859
+ --> junit.framework.AssertionFailedError: expected:<...ncoding="ISO-8859-1"[?]>
+ - org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlUtf8
+ --> junit.framework.AssertionFailedError: expected:<....0" encoding="UTF-8"[?]>
+ - org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlDisabledNoChanges
+ --> junit.framework.AssertionFailedError: expected:<...encoding="dontTouch"[?]>
+ - org.jsoup.parser.XmlTreeBuilderTest::handlesXmlDeclarationAsDeclaration
+ --> junit.framework.AssertionFailedError: expected:<<?xml encoding=["UTF-8"]?> <body> One </body...> but was:<<?xml encoding=['UTF-8' ]?> <body> One </body...>
+ - org.jsoup.parser.XmlTreeBuilderTest::testDetectCharsetEncodingDeclaration
+ --> junit.framework.AssertionFailedError: expected:<[ISO-8859-1]> but was:<[UTF-8]>
+ - org.jsoup.parser.XmlTreeBuilderTest::testParseDeclarationAttributes
+ --> junit.framework.AssertionFailedError: expected:<[1]> but was:<[]>
+Modified: org.jsoup.helper.DataUtil, org.jsoup.nodes.XmlDeclaration, org.jsoup.parser.XmlTreeBuilder
+
+Prompt-01 test plan:
+TARGETS: XmlDecl.toString/getWholeDecl closing "?>"; XmlDecl attributes quoting; XmlTreeBuilder
+token→attrs
+ORACLES: XML spec: decl ends "?>"; default double-quoted attribute values; encoding in charset
+detection
+CASES: "encoding" set/not; single-quoted attrs; extra attrs; empty attrs; BOM+encoding conflict;
+missing "?> "
+RISKS: No source of private helpers; XML spec conformance assumed; only modified classes available
+for test
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.helper.DataUtil (java) =====
+/* API SIGNATURES */
+package org.jsoup.helper;
+public final class DataUtil {
+private static final Pattern charsetPattern = Pattern.compile("(?i)\\bcharset=\\s*(?:\"|')?([^\\s,;\"']*)");
+private DataUtil() {}
+public static Document load(File in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+static void crossStreams(final InputStream in, final OutputStream out) throws IOException {
+static Document parseByteData(ByteBuffer byteData, String charsetName, String baseUri, Parser parser) {
+static ByteBuffer readToByteBuffer(InputStream inStream, int maxSize) throws IOException {
+static ByteBuffer readToByteBuffer(InputStream inStream) throws IOException {
+static ByteBuffer readFileToByteBuffer(File file) throws IOException {
+static ByteBuffer emptyByteBuffer() {
+static String getCharsetFromContentType(String contentType) {
+private static String validateCharset(String cs) {
+static String mimeBoundary() {
+final StringBuilder mime = new StringBuilder(boundaryLength);
+final Random rand = new Random();
+private static String detectCharsetFromBom(ByteBuffer byteData, String charsetName) {
+
+/* HEADER */
+package org.jsoup.helper;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.XmlDeclaration;
+import org.jsoup.parser.Parser;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.util.Locale;
+import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/* METHOD DataUtil */
+private DataUtil() {}
+
+/* METHOD load */
+public static Document load(File in, String charsetName, String baseUri) throws IOException {
+ ByteBuffer byteData = readFileToByteBuffer(in);
+ return parseByteData(byteData, charsetName, baseUri, Parser.htmlParser());
+ }
+
+/* METHOD load */
+public static Document load(InputStream in, String charsetName, String baseUri) throws IOException {
+ ByteBuffer byteData = readToByteBuffer(in);
+ return parseByteData(byteData, charsetName, baseUri, Parser.htmlParser());
+ }
+
+/* METHOD load */
+public static Document load(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+ ByteBuffer byteData = readToByteBuffer(in);
+ return parseByteData(byteData, charsetName, baseUri, pa
+...[truncated deterministically]...
+er byteData, String charsetName, String baseUri, Parser parser) {
+ String docData;
+ Document doc = null;
+
+ // look for BOM - overrides any other header or input
+ charsetName = detectCharsetFromBom(byteData, charsetName);
+
+ if (charsetName == null) { // determine from meta. safe first parse as UTF-8
+ // look for <meta http-equiv="Content-Type" content="text/html;charset=gb2312"> or HTML5 <meta charset="gb2312">
+ docData = Charset.forName(defaultCharset).decode(byteData).toString();
+ doc = parser.parseInput(docData, baseUri);
+ Element meta = doc.select("meta[http-equiv=content-type], meta[charset]").first();
+ String foundCharset = null; // if not found, will keep utf-8 as best attempt
+ if (meta != null) {
+ if (meta.hasAttr("http-equiv")) {
+ foundCharset = getCharsetFromContentType(meta.attr("content"));
+ }
+ if (foundCharset == null && meta.ha
+...[truncated deterministically]...
+e(byteData).toString();
+ doc = null;
+ }
+ } else { // specified by content type header (or by user on file load)
+ Validate.notEmpty(charsetName, "Must set charset arg to character set of file to parse. Set to null to attempt to detect from HTML");
+ docData = Charset.forName(charsetName).decode(byteData).toString();
+ }
+ if (doc == null) {
+ doc = parser.parseInput(docData, baseUri);
+ doc.outputSettings().charset(charsetName);
+ }
+ return doc;
+ }
+
+===== org.jsoup.nodes.XmlDeclaration (java) =====
+package org.jsoup.nodes;
+
+import org.jsoup.helper.Validate;
+
+import java.io.IOException;
+
+/**
+ An XML Declaration.
+
+ @author Jonathan Hedley, jonathan@hedley.net */
+public class XmlDeclaration extends Node {
+ private final String name;
+ private final boolean isProcessingInstruction; // <! if true, <? if false, declaration (and last data char should be ?)
+
+ /**
+ Create a new XML declaration
+ @param name of declaration
+ @param baseUri base uri
+ @param isProcessingInstruction is processing instruction
+ */
+ public XmlDeclaration(String name, String baseUri, boolean isProcessingInstruction) {
+ super(baseUri);
+ Validate.notNull(name);
+ this.name = name;
+ this.isProcessingInstruction = isProcessingInstruction;
+ }
+
+ public String nodeName() {
+ return "#declaration";
+ }
+
+ /**
+ * Get the name of this declaration.
+ * @return name of this declaration.
+ */
+ public String name() {
+ return name;
+ }
+
+ /**
+ Get the unencoded XML declaration.
+ @return XML declaration
+ */
+ public String getWholeDeclaration() {
+ final String decl = this.name;
+ if(decl.equals("xml") && attributes.size() > 1 ) {
+ StringBuilder sb = new StringBuilder(decl);
+ final String version = attributes.get("version");
+ if( version != null ) {
+ sb.append(" version=\"").append(version).append("\"");
+ }
+ final String encoding = attributes.get("encoding");
+ if( encoding != null ) {
+ sb.append(" encoding=\"").append(encoding).append("\"");
+ }
+ return sb.toString();
+ }
+ else {
+ return this.name;
+ }
+ }
+
+ void outerHtmlHead(Appendable accum, int depth, Document.OutputSettings out) throws IOException {
+ accum
+ .append("<")
+ .append(isProcessingInstruction ? "!" : "?")
+ .append(getWholeDeclaration())
+ .append(">");
+ }
+
+ void outerHtmlTail(Appendable accum, int depth, Document.OutputSettings out) {}
+
+ @Override
+ public String toString() {
+ return outerHtml();
+ }
+}
+
+===== org.jsoup.parser.XmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class XmlTreeBuilder extends TreeBuilder {
+@Override
+protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private void popStackToClose(Token.EndTag endTag) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.*;
+import java.util.List;
+public class XmlTreeBuilder extends TreeBuilder {
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+ super.initialiseParse(input, baseUri, errors);
+ stack.add(doc); // place the document onto the stack. differs from HtmlTreeBuilder (not on stack)
+ doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
+ }
+
+/* METHOD process */
+@Override
+ protected boolean process(Token token) {
+ // start tag, end tag, doctype, comment, character, eof
+ switch (token.type) {
+ case StartTag:
+ insert(token.asStartTag());
+ break;
+ case EndTag:
+ popStackToClose(token.asEndTag());
+ break;
+ case Comment:
+ insert(token.asComment());
+ break;
+ case Character:
+ insert(token.asCharacter());
+ break;
+ case Doctype:
+ insert(token.asDoctype());
+ break;
+ case EOF: // could put some normalisation here if desired
+ break;
+ default:
+ Validate.fail("Unexpected token type: " + token.type);
+ }
+ return true;
+ }
+
+/* METHOD insert */
+Element insert(Token.StartTag startTag) {
+ Tag tag = Tag.valueOf(startTag.name());
+ // todo: wonder if for xml parsing, should treat all tags as unknown? because it's not html.
+ Element el = new Element(tag, baseUri, startTag.attributes);
+ insertNode(el);
+ if (startTag.isSelfClosing()) {
+ tokeniser.acknowledgeSelfClosingFlag();
+ if (!tag.isKnownTag()) // unknown tag, remember this is self closing for output. see above.
+ tag.setSelfClosing();
+ } else {
+ stack.add(el);
+ }
+ return el;
+ }
+
+ void insert(Token.Comment commentToken) {
+ Comment comment = new Comment(commentToken.getData(), baseUri);
+ Node insert = comment;
+ if (commentToken.bogus) { // xml declarations are emitted as bogus comments (which is right for html, but not xml)
+ // so we do a bit of a hack and parse the data as an element to pull the attributes out
+ String data = comment.getData();
+ if (data.length() > 1 && (data.startsWith("!") || data.startsWith("?"))) {
+ String declaration = data.substring(1);
+ insert = new XmlDeclaration(declaration, comment.baseUri(), data.startsWith("!"));
+ }
+ }
+ insertNode(insert);
+ }
+
+ void insert(Token.Character characterToken) {
+ Node node = new TextNode(characterToken.getData(), baseUri);
+ insertNode(node);
+ }
+
+ void insert(Token.Doctype d) {
+ DocumentType doctypeNode = new DocumentType(d.getName(), d.getPublicIdentifier(), d.getSystemIdentifier(), baseUri);
+ insertNode(doctypeNode);
+ }
+
+ /**
+ * If the stack contains an element with this tag's name, pop up the stack to remove the first occurrence. If not
+ * found, skips.
+ *
+ * @param endTag
+ */
+ private void popStackToClose(Token.EndTag endTag) {
+ String elName = endTag.name();
+ Element firstFound = null;
+
+ for (int pos = stack.size() -1; pos >= 0; pos--) {
+ Element next = stack.get(pos);
+ if (next.nodeName().equals(elName)) {
+ firstFound = next;
+ break;
+ }
+ }
+ if (firstFound == null)
+ return; // not found, skip
+
+ for (int pos = stack.size() -1; pos >= 0; pos--) {
+ Element next = stack.get(pos);
+ stack.remove(pos);
+ if (next == firstFound)
+ break;
+ }
+ }
+
+ List<Node> parseFragment(String inputFragment, String baseUri, ParseErrorList errors) {
+ initialiseParse(inputFragment, baseUri, errors);
+ runParser();
+ return doc.childNodes();
+ }
+}

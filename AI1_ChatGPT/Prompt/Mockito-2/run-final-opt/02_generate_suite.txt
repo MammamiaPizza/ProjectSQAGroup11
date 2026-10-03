@@ -1,0 +1,60 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 2  Version: Mockito-2b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.util.Timer
+Modified: org.mockito.internal.util.Timer
+Triggers: org.mockito.internal.util.TimerTest::should_throw_friendly_reminder_exception_when_duration_is_negative, org.mockito.verification.NegativeDurationTest::should_throw_exception_when_duration_is_negative_for_timeout_method, org.mockito.verification.NegativeDurationTest::should_throw_exception_when_duration_is_negative_for_after_method
+
+Bug/specification summary:
+Bug report: 197
+Trigger failures:
+- org.mockito.internal.util.TimerTest::should_throw_friendly_reminder_exception_when_duration_is_negative
+ --> junit.framework.AssertionFailedError: It is forbidden to create timer with negative value of timer's duration.
+ - org.mockito.verification.NegativeDurationTest::should_throw_exception_when_duration_is_negative_for_timeout_method
+ --> junit.framework.AssertionFailedError: It is forbidden to invoke Mockito.timeout() with negative value.
+ - org.mockito.verification.NegativeDurationTest::should_throw_exception_when_duration_is_negative_for_after_method
+ --> junit.framework.AssertionFailedError: It is forbidden to invoke Mockito.after() with negative value.
+Modified: org.mockito.internal.util.Timer
+
+Prompt-01 test plan:
+TARGETS: Timer(long durationMillis), isCounting(), start(); indirect Mockito.timeout()/after() duration validation.
+ORACLES: Trigger assertions require friendly failures for negative Timer, timeout, and after durations.
+CASES: Timer(-1) throws expected reminder exception/message; test -1 boundary.
+CASES: Mockito.timeout(-1) and Mockito.after(-1) throw expected negative-value exceptions/messages.
+CASES: Timer(0) and positive durations preserve normal construction/counting behavior if observable.
+RISKS: Context lacks Timer implementation, exception types, and exact behavior for zero/elapsed durations.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.util.Timer (java) =====
+package org.mockito.internal.util;
+
+public class Timer {
+
+ private final long durationMillis;
+ private long startTime = -1;
+
+ public Timer(long durationMillis) {
+ this.durationMillis = durationMillis;
+ }
+
+ /**
+ * Informs whether the timer is still counting down.
+ */
+ public boolean isCounting() {
+ assert startTime != -1;
+ return System.currentTimeMillis() - startTime <= durationMillis;
+ }
+
+ /**
+ * Starts the timer count down.
+ */
+ public void start() {
+ startTime = System.currentTimeMillis();
+ }
+
+}

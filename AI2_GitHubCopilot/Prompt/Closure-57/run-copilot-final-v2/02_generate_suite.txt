@@ -1,0 +1,347 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 57  Version: Closure-57b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.ClosureCodingConvention
+Modified: com.google.javascript.jscomp.ClosureCodingConvention
+Triggers: com.google.javascript.jscomp.ClosureCodingConventionTest::testRequire
+
+Bug/specification summary:
+Bug report: 530
+Trigger failures:
+- com.google.javascript.jscomp.ClosureCodingConventionTest::testRequire
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: foo
+Modified: com.google.javascript.jscomp.ClosureCodingConvention
+
+Prompt-01 test plan:
+TARGETS: extractClassNameIfRequire(Node,Node) — returns non-null for non‑goog.require calls
+ORACLES: DefaultCodingConvention semantics; junit assertions from testRequire (null expected)
+CASES: goog.require('a.B')→'a.B'; goog.provide('a.B')→null; bare require('foo')→null
+CASES: null nodes, non‑NAME first child, non‑CALL parent, wrong argument count/type
+CASES: goog.require without string arg; x.y.require('foo')→null; similar-prefix calls
+RISKS: Exact failing input unknown; bug likely in lax call‑name or arg‑count validation
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.ClosureCodingConvention (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public class ClosureCodingConvention extends DefaultCodingConvention {
+@Override
+public SubclassRelationship getClassesDefinedByCall(Node callNode) {
+private SubclassType typeofClassDefiningName(Node callName) {
+public boolean isSuperClassReference(String propertyName) {
+private boolean endsWithPrototype(Node qualifiedName) {
+public String extractClassNameIfProvide(Node node, Node parent){
+public String extractClassNameIfRequire(Node node, Node parent){
+public String getExportPropertyFunction() {
+public String getExportSymbolFunction() {
+public List<String> identifyTypeDeclarationCall(Node n) {
+public String getAbstractMethodName() {
+public String getSingletonGetterClassName(Node callNode) {
+public String getGlobalObject() {
+public boolean isPropertyTestFunction(Node call) {
+public boolean isOptionalParameter(Node parameter) {
+public boolean isVarArgsParameter(Node parameter) {
+public boolean isPrivate(String name) {
+public Collection<AssertionFunctionSpec> getAssertionFunctions() {
+public Bind describeFunctionBind(Node n) {
+private Node safeNext(Node n) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.ObjectType;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+public class ClosureCodingConvention extends DefaultCodingConvention {
+
+/* METHOD getObjectLiteralCast */
+@Override
+ public ObjectLiteralCast getObjectLiteralCast(NodeTraversal t,
+ Node callNode) {
+ Preconditions.checkArgument(callNode.getType() == Token.CALL);
+ Node callName = callNode.getFirstChild();
+ if (!"goog.reflect.object".equals(callName.getQualifiedName()) ||
+ callNode.getChildCount() != 3) {
+ return null;
+ }
+
+ Node typeNode = callName.getNext();
+ if (!typeNode.isQualifiedName()) {
+ return null;
+ }
+
+ Node objectNode = typeNode.getNext();
+ if (objectNode.getType() != Token.OBJECTLIT) {
+ // TODO(johnlenz): The coding convention should not be performing checks.
+ t.getCompiler().report(JSError.make(t.getSourceName(), callNode,
+ OBJECTLIT_EXPECTED));
+ return null;
+ }
+
+ return new ObjectLiteralCast(typeNode.getQualifiedName(),
+ typeNode.getNext());
+ }
+
+/* METHOD identifyTypeDeclarationCall */
+@Override
+ public List<String> identifyTypeDeclarationCall(Node n) {
+ Node callName = n.getFirstChild();
+ if ("goog.addDependency".equals(callName.getQualifiedName()) &&
+ n.getChildCount() >= 3) {
+ Node typeArray = callName.getNext().getNext();
+ if (typeArray.getType() == Token.ARRAYLIT) {
+ List<String> typeNames = Lists.newArrayList();
+ for (Node name = typeArray.getFirstChild(); name != null;
+ name = name.getNext()) {
+ if (name.getType() == Token.STRING) {
+ typeNames.add(name.getString());
+ }
+ }
+ return typeNames;
+ }
+ }
+ return null;
+ }
+
+/* METHOD getAssertionFunctions */
+@Override
+ public Collection<AssertionFunctionSpec> getAssertionFunctions() {
+ return ImmutableList.<AssertionFunctionSpec>of(
+ new AssertionFunctionSpec("goog.asserts.assert"),
+ new AssertionFunctionSpec("goog.asserts.assertNumber",
+ JSTypeNative.NUMBER_TYPE),
+ new AssertionFunctionSpec("goog.asserts.assertString",
+ JSTypeNative.STRING_TYPE),
+ new AssertionFunctionSpec("goog.asserts.assertFunction",
+ JSTypeNative.FUNCTION_INSTANCE_TYPE),
+ new AssertionFunctionSpec("goog.asserts.assertObject",
+ JSTypeNative.OBJECT_TYPE),
+ new AssertionFunctionSpec("goog.asserts.assertArray",
+ JSTypeNative.ARRAY_TYPE),
+ // TODO(agrieve): It would be better if this could make the first
+ // parameter the type of the second parameter.
+ new AssertionFunctionSpec("goog.asserts.assertInstanceof",
+ JSTypeNative.OBJECT_TYPE)
+ );
+ }
+
+/* METHOD describeFunctionBind */
+@Override
+ public Bind describeFunctionBind(Node n) {
+ Bind result = super.describeFunctionBind(n);
+ if (result != null) {
+ return result;
+ }
+
+ // It would be nice to be able to identify a fn.bind call
+ // but that requires knowing the type of "fn".
+
+ if (n.getType() != Token.CALL) {
+ return null;
+ }
+
+ Node callTarget = n.getFirstChild();
+ String name = callTarget.getQualifiedName();
+ if (name != null) {
+ if (name.equals("goog.bind")
+ || name.equals("goog$bind")) {
+ // goog.bind(fn, self, args...);
+ Node fn = callTarget.getNext();
+ if (fn == null) {
+ return null;
+ }
+ Node thisValue = safeNext(fn);
+ Node parameters = safeNext(thisValue);
+ return new Bind(fn, thisValue, parameters);
+ }
+
+ if (name.equals("goog.partial") || name.equals("goog$partial")) {
+ // goog.partial(fn, args...);
+ Node fn = callTarget.getNext();
+ if (fn == null) {
+ return null;
+ }
+ Node thisValue = null;
+ Node parameters = safeNext(fn);
+ return new Bind(fn, thisValue, parameters);
+ }
+ }
+
+ return null;
+ }
+
+/* METHOD getSingletonGetterClassName */
+@Override
+ public String getSingletonGetterClassName(Node callNode) {
+ Node callArg = callNode.getFirstChild();
+ String callName = callArg.getQualifiedName();
+
+ // Use both the original name and the post-CollapseProperties name.
+ if (!("goog.addSingletonGetter".equals(callName) ||
+ "goog$addSingletonGetter".equals(callName)) ||
+ callNode.getChildCount() != 2) {
+ return null;
+ }
+
+ return callArg.getNext().getQualifiedName();
+ }
+
+/* METHOD applySubclassRelationship */
+@Override
+ public void applySubclassRelationship(FunctionType parentCtor,
+ FunctionType childCtor, SubclassType type) {
+ if (type == SubclassType.INHERITS) {
+ childCtor.defineDeclaredProperty("superClass_",
+ parentCtor.getPrototype(), parentCtor.getSource());
+ childCtor.getPrototype().defineDeclaredProperty("constructor",
+ childCtor, parentCtor.getSource());
+ }
+ }
+
+/* METHOD isSuperClassReference */
+@Override
+ public boolean isSuperClassReference(String propertyName) {
+ return "superClass_".equals(propertyName);
+ }
+
+/* METHOD extractClassNameIfProvide */
+@Override
+ public String extractClassNameIfProvide(Node node, Node parent){
+ return extractClassNameIfGoog(node, parent, "goog.provide");
+ }
+
+/* METHOD extractClassNameIfRequire */
+@Override
+ public String extractClassNameIfRequire(Node node, Node parent){
+ return extractClassNameIfGoog(node, parent, "goog.require");
+ }
+
+/* METHOD getExportPropertyFunction */
+@Override
+ public String getExportPropertyFunction() {
+ return "goog.exportProperty";
+ }
+
+/* METHOD getExportSymbolFunction */
+@Override
+ public String getExportSymbolFunction() {
+ return "goog.exportSymbol";
+ }
+
+/* METHOD getAbstractMethodName */
+@Override
+ public String getAbstractMethodName() {
+ return "goog.abstractMethod";
+ }
+
+/* METHOD applySingletonGetter */
+@Override
+ public void applySingletonGetter(FunctionType functionType,
+ FunctionType getterType, ObjectType objectType) {
+ functionType.defineDeclaredProperty("getInstance", getterType,
+ functionType.getSource());
+ functionType.defineDeclaredProperty("instance_", objectType,
+ functionType.getSource());
+ }
+
+/* METHOD getGlobalObject */
+@Override
+ public String getGlobalObject() {
+ return "goog.global";
+ }
+
+/* METHOD isPropertyTestFunction */
+@Override
+ public boolean isPropertyTestFunction(Node call) {
+ Preconditions.checkArgument(call.getType() == Token.CALL);
+ return propertyTestFunctions.contains(
+ call.getFirstChild().getQualifiedName());
+ }
+
+/* METHOD isOptionalParameter */
+@Override
+ public boolean isOptionalParameter(Node parameter) {
+ return false;
+ }
+
+/* METHOD isVarArgsParameter */
+@Override
+ public boolean isVarArgsParameter(Node parameter) {
+ return false;
+ }
+
+/* METHOD isPrivate */
+@Override
+ public boolean isPrivate(String name) {
+ return false;
+ }
+
+/* METHOD typeofClassDefiningName */
+private SubclassType typeofClassDefiningName(Node callName) {
+ // Check if the method name matches one of the class-defining methods.
+ String methodName = null;
+ if (callName.getType() == Token.GETPROP) {
+ methodName = callName.getLastChild().getString();
+ } else if (callName.getType() == Token.NAME) {
+ String name = callName.getString();
+ int dollarIndex = name.lastIndexOf('$');
+ if (dollarIndex != -1) {
+ methodName = name.substring(dollarIndex + 1);
+ }
+ }
+
+ if (methodName != null) {
+ if (methodName.equals("inherits")) {
+ return SubclassType.INHERITS;
+ } else if (methodName.equals("mixin")) {
+ return SubclassType.MIXIN;
+ }
+ }
+ return null;
+ }
+
+/* METHOD extractClassNameIfGoog */
+private static String extractClassNameIfGoog(Node node, Node parent,
+ String functionName){
+ String className = null;
+ if (NodeUtil.isExprCall(parent)) {
+ Node callee = node.getFirstChild();
+ if (callee != null && callee.getType() == Token.GETPROP) {
+ String qualifiedName = callee.getQualifiedName();
+ if (functionName.equals(qualifiedName)) {
+ Node target = callee.getNext();
+ if (target != null) {
+ className = target.getString();
+ }
+ }
+ }
+ }
+ return className;
+ }
+
+/* METHOD safeNext */
+private Node safeNext(Node n) {
+ if (n != null) {
+ return n.getNext();
+ }
+ return null;
+ }
+
+/* METHOD endsWithPrototype */
+private boolean endsWithPrototype(Node qualifiedName) {
+ return qualifiedName.getType() == Token.GETPROP &&
+ qualifiedName.getLastChild().getString().equals("prototype");
+ }

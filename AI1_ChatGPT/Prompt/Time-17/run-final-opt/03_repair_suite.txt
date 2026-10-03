@@ -1,0 +1,145 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 17  Version: Time-17b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 141
+Trigger failures:
+- org.joda.time.TestDateTimeZoneCutover::testBug3476684_adjustOffset
+ --> junit.framework.AssertionFailedError: expected:<2012-02-25T23:15:00.000-03:00> but was:<2012-02-25T23:15:00.000-02:00>
+Modified: org.joda.time.DateTimeZone
+
+Available API/signatures:
+[org.joda.time.DateTimeZone | java]
+package org.joda.time;
+public abstract class DateTimeZone implements Serializable {
+public static final DateTimeZone UTC = new FixedDateTimeZone("UTC", "UTC", 0, 0);
+public static DateTimeZone getDefault() {
+synchronized(DateTimeZone.class) {
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+@FromString
+public static DateTimeZone forID(String id) {
+public static DateTimeZone forOffsetHours(int hoursOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetMillis(int millisOffset) {
+public static DateTimeZone forTimeZone(TimeZone zone) {
+final String id = zone.getID();
+private static synchronized DateTimeZone fixedOffsetZone(String id, int offset) {
+public static Set<String> getAvailableIDs() {
+public static Provider getProvider() {
+public static void setProvider(Provider provider) throws SecurityException {
+private static void setProvider0(Provider provider) {
+private static Provider getDefaultProvider() {
+public static NameProvider getNameProvider() {
+public static void setNameProvider(NameProvider nameProvider) throws SecurityException {
+private static void setNameProvider0(NameProvider nameProvider) {
+private static NameProvider getDefaultNameProvider() {
+private static synchronized String getConvertedId(String id) {
+private static int parseOffset(String str) {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public String toString() {
+private static String printOffset(int offse
+...[truncated deterministically]...
+c long convertLocalToUTC(long instantLocal, boolean strict) {
+public long getMillisKeepLocal(DateTimeZone newZone, long oldInstant) {
+public boolean isLocalDateTimeGap(LocalDateTime localDateTime) {
+public long adjustOffset(long instant, boolean earlierOrLater) {
+public abstract boolean isFixed();
+public abstract long nextTransition(long instant);
+public abstract long previousTransition(long instant);
+public java.util.TimeZone toTimeZone() {
+public abstract boolean equals(Object object);
+public int hashCode() {
+protected Object writeReplace() throws ObjectStreamException {
+private static final class Stub implements Serializable {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException {
+private Object readResolve() throws ObjectStreamException {
+
+Generated JUnit Test:
+package org.joda.time;
+
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
+public class DateTimeZoneAdjustOffsetTest {
+
+    private static final DateTimeZone SAO_PAULO = DateTimeZone.forID("America/Sao_Paulo");
+    private static final long HOUR = 60L * 60L * 1000L;
+
+    private long utcMillis(int year, int month, int day, int hour, int minute, int second, int millis) {
+        return new DateTime(year, month, day, hour, minute, second, millis, DateTimeZone.UTC).getMillis();
+    }
+
+    @Test
+    public void adjustOffsetSelectsEarlierOccurrenceWhenRequested() {
+        long laterOccurrence = utcMillis(2012, 2, 26, 2, 15, 0, 0);
+        long earlierOccurrence = utcMillis(2012, 2, 26, 1, 15, 0, 0);
+
+        assertEquals(-3L * HOUR, SAO_PAULO.getOffset(laterOccurrence));
+        assertEquals(-2L * HOUR, SAO_PAULO.getOffset(earlierOccurrence));
+
+        long adjusted = SAO_PAULO.adjustOffset(laterOccurrence, true);
+
+        assertEquals(earlierOccurrence, adjusted);
+        assertEquals(SAO_PAULO.convertUTCToLocal(laterOccurrence),
+                SAO_PAULO.convertUTCToLocal(adjusted));
+        assertEquals(-2L * HOUR, SAO_PAULO.getOffset(adjusted));
+    }
+
+    @Test
+    public void adjustOffsetSelectsLaterOccurrenceWhenRequested() {
+        long earlierOccurrence = utcMillis(2012, 2, 26, 1, 15, 0, 0);
+        long laterOccurrence = utcMillis(2012, 2, 26, 2, 15, 0, 0);
+
+        long adjusted = SAO_PAULO.adjustOffset(earlierOccurrence, false);
+
+        assertEquals(laterOccurrence, adjusted);
+        assertEquals(SAO_PAULO.convertUTCToLocal(earlierOccurrence),
+                SAO_PAULO.convertUTCToLocal(adjusted));
+        assertEquals(-3L * HOUR, SAO_PAULO.getOffset(adjusted));
+    }
+
+    @Test
+    public void adjustOffsetAtTransitionBoundarySelectsRequestedSideOfOverlap() {
+        long earlierBoundary = utcMillis(2012, 2, 26, 1, 0, 0, 0);
+        long laterBoundary = utcMillis(2012, 2, 26, 2, 0, 0, 0);
+
+        assertEquals(earlierBoundary, SAO_PAULO.adjustOffset(laterBoundary, true));
+        assertEquals(laterBoundary, SAO_PAULO.adjustOffset(laterBoundary, false));
+        assertEquals(SAO_PAULO.convertUTCToLocal(earlierBoundary),
+                SAO_PAULO.convertUTCToLocal(laterBoundary));
+    }
+
+    @Test
+    public void adjustOffsetHandlesMillisecondImmediatelyBeforeTransition() {
+        long earlierOccurrence = utcMillis(2012, 2, 26, 1, 59, 59, 999);
+        long laterOccurrence = utcMillis(2012, 2, 26, 2, 59, 59, 999);
+
+        assertEquals(laterOccurrence, SAO_PAULO.adjustOffset(earlierOccurrence, false));
+        assertEquals(earlierOccurrence, SAO_PAULO.adjustOffset(laterOccurrence, true));
+        assertEquals(SAO_PAULO.convertUTCToLocal(earlierOccurrence),
+                SAO_PAULO.convertUTCToLocal(laterOccurrence));
+    }
+
+    @Test
+    public void adjustOffsetDoesNotChangeInstantOutsideOverlap() {
+        long normalInstant = utcMillis(2012, 3, 1, 12, 0, 0, 0);
+
+        assertEquals(normalInstant, SAO_PAULO.adjustOffset(normalInstant, true));
+        assertEquals(normalInstant, SAO_PAULO.adjustOffset(normalInstant, false));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetSelectsEarlierOccurrenceWhenRequested
+ - org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetAtTransitionBoundarySelectsRequestedSideOfOverlap
+ - org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetSelectsLaterOccurrenceWhenRequested
+Failing generated tests: org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetAtTransitionBoundarySelectsRequestedSideOfOverlap, org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetHandlesMillisecondImmediatelyBeforeTransition, org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetSelectsEarlierOccurrenceWhenRequested, org.joda.time.DateTimeZoneAdjustOffsetTest::adjustOffsetSelectsLaterOccurrenceWhenRequested

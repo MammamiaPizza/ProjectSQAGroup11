@@ -1,0 +1,344 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Time  Bug: 14  Version: Time-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.joda.time.chrono.BasicMonthOfYearDateTimeField
+Modified: org.joda.time.chrono.BasicMonthOfYearDateTimeField
+Triggers: org.joda.time.TestMonthDay_Basics::testPlusMonths_int_negativeFromLeap, org.joda.time.TestMonthDay_Basics::testMinusDays_int_negativeFromLeap, org.joda.time.TestMonthDay_Basics::testPlusMonths_int_fromLeap, org.joda.time.TestMonthDay_Basics::testPlusMonths_int_negativeEndOfMonthAdjust, org.joda.time.TestMonthDay_Basics::testMinusMonths_int_endOfMonthAdjust, org.joda.time.TestMonthDay_Basics::testMinusMonths_int_negativeFromLeap, org.joda.time.TestMonthDay_Basics::testMinusMonths_int_fromLeap, org.joda.time.TestMonthDay_Basics::testPlusDays_int_fromLeap
+
+Bug/specification summary:
+Bug report: 151
+Trigger failures:
+- org.joda.time.TestMonthDay_Basics::testPlusMonths_int_negativeFromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testMinusDays_int_negativeFromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testPlusMonths_int_fromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testPlusMonths_int_negativeEndOfMonthAdjust
+ --> junit.framework.AssertionFailedError: expected:<--02-29> but was:<--02-28>
+ - org.joda.time.TestMonthDay_Basics::testMinusMonths_int_endOfMonthAdjust
+ --> junit.framework.AssertionFailedError: expected:<--02-29> but was:<--02-28>
+ - org.joda.time.TestMonthDay_Basics::te
+...[truncated deterministically]...
+omLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testMinusMonths_int_fromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+ - org.joda.time.TestMonthDay_Basics::testPlusDays_int_fromLeap
+ --> org.joda.time.IllegalFieldValueException: Value 29 for dayOfMonth must be in the range [1,28]
+Modified: org.joda.time.chrono.BasicMonthOfYearDateTimeField
+
+Prompt-01 test plan:
+TARGETS: BasicMonthOfYearDateTimeField.add(ReadablePartial,int,int[],int) month/day adjustment for MonthDay.
+TARGETS: add(long,int/long), set(long,int), and leap-related behavior may affect month transitions.
+ORACLES: Triggered TestMonthDay_Basics expectations and reported --02-29 versus --02-28 assertion.
+ORACLES: Avoid IllegalFieldValueException for day 29 when operating from leap-day MonthDay values.
+CASES: Add/subtract months from --02-29, including negative month deltas and transitions to/from February.
+CASES: Add/subtract days from --02-29 where resulting MonthDay must remain valid.
+CASES: End-of-month adjustment paths that should preserve --02-29 per listed trigger expectations.
+RISKS: Partial-field add may validate day against a non-leap reference year, yielding range [1,28].
+RISKS: Context lacks implementation and complete trigger assertions; derive expectations only from supplied failures.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.joda.time.chrono.BasicMonthOfYearDateTimeField (java) =====
+/* API SIGNATURES */
+package org.joda.time.chrono;
+class BasicMonthOfYearDateTimeField extends ImpreciseDateTimeField {
+public boolean isLenient() {
+public int get(long instant) {
+public long add(long instant, int months) {
+public long add(long instant, long months) {
+public int[] add(ReadablePartial partial, int fieldIndex, int[] values, int valueToAdd) {
+public long addWrapField(long instant, int months) {
+public long getDifferenceAsLong(long minuendInstant, long subtrahendInstant) {
+public long set(long instant, int month) {
+public DurationField getRangeDurationField() {
+public boolean isLeap(long instant) {
+public int getLeapAmount(long instant) {
+public DurationField getLeapDurationField() {
+public int getMinimumValue() {
+public int getMaximumValue() {
+public long roundFloor(long instant) {
+public long remainder(long instant) {
+private Object readResolve() {
+
+/* HEADER */
+package org.joda.time.chrono;
+import org.joda.time.DateTimeConstants;
+import org.joda.time.DateTimeFieldType;
+import org.joda.time.DateTimeUtils;
+import org.joda.time.DurationField;
+import org.joda.time.ReadablePartial;
+import org.joda.time.field.FieldUtils;
+import org.joda.time.field.ImpreciseDateTimeField;
+class BasicMonthOfYearDateTimeField extends ImpreciseDateTimeField {
+
+/* METHOD BasicMonthOfYearDateTimeField */
+BasicMonthOfYearDateTimeField(BasicChronology chronology, int leapMonth) {
+ super(DateTimeFieldType.monthOfYear(), chronology.getAverageMillisPerMonth());
+ iChronology = chronology;
+ iMax = iChronology.getMaxMonth();
+ iLeapMonth = leapMonth;
+ }
+
+/* METHOD add */
+public int[] add(ReadablePartial partial, int fieldIndex, int[] values, int valueToAdd) {
+ // overridden as superclass algorithm can't handle
+ // 2004-02-29 + 48 months -> 2008-02-29 type dates
+ if (valueToAdd == 0) {
+ return values;
+ }
+ // month is largest field and being added to, such as month-day
+ if (DateTimeUtils.isContiguous(partial)) {
+ long instant = 0L;
+ for (int i = 0, isize = partial.size(); i < isize; i++) {
+ instant = partial.getFieldType(i).getField(iChronology).set(instant, values[i]);
+ }
+ instant = add(instant, valueToAdd);
+ return iChronology.get(partial, instant);
+ } else {
+ return super.add(partial, fieldIndex, values, valueToAdd);
+ }
+ }
+
+ //-----------------------------------------------------------------------
+ /**
+ * Add to the Month component of the specified time instant
+ * wrapping around within that component if necessary.
+ * 
+ * @see org.joda.time.DateTimeField#addWrapField
+ * @param instant the time instant in millis to update.
+ * @param months the months to add (can be negative).
+ * @return the updated time instant.
+ */
+ public long addWrapField(long instant, int months) {
+ return set(instant, FieldUtils.getWrappedValue(get(instant), months, MIN, iMax));
+ }
+
+ //-----------------------------------------------------------------------
+ public long getDifferenceAsLong(long minuendInstant, long subtrahendInstant) {
+ if (minuendInstant < subtrahendInstant) {
+ return -getDifference(subtrahendInstant, minuendInstant);
+ }
+
+ int minuendYear = iChronology.getYear(minuendInstant);
+ int minuendMonth = iChronology.getMonthOfYear(minuendInstant, minuendYear);
+ int subtrahendYear = iChronology.getYear(subtrahendInstant);
+ int subtrahendMonth = iChronology.getMonthOfYear(subtrahendInstant, subtrahendYear);
+
+ long difference = (minuendYear - subtrahendYear) * ((long) iMax) + minuendMonth - subtrahendMonth;
+
+ // Before adjusting for remainder, account for special case of add
+ // where the day-of-month is forced to the nearest sane value.
+ int minuendDom = iChronology.getDayOfMonth
+ (minuendInstant, minuendYear, minuendMonth);
+ if (minuendDom == iChronology.getDaysInYearMonth(minuendYear, minuendMonth)) {
+ // Last day of the minuend month...
+ int subtrahendDom = iChronology.getDayOfMonth
+ (subtrahendInstant, subtrahendYear, subtrahendMonth);
+ if (subtrahendDom > minuendDom) {
+ // ...and day of subtrahend month is larger.
+ // Note: This works fine, but it ideally shouldn't invoke other
+ // fields from within a field.
+ subtrahendInstant = iChronology.dayOfMonth().set(subtrahendInstant, minuendDom);
+ }
+
+/* METHOD add */
+public long add(long instant, int months) {
+ if (months == 0) {
+ return instant; // the easy case
+ }
+ //
+ // Save time part first.
+ //
+ long timePart = iChronology.getMillisOfDay(instant);
+ //
+ //
+ // Get this year and month.
+ //
+ int thisYear = iChronology.getYear(instant);
+ int thisMonth = iChronology.getMonthOfYear(instant, thisYear);
+ // ----------------------------------------------------------
+ //
+ // Do not refactor without careful consideration.
+ // Order of calculation is important.
+ //
+ int yearToUse;
+ // Initially, monthToUse is zero-based
+ int monthToUse = thisMonth - 1 + months;
+ if (monthToUse >= 0) {
+ yearToUse = thisYear + (monthToUse / iMax);
+ monthToUse = (monthToUse % iMax) + 1;
+ } else {
+ yearToUse = thisYear + (monthToUse / iMax) - 1;
+ monthToUse = Math.abs(monthToUse);
+ int remMonthToUse = monthToUse % iMax;
+ // Take care of the boundary condition
+ if (remMonthToUse == 0) {
+ remMonthToUse = iMax;
+ }
+ monthToUse = iMax - remMonthToUse + 1;
+ // Take care of the boundary condition
+ if (monthToUse == 1) {
+ yearToUse += 1;
+ }
+ }
+ // End of do not refactor.
+ // ----------------------------------------------------------
+
+ //
+ // Quietly force DOM to nearest sane value.
+ //
+ int dayToUse = iChronology.getDayOfMonth(instant, thisYear, thisMonth);
+ int maxDay = iChronology.getDaysInYearMonth(yearToUse, monthToUse);
+ if (dayToUse > maxDay) {
+ dayToUse = maxDay;
+ }
+ //
+ // get proper date part, and return result
+ //
+ long datePart =
+ iChronology.getYearMonthDayMillis(yearToUse, monthToUse, dayToUse);
+ return datePart + timePart;
+ }
+
+/* METHOD add */
+public long add(long instant, long months) {
+ int i_months = (int)months;
+ if (i_months == months) {
+ return add(instant, i_months);
+ }
+
+ // Copied from add(long, int) and modified slightly:
+
+ long timePart = iChronology.getMillisOfDay(instant);
+
+ int thisYear = iChronology.getYear(instant);
+ int thisMonth = iChronology.getMonthOfYear(instant, thisYear);
+
+ long yearToUse;
+ long monthToUse = thisMonth - 1 + months;
+ if (monthToUse >= 0) {
+ yearToUse = thisYear + (monthToUse / iMax);
+ monthToUse = (monthToUse % iMax) + 1;
+ } else {
+ yearToUse = thisYear + (monthToUse / iMax) - 1;
+ monthToUse = Math.abs(monthToUse);
+ int remMonthToUse = (int)(monthToUse % iMax);
+ if (remMonthToUse == 0) {
+ remMonthToUse = iMax;
+ }
+ monthToUse = iMax - remMonthToUse + 1;
+ if (monthToUse == 1) {
+ yearToUse += 1;
+ }
+ }
+
+ if (yearToUse < iChronology.getMinYear() ||
+ yearToUse > iChronology.getMaxYear()) {
+
+ throw new IllegalArgumentException
+ ("Magnitude of add amount is too large: " + months);
+ }
+
+ int i_yearToUse = (int)yearToUse;
+ int i_monthToUse = (int)monthToUse;
+
+ int dayToUse = iChronology.getDayOfMonth(instant, thisYear, thisMonth);
+ int maxDay = iChronology.getDaysInYearMonth(i_yearToUse, i_monthToUse);
+ if (dayToUse > maxDay) {
+ dayToUse = maxDay;
+ }
+
+ long datePart =
+ iChronology.getYearMonthDayMillis(i_yearToUse, i_monthToUse, dayToUse);
+ return datePart + timePart;
+ }
+
+/* METHOD set */
+public long set(long instant, int month) {
+ FieldUtils.verifyValueBounds(this, month, MIN, iMax);
+ //
+ int thisYear = iChronology.getYear(instant);
+ //
+ int thisDom = iChronology.getDayOfMonth(instant, thisYear);
+ int maxDom = iChronology.getDaysInYearMonth(thisYear, month);
+ if (thisDom > maxDom) {
+ // Quietly force DOM to nearest sane value.
+ thisDom = maxDom;
+ }
+ // Return newly calculated millis value
+ return iChronology.getYearMonthDayMillis(thisYear, month, thisDom) +
+ iChronology.getMillisOfDay(instant);
+ }
+
+/* METHOD getRangeDurationField */
+public DurationField getRangeDurationField() {
+ return iChronology.years();
+ }
+
+/* METHOD get */
+public int get(long instant) {
+ return iChronology.getMonthOfYear(instant);
+ }
+
+/* METHOD addWrapField */
+public long addWrapField(long instant, int months) {
+ return set(instant, FieldUtils.getWrappedValue(get(instant), months, MIN, iMax));
+ }
+
+/* METHOD isLeap */
+public boolean isLeap(long instant) {
+ int thisYear = iChronology.getYear(instant);
+ if (iChronology.isLeapYear(thisYear)) {
+ return (iChronology.getMonthOfYear(instant, thisYear) == iLeapMonth);
+ }
+ return false;
+ }
+
+/* METHOD getLeapDurationField */
+public DurationField getLeapDurationField() {
+ return iChronology.days();
+ }
+
+/* METHOD getMinimumValue */
+public int getMinimumValue() {
+ return MIN;
+ }
+
+/* METHOD getMaximumValue */
+public int getMaximumValue() {
+ return iMax;
+ }
+
+/* METHOD roundFloor */
+public long roundFloor(long instant) {
+ int year = iChronology.getYear(instant);
+ int month = iChronology.getMonthOfYear(instant, year);
+ return iChronology.getYearMonthMillis(year, month);
+ }
+
+/* METHOD isLenient */
+public boolean isLenient() {
+ return false;
+ }
+
+/* METHOD getLeapAmount */
+public int getLeapAmount(long instant) {
+ return isLeap(instant) ? 1 : 0;
+ }
+
+/* METHOD remainder */
+public long remainder(long instant) {
+ return instant - roundFloor(instant);
+ }
+
+/* METHOD readResolve */
+private Object readResolve() {
+ return iChronology.monthOfYear();
+ }

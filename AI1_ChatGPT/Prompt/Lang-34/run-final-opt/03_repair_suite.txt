@@ -1,0 +1,232 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 34  Version: Lang-34b
+JUnit: junit-4.7.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-586
+Trigger failures:
+- org.apache.commons.lang3.builder.ToStringBuilderTest::testObjectCycle
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionHierarchy
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testSelfInstanceTwoVarsReflectionObjectCycle
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayCycle
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionLongArrayArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayArrayCy
+...[truncated deterministically]...
+uilder.ToStringBuilderTest::testReflectionIntArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionCharArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionFloatArrayArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+Modified: org.apache.commons.lang3.builder.ToStringStyle
+
+Available API/signatures:
+[org.apache.commons.lang3.builder.ToStringStyle | java]
+package org.apache.commons.lang3.builder;
+public abstract class ToStringStyle implements Serializable {
+public static final ToStringStyle DEFAULT_STYLE = new DefaultToStringStyle();
+public static final ToStringStyle MULTI_LINE_STYLE = new MultiLineToStringStyle();
+public static final ToStringStyle NO_FIELD_NAMES_STYLE = new NoFieldNameToStringStyle();
+public static final ToStringStyle SHORT_PREFIX_STYLE = new ShortPrefixToStringStyle();
+public static final ToStringStyle SIMPLE_STYLE = new SimpleToStringStyle();
+private static final ThreadLocal<WeakHashMap<Object, Object>> REGISTRY = new ThreadLocal<WeakHashMap<Object,Object>>();
+static Map<Object, Object> getRegistry() {
+static boolean isRegistered(Object value) {
+static void register(Object value) {
+synchronized (ToStringStyle.class) {
+static void unregister(Object value) {
+protected ToStringStyle() {
+public void appendSuper(StringBuffer buffer, String superToString) {
+public void appendToString(StringBuffer buffer, String toString) {
+public void appendStart(StringBuffer buffer, Object object) {
+public void appendEnd(StringBuffer buffer, Object object) {
+protected void removeLastFieldSeparator(StringBuffer buffer) {
+public void append(StringBuffer buffer, String fieldName, Object value, Boolean fullDetail) {
+protected void appendInternal(StringBuffer buffer, String fieldName, Object value, boolean detail) {
+protected void appendCyclicObject(StringBuffer buffer, String fieldName, Object value) {
+protected void appendDetail(StringBuffer buffer, String fieldName, Object value) {
+protected void appendDetail(StringBuffer buffer, String f
+...[truncated deterministically]...
+ring nullText) {
+protected String getSizeStartText() {
+protected void setSizeStartText(String sizeStartText) {
+protected String getSizeEndText() {
+protected void setSizeEndText(String sizeEndText) {
+protected String getSummaryObjectStartText() {
+protected void setSummaryObjectStartText(String summaryObjectStartText) {
+protected String getSummaryObjectEndText() {
+protected void setSummaryObjectEndText(String summaryObjectEndText) {
+private static final class DefaultToStringStyle extends ToStringStyle {
+private Object readResolve() {
+private static final class NoFieldNameToStringStyle extends ToStringStyle {
+private static final class ShortPrefixToStringStyle extends ToStringStyle {
+private static final class SimpleToStringStyle extends ToStringStyle {
+private static final class MultiLineToStringStyle extends ToStringStyle {
+
+Generated JUnit Test:
+package org.apache.commons.lang3.builder;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import org.junit.Test;
+
+public class ToStringStyleRegistryLifecycleTest {
+
+    private static class SelfReferencingObject {
+        private Object self;
+
+        SelfReferencingObject() {
+            self = this;
+        }
+    }
+
+    private static class Parent {
+        private Object reference;
+    }
+
+    private static class Child extends Parent {
+        private int number = 7;
+    }
+
+    private static class PrimitiveArrayHolder {
+        private final long[] longs = new long[] { 1L, 2L };
+        private final int[] ints = new int[] { 3, 4 };
+        private final short[] shorts = new short[] { 5, 6 };
+        private final byte[] bytes = new byte[] { 7, 8 };
+        private final char[] chars = new char[] { 'a', 'b' };
+        private final double[] doubles = new double[] { 1.5d, 2.5d };
+        private final float[] floats = new float[] { 3.5f, 4.5f };
+        private final boolean[] booleans = new boolean[] { true, false };
+    }
+
+    private static class ThrowingValue {
+        @Override
+        public String toString() {
+            throw new IllegalStateException("expected");
+        }
+    }
+
+    @Test
+    public void testRegisterAndUnregisterRemovesEmptyRegistry() {
+        Object value = new Object();
+
+        ToStringStyle.register(value);
+
+        assertTrue(ToStringStyle.isRegistered(value));
+        assertNotNull(ToStringStyle.getRegistry());
+
+        ToStringStyle.unregister(value);
+
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testNormalObjectAppendLeavesNoRegistry() {
+        StringBuffer buffer = new StringBuffer();
+
+        ToStringStyle.DEFAULT_STYLE.append(buffer, "value", (Object) "alpha", Boolean.TRUE);
+
+        assertTrue(buffer.toString().indexOf("alpha") >= 0);
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testNullObjectAppendDoesNotCreateRegistry() {
+        StringBuffer buffer = new StringBuffer();
+
+        ToStringStyle.DEFAULT_STYLE.append(buffer, "value", (Object) null, Boolean.TRUE);
+
+        assertTrue(buffer.toString().indexOf("null") >= 0);
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testExceptionDuringDetailRenderingCleansRegistry() {
+        StringBuffer buffer = new StringBuffer();
+
+        try {
+            ToStringStyle.DEFAULT_STYLE.append(buffer, "value", (Object) new ThrowingValue(), Boolean.TRUE);
+            fail("Expected the value's toString() exception");
+        } catch (IllegalStateException expected) {
+            assertTrue("expected".equals(expected.getMessage()));
+        }
+
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testReflectionSelfReferenceUsesCycleHandlingAndCleansRegistry() {
+        String rendered = ReflectionToStringBuilder.toString(new SelfReferencingObject());
+
+        assertNotNull(rendered);
+        assertTrue(rendered.indexOf('@') >= 0);
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testCyclicObjectArrayUsesCycleHandlingAndCleansRegistry() {
+        Object[] values = new Object[1];
+        values[0] = values;
+        StringBuffer buffer = new StringBuffer();
+
+        ToStringStyle.DEFAULT_STYLE.append(buffer, "values", (Object) values, Boolean.TRUE);
+
+        assertTrue(buffer.toString().indexOf('@') >= 0);
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testReflectionHierarchyWithCycleCleansRegistry() {
+        Child child = new Child();
+        child.reference = child;
+
+        String rendered = ReflectionToStringBuilder.toString(child);
+
+        assertNotNull(rendered);
+        assertTrue(rendered.indexOf("number=7") >= 0);
+        assertNull(ToStringStyle.getRegistry());
+    }
+
+    @Test
+    public void testReflectionPrimitiveArraysCleanRegistry() {
+        String rendered = ReflectionToStringBuilder.toString(new PrimitiveArrayHolder());
+
+        assertNotNull(rendered);
+        assertTrue(rendered.indexOf("longs") >= 0);
+        assertTrue(rendered.indexOf("booleans") >= 0);
+        assertNull(ToStringStyle.getRegistry());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Lang-34f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Lang-34f-ai -Dd4j.test.dir=/root/sqa-workspaces/Lang-34f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] /root/sqa-workspaces/Lang-34f-ai/src/main/java/org/apache/commons/lang3/Validate.java:121: warning: [deprecation] Double(double) in Double has been deprecated
+ [javac] throw new IllegalArgumentException(String.format(message, new Double(value)));
+ [javac] ^
+ [javac] /root/sqa-workspaces/Lang-34f-ai/src/main/java/org/apache/commons/lang3/math/NumberUtils.java:41: warning: [deprecation] Long(long) in Long has been deprecated
+ [javac] public static final Long LONG_ZERO = new Long(0L);
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Lang-34f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/Lang-34f-ai/.test_suite/org/apache/commons/lang3/builder/ToStringStyleRegistryLifecycleTest.java:118: error: reference has private access in Parent
+ [javac] child.reference = child;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 29 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

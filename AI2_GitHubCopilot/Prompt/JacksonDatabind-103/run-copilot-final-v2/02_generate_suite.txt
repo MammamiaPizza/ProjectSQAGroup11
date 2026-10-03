@@ -1,0 +1,346 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 103  Version: JacksonDatabind-103b
+JUnit: powermock-module-junit4-1.7.3.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.DatabindContext, com.fasterxml.jackson.databind.DeserializationContext, com.fasterxml.jackson.databind.JsonMappingException, com.fasterxml.jackson.databind.SerializerProvider, com.fasterxml.jackson.databind.deser.BasicDeserializerFactory, com.fasterxml.jackson.databind.deser.BeanDeserializerFactory, com.fasterxml.jackson.databind.deser.DeserializerCache, com.fasterxml.jackson.databind.deser.SettableAnyProperty, com.fasterxml.jackson.databind.deser.SettableBeanProperty, com.fasterxml.jackson.databind.deser.std.StdDeserializer, com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator, com.fasterxml.jackson.databind.introspect.BasicBeanDescription, com.fasterxml.jackson.databind.ser.DefaultSerializerProvider, com.fasterxml.jackson.databind.ser.PropertyBuilder, com.fasterxml.jackson.databind.util.ClassUtil
+Modified: com.fasterxml.jackson.databind.DatabindContext, com.fasterxml.jackson.databind.DeserializationContext, com.fasterxml.jackson.databind.JsonMappingException, com.fasterxml.jackson.databind.SerializerProvider, com.fasterxml.jackson.databind.deser.BasicDeserializerFactory, com.fasterxml.jackson.databind.deser.BeanDeserializerFactory, com.fasterxml.jackson.databind.deser.DeserializerCache, com.fasterxml.jackson.databind.deser.SettableAnyProperty, com.fasterxml.jackson.databind.deser.SettableBeanProperty, com.fasterxml.jackson.databind.deser.std.StdDeserializer, com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator, com.fasterxml.jackson.databind.introspect.BasicBeanDescription, com.fasterxml.jackson.databind.ser.DefaultSerializerProvider, com.fasterxml.jackson.databind.ser.PropertyBuilder, com.fasterxml.jackson.databind.util.ClassUtil
+Triggers: com.fasterxml.jackson.databind.exc.BasicExceptionTest::testLocationAddition
+
+Bug/specification summary:
+Bug report: 2128
+Trigger failures:
+- com.fasterxml.jackson.databind.exc.BasicExceptionTest::testLocationAddition
+ --> junit.framework.AssertionFailedError: Should only get one 'at [' marker, got 2, source: Cannot deserialize Map key of type `com.fasterxml.jackson.databind.BaseMapTest$ABC` from String "value": not a valid representation, problem: (com.fasterxml.jackson.databind.exc.InvalidFormatException) Cannot deserialize Map key of type `com.fasterxml.jackson.databind.BaseMapTest$ABC` from String "value": not one of values excepted for Enum class: [A, B, C]
+Modified: com.fasterxml.jackson.databind.DatabindContext, com.fasterxml.jackson.databind.DeserializationContext, com.fasterxml.jackson.databind.JsonMappingException, com.fasterxml.jackson.databind.SerializerProvider, com.fasterxml.jackson.databind.deser.BasicDeserializerFactory, com.fasterxml.jackson.databind.deser.BeanDeserializerFactory, com.fasterxml.jackson.databind.deser.DeserializerCache, com.fasterxml.jackson.databind.deser.SettableAnyProperty, com.fasterxml.jackson.databind.deser.SettableBeanProperty, com.fasterxml.jackson.databind.deser.std.StdDeserializer, com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator, com.fasterxml.jackson.databind.introspect.BasicBeanDescription, com.fasterxml.jackson.databind.ser.DefaultSerializerProvider, com.fasterxml.jackson.databind.ser.PropertyBuilder, com.fasterxml.jackson.databind.util.ClassUtil
+
+Prompt-01 test plan:
+TARGETS: JsonMappingException._buildMessage / prependPath and message construction chain
+TARGETS: DeserializationContext.weirdKeyException / handleWeirdKey adding location markers
+TARGETS: StdKeyDeserializer.deserializeKey and its error-reporting logic
+ORACLES: Exception.getMessage() must contain exactly one "at [" substring per error chain
+ORACLES: Trigger test assert: count of "at [" in message == 1 (not 2)
+CASES: Map key deserialization fails with invalid Enum value or bad String representation
+CASES: Nested deserialization where inner key failure could cause duplicate path prepend
+CASES: Boundary: empty error message, deeply wrapped exception, multiple context levels
+RISKS: Full method signatures partially truncated; exact message-prepend code may differ across
+Jackson versions
+RISKS: Bug may be specific to StdKeyDeserializer + Map type; must test through full deserialization
+pipeline
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.DatabindContext (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public abstract class DatabindContext
+public abstract MapperConfig<?> getConfig();
+public abstract AnnotationIntrospector getAnnotationIntrospector();
+public abstract boolean isEnabled(MapperFeature feature);
+public abstract boolean canOverrideAccessModifiers();
+public abstract Class<?> getActiveView();
+public abstract Locale getLocale();
+public abstract TimeZone getTimeZone();
+public abstract JsonFormat.Value getDefaultPropertyFormat(Class<?> baseType);
+public abstract Object getAttribute(Object key);
+public
+...[truncated deterministically]...
+onMappingException {
+protected final String _format(String msg, Object... msgArgs) {
+protected final String _truncate(String desc) {
+protected String _quotedString(String desc) {
+protected String _colonConcat(String msgBase, String extra) {
+protected String _desc(String desc) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.lang.reflect.Type;
+import java.util.Locale;
+import java.util.TimeZone;
+import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.databind.cfg.HandlerInstantiator;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
+import com.fasterxml.jackson.databind.introspect.Annotated;
+import com.fasterxml.jackson.databind.introspect.ObjectIdInfo;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.Converter;
+
+/* METHOD converterInstance */
+@SuppressWarnings("unchecked")
+ public Converter<Object,Object> converterInstance(Annotated annotated,
+ Object converterDef)
+ throws JsonMappingException
+ {
+...[truncated deterministically]...
+of Converter<?,?>) {
+ return (Converter<Object,Object>) converterDef;
+ }
+ if (!(converterDef instanceof Class)) {
+ throw new IllegalStateException("AnnotationIntrospector returned Converter definition of type "
+ +converterDef.getClass().getName()+"; expected type Converter or Class<Converter> instead");
+ }
+ Class<?> converterClass = (Class<?>)converterDef;
+ // there are some known "no class" markers to consider too:
+ if (converterClass == Converter.No
+...[truncated deterministically]...
+onfig();
+ HandlerInstantiator hi = config.getHandlerInstantiator();
+ Converter<?,?> conv = (hi == null) ? null : hi.converterInstance(config, annotated, converterClass);
+ if (conv == null) {
+ conv = (Converter<?,?>) ClassUtil.createInstance(converterClass,
+ config.canOverrideAccessModifiers());
+ }
+ return (Converter<Object,Object>) conv;
+ }
+
+===== com.fasterxml.jackson.databind.DeserializationContext (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public abstract class DeserializationContext
+protected final DeserializerCache _cache;
+protected final DeserializerFactory _factory;
+protected final DeserializationConfig _config;
+protected final int _featureFlags;
+protected final Class<?> _view;
+protected transient JsonParser _parser;
+protected final InjectableValues _injectableValues;
+protected transient ArrayBuilders _arrayBuilders;
+protected transient ObjectBuffer _objectBuffer;
+protected transient DateFormat _dateFormat;
+protected transient ContextAttribu
+...[truncated deterministically]...
+ssage) {
+public JsonMappingException mappingException(String msg, Object... msgArgs) {
+public JsonMappingException mappingException(Class<?> targetClass) {
+public JsonMappingException mappingException(Class<?> targetClass, JsonToken token) {
+protected DateFormat getDateFormat()
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+import com.fasterxml.jackson.annotation.ObjectIdResolver;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.cfg.ContextAttributes;
+import com.fasterxml.jackson.databind.deser.*;
+import com.fasterxml.jackson.databind.deser.impl.ObjectIdReader;
+import com.fasterxml.jackson.databind.deser.impl.ReadableObjectId;
+import com.fasterxml.jackson.databind.deser.impl.TypeWrappedDeserializer;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.fasterxml.jackson.databind.introspect.Annotated;
+import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+import com.fasterxml.jackson.databind.jsontype.TypeIdResolver;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.*;
+
+===== com.fasterxml.jackson.databind.JsonMappingException (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public class JsonMappingException
+public static class Reference implements Serializable
+protected transient Object _from;
+protected String _fieldName;
+protected int _index = -1;
+protected String _desc;
+protected Reference() { }
+public Reference(Object from) { _from = from; }
+public Reference(Object from, String fieldName) {
+public Reference(Object from, int index) {
+@JsonIgnore
+public Object getFrom() { return _from; }
+public String getFieldName() { return _fieldName; }
+public int getIndex() { return _index; }
+...[truncated deterministically]...
+// since 2.7.5
+@JsonIgnore // as per [databind#1368]
+public Object getProcessor() { return _processor; }
+public String getLocalizedMessage() {
+public String getMessage() {
+protected String _buildMessage()
+public String toString()
+protected void _appendPathDesc(StringBuilder sb)
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.core.*;
+public class JsonMappingException
+
+/* METHOD JsonMappingException */
+public JsonMappingException(Closeable processor, String msg) {
+ super(msg);
+ _processor = processor;
+ if (processor instanceof JsonParser) {
+ // 17-Aug-2015, tatu: Use of token location makes some sense from databinding,
+ // since actual parsing (current) location is typically only needed for low-level
+ // parsing exceptions.
+ _location = ((JsonParser) processor).getTokenLocation();
+ }
+ }
+
+/* METHOD JsonMappingException */
+public JsonMappingException(String msg, Throwable rootCause) { super(msg, rootCause); }
+
+/* METHOD JsonMappingException */
+public JsonMappingException(String msg, JsonLocation loc, Throwable rootCause) { super(msg, loc, rootCause); }
+
+/* METHOD JsonMappingException */
+public JsonMappingException(Closeable processor, String msg, Throwable problem) {
+ super(msg, problem);
+ _processor = processor;
+ if (processor instanceof JsonParser) {
+ _location = ((JsonParser) processor).getTokenLocation();
+ }
+ }
+
+===== com.fasterxml.jackson.databind.SerializerProvider (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public abstract class SerializerProvider
+protected final static boolean CACHE_UNKNOWN_MAPPINGS = false;
+protected final static JsonSerializer<Object> DEFAULT_UNKNOWN_SERIALIZER = new UnknownSerializer();
+final protected SerializationConfig _config;
+final protected Class<?> _serializationView;
+final protected SerializerFactory _serializerFactory;
+final protected SerializerCache _serializerCache;
+protected transient ContextAttributes _attributes;
+protected JsonSerializer<Object> _unknownTypeSerializer = DEFAULT_
+...[truncated deterministically]...
+<Object> _createAndCacheUntypedSeriali
+...[truncated deterministically]...
+notation.JsonSerialize;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.util.*;
+public class PropertyBuilder
+
+/* METHOD findSerializationType */
+protected JavaType findSerializationType(Annotated a, boolean useStaticTyping, JavaType declaredType)
+ throws JsonMappingException
+ {
+ JavaType secondary = _annotationIntrospector.refineSerializationType(_config, a, declaredType);
+
+ // 11-Oct-2015, tatu: As of 2.7, not 100% sure following checks are needed. But keeping
+ // for now
+...[truncated deterministically]...
+ary.getRawClass();
+ // Must be a super type to be usable
+ Class<?> rawDeclared = declaredType.getRawClass();
+ if (serClass.isAssignableFrom(rawDeclared)) {
+ ; // fine as is
+ } else {
+ /* 18-Nov-2010, tatu: Related to fixing [JACKSON-416], an issue with such
+ * check is that for deserialization more specific type makes sense;
+ * and for serialization more generic. But alas JAXB uses but a sing
+...[truncated deterministically]...
+known to be the type...
+ JsonSerialize.Typing typing = _annotationIntrospector.findSerializationTyping(a);
+ if ((typing != null) && (typing != JsonSerialize.Typing.DEFAULT_TYPING)) {
+ useStaticTyping = (typing == JsonSerialize.Typing.STATIC);
+ }
+ if (useStaticTyping) {
+ // 11-Oct-2015, tatu: Make sure JavaType also "knows" static-ness...
+ return declaredType.withStaticTyping();
+ 
+ }
+ return null;
+ }
+
+===== com.fasterxml.jackson.databind.util.ClassUtil (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.util;
+public final class ClassUtil
+private final static Class<?> CLS_OBJECT = Object.class;
+private final static Iterator<?> EMPTY_ITERATOR = Collections.emptyIterator();
+@SuppressWarnings("unchecked")
+public static <T> Iterator<T> emptyIterator() {
+if ((type == null) || type.hasRawClass(endBefore) || type.hasRawClass(Object.class)) {
+public static List<Class<?>> findRawSuperTypes(Class<?> cls, Class<?> endBefore, boolean addClassItself) {
+if ((cls == null) || (cls == endBefore) || (cls == Object.class)) {
+@Dep
+...[truncated deterministically]...
+tor
+public final Constructor<?> _ctor;
+public Ctor(Constructor<?> ctor) {
+public Constructor<?> getConstructor() {
+public int getParamCount() {
+public Class<?> getDeclaringClass() {
+public Annotation[] getDeclaredAnnotations() {
+public Annotation[][] getParameterAnnotations() {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.util;
+import java.io.Closeable;
+import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.*;
+import java.util.*;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+
+/* METHOD canBeABeanType */
+public static String canBeABeanType(Class<?> type)
+ {
+ // First: language constructs that ain't beans:
+ if (type.isAnnotation()) {
+ return "annotation";
+ }
+ if (type.isArray()) {
+ return "array";
+ }
+ if (type.isEnum()) {
+ return "enum";
+ }
+ if (type.isPrimitive()) {
+ return "primitive";
+ }
+
+ // Anything else? Seems valid, then
+ return null;
+ }
+ 
+ public static String isLocalType(Class<?> type, boolean allowNonStatic)
+ {
+ /* As per [JACKSON-187], GAE seems to throw SecurityExceptions
+ * here and there... and GAE itself has a bug, too
+ * (see []). Bah. So we need to catch some wayward exceptions on GAE
+ */
+ try {
+ // one more: method locals, anonymous, are not good:
+ if (hasEnclosingMethod(type)) {
+ return "local/anonymous";
+ }
+ 
+ /* But how about non-static inner classes? Can't construct
+ * easily (theoretically, we could try to check if parent
+ * happens to be enclosing... but that gets convoluted)
+ */
+ if (!allowNonStatic) {
+ if (!Modifier.isStatic(type.getModifiers())) {
+ if (getEnclosingClass(type) != null) {
+ return "non-static member class";
+ }
+ }
+ }
+ }

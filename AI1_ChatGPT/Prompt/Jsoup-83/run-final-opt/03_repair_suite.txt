@@ -1,0 +1,163 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 83  Version: Jsoup-83b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 797
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::parsesQuiteRoughAttributes
+ --> junit.framework.AssertionFailedError: expected:<<p =a>One<a[></a></p><p><a>Something</a></p><a]>Else</a>> but was:<<p =a>One<a[ <p>Something</a></p><a <p]>Else</a>>
+ - org.jsoup.parser.TokeniserStateTest::handlesLessInTagThanAsNewTag
+ --> junit.framework.AssertionFailedError: expected:<<p[></p><p></p><div id="one"><span>Two</span></div]>> but was:<<p[ <p<div id="one" <span>Two</p]>>
+Modified: org.jsoup.parser.CharacterReader, org.jsoup.parser.TokeniserState
+
+Available API/signatures:
+[org.jsoup.parser.CharacterReader | java]
+package org.jsoup.parser;
+public final class CharacterReader {
+static final char EOF = (char) -1;
+private static final int readAheadLimit = (int) (maxBufferLen * 0.75);
+public CharacterReader(Reader input, int sz) {
+public CharacterReader(Reader input) {
+public CharacterReader(String input) {
+private void bufferUp() {
+final int read = reader.read(charBuf);
+public int pos() {
+public boolean isEmpty() {
+private boolean isEmptyNoBufferUp() {
+public char current() {
+public void advance() {
+public String consumeTo(char c) {
+public String consumeToAny(final char... chars) {
+String consumeToAnySorted(final char... chars) {
+@Override
+public String toString() {
+private static String cacheString(final char[] charBuf, final String[] stringCache, final int start, final int count) {
+static boolean rangeEquals(final char[] charBuf, final int start, int count, final String cached) {
+boolean rangeEquals(final int start, final int count, final String cached) {
+
+[org.jsoup.parser.TokeniserState | java]
+package org.jsoup.parser;
+enum TokeniserState {
+private void anythingElse(Tokeniser t, CharacterReader r) {
+abstract void read(Tokeniser t, CharacterReader r);
+private static final String replacementStr = String.valueOf(Tokeniser.replacementChar);
+private static void handleDataEndTag(Tokeniser t, CharacterReader r, TokeniserState elseTransition) {
+private static void readData(Tokeniser t, CharacterReader r, TokeniserState current, TokeniserState advance) {
+private static void readCharRef(Tokeniser t, TokeniserState advance) {
+private static void readEndTag(Tokeniser t, CharacterReader r, TokeniserState a, TokeniserState b) {
+private static void handleDataDoubleEscapeTag(Tokeniser t, CharacterReader r, TokeniserState primary, TokeniserState fallback) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class CharacterReaderAndTokeniserStateBug83Test {
+
+    @Test
+    public void consumeTagNameStopsBeforeLessThanSoItCanStartAnotherTag() {
+        CharacterReader reader = new CharacterReader("a<p>");
+
+        assertEquals("a", reader.consumeTagName());
+        assertEquals('<', reader.current());
+    }
+
+    @Test
+    public void consumeToLeavesTheMatchedCharacterUnread() {
+        CharacterReader reader = new CharacterReader("prefix<lemma");
+
+        assertEquals("prefix", reader.consumeTo('<'));
+        assertEquals('<', reader.current());
+        assertEquals(6, reader.pos());
+    }
+
+    @Test
+    public void consumeToAnyStopsAtFirstMatchingDelimiter() {
+        CharacterReader reader = new CharacterReader("name=value>tail");
+
+        assertEquals("name", reader.consumeToAny('=', '>'));
+        assertEquals('=', reader.current());
+
+        reader.advance();
+        assertEquals("value", reader.consumeToAny('>', '<'));
+        assertEquals('>', reader.current());
+    }
+
+    @Test
+    public void consumeToCanReachLessThanAfterReaderBufferRefillWithoutSkippingIt() {
+        StringBuilder input = new StringBuilder();
+        for (int i = 0; i < 40000; i++) {
+            input.append('a');
+        }
+        input.append("<p>");
+
+        CharacterReader reader = new CharacterReader(input.toString());
+        StringBuilder consumed = new StringBuilder();
+
+        for (int i = 0; i < 4 && reader.current() != '<'; i++) {
+            String part = reader.consumeTo('<');
+            assertTrue("Reader must make progress while searching across buffers", part.length() > 0);
+            consumed.append(part);
+        }
+
+        assertEquals(40000, consumed.length());
+        assertEquals('<', reader.current());
+        assertEquals(40000, reader.pos());
+    }
+
+    @Test
+    public void roughAttributesWithLessThanStartFollowingParagraphAndAnchorTags() {
+        String html = "<p =a>One<a <p>Something</a></p><a <p>Else</a>";
+
+        assertEquals(
+            "<p =a>One<a></a></p><p><a>Something</a></p><a>Else</a>",
+            bodyHtml(html)
+        );
+    }
+
+    @Test
+    public void lessThanWhileParsingTagAttributesStartsNewTags() {
+        String html = "<p <p<div id=\"one\" <span>Two</p>";
+
+        assertEquals(
+            "<p></p><p></p><div id=\"one\"><span>Two</span></div>",
+            bodyHtml(html)
+        );
+    }
+
+    @Test
+    public void lessThanInTagNameStartsAnotherParagraphInsteadOfBecomingPartOfTheName() {
+        String html = "<p<p>One</p>";
+
+        assertEquals("<p></p><p>One</p>", bodyHtml(html));
+    }
+
+    @Test
+    public void lessThanAfterAnAttributeSeparatesTheContainingAndNestedTags() {
+        String html = "<div id=\"one\" <span>Two</span></div>";
+
+        assertEquals("<div id=\"one\"><span>Two</span></div>", bodyHtml(html));
+    }
+
+    private String bodyHtml(String html) {
+        Document document = Jsoup.parse(html);
+        document.outputSettings().prettyPrint(false);
+        return document.body().html();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.parser.CharacterReaderAndTokeniserStateBug83Test::lessThanWhileParsingTagAttributesStartsNewTags
+ - org.jsoup.parser.CharacterReaderAndTokeniserStateBug83Test::roughAttributesWithLessThanStartFollowingParagraphAndAnchorTags
+
+Failing generated tests: org.jsoup.parser.CharacterReaderAndTokeniserStateBug83Test::lessThanWhileParsingTagAttributesStartsNewTags, org.jsoup.parser.CharacterReaderAndTokeniserStateBug83Test::roughAttributesWithLessThanStartFollowingParagraphAndAnchorTags

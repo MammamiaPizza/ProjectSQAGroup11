@@ -1,0 +1,232 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 2  Version: Gson-2b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 719
+Trigger failures:
+- com.google.gson.functional.DefaultTypeAdaptersTest::testJsonElementTypeMismatch
+ --> java.lang.ClassCastException: Cannot cast com.google.gson.JsonPrimitive to com.google.gson.JsonObject
+Modified: com.google.gson.internal.bind.TypeAdapters
+
+Available API/signatures:
+[com.google.gson.internal.bind.TypeAdapters | java]
+package com.google.gson.internal.bind;
+public final class TypeAdapters {
+private TypeAdapters() {
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Class> CLASS = new TypeAdapter<Class>() {
+@Override
+public void write(JsonWriter out, Class value) throws IOException {
+public Class read(JsonReader in) throws IOException {
+public static final TypeAdapterFactory CLASS_FACTORY = newFactory(Class.class, CLASS);
+public static final TypeAdapter<BitSet> BIT_SET = new TypeAdapter<BitSet>() {
+public BitSet read(JsonReader in) throws IOException {
+public void write(JsonWriter out, BitSet src) throws IOException {
+public static final TypeAdapterFactory BIT_SET_FACTORY = newFactory(BitSet.class, BIT_SET);
+public static final TypeAdapter<Boolean> BOOLEAN = new TypeAdapter<Boolean>() {
+public Boolean read(JsonReader in) throws IOException {
+public void write(JsonWriter out, Boolean value) throws IOException {
+public static final TypeAdapter<Boolean> BOOLEAN_AS_STRING = new TypeAdapter<Boolean>() {
+@Override public Boolean read(JsonReader in) throws IOException {
+@Override public void write(JsonWriter out, Boolean value) throws IOException {
+= newFactory(boolean.class, Boolean.class, BOOLEAN);
+public static final TypeAdapter<Number> BYTE = new TypeAdapter<Number>() {
+public Number read(JsonReader in) throws IOException {
+public void write(JsonWriter out, Number value) throws IOException {
+= newFactory(byte.class, Byte.class, BYTE);
+public static final TypeAdapter<Number> SHORT = new TypeAdapter<Number>() {
+= newFactory(short.class, Short.class, SHORT);
+public static final TypeAdapter<Number>
+...[truncated deterministically]...
+extends Enum<T>> extends TypeAdapter<T> {
+private final Map<String, T> nameToConstant = new HashMap<String, T>();
+private final Map<T, String> constantToName = new HashMap<T, String>();
+public EnumTypeAdapter(Class<T> classOfT) {
+SerializedName annotation = classOfT.getField(name).getAnnotation(SerializedName.class);
+public T read(JsonReader in) throws IOException {
+public void write(JsonWriter out, T value) throws IOException {
+public static final TypeAdapterFactory ENUM_FACTORY = new TypeAdapterFactory() {
+@SuppressWarnings({"rawtypes", "unchecked"})
+if (!Enum.class.isAssignableFrom(rawType) || rawType == Enum.class) {
+@Override public String toString() {
+@SuppressWarnings("unchecked")
+public <T2> TypeAdapter<T2> create(Gson gson, TypeToken<T2> typeToken) {
+final Class<? super T2> requestedType = typeToken.getRawType();
+
+Generated JUnit Test:
+package com.google.gson.internal.bind;
+
+ import com.google.gson.JsonArray;
+ import com.google.gson.JsonElement;
+ import com.google.gson.JsonNull;
+ import com.google.gson.JsonObject;
+ import com.google.gson.JsonPrimitive;
+ import com.google.gson.TypeAdapter;
+ import com.google.gson.stream.JsonReader;
+ import com.google.gson.stream.JsonWriter;
+ import java.io.IOException;
+ import java.io.StringReader;
+ import java.io.StringWriter;
+ import junit.framework.TestCase;
+
+ public class TypeAdaptersTest extends TestCase {
+
+     private TypeAdapter<JsonElement> adapter;
+
+     @Override
+     protected void setUp() {
+         adapter = TypeAdapters.JSON_ELEMENT;
+     }
+
+     private JsonElement read(String json) throws IOException {
+         JsonReader reader = new JsonReader(new StringReader(json));
+         reader.setLenient(true);
+         return adapter.read(reader);
+     }
+
+     private String write(JsonElement element) throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonWriter writer = new JsonWriter(sw);
+         adapter.write(writer, element);
+         writer.close();
+         return sw.toString();
+     }
+
+     public void testReadJsonPrimitiveString() throws IOException {
+         JsonElement element = read("\"hello\"");
+         assertNotNull(element);
+         assertTrue(element instanceof JsonPrimitive);
+         assertTrue(element.getAsJsonPrimitive().isString());
+         assertEquals("hello", element.getAsString());
+         // Bug focus: cast to a wrong type should throw state exception, not ClassCastException
+         try {
+             element.getAsJsonObject();
+             fail("Expected IllegalStateException for string primitive as object");
+         } catch (IllegalStateException expected) {
+             // correct contract
+         } catch (ClassCastException e) {
+             fail("ClassCastException occurred – regression of bug 719");
+         }
+     }
+
+     public void testReadJsonPrimitiveNumber() throws IOException {
+         JsonElement element = read("42");
+         assertNotNull(element);
+         assertTrue(element instanceof JsonPrimitive);
+         assertTrue(element.getAsJsonPrimitive().isNumber());
+         assertEquals(42, element.getAsInt());
+         try {
+             element.getAsJsonArray();
+             fail("Expected IllegalStateException for number primitive as array");
+         } catch (IllegalStateException expected) {
+             // correct
+         } catch (ClassCastException e) {
+             fail("ClassCastException occurred – regression");
+         }
+     }
+
+     public void testReadJsonNull() throws IOException {
+         JsonElement element = read("null");
+         assertNotNull(element);
+         assertTrue(element instanceof JsonNull);
+         try {
+             element.getAsJsonObject();
+             fail("Expected IllegalStateException for null as object");
+         } catch (IllegalStateException expected) {
+             // correct
+         }
+     }
+
+     public void testReadJsonArray() throws IOException {
+         JsonElement element = read("[1, \"two\", true]");
+         assertNotNull(element);
+         assertTrue(element instanceof JsonArray);
+         JsonArray array = element.getAsJsonArray();
+         assertEquals(3, array.size());
+         assertEquals(1, array.get(0).getAsInt());
+         assertEquals("two", array.get(1).getAsString());
+         assertTrue(array.get(2).getAsBoolean());
+     }
+
+     public void testReadEmptyJsonArray() throws IOException {
+         JsonElement element = read("[]");
+         assertTrue(element instanceof JsonArray);
+         assertEquals(0, element.getAsJsonArray().size());
+     }
+
+     public void testReadJsonObject() throws IOException {
+         JsonElement element = read("{\"key\":\"value\"}");
+         assertNotNull(element);
+         assertTrue(element instanceof JsonObject);
+         JsonObject obj = element.getAsJsonObject();
+         assertEquals(1, obj.entrySet().size());
+         assertEquals("value", obj.get("key").getAsString());
+     }
+
+     public void testReadEmptyJsonObject() throws IOException {
+         JsonElement element = read("{}");
+         assertTrue(element instanceof JsonObject);
+         assertEquals(0, element.getAsJsonObject().entrySet().size());
+     }
+
+     public void testReadNestedJson() throws IOException {
+         JsonElement element = read("{\"outer\":{\"inner\":[1,2]}}");
+         assertTrue(element instanceof JsonObject);
+         JsonObject outer = element.getAsJsonObject();
+         JsonElement inner = outer.get("outer");
+         assertTrue(inner instanceof JsonObject);
+         JsonArray innerArray = inner.getAsJsonObject().getAsJsonArray("inner");
+         assertEquals(2, innerArray.size());
+         assertEquals(1, innerArray.get(0).getAsInt());
+     }
+
+     public void testRoundTripJsonPrimitive() throws IOException {
+         JsonPrimitive original = new JsonPrimitive("test");
+         String json = write(original);
+         JsonElement result = read(json);
+         assertTrue(result instanceof JsonPrimitive);
+         assertEquals("test", result.getAsString());
+         assertFalse(result.getAsJsonPrimitive().isNumber());
+     }
+
+     public void testRoundTripJsonArray() throws IOException {
+         JsonArray original = new JsonArray();
+         original.add(new JsonPrimitive(1));
+         original.add(new JsonPrimitive("two"));
+         String json = write(original);
+         JsonElement result = read(json);
+         assertTrue(result instanceof JsonArray);
+         JsonArray array = result.getAsJsonArray();
+         assertEquals(2, array.size());
+         assertEquals(1, array.get(0).getAsInt());
+         assertEquals("two", array.get(1).getAsString());
+     }
+
+     public void testRoundTripJsonObject() throws IOException {
+         JsonObject original = new JsonObject();
+         original.addProperty("a", 1);
+         original.addProperty("b", "str");
+         String json = write(original);
+         JsonElement result = read(json);
+         assertTrue(result instanceof JsonObject);
+         JsonObject obj = result.getAsJsonObject();
+         assertEquals(1, obj.get("a").getAsInt());
+         assertEquals("str", obj.get("b").getAsString());
+     }
+
+     public void testWriteNullReturnsNull() throws IOException {
+         String json = write(null);
+         assertEquals("null", json.trim());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.google.gson.internal.bind.TypeAdaptersTest::testWriteNullReturnsNull
+ - com.google.gson.internal.bind.TypeAdaptersTest::testRoundTripJsonPrimitive
+
+Failing generated tests: com.google.gson.internal.bind.TypeAdaptersTest::testRoundTripJsonPrimitive, com.google.gson.internal.bind.TypeAdaptersTest::testWriteNullReturnsNull

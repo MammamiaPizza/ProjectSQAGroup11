@@ -1,0 +1,318 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 41  Version: Compress-41b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-367
+Trigger failures:
+- org.apache.commons.compress.archivers.ZipTestCase::testListAllFilesWithNestedArchive
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+ - org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamTest::testThrowOnInvalidEntry
+ --> junit.framework.AssertionFailedError: IOException expected
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.zip.ZipArchiveInputStream | java]
+package org.apache.commons.compress.archivers.zip;
+public class ZipArchiveInputStream extends ArchiveInputStream {
+private final Inflater inf = new Inflater(true);
+private final ByteBuffer buf = ByteBuffer.allocate(ZipArchiveOutputStream.BUFFER_SIZE);
+public ZipArchiveInputStream(final InputStream inputStream) {
+public ZipArchiveInputStream(final InputStream inputStream, final String encoding) {
+public ZipArchiveInputStream(final InputStream inputStream, final String encoding, final boolean useUnicodeExtraFields) {
+public ZipArchiveEntry getNextZipEntry() throws IOException {
+} catch (final EOFException e) {
+final ZipLong sig = new ZipLong(LFH_BUF);
+final int versionMadeBy = ZipShort.getValue(LFH_BUF, off);
+final GeneralPurposeBit gpFlag = GeneralPurposeBit.parse(LFH_BUF, off);
+final boolean hasUTF8Flag = gpFlag.usesUTF8ForNames();
+final long time = ZipUtil.dosToJavaTime(ZipLong.getValue(LFH_BUF, off));
+final int fileNameLen = ZipShort.getValue(LFH_BUF, off);
+final int extraLen = ZipShort.getValue(LFH_BUF, off);
+private void readFirstLocalFileHeader(final byte[] lfh) throws IOException {
+final ZipLong sig = new ZipLong(lfh);
+private void processZip64Extra(final ZipLong size, final ZipLong cSize) {
+@Override
+public ArchiveEntry getNextEntry() throws IOException {
+public boolean canReadEntryData(final ArchiveEntry ae) {
+final ZipArchiveEntry ze = (ZipArchiveEntry) ae;
+public int read(final byte[] buffer, final int offset, final int length) throws IOException {
+private int readStored(final byte[] buffer, final int offset, final int length) throws IOException {
+final lon
+...[truncated deterministically]...
+ivate boolean isFirstByteOfEocdSig(final int b) {
+private static final class CurrentEntry {
+private final ZipArchiveEntry entry = new ZipArchiveEntry();
+private final CRC32 crc = new CRC32();
+private class BoundedInputStream extends InputStream {
+public BoundedInputStream(final InputStream in, final long size) {
+public int read() throws IOException {
+final int result = in.read();
+public int read(final byte[] b) throws IOException {
+public int read(final byte[] b, final int off, final int len) throws IOException {
+final long maxRead = max >= 0 ? Math.min(len, max - pos) : len;
+final int bytesRead = in.read(b, off, (int) maxRead);
+public long skip(final long n) throws IOException {
+final long toSkip = max >= 0 ? Math.min(n, max - pos) : n;
+final long skippedBytes = in.skip(toSkip);
+public int available() throws IOException {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.zip;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.util.zip.CRC32;
+ import java.util.zip.ZipEntry;
+ import java.util.zip.ZipOutputStream;
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ public class ZipArchiveInputStreamBugTest {
+
+     private static byte[] createNestedZipBytes() throws IOException {
+         // Inner zip
+         ByteArrayOutputStream innerBos = new ByteArrayOutputStream();
+         ZipOutputStream innerZos = new ZipOutputStream(innerBos);
+         innerZos.putNextEntry(new ZipEntry("inner.txt"));
+         innerZos.write("inner".getBytes("UTF-8"));
+         innerZos.closeEntry();
+         innerZos.finish();
+         byte[] innerBytes = innerBos.toByteArray();
+
+         // Outer zip with inner zip as stored entry
+         ByteArrayOutputStream outerBos = new ByteArrayOutputStream();
+         ZipOutputStream outerZos = new ZipOutputStream(outerBos);
+         outerZos.putNextEntry(new ZipEntry("nested.zip"));
+         outerZos.write(innerBytes);
+         outerZos.closeEntry();
+         outerZos.finish();
+         return outerBos.toByteArray();
+     }
+
+     /**
+      * Covers COMPRESS-367: nested zip inside a zip should return exactly 1 entry.
+      */
+     @Test
+     public void testNestedZipReturnsOneEntry() throws Exception {
+         byte[] zipData = createNestedZipBytes();
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(zipData));
+         int count = 0;
+         while (zis.getNextZipEntry() != null) {
+             count++;
+         }
+         zis.close();
+         assertEquals("nested zip must yield exactly 1 entry", 1, count);
+     }
+
+     /**
+      * Covers testThrowOnInvalidEntry: a stream with a non-zip signature
+      * must throw IOException rather than silently returning null.
+      */
+     @Test(expected = IOException.class)
+     public void testThrowOnInvalidEntry() throws IOException {
+         // 4 bytes that are not LFH, CFH, or AED signatures
+         byte[] data = new byte[] { (byte) 0xAB, (byte) 0xCD, (byte) 0xEF, (byte) 0x12 };
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(data));
+         try {
+             zis.getNextZipEntry();
+         } finally {
+             zis.close();
+         }
+     }
+
+     @Test
+     public void testEmptyStreamReturnsNull() throws IOException {
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new
+byte[0]));
+         assertNull(zis.getNextZipEntry());
+         zis.close();
+     }
+
+     @Test
+     public void testDeflatedEntry() throws Exception {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         ZipOutputStream zos = new ZipOutputStream(bos);
+         zos.setMethod(ZipEntry.DEFLATED);
+         zos.putNextEntry(new ZipEntry("deflated.txt"));
+         byte[] content = "deflated content".getBytes("UTF-8"));
+         zos.write(content);
+         zos.closeEntry();
+         zos.finish();
+
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new
+ByteArrayInputStream(bos.toByteArray()));
+         ZipArchiveEntry entry = zis.getNextZipEntry();
+         assertNotNull(entry);
+         assertEquals("deflated.txt", entry.getName());
+         byte[] buf = new byte[1024];
+         int len = zis.read(buf);
+         assertTrue("should read deflated content", len > 0);
+         assertEquals("deflated content", new String(buf, 0, len, "UTF-8"));
+         assertNull(zis.getNextZipEntry());
+         zis.close();
+     }
+
+     @Test
+     public void testStoredEntry() throws Exception {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         ZipOutputStream zos = new ZipOutputStream(bos);
+         zos.setMethod(ZipEntry.STORED);
+         byte[] content = "stored content".getBytes("UTF-8");
+         ZipEntry entry = new ZipEntry("stored.txt");
+         entry.setSize(content.length);
+         CRC32 crc = new CRC32();
+         crc.update(content);
+         entry.setCrc(crc.getValue());
+         zos.putNextEntry(entry);
+         zos.write(content);
+         zos.closeEntry();
+         zos.finish();
+
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new
+ByteArrayInputStream(bos.toByteArray()));
+         ZipArchiveEntry ze = zis.getNextZipEntry();
+         assertNotNull(ze);
+         assertEquals("stored.txt", ze.getName());
+         byte[] buf = new byte[1024];
+         int len = zis.read(buf);
+         assertTrue(len > 0);
+         assertEquals("stored content", new String(buf, 0, len, "UTF-8"));
+         zis.close();
+     }
+
+     @Test
+     public void testMultipleEntries() throws Exception {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         ZipOutputStream zos = new ZipOutputStream(bos);
+         zos.putNextEntry(new ZipEntry("first.txt"));
+         zos.write("first".getBytes("UTF-8"));
+         zos.closeEntry();
+         zos.putNextEntry(new ZipEntry("second.txt"));
+         zos.write("second".getBytes("UTF-8"));
+         zos.closeEntry();
+         zos.finish();
+
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new
+ByteArrayInputStream(bos.toByteArray()));
+         assertEquals("first.txt", zis.getNextZipEntry().getName());
+         assertEquals("second.txt", zis.getNextZipEntry().getName());
+         assertNull(zis.getNextZipEntry());
+         zis.close();
+     }
+
+     /**
+      * Verifies closeEntry() drain logic: skipping remaining data of the current
+      * entry must correctly position the stream at the next LFH header.
+      */
+     @Test
+     public void testSkipEntryDataAdvancesToNextEntry() throws Exception {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         ZipOutputStream zos = new ZipOutputStream(bos);
+         zos.putNextEntry(new ZipEntry("skip.txt"));
+         zos.write("data-to-skip".getBytes("UTF-8"));
+         zos.closeEntry();
+         zos.putNextEntry(new ZipEntry("read.txt"));
+         zos.write("data-to-read".getBytes("UTF-8"));
+         zos.closeEntry();
+         zos.finish();
+
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new
+ByteArrayInputStream(bos.toByteArray()));
+         // Consume first entry but skip its data by calling getNextZipEntry again
+         assertNotNull(zis.getNextZipEntry());
+         ZipArchiveEntry second = zis.getNextZipEntry();
+         assertEquals("read.txt", second.getName());
+         byte[] buf = new byte[1024];
+         int len = zis.read(buf);
+         assertEquals("data-to-read", new String(buf, 0, len, "UTF-8"));
+         zis.close();
+     }
+
+     @Test
+     public void testClosedStreamReturnsNull() throws IOException {
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new
+byte[0]));
+         zis.close();
+         assertNull(zis.getNextZipEntry());
+     }
+
+     @Test
+     public void testCanReadEntryDataStored() throws Exception {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         ZipOutputStream zos = new ZipOutputStream(bos);
+         zos.setMethod(ZipEntry.STORED);
+         byte[] content = "test".getBytes("UTF-8");
+         ZipEntry entry = new ZipEntry("test.txt");
+         entry.setSize(content.length);
+         CRC32 crc = new CRC32();
+         crc.update(content);
+         entry.setCrc(crc.getValue());
+         zos.putNextEntry(entry);
+         zos.write(content);
+         zos.closeEntry();
+         zos.finish();
+
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new
+ByteArrayInputStream(bos.toByteArray()));
+         ZipArchiveEntry ze = zis.getNextZipEntry();
+         assertTrue(zis.canReadEntryData(ze));
+         byte[] buf = new byte[1024];
+         int len = zis.read(buf);
+         assertEquals(content.length, len);
+         assertArrayEquals(content, java.util.Arrays.copyOf(buf, len));
+         zis.close();
+     }
+
+     /**
+      * Corrupt entry with a valid LFH signature but truncated compressed data
+      * must trigger an IOException when the stream ends prematurely.
+      */
+     @Test(expected = IOException.class)
+     public void testTruncatedDeflatedEntryThrowsIOException() throws IOException {
+         // Minimal LFH: STORED method, comp-size=100, but stream ends right after header
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         bos.write(new byte[] { 0x50, 0x4b, 0x03, 0x04 }); // LFH sig
+         bos.write(new byte[] { 0x14, 0x00 }); // version 2.0
+         bos.write(new byte[] { 0x00, 0x00 }); // flags
+         bos.write(new byte[] { 0x00, 0x00 }); // method = STORED
+         bos.write(new byte[] { 0x00, 0x00, 0x00, 0x00 }); // time + date
+         bos.write(new byte[] { 0x00, 0x00, 0x00, 0x00 }); // CRC
+         bos.write(new byte[] { 0x64, 0x00, 0x00, 0x00 }); // comp-size = 100
+         bos.write(new byte[] { 0x64, 0x00, 0x00, 0x00 }); // uncomp-size = 100
+         bos.write(new byte[] { 0x00, 0x00 }); // filename-len = 0
+         bos.write(new byte[] { 0x00, 0x00 }); // extra-len = 0
+         // No entry data follows!
+
+         ZipArchiveInputStream zis = new ZipArchiveInputStream(new
+ByteArrayInputStream(bos.toByteArray()));
+         try {
+             zis.getNextZipEntry();
+             byte[] buf = new byte[200];
+             zis.read(buf); // must throw: stream ends before 100 bytes
+         } finally {
+             zis.close();
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Compress-41f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Compress-41f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Compress-41f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Compress-41f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Compress-41f-copilot/.test_suite/org/apache/commons/compress/archivers/zip/ZipArchiveInputStreamBugTest.java:79: error: ';' expected
+ [javac] byte[] content = "deflated content".getBytes("UTF-8"));
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

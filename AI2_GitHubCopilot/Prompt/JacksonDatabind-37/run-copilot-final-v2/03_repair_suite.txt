@@ -1,0 +1,228 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 37  Version: JacksonDatabind-37b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1083
+Trigger failures:
+- com.fasterxml.jackson.databind.objectid.Objecid1083Test::testSimple
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "name" (class com.fasterxml.jackson.databind.objectid.Objecid1083Test$JsonMapSchema), not marked as ignorable (0 known properties: ])
+Modified: com.fasterxml.jackson.databind.type.SimpleType
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.SimpleType | java]
+package com.fasterxml.jackson.databind.type;
+public class SimpleType // note: until 2.6 was final
+protected SimpleType(Class<?> cls) {
+protected SimpleType(TypeBase base) {
+public static SimpleType constructUnsafe(Class<?> raw) {
+@Deprecated
+public static SimpleType construct(Class<?> cls)
+if (Map.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Map (class: "+cls.getName()+")");
+if (Collection.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Collection (class: "+cls.getName()+")");
+throw new IllegalArgumentException("Can not construct SimpleType for an array (class: "+cls.getName()+")");
+@Override
+protected JavaType _narrow(Class<?> subclass)
+public JavaType withContentType(JavaType contentType) {
+public SimpleType withTypeHandler(Object h) {
+public JavaType withContentTypeHandler(Object h) {
+public SimpleType withValueHandler(Object h) {
+public SimpleType withContentValueHandler(Object h) {
+public SimpleType withStaticTyping() {
+protected String buildCanonicalName()
+final int count = _bindings.size();
+public boolean isContainerType() { return false; }
+public StringBuilder getErasedSignature(StringBuilder sb) {
+public StringBuilder getGenericSignature(StringBuilder sb)
+public String toString()
+sb.append("[simple type, class ").append(buildCanonicalName()).append(']');
+public boolean equals(Object o)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+import java.util.;
+import static org.junit.Assert.;
+import org.junit.Test;
+
+public class SimpleTypeTest {
+
+ public static class TestBean {
+     public String name;
+ }
+
+ // 1. construct() with a normal class returns valid SimpleType
+ @Test
+ public void testConstructNormalClass() {
+     SimpleType type = SimpleType.construct(String.class);
+     assertNotNull(type);
+     assertEquals(String.class, type.getRawClass());
+     assertFalse(type.isContainerType());
+     assertEquals("java.lang.String", type.buildCanonicalName());
+ }
+
+ // 2. construct() throws IAE for Map, Collection, and array types
+ @Test
+ public void testConstructThrowsForContainers() {
+     try {
+         SimpleType.construct(HashMap.class);
+         fail("Should throw IAE for Map");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("Map"));
+     }
+     try {
+         SimpleType.construct(ArrayList.class);
+         fail("Should throw IAE for Collection");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("Collection"));
+     }
+     try {
+         SimpleType.construct(int[].class);
+         fail("Should throw IAE for array");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("array"));
+     }
+ }
+
+ // 3. constructUnsafe() bypasses container-type checks
+ @Test
+ public void testConstructUnsafeBypassesChecks() {
+     SimpleType mapType = SimpleType.constructUnsafe(HashMap.class);
+     assertNotNull(mapType);
+     assertEquals(HashMap.class, mapType.getRawClass());
+
+     SimpleType listType = SimpleType.constructUnsafe(ArrayList.class);
+     assertNotNull(listType);
+     assertEquals(ArrayList.class, listType.getRawClass());
+
+     SimpleType arrayType = SimpleType.constructUnsafe(int[].class);
+     assertNotNull(arrayType);
+     assertEquals(int[].class, arrayType.getRawClass());
+ }
+
+ // 4. construct() handles inner classes correctly
+ @Test
+ public void testConstructInnerClass() {
+     SimpleType type = SimpleType.construct(TestBean.class);
+     assertNotNull(type);
+     assertEquals(TestBean.class, type.getRawClass());
+     assertFalse(type.isContainerType());
+     String canonical = type.buildCanonicalName();
+     assertTrue(canonical.contains("SimpleTypeTest$TestBean"));
+ }
+
+ // 5. constructUnsafe() with null argument – expect NullPointerException
+ @Test(expected = NullPointerException.class)
+ public void testConstructUnsafeNullClass() {
+     SimpleType.constructUnsafe(null);
+ }
+
+ // 6. buildCanonicalName() produces correct output
+ @Test
+ public void testBuildCanonicalName() {
+     assertEquals("java.lang.Integer", SimpleType.construct(Integer.class).buildCanonicalName());
+     assertEquals("java.lang.Double", SimpleType.construct(Double.class).buildCanonicalName());
+     // No generics brackets when bindings are empty
+     String name = SimpleType.construct(String.class).buildCanonicalName();
+     assertFalse(name.contains("<"));
+ }
+
+ // 7. toString() follows documented format
+ @Test
+ public void testToString() {
+     String str = SimpleType.construct(Long.class).toString();
+     assertTrue(str.startsWith("[simple type, class"));
+     assertTrue(str.contains("java.lang.Long"));
+     assertTrue(str.endsWith("]"));
+ }
+
+ // 8. equals() compares class and bindings
+ @Test
+ public void testEquals() {
+     SimpleType t1 = SimpleType.construct(String.class);
+     SimpleType t2 = SimpleType.construct(String.class);
+     SimpleType t3 = SimpleType.construct(Integer.class);
+
+     assertEquals(t1, t2);
+     assertNotEquals(t1, t3);
+     assertEquals(t1, t1);            // reflexivity
+     assertNotEquals(t1, null);       // null
+     assertNotEquals(t1, new Object()); // different class
+ }
+
+ // 9. withTypeHandler() creates new instance or returns this when unchanged
+ @Test
+ public void testWithTypeHandler() {
+     SimpleType type = SimpleType.construct(String.class);
+     Object handler = new Object();
+
+     SimpleType with = type.withTypeHandler(handler);
+     assertNotSame(type, with);
+     assertEquals(String.class, with.getRawClass());
+
+     // same handler returns this
+     assertSame(with, with.withTypeHandler(handler));
+
+     // null handler when _typeHandler is null returns this
+     assertSame(type, type.withTypeHandler(null));
+ }
+
+ // 10. withContentType() and related methods throw IAE for simple types
+ @Test(expected = IllegalArgumentException.class)
+ public void testWithContentTypeThrows() {
+     SimpleType.construct(String.class).withContentType(null);
+ }
+
+ // 11. withStaticTyping() toggles the static flag
+ @Test
+ public void testWithStaticTyping() {
+     SimpleType type = SimpleType.construct(Boolean.class);
+     SimpleType staticType = type.withStaticTyping();
+
+     assertNotSame(type, staticType);
+     assertEquals(Boolean.class, staticType.getRawClass());
+     assertFalse(type.isContainerType());
+
+     // calling again returns same instance
+     assertSame(staticType, staticType.withStaticTyping());
+ }
+
+ // 12. _narrow() returns this for same class, new instance for subclass
+ @Test
+ public void testNarrow() {
+     SimpleType type = SimpleType.construct(Number.class);
+
+     // same class -> same instance
+     assertSame(type, type._narrow(Number.class));
+
+     // subclass -> new instance with subclass rawClass
+     JavaType narrowed = type._narrow(Integer.class);
+     assertNotNull(narrowed);
+     assertNotSame(type, narrowed);
+     assertEquals(Integer.class, narrowed.getRawClass());
+     assertTrue(narrowed instanceof SimpleType);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-37f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-37f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-37f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-37f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-37f-copilot/.test_suite/com/fasterxml/jackson/databind/type/SimpleTypeTest.java:3: error: <identifier> expected
+ [javac] import java.util.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 55 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

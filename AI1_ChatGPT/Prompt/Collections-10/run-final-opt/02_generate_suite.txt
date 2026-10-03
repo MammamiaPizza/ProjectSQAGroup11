@@ -1,0 +1,345 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Collections  Bug: 10  Version: Collections-10b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.collections.map.MultiValueMap
+Modified: org.apache.commons.collections.map.MultiValueMap
+Triggers: org.apache.commons.collections.map.TestMultiValueMap::testEmptyMapCompatibility, org.apache.commons.collections.map.TestMultiValueMap::testFullMapCompatibility
+
+Bug/specification summary:
+Bug report: COLLECTIONS-240
+Trigger failures:
+- org.apache.commons.collections.map.TestMultiValueMap::testEmptyMapCompatibility
+ --> java.io.InvalidClassException: org.apache.commons.collections.map.MultiValueMap; class invalid for deserialization
+ - org.apache.commons.collections.map.TestMultiValueMap::testFullMapCompatibility
+ --> java.io.InvalidClassException: org.apache.commons.collections.map.MultiValueMap; class invalid for deserialization
+Modified: org.apache.commons.collections.map.MultiValueMap
+
+Prompt-01 test plan:
+TARGETS: MultiValueMap custom serialization: private writeObject/readObject; empty and populated map round trips.
+ORACLES: Trigger tests specify deserialization must not throw InvalidClassException for compatible serialized forms.
+CASES: Serialize/deserialize empty MultiValueMap; verify deserialized map remains empty and usable.
+CASES: Serialize/deserialize populated MultiValueMap; verify mappings, per-key collections, and totalSize survive.
+RISKS: serialVersionUID/serialized-field compatibility is implicated; exact legacy stream fixture/source is unavailable.
+RISKS: Do not infer behavior for malformed streams or non-serializable keys, values, maps, or factories.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.collections.map.MultiValueMap (java) =====
+/* API SIGNATURES */
+package org.apache.commons.collections.map;
+public class MultiValueMap extends AbstractMapDecorator implements MultiMap {
+public static MultiValueMap decorate(Map map) {
+return new MultiValueMap(map, new ReflectionFactory(ArrayList.class));
+public static MultiValueMap decorate(Map map, Class collectionClass) {
+public static MultiValueMap decorate(Map map, Factory collectionFactory) {
+public MultiValueMap() {
+this(new HashMap(), new ReflectionFactory(ArrayList.class));
+protected MultiValueMap(Map map, Factory collectionFactory) {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+public void clear() {
+public Object removeMapping(Object key, Object value) {
+public boolean containsValue(Object value) {
+public Object put(Object key, Object value) {
+public void putAll(Map map) {
+public Collection values() {
+public boolean containsValue(Object key, Object value) {
+public Collection getCollection(Object key) {
+public int size(Object key) {
+public boolean putAll(Object key, Collection values) {
+public Iterator iterator(Object key) {
+public int totalSize() {
+protected Collection createCollection(int size) {
+private class Values extends AbstractCollection {
+public Iterator iterator() {
+final IteratorChain chain = new IteratorChain();
+public int size() {
+private class ValuesIterator implements Iterator {
+public ValuesIterator(Object key) {
+public void remove() {
+public boolean hasNext() {
+public Object next() {
+private static class ReflectionFactory implements Factory {
+public ReflectionFactory(Class clazz) {
+public Object create() {
+throw new FunctorException("Cannot instantiate class: " + clazz, ex);
+
+/* HEADER */
+package org.apache.commons.collections.map;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import org.apache.commons.collections.Factory;
+import org.apache.commons.collections.FunctorException;
+import org.apache.commons.collections.MultiMap;
+import org.apache.commons.collections.iterators.EmptyIterator;
+import org.apache.commons.collections.iterators.IteratorChain;
+public class MultiValueMap extends AbstractMapDecorator implements MultiMap {
+
+/* METHOD MultiValueMap */
+public MultiValueMap() {
+ this(new HashMap(), new ReflectionFactory(ArrayList.class));
+ }
+
+/* METHOD MultiValueMap */
+protected MultiValueMap(Map map, Factory collectionFactory) {
+ super(map);
+ if (collectionFactory == null) {
+ throw new IllegalArgumentException("The factory must not be null");
+ }
+ this.collectionFactory = collectionFactory;
+ }
+
+/* METHOD decorate */
+public static MultiValueMap decorate(Map map) {
+ return new MultiValueMap(map, new ReflectionFactory(ArrayList.class));
+ }
+
+/* METHOD decorate */
+public static MultiValueMap decorate(Map map, Class collectionClass) {
+ return new MultiValueMap(map, new ReflectionFactory(collectionClass));
+ }
+
+/* METHOD decorate */
+public static MultiValueMap decorate(Map map, Factory collectionFactory) {
+ return new MultiValueMap(map, collectionFactory);
+ }
+
+/* METHOD clear */
+public void clear() {
+ // If you believe that you have GC issues here, try uncommenting this code
+// Set pairs = getMap().entrySet();
+// Iterator pairsIterator = pairs.iterator();
+// while (pairsIterator.hasNext()) {
+// Map.Entry keyValuePair = (Map.Entry) pairsIterator.next();
+// Collection coll = (Collection) keyValuePair.getValue();
+// coll.clear();
+// }
+ getMap().clear();
+ }
+
+/* METHOD clear */
+public void clear() {
+ MultiValueMap.this.clear();
+ }
+
+/* METHOD remove */
+public void remove() {
+ iterator.remove();
+ if (values.isEmpty()) {
+ MultiValueMap.this.remove(key);
+ }
+ }
+
+/* METHOD removeMapping */
+public Object removeMapping(Object key, Object value) {
+ Collection valuesForKey = getCollection(key);
+ if (valuesForKey == null) {
+ return null;
+ }
+ boolean removed = valuesForKey.remove(value);
+ if (removed == false) {
+ return null;
+ }
+ if (valuesForKey.isEmpty()) {
+ remove(key);
+ }
+ return value;
+ }
+
+/* METHOD containsValue */
+public boolean containsValue(Object value) {
+ Set pairs = getMap().entrySet();
+ if (pairs == null) {
+ return false;
+ }
+ Iterator pairsIterator = pairs.iterator();
+ while (pairsIterator.hasNext()) {
+ Map.Entry keyValuePair = (Map.Entry) pairsIterator.next();
+ Collection coll = (Collection) keyValuePair.getValue();
+ if (coll.contains(value)) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+/* METHOD put */
+public Object put(Object key, Object value) {
+ boolean result = false;
+ Collection coll = getCollection(key);
+ if (coll == null) {
+ coll = createCollection(1); // might produce a non-empty collection
+ coll.add(value);
+ if (coll.size() > 0) {
+ // only add if non-zero size to maintain class state
+ getMap().put(key, coll);
+ result = true; // map definitely changed
+ }
+ } else {
+ result = coll.add(value);
+ }
+ return (result ? value : null);
+ }
+
+/* METHOD putAll */
+public void putAll(Map map) {
+ if (map instanceof MultiMap) {
+ for (Iterator it = map.entrySet().iterator(); it.hasNext();) {
+ Map.Entry entry = (Map.Entry) it.next();
+ Collection coll = (Collection) entry.getValue();
+ putAll(entry.getKey(), coll);
+ }
+ } else {
+ for (Iterator it = map.entrySet().iterator(); it.hasNext();) {
+ Map.Entry entry = (Map.Entry) it.next();
+ put(entry.getKey(), entry.getValue());
+ }
+ }
+ }
+
+/* METHOD getCollection */
+public Collection getCollection(Object key) {
+ return (Collection) getMap().get(key);
+ }
+
+/* METHOD putAll */
+public boolean putAll(Object key, Collection values) {
+ if (values == null || values.size() == 0) {
+ return false;
+ }
+ boolean result = false;
+ Collection coll = getCollection(key);
+ if (coll == null) {
+ coll = createCollection(values.size()); // might produce a non-empty collection
+ coll.addAll(values);
+ if (coll.size() > 0) {
+ // only add if non-zero size to maintain class state
+ getMap().put(key, coll);
+ result = true; // map definitely changed
+ }
+ } else {
+ result = coll.addAll(values);
+ }
+ return result;
+ }
+
+/* METHOD totalSize */
+public int totalSize() {
+ int total = 0;
+ Collection values = getMap().values();
+ for (Iterator it = values.iterator(); it.hasNext();) {
+ Collection coll = (Collection) it.next();
+ total += coll.size();
+ }
+ return total;
+ }
+
+/* METHOD values */
+public Collection values() {
+ if (valuesView == null) {
+ valuesView = new Values();
+ }
+ return valuesView;
+ }
+
+/* METHOD containsValue */
+public boolean containsValue(Object key, Object value) {
+ Collection coll = getCollection(key);
+ if (coll == null) {
+ return false;
+ }
+ return coll.contains(value);
+ }
+
+/* METHOD size */
+public int size(Object key) {
+ Collection coll = getCollection(key);
+ if (coll == null) {
+ return 0;
+ }
+ return coll.size();
+ }
+
+/* METHOD iterator */
+public Iterator iterator(Object key) {
+ if (!containsKey(key)) {
+ return EmptyIterator.INSTANCE;
+ } else {
+ return new ValuesIterator(key);
+ }
+ }
+
+/* METHOD createCollection */
+protected Collection createCollection(int size) {
+ return (Collection) collectionFactory.create();
+ }
+
+/* METHOD iterator */
+public Iterator iterator() {
+ final IteratorChain chain = new IteratorChain();
+ for (Iterator it = keySet().iterator(); it.hasNext();) {
+ chain.addIterator(new ValuesIterator(it.next()));
+ }
+ return chain;
+ }
+
+/* METHOD size */
+public int size() {
+ return totalSize();
+ }
+
+/* METHOD ValuesIterator */
+public ValuesIterator(Object key) {
+ this.key = key;
+ this.values = getCollection(key);
+ this.iterator = values.iterator();
+ }
+
+/* METHOD hasNext */
+public boolean hasNext() {
+ return iterator.hasNext();
+ }
+
+/* METHOD next */
+public Object next() {
+ return iterator.next();
+ }
+
+/* METHOD ReflectionFactory */
+public ReflectionFactory(Class clazz) {
+ this.clazz = clazz;
+ }
+
+/* METHOD create */
+public Object create() {
+ try {
+ return clazz.newInstance();
+ } catch (Exception ex) {
+ throw new FunctorException("Cannot instantiate class: " + clazz, ex);
+ }
+ }
+
+/* METHOD writeObject */
+private void writeObject(ObjectOutputStream out) throws IOException {
+ out.defaultWriteObject();
+ out.writeObject(map);
+ }
+
+/* METHOD readObject */
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+ in.defaultReadObject();
+ map = (Map) in.readObject();
+ }

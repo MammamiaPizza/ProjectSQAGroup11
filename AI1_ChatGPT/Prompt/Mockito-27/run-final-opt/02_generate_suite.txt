@@ -1,0 +1,140 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 27  Version: Mockito-27b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.util.MockUtil
+Modified: org.mockito.internal.util.MockUtil
+Triggers: org.mockitousage.bugs.ListenersLostOnResetMockTest::listener
+
+Bug/specification summary:
+Bug report: 282
+Trigger failures:
+- org.mockitousage.bugs.ListenersLostOnResetMockTest::listener
+ --> junit.framework.AssertionFailedError:
+Modified: org.mockito.internal.util.MockUtil
+
+Prompt-01 test plan:
+TARGETS: MockUtil.resetMock(T) listener preservation on reset; related getMockHandler/getInterceptor behavior.
+ORACLES: Trigger ListenersLostOnResetMockTest::listener assertion; MockUtil behavior and available signatures only.
+CASES: Reset a mock configured with listeners, then invoke/reset-observable behavior to verify listeners remain active.
+CASES: Normal reset of a Mockito mock; verify handler/interceptor remains obtainable after reset.
+CASES: Boundary/error inputs only if supported by existing test context; null/non-mock expectations are unspecified.
+RISKS: Listener APIs, invocation expectations, and exact listener callback semantics are not provided.
+RISKS: Do not infer behavior from another Mockito version or invent MockSettingsImpl configuration APIs.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.util.MockUtil (java) =====
+/*
+ * Copyright (c) 2007 Mockito contributors
+ * This program is made available under the terms of the MIT License.
+ */
+
+package org.mockito.internal.util;
+
+import org.mockito.cglib.proxy.Callback;
+import org.mockito.cglib.proxy.Factory;
+import org.mockito.exceptions.misusing.NotAMockException;
+import org.mockito.internal.InvocationNotifierHandler;
+import org.mockito.internal.MockHandler;
+import org.mockito.internal.MockHandlerInterface;
+import org.mockito.internal.creation.MethodInterceptorFilter;
+import org.mockito.internal.creation.MockSettingsImpl;
+import org.mockito.internal.creation.jmock.ClassImposterizer;
+import org.mockito.internal.util.reflection.LenientCopyTool;
+
+import java.io.Serializable;
+
+@SuppressWarnings("unchecked")
+public class MockUtil {
+ 
+ private final MockCreationValidator creationValidator;
+
+ public MockUtil(MockCreationValidator creationValidator) {
+ this.creationValidator = creationValidator;
+ }
+ 
+ public MockUtil() {
+ this(new MockCreationValidator());
+ }
+
+ public <T> T createMock(Class<T> classToMock, MockSettingsImpl settings) {
+ creationValidator.validateType(classToMock);
+ creationValidator.validateExtraInterfaces(classToMock, settings.getExtraInterfaces());
+ creationValidator.validateMockedType(classToMock, settings.getSpiedInstance());
+
+ settings.initiateMockName(classToMock);
+
+ MethodInterceptorFilter filter = newMethodInterceptorFilter(settings);
+ Class<?>[] interfaces = settings.getExtraInterfaces();
+
+ Class<?>[] ancillaryTypes;
+ if (settings.isSerializable()) {
+ ancillaryTypes = interfaces == null ? new Class<?>[] {Serializable.class} : new ArrayUtils().concat(interfaces, Serializable.class);
+ } else {
+ ancillaryTypes = interfaces == null ? new Class<?>[0] : interfaces;
+ }
+
+ Object spiedInstance = settings.getSpiedInstance();
+ 
+ T mock = ClassImposterizer.INSTANCE.imposterise(filter, classToMock, ancillaryTypes);
+ 
+ if (spiedInstance != null) {
+ new LenientCopyTool().copyToMock(spiedInstance, mock);
+ }
+ 
+ return mock;
+ }
+
+ public <T> void resetMock(T mock) {
+ MockHandlerInterface<T> oldMockHandler = getMockHandler(mock);
+ MockHandler<T> newMockHandler = new MockHandler<T>(oldMockHandler);
+ MethodInterceptorFilter newFilter = new MethodInterceptorFilter(newMockHandler, (MockSettingsImpl) org.mockito.Mockito.withSettings().defaultAnswer(org.mockito.Mockito.RETURNS_DEFAULTS));
+ ((Factory) mock).setCallback(0, newFilter);
+ }
+
+ private <T> MethodInterceptorFilter newMethodInterceptorFilter(MockSettingsImpl settings) {
+ MockHandler<T> mockHandler = new MockHandler<T>(settings);
+ InvocationNotifierHandler<T> invocationNotifierHandler = new InvocationNotifierHandler<T>(mockHandler, settings);
+ return new MethodInterceptorFilter(invocationNotifierHandler, settings);
+ }
+
+ public <T> MockHandlerInterface<T> getMockHandler(T mock) {
+ if (mock == null) {
+ throw new NotAMockException("Argument should be a mock, but is null!");
+ }
+
+ if (isMockitoMock(mock)) {
+ return (MockHandlerInterface) getInterceptor(mock).getHandler();
+ } else {
+ throw new NotAMockException("Argument should be a mock, but is: " + mock.getClass());
+ }
+ }
+
+ private <T> boolean isMockitoMock(T mock) {
+ return getInterceptor(mock) != null;
+ }
+
+ public boolean isMock(Object mock) {
+ return mock != null && isMockitoMock(mock);
+ }
+
+ private <T> MethodInterceptorFilter getInterceptor(T mock) {
+ if (!(mock instanceof Factory)) {
+ return null;
+ }
+ Factory factory = (Factory) mock;
+ Callback callback = factory.getCallback(0);
+ if (callback instanceof MethodInterceptorFilter) {
+ return (MethodInterceptorFilter) callback;
+ }
+ return null;
+ }
+
+ public MockName getMockName(Object mock) {
+ return getMockHandler(mock).getMockSettings().getMockName();
+ }
+}

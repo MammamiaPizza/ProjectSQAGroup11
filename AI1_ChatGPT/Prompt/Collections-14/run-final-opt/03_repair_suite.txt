@@ -1,0 +1,117 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 14  Version: Collections-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-294
+Trigger failures:
+- org.apache.commons.collections.map.TestCaseInsensitiveMap::testLocaleIndependence
+ --> junit.framework.AssertionFailedError: en: 1 expected:<value> but was:<null>
+Modified: org.apache.commons.collections.map.CaseInsensitiveMap
+
+Available API/signatures:
+[org.apache.commons.collections.map.CaseInsensitiveMap | java]
+package org.apache.commons.collections.map;
+public class CaseInsensitiveMap extends AbstractHashedMap implements Serializable, Cloneable {
+public CaseInsensitiveMap() {
+public CaseInsensitiveMap(int initialCapacity) {
+public CaseInsensitiveMap(int initialCapacity, float loadFactor) {
+public CaseInsensitiveMap(Map map) {
+protected Object convertKey(Object key) {
+public Object clone() {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+
+Generated JUnit Test:
+package org.apache.commons.collections.map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Locale;
+
+import org.junit.Test;
+
+public class CaseInsensitiveMapLocaleIndependenceTest {
+
+    @Test
+    public void testCaseInsensitiveOperationsAreIndependentOfTurkishAndAzeriLocales() {
+        Locale original = Locale.getDefault();
+        Locale[] sensitiveLocales = {
+            new Locale("tr", "TR"),
+            new Locale("az", "AZ")
+        };
+
+        try {
+            for (int i = 0; i < sensitiveLocales.length; i++) {
+                Locale.setDefault(Locale.ENGLISH);
+                CaseInsensitiveMap map = new CaseInsensitiveMap();
+                map.put("FILE", "value");
+
+                Locale.setDefault(sensitiveLocales[i]);
+                assertEquals("value", map.get("FILE"));
+                assertEquals("value", map.remove("FILE"));
+                assertFalse(map.containsKey("file"));
+
+                CaseInsensitiveMap insertedUnderSensitiveLocale = new CaseInsensitiveMap();
+                insertedUnderSensitiveLocale.put("i", "lowercase-i");
+                assertEquals("lowercase-i", insertedUnderSensitiveLocale.get("I"));
+
+                Locale.setDefault(Locale.ENGLISH);
+                assertEquals("lowercase-i", insertedUnderSensitiveLocale.get("I"));
+            }
+        } finally {
+            Locale.setDefault(original);
+        }
+    }
+
+    @Test
+    public void testBasicCaseInsensitivePutGetAndReplacement() {
+        CaseInsensitiveMap map = new CaseInsensitiveMap();
+
+        assertNull(map.put("One", "first"));
+        assertEquals("first", map.get("ONE"));
+        assertTrue(map.containsKey("oNe"));
+
+        assertEquals("first", map.put("one", "second"));
+        assertEquals(1, map.size());
+        assertEquals("second", map.get("ONE"));
+    }
+
+    @Test
+    public void testNullKeyIsSupported() {
+        CaseInsensitiveMap map = new CaseInsensitiveMap();
+
+        assertNull(map.put(null, "null-value"));
+        assertTrue(map.containsKey(null));
+        assertEquals("null-value", map.get(null));
+        assertTrue(map.keySet().contains(null));
+    }
+
+    @Test
+    public void testKeySetExposesLowercaseStringKeys() {
+        CaseInsensitiveMap map = new CaseInsensitiveMap();
+
+        map.put("MiXeD", "value");
+
+        assertTrue(map.keySet().contains("mixed"));
+        assertFalse(map.keySet().contains("MiXeD"));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testZeroInitialCapacityIsRejected() {
+        new CaseInsensitiveMap(0);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.collections.map.CaseInsensitiveMapLocaleIndependenceTest::testKeySetExposesLowercaseStringKeys
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.collections.map.CaseInsensitiveMapLocaleIndependenceTest::testKeySetExposesLowercaseStringKeys

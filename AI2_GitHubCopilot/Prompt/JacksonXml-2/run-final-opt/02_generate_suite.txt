@@ -1,0 +1,411 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonXml  Bug: 2  Version: JacksonXml-2b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream
+Modified: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream
+Triggers: com.fasterxml.jackson.dataformat.xml.misc.XmlTextTest::testMixedContent
+
+Bug/specification summary:
+Bug report: 196
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.misc.XmlTextTest::testMixedContent
+ --> junit.framework.AssertionFailedError: expected:<27> but was:<0>
+Modified: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream
+
+Prompt-01 test plan:
+<tool_calls>
+<invoke name="bash">
+<parameter name="command">find /tmp/sqa-copilot-clean/Cpilot -maxdepth 3 -type f | head -50 && echo
+'---' && find /tmp/sqa-copilot-clean/Cpilot -path '*XmlTokenStream*' -o -path '*XmlTextTest*' |
+head</parameter>
+</invoke>
+</tool_calls>
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.dataformat.xml.deser;
+public class XmlTokenStream
+public final static int XML_START_ELEMENT = 1;
+public final static int XML_END_ELEMENT = 2;
+public final static int XML_ATTRIBUTE_NAME = 3;
+public final static int XML_ATTRIBUTE_VALUE = 4;
+public final static int XML_TEXT = 5;
+public final static int XML_END = 6;
+final protected XMLStreamReader2 _xmlReader;
+final protected Object _sourceReference;
+protected int _currentState;
+protected int _attributeCount;
+protected int _nextAttributeIndex = 0;
+protected String _localName;
+protected String _namespaceURI;
+protected String _textValue;
+protected int _repeatElement;
+protected ElementWrapper _currentWrapper;
+protected String _nextLocalName;
+protected String _nextNamespaceURI;
+public XmlTokenStream(XMLStreamReader xmlReader, Object sourceRef)
+public XMLStreamReader2 getXmlReader() {
+public int next() throws IOException
+public void skipEndElement() throws IOException
+public int getCurrentToken() { return _currentState; }
+public String getText() { return _textValue; }
+public String getLocalName() { return _localName; }
+public String getNamespaceURI() { return _namespaceURI; }
+public boolean hasAttributes() {
+public void closeCompletely() throws IOException
+public void close() throws IOException
+public JsonLocation getCurrentLocation() {
+public JsonLocation getTokenLocation() {
+protected void repeatStartElement()
+protected void skipAttributes()
+protected String convertToString() throws IOException
+private final int _next() throws XMLStreamException
+private final String _collectUntilTag() throws XMLStreamException
+private final int _skipUntilTag() throws XMLStreamException
+private final int _initStartElement() throws XMLStreamException
+final String ns = _xmlReader.getNamespaceURI();
+final String localName = _xmlReader.getLocalName();
+protected int _handleRepeatElement() throws IOException
+private final int _handleEndElement()
+private JsonLocation _extractLocation(XMLStreamLocation2 location)
+@Override
+public String toString()
+
+/* HEADER */
+package com.fasterxml.jackson.dataformat.xml.deser;
+import java.io.IOException;
+import javax.xml.stream.*;
+import org.codehaus.stax2.XMLStreamLocation2;
+import org.codehaus.stax2.XMLStreamReader2;
+import org.codehaus.stax2.ri.Stax2ReaderAdapter;
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.dataformat.xml.util.StaxUtil;
+public class XmlTokenStream
+
+/* METHOD convertToString */
+protected String convertToString() throws IOException
+ {
+ // only applicable to cases where START_OBJECT was induced by attributes
+ if (_currentState != XML_ATTRIBUTE_NAME || _nextAttributeIndex != 0) {
+ return null;
+ }
+ try {
+ String text = _collectUntilTag();
+ // 23-Dec-2015, tatu: Used to require text not to be null, but as per
+ // [dataformat-xml#167], empty tag does count
+ if (_xmlReader.getEventType() == XMLStreamReader.END_ELEMENT) {
+ if (text == null) {
+ text = "";
+ }
+ if (_currentWrapper != null) {
+ _currentWrapper = _currentWrapper.getParent();
+ }
+ // just for diagnostics, reset to element name (from first attribute name)
+ _localName = _xmlReader.getLocalName();
+ _namespaceURI = _xmlReader.getNamespaceURI();
+ _attributeCount = 0;
+ _currentState = XML_TEXT;
+ _textValue = text;
+ return text;
+ }
+ } catch (XMLStreamException e) {
+ StaxUtil.throwXmlAsIOException(e);
+ }
+ // Anything to do in failed case? Roll back whatever we found or.. ?
+ return null;
+ }
+
+/* METHOD skipAttributes */
+protected void skipAttributes()
+ {
+ if (_currentState == XML_ATTRIBUTE_NAME) {
+ _attributeCount = 0;
+ _currentState = XML_START_ELEMENT;
+ } else if (_currentState == XML_START_ELEMENT) {
+ /* 06-Jan-2012, tatu: As per [#47] it looks like we should NOT do anything
+ * in this particular case, because it occurs when original element had
+ * no attributes and we now point to the first child element.
+ */
+// _attributeCount = 0;
+ } else if (_currentState == XML_TEXT) {
+ ; // nothing to do... is it even legal?
+ } else {
+ throw new IllegalStateException("Current state not XML_START_ELEMENT or XML_ATTRIBUTE_NAME ("
+ +XML_START_ELEMENT+") but "+_currentState);
+ }
+ }
+
+/* METHOD next */
+public int next() throws IOException 
+ {
+ int n = next0();
+ switch (n) {
+ case XML_START_ELEMENT: 
+ System.out.println(" XML-token: XML_START_ELEMENT '"+_localName+"'");
+ break;
+ case XML_END_ELEMENT: 
+ System.out.println(" XML-token: XML_END_ELEMENT '"+_localName+"'");
+ break;
+ case XML_ATTRIBUTE_NAME: 
+ System.out.println(" XML-token: XML_ATTRIBUTE_NAME '"+_localName+"'");
+ break;
+ case XML_ATTRIBUTE_VALUE: 
+ System.out.println(" XML-token: XML_ATTRIBUTE_VALUE '"+_textValue+"'");
+ break;
+ case XML_TEXT: 
+ System.out.println(" XML-token: XML_TEXT '"+_textValue+"'");
+ break;
+ case XML_END: 
+ System.out.println(" XML-token: XML_END");
+ break;
+ default:
+ throw new IllegalStateException();
+ }
+ return n;
+ }
+
+/* METHOD hasAttributes */
+public boolean hasAttributes() {
+ return (_currentState == XML_START_ELEMENT) && (_attributeCount > 0);
+ }
+
+/* METHOD closeCompletely */
+public void closeCompletely() throws IOException
+ {
+ try {
+ _xmlReader.closeCompletely();
+ } catch (XMLStreamException e) {
+ StaxUtil.throwXmlAsIOException(e);
+ }
+ }
+
+/* METHOD repeatStartElement */
+protected void repeatStartElement()
+ {
+//System.out.println(" -> repeatStartElement for "+_localName); 
+ // sanity check: can only be used when just returned START_ELEMENT:
+ if (_currentState != XML_START_ELEMENT) {
+ throw new IllegalStateException("Current state not XML_START_ELEMENT ("
+ +XML_START_ELEMENT+") but "+_currentState);
+ }
+ // Important: add wrapper, to keep track...
+ if (_currentWrapper == null) {
+ _currentWrapper = ElementWrapper.matchingWrapper(_currentWrapper, _localName, _namespaceURI);
+ } else {
+ _currentWrapper = ElementWrapper.matchingWrapper(_currentWrapper.getParent(), _localName, _namespaceURI);
+ }
+ _repeatElement = REPLAY_START_DUP;
+ }
+
+/* METHOD _handleRepeatElement */
+protected int _handleRepeatElement() throws IOException 
+ {
+ int type = _repeatElement;
+ _repeatElement = 0;
+ if (type == REPLAY_START_DUP) {
+//System.out.println("handleRepeat for START_ELEMENT: "+_localName+" ("+_xmlReader.getLocalName()+")");
+ // important: add the virtual element second time, but not with name to match
+ _currentWrapper = _currentWrapper.intermediateWrapper();
+ return XML_START_ELEMENT;
+ }
+ if (type == REPLAY_END) {
+//System.out.println("handleRepeat for END_ELEMENT: "+_localName+" ("+_xmlReader.getLocalName()+")");
+ _localName = _xmlReader.getLocalName();
+ _namespaceURI = _xmlReader.getNamespaceURI();
+ if (_currentWrapper != null) {
+ _currentWrapper = _currentWrapper.getParent();
+ }
+ return XML_END_ELEMENT;
+ }
+ if (type == REPLAY_START_DELAYED) {
+ if (_currentWrapper != null) {
+ _currentWrapper = _currentWrapper.intermediateWrapper();
+ }
+ _localName = _nextLocalName;
+ _namespaceURI = _nextNamespaceURI;
+ _nextLocalName = null;
+ _nextNamespaceURI = null;
+ 
+//System.out.println("handleRepeat for START_DELAYED: "+_localName+" ("+_xmlReader.getLocalName()+")");
+
+ return XML_START_ELEMENT;
+ }
+ throw new IllegalStateException("Unrecognized type to repeat: "+type);
+ }
+
+/* METHOD toString */
+@Override
+ public String toString()
+ {
+ StringBuilder sb = new StringBuilder();
+ sb.append("(Token stream:");
+ sb.append(" state=").append(_currentState);
+ sb.append(" attr#=").append(_attributeCount);
+ sb.append(" nextAttr#=").append(_nextAttributeIndex);
+ sb.append(" name=").append(_localName);
+ sb.append(" text=").append(_textValue);
+ sb.append(" repeat?=").append(_repeatElement);
+ sb.append(" wrapper=[").append(_currentWrapper);
+ sb.append("] repeatElement=").append(_repeatElement);
+ sb.append(" nextName=").append(_nextLocalName);
+ sb.append(")");
+ return sb.toString();
+ }
+
+/* METHOD getXmlReader */
+public XMLStreamReader2 getXmlReader() {
+ return _xmlReader;
+ }
+
+/* METHOD next */
+public int next() throws IOException 
+ {
+ if (_repeatElement != 0) {
+ return (_currentState = _handleRepeatElement());
+ }
+ try {
+ return _next();
+ } catch (XMLStreamException e) {
+ StaxUtil.throwXmlAsIOException(e);
+ return -1;
+ }
+ }
+
+/* METHOD skipEndElement */
+public void skipEndElement() throws IOException
+ {
+ int type = next();
+ if (type != XML_END_ELEMENT) {
+ throw new IOException("Expected END_ELEMENT, got event of type "+type);
+ }
+ }
+
+/* METHOD close */
+public void close() throws IOException
+ {
+ try {
+ _xmlReader.close();
+ } catch (XMLStreamException e) {
+ StaxUtil.throwXmlAsIOException(e);
+ }
+ }
+
+/* METHOD getCurrentLocation */
+public JsonLocation getCurrentLocation() {
+ return _extractLocation(_xmlReader.getLocationInfo().getCurrentLocation());
+ }
+
+/* METHOD getTokenLocation */
+public JsonLocation getTokenLocation() {
+ return _extractLocation(_xmlReader.getLocationInfo().getStartLocation());
+ }
+
+/* METHOD getCurrentToken */
+public int getCurrentToken() { return _currentState; }
+
+/* METHOD getText */
+public String getText() { return _textValue; }
+
+/* METHOD getLocalName */
+public String getLocalName() { return _localName; }
+
+/* METHOD getNamespaceURI */
+public String getNamespaceURI() { return _namespaceURI; }
+
+/* METHOD _next */
+private final int _next() throws XMLStreamException
+ {
+ switch (_currentState) {
+ case XML_ATTRIBUTE_VALUE:
+ ++_nextAttributeIndex;
+ // fall through
+ case XML_START_ELEMENT: // attributes to return?
+ if (_nextAttributeIndex < _attributeCount) {
+ _localName = _xmlReader.getAttributeLocalName(_nextAttributeIndex);
+ _namespaceURI = _xmlReader.getAttributeNamespace(_nextAttributeIndex);
+ _textValue = _xmlReader.getAttributeValue(_nextAttributeIndex);
+ return (_currentState = XML_ATTRIBUTE_NAME);
+ }
+ // otherwise need to find START/END_ELEMENT or text
+ String text = _collectUntilTag();
+ // If we have no/all-whitespace text followed by START_ELEMENT, ignore text
+ if (_xmlReader.getEventType() == XMLStreamReader.START_ELEMENT) {
+ return _initStartElement();
+ }
+ // For END_ELEMENT we will return text, if any
+ if (text != null) {
+ _textValue = text;
+ return (_currentState = XML_TEXT);
+ }
+ return _handleEndElement();
+
+ case XML_ATTRIBUTE_NAME:
+ // if we just returned name, will need to just send value next
+ return (_currentState = XML_ATTRIBUTE_VALUE);
+ case XML_TEXT:
+ // mixed text with other elements
+ // text followed by END_ELEMENT
+ return _handleEndElement();
+ case XML_END:
+ return XML_END;
+// throw new IllegalStateException("No more XML tokens available (end of input)");
+ }
+
+ // Ok: must be END_ELEMENT; see what tag we get (or end)
+ switch (_skipUntilTag()) {
+ case XMLStreamConstants.END_DOCUMENT:
+ return (_currentState = XML_END);
+ case XMLStreamConstants.END_ELEMENT:
+ return _handleEndElement();
+ }
+ // START_ELEMENT...
+ return _initStartElement();
+ }
+
+/* METHOD _collectUntilTag */
+private final String _collectUntilTag() throws XMLStreamException
+ {
+ String text = null;
+ while (true) {
+ switch (_xmlReader.next()) {
+ case XMLStreamConstants.START_ELEMENT:
+ case XMLStreamConstants.END_ELEMENT:
+ case XMLStreamConstants.END_DOCUMENT:
+ return text;
+ // note: SPACE is ignorable (and seldom seen), not to be included
+ case XMLStreamConstants.CHARACTERS:
+ case XMLStreamConstants.CDATA:
+ if (text == null) {
+ text = _xmlReader.getText();
+ } else { // can be optimized in future, if need be:
+ text += _xmlReader.getText();
+ }
+ break;
+ default:
+ // any other type (proc instr, comment etc) is just ignored
+ }
+ }
+ }
+
+/* METHOD _skipUntilTag */
+private final int _skipUntilTag() throws XMLStreamException
+ {
+ while (_xmlReader.hasNext()) {
+ int type;
+ switch (type = _xmlReader.next()) {
+ case XMLStreamConstants.START_ELEMENT:
+ case XMLStreamConstants.END_ELEMENT:
+ case XMLStreamConstants.END_DOCUMENT:
+ return type;
+ default:
+ // any other type (proc instr, comment etc) is just ignored
+ }
+ }
+ throw new IllegalStateException("Expected to find a tag, instead reached end of input");
+ }

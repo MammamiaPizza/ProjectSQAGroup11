@@ -1,0 +1,204 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 68  Version: Jsoup-68b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 966
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::testHandlesDeepSpans
+ --> java.lang.StackOverflowError
+Modified: org.jsoup.parser.HtmlTreeBuilder
+
+Available API/signatures:
+[org.jsoup.parser.HtmlTreeBuilder | java]
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+public static final int MaxScopeSearchDepth = 100; // prevents the parser bogging down in exceptionally broken pages
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(ArrayList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(ArrayList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+final String elName = stack.get(pos).nodeName();
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class HtmlTreeBuilderStackOverflowTest {
+
+ private String generateNestedSpans(int depth) {
+     StringBuilder sb = new StringBuilder(depth * 11 + 4);
+     for (int i = 0; i < depth; i++) {
+         sb.append("<span>");
+     }
+     sb.append("text");
+     for (int i = 0; i < depth; i++) {
+         sb.append("</span>");
+     }
+     return sb.toString();
+ }
+
+ // Returns the innermost span element after navigating from root span
+ private Element innermostSpan(Element outerSpan, int depth) {
+     Element cur = outerSpan;
+     for (int i = 0; i < depth - 1; i++) {
+         assertNotNull(cur);
+         assertEquals(1, cur.childrenSize());
+         cur = cur.child(0);
+     }
+     return cur;
+ }
+
+ @Test
+ public void testShallowSpans() {
+     String html = generateNestedSpans(3);
+     Document doc = Jsoup.parse(html);
+     Element outer = doc.body().child(0);
+
+     Element innermost = innermostSpan(outer, 3);
+     assertEquals("span", innermost.tagName());
+     assertEquals("text", innermost.ownText());
+ }
+
+ @Test
+ public void testSingleSpan() {
+     Document doc = Jsoup.parse("<span>text</span>");
+     Element span = doc.body().child(0);
+     assertEquals("span", span.tagName());
+     assertEquals("text", span.ownText());
+ }
+
+ @Test
+ public void testSpansAtMaxScopeDepth_100() {
+     String html = generateNestedSpans(100);
+     Document doc = Jsoup.parse(html);
+     Element outer = doc.body().child(0);
+     assertNotNull(outer);
+     // Verify nesting depth without crashing
+     Element cur = outer;
+     for (int i = 0; i < 100; i++) {
+         assertEquals("span", cur.tagName());
+         if (i < 99) {
+             assertEquals(1, cur.childrenSize());
+             cur = cur.child(0);
+         }
+     }
+     assertEquals("text", cur.ownText());
+ }
+
+ @Test
+ public void testSpansAtMaxScopeDepth_101() {
+     String html = generateNestedSpans(101);
+     Document doc = Jsoup.parse(html);
+     Element outer = doc.body().child(0);
+     assertNotNull(outer);
+     // Should parse without StackOverflowError; structure may be truncated but not required
+     // At minimum, no exception.
+ }
+
+ @Test
+ public void testSpansBeyondMaxScopeDepth_500() {
+     String html = generateNestedSpans(500);
+     // Parsing must complete without StackOverflowError.
+     Document doc = Jsoup.parse(html);
+     assertNotNull(doc.body());
+ }
+
+ @Test
+ public void testEmptySpan() {
+     Document doc = Jsoup.parse("<span></span>");
+     Element span = doc.body().child(0);
+     assertEquals("span", span.tagName());
+     assertEquals(0, span.childrenSize());
+     assertEquals("", span.ownText());
+ }
+
+ @Test
+ public void testSelfClosingSpan() {
+     // Span is known, not void – self-closing should not crash
+     Document doc = Jsoup.parse("<span/>");
+     assertNotNull(doc.body());
+     assertFalse(doc.body().children().isEmpty());
+ }
+
+ @Test
+ public void testMixedInlineElementsDeep() {
+     StringBuilder sb = new StringBuilder();
+     for (int i = 0; i < 80; i++) {
+         sb.append("<span>");
+         if (i % 2 == 0) sb.append("<b>");
+     }
+     sb.append("hello");
+     for (int i = 0; i < 80; i++) {
+         if (i % 2 == 0) sb.append("</b>");
+         sb.append("</span>");
+     }
+     Document doc = Jsoup.parse(sb.toString());
+     assertNotNull(doc.body().child(0)); // no exception
+ }
+
+ @Test
+ public void testUnclosedSpansReconstruction() {
+     // Render tree builder must reconstruct active formatting elements without recursion blow‑up
+     StringBuilder sb = new StringBuilder();
+     for (int i = 0; i < 100; i++) {
+         sb.append("<span>");
+     }
+     // No closing tags – parser tries to reconstruct
+     Document doc = Jsoup.parse(sb.toString());
+     assertNotNull(doc.body()); // no StackOverflowError
+ }
+
+ @Test
+ public void testSpanInListDeep() {
+     StringBuilder sb = new StringBuilder("<ul><li>");
+     for (int i = 0; i < 120; i++) {
+         sb.append("<span>");
+     }
+     sb.append("deep");
+     for (int i = 0; i < 120; i++) {
+         sb.append("</span>");
+     }
+     sb.append("</li></ul>");
+     Document doc = Jsoup.parse(sb.toString());
+     // Should not crash; list context may trigger additional scope checks
+     assertNotNull(doc.select("span").first());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-68f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-68f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-68f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-68f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-68f-copilot/.test_suite/org/jsoup/parser/HtmlTreeBuilderStackOverflowTest.java:28: error: cannot find symbol
+ [javac] assertEquals(1, cur.childrenSize());
+ [javac] ^
+ [javac] symbol: method childrenSize()
+ [javac] location: variable cur of type Element
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

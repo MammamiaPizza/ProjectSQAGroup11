@@ -1,0 +1,1 @@
+TARGETS: ChecksumCalculatingInputStream constructor null-check for both checksum and in params

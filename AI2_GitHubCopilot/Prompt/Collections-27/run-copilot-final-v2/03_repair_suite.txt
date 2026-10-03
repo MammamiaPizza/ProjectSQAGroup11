@@ -1,0 +1,217 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 27  Version: Collections-27b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-580
+Trigger failures:
+- org.apache.commons.collections4.map.MultiValueMapTest::testUnsafeDeSerialization
+ --> junit.framework.AssertionFailedError: unsafe clazz accepted when de-serializing MultiValueMap
+Modified: org.apache.commons.collections4.map.MultiValueMap
+
+Available API/signatures:
+[org.apache.commons.collections4.map.MultiValueMap | java]
+package org.apache.commons.collections4.map;
+@Deprecated
+public class MultiValueMap<K, V> extends AbstractMapDecorator<K, Object> implements MultiMap<K, V>, Serializable {
+@SuppressWarnings({ "unchecked", "rawtypes" })
+public static <K, V> MultiValueMap<K, V> multiValueMap(final Map<K, ? super Collection<V>> map) {
+return MultiValueMap.<K, V, ArrayList> multiValueMap((Map<K, ? super Collection>) map, ArrayList.class);
+public MultiValueMap() {
+this(new HashMap<K, V>(), new ReflectionFactory(ArrayList.class));
+@SuppressWarnings("unchecked")
+private void writeObject(final ObjectOutputStream out) throws IOException {
+@SuppressWarnings("unchecked") // (1) should only fail if input stream is incorrect
+private void readObject(final ObjectInputStream in) throws IOException, ClassNotFoundException {
+@Override
+public void clear() {
+public boolean removeMapping(final Object key, final Object value) {
+final Collection<V> valuesForKey = getCollection(key);
+final boolean removed = valuesForKey.remove(value);
+public boolean containsValue(final Object value) {
+final Set<Map.Entry<K, Object>> pairs = decorated().entrySet();
+for (final Map.Entry<K, Object> entry : pairs) {
+public Object put(final K key, final Object value) {
+public void putAll(final Map<? extends K, ?> map) {
+for (final Map.Entry<? extends K, Object> entry : ((MultiMap<? extends K, V>) map).entrySet()) {
+for (final Map.Entry<? extends K, ?> entry : map.entrySet()) {
+public Set<Entry<K, Object>> entrySet() {
+public Collection<Object> values() {
+public boolean containsValue(final Object key, final Object value) {
+final Collection<V>
+...[truncated deterministically]...
+input) {
+public K getKey() {
+public V getValue() {
+public V setValue(V value) {
+public int totalSize() {
+for (final Object v : decorated().values()) {
+protected Collection<V> createCollection(final int size) {
+private class Values extends AbstractCollection<V> {
+public Iterator<V> iterator() {
+final IteratorChain<V> chain = new IteratorChain<V>();
+for (final K k : keySet()) {
+public int size() {
+private class ValuesIterator implements Iterator<V> {
+public ValuesIterator(final Object key) {
+public void remove() {
+public boolean hasNext() {
+public V next() {
+private static class ReflectionFactory<T extends Collection<?>> implements Factory<T>, Serializable {
+public ReflectionFactory(final Class<T> clazz) {
+public T create() {
+} catch (final Exception ex) {
+throw new FunctorException("Cannot instantiate class: " + clazz, ex);
+
+Generated JUnit Test:
+package org.apache.commons.collections4.map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+
+import org.apache.commons.collections4.Factory;
+import org.junit.Test;
+
+public class MultiValueMapUnsafeDeserializationTest {
+
+ /**
+  * A collection class that is not part of the safe/allow-listed deserialization
+  * types. It must expose a public no-arg constructor so ReflectionFactory could
+  * instantiate it when the vulnerable code path is exercised.
+  */
+ public static class UnsafeCollection extends AbstractCollection<Object> {
+     public UnsafeCollection() {
+     }
+
+     @Override
+     public Iterator<Object> iterator() {
+         return Collections.emptyIterator();
+     }
+
+     @Override
+     public int size() {
+         return 0;
+     }
+ }
+
+ private byte[] serialize(final Object obj) throws IOException {
+     final ByteArrayOutputStream bos = new ByteArrayOutputStream();
+     final ObjectOutputStream oos = new ObjectOutputStream(bos);
+     try {
+         oos.writeObject(obj);
+     } finally {
+         oos.close();
+     }
+     return bos.toByteArray();
+ }
+
+ private Object deserialize(final byte[] bytes) throws IOException, ClassNotFoundException {
+     final ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
+     try {
+         return ois.readObject();
+     } finally {
+         ois.close();
+     }
+ }
+
+ private void assertDeserializationRejected(final byte[] bytes) throws IOException {
+     try {
+         deserialize(bytes);
+     } catch (final Exception expected) {
+         // rejection is the expected outcome; any serialization/validation exception
+         // such as IOException, ClassCastException or IllegalArgumentException
+         // is acceptable because the exact exception type is not part of the contract.
+         return;
+     }
+     fail("Expected deserialization of an unsafe collection class to be rejected");
+ }
+
+ @Test
+ public void testDefaultConstructorRoundTripPreservesValues() throws Exception {
+     final MultiValueMap<String, Object> map = new MultiValueMap<String, Object>();
+     map.put("first", "one");
+     map.put("first", "two");
+     map.put("second", 3);
+
+     final MultiValueMap<?, ?> restored = (MultiValueMap<?, ?>) deserialize(serialize(map));
+
+     assertNotNull(restored);
+     assertEquals(2, restored.getCollection("first").size());
+     assertEquals(1, restored.getCollection("second").size());
+ }
+
+ @Test
+ @SuppressWarnings("unchecked")
+ public void testSafeListCollectionFactoryRoundTrip() throws Exception {
+     final MultiValueMap map = MultiValueMap.multiValueMap(new HashMap(), ArrayList.class);
+     map.put("key", "value1");
+     map.put("key", "value2");
+
+     final MultiValueMap restored = (MultiValueMap) deserialize(serialize(map));
+
+     assertEquals(2, restored.getCollection("key").size());
+ }
+
+ @Test
+ @SuppressWarnings("unchecked")
+ public void testUnsafeCollectionFactoryIsRejectedOnDeserialization() throws Exception {
+     final MultiValueMap map = MultiValueMap.multiValueMap(new HashMap(), UnsafeCollection.class);
+
+     // The unsafe factory is rejected before (or during) de-serialization even
+     // when the map has no entries, so lazy instantiation cannot mask the bug.
+     assertDeserializationRejected(serialize(map));
+ }
+
+ @Test
+ @SuppressWarnings("unchecked")
+ public void testNullCollectionFactoryIsRejected() {
+     try {
+         MultiValueMap.multiValueMap(new HashMap(), (Factory) null);
+     } catch (final IllegalArgumentException expected) {
+         return;
+     }
+     fail("Expected IllegalArgumentException when constructing MultiValueMap with a null factory");
+ }
+
+ @Test
+ public void testGetCollectionForMissingKeyReturnsNull() {
+     final MultiValueMap<String, Object> map = new MultiValueMap<String, Object>();
+     assertEquals(null, map.getCollection("missingKey"));
+ }
+
+ @Test
+ public void testTotalSizeRemainsCorrectAfterRoundTrip() throws Exception {
+     final MultiValueMap<String, Object> map = new MultiValueMap<String, Object>();
+     map.put("a", 1);
+     map.put("a", 2);
+     map.put("b", 3);
+
+     final MultiValueMap<?, ?> restored = (MultiValueMap<?, ?>) deserialize(serialize(map));
+
+     assertEquals(3, restored.totalSize());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.collections4.map.MultiValueMapUnsafeDeserializationTest::testUnsafeCollectionFactoryIsRejectedOnDeserialization
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.collections4.map.MultiValueMapUnsafeDeserializationTest::testUnsafeCollectionFactoryIsRejectedOnDeserialization

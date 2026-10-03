@@ -1,0 +1,144 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 128  Version: Closure-128b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 942
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testIssue942
+ --> junit.framework.ComparisonFailure: expected:<var x={[0]:1}> but was:<var x={["0"]:1}>
+Modified: com.google.javascript.jscomp.CodeGenerator
+
+Available API/signatures:
+[com.google.javascript.jscomp.CodeGenerator | java]
+package com.google.javascript.jscomp;
+class CodeGenerator {
+private final Map<String, String> ESCAPED_JS_STRINGS = Maps.newHashMap();
+private CodeGenerator(CodeConsumer consumer) {
+static CodeGenerator forCostEstimation(CodeConsumer consumer) {
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+private void addJsString(Node n) {
+private String jsString(String s, boolean useSlashV) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Tests for {@link CodeGenerator} focusing on Bug 942:
+  * numeric string keys in object literals must be printed as
+  * number literals (e.g. [0] not ["0"]).
+  */
+ public class CodeGeneratorTest extends TestCase {
+
+     // ---- isSimpleNumber (core of Bug 942) ----
+
+     public void testIsSimpleNumber_zero() {
+         // Bug 942: "0" should be recognized as a simple number
+         assertTrue("'0' must be a simple number",
+                    CodeGenerator.isSimpleNumber("0"));
+     }
+
+     public void testIsSimpleNumber_positiveDigits() {
+         assertTrue(CodeGenerator.isSimpleNumber("1"));
+         assertTrue(CodeGenerator.isSimpleNumber("9"));
+         assertTrue(CodeGenerator.isSimpleNumber("10"));
+         assertTrue(CodeGenerator.isSimpleNumber("42"));
+         assertTrue(CodeGenerator.isSimpleNumber("999999"));
+     }
+
+     public void testIsSimpleNumber_leadingZeros() {
+         assertFalse("'00' must not be simple (octal ambiguity)",
+                     CodeGenerator.isSimpleNumber("00"));
+         assertFalse(CodeGenerator.isSimpleNumber("01"));
+         assertFalse(CodeGenerator.isSimpleNumber("0010"));
+     }
+
+     public void testIsSimpleNumber_empty() {
+         assertFalse("empty string must not be simple",
+                     CodeGenerator.isSimpleNumber(""));
+     }
+
+     public void testIsSimpleNumber_nonNumeric() {
+         assertFalse(CodeGenerator.isSimpleNumber("abc"));
+         assertFalse(CodeGenerator.isSimpleNumber("0x0"));
+         assertFalse(CodeGenerator.isSimpleNumber("1e2"));
+         assertFalse(CodeGenerator.isSimpleNumber("1.5"));
+         assertFalse(CodeGenerator.isSimpleNumber("-1"));
+         assertFalse(CodeGenerator.isSimpleNumber(" 0"));
+     }
+
+     // ---- getSimpleNumber ----
+
+     public void testGetSimpleNumber_zero() {
+         assertEquals(0.0, CodeGenerator.getSimpleNumber("0"), 0.0);
+     }
+
+     public void testGetSimpleNumber_positiveValues() {
+         assertEquals(1.0, CodeGenerator.getSimpleNumber("1"), 0.0);
+         assertEquals(42.0, CodeGenerator.getSimpleNumber("42"), 0.0);
+     }
+
+     public void testGetSimpleNumber_invalidReturnsNaN() {
+         assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("abc")));
+         assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("00")));
+         assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("")));
+         assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("1.5")));
+     }
+
+     // ---- Object-literal key integration ----
+
+     public void testObjectLiteralKeyZero_noQuotes() {
+         // Bug 942 core case
+         testOutput("var x={0:1}", "var x={0:1}");
+     }
+
+     public void testObjectLiteralKeyMultiDigit_noQuotes() {
+         testOutput("var x={42:1,100:2}", "var x={42:1,100:2}");
+     }
+
+     public void testObjectLiteralKeyString_keepsQuotes() {
+         testOutput("var x={\"abc\":1}", "var x={\"abc\":1}");
+     }
+
+     public void testObjectLiteralKeyLeadingZero_keepsQuotes() {
+         testOutput("var x={\"01\":1}", "var x={\"01\":1}");
+     }
+
+     // ---- helper ----
+
+     private void testOutput(String input, String expected) {
+         Compiler compiler = new Compiler();
+         compiler.disableThreads();
+         CompilerOptions options = new CompilerOptions();
+         JSSourceFile[] inputs = {JSSourceFile.fromCode("in.js", input)};
+         JSSourceFile[] externs = {JSSourceFile.fromCode("ex.js", "")};
+         Result r = compiler.compile(externs, inputs, options);
+         assertTrue("Compilation failed: " + r.errors, r.success);
+         assertEquals(expected, compiler.toSource().trim());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyLeadingZero_keepsQuotes
+ - com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyString_keepsQuotes
+ - com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyZero_noQuotes
+Failing generated tests: com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyLeadingZero_keepsQuotes, com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyMultiDigit_noQuotes, com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyString_keepsQuotes, com.google.javascript.jscomp.CodeGeneratorTest::testObjectLiteralKeyZero_noQuotes

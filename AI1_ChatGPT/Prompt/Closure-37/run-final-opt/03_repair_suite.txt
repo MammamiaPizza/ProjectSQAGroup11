@@ -1,0 +1,148 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 37  Version: Closure-37b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 663
+Trigger failures:
+- com.google.javascript.jscomp.IntegrationTest::testIncompleteFunction
+ --> java.lang.RuntimeException: java.lang.RuntimeException: INTERNAL COMPILER ERROR.
+Modified: com.google.javascript.jscomp.NodeTraversal, com.google.javascript.jscomp.parsing.IRFactory
+
+Available API/signatures:
+[com.google.javascript.jscomp.NodeTraversal | java]
+package com.google.javascript.jscomp;
+public class NodeTraversal {
+private final Deque<Scope> scopes = new ArrayDeque<Scope>();
+private final Deque<Node> scopeRoots = new ArrayDeque<Node>();
+public interface Callback {
+public interface ScopedCallback extends Callback {
+public abstract static class AbstractPostOrderCallback implements Callback {
+@Override
+public abstract static class AbstractScopedCallback
+public void enterScope(NodeTraversal t) {}
+public void exitScope(NodeTraversal t) {}
+public abstract static class AbstractShallowCallback implements Callback {
+public abstract static class AbstractShallowStatementCallback
+public abstract static class AbstractNodeTypePruningCallback
+public AbstractNodeTypePruningCallback(Set<Integer> nodeTypes) {
+public NodeTraversal(AbstractCompiler compiler, Callback cb) {
+private void
+...[truncated deterministically]...
+essWarnings("unchecked")
+public Node getEnclosingFunction() {
+private void pushScope(Node node) {
+private void pushScope(Scope s) {
+private void popScope() {
+public Scope getScope() {
+public ControlFlowGraph<Node> getControlFlowGraph() {
+public Node getScopeRoot() {
+public boolean hasScope() {
+private static String getSourceName(Node n) {
+public JSError makeError(Node n, DiagnosticType type, String... arguments) {
+
+[com.google.javascript.jscomp.parsing.IRFactory | java]
+package com.google.javascript.jscomp.parsing;
+class IRFactory {
+private final Set<String> ALLOWED_DIRECTIVES = Sets.newHashSet("use strict");
+"class", "const", "enum", "export", "extends", "import", "super");
+"class", "const", "enum", "export", "extends", "import", "sup
+...[truncated deterministically]...
+ateTemplateNode() {
+private void setFileOverviewJsDoc(Node irNode) {
+private Node transformBlock(AstNode node) {
+private void handleBlockComment(Comment comment) {
+private void handlePossibleFileOverviewJsDoc(Comment comment, Node irNode) {
+private JSDocInfo handleJsDoc(AstNode node, Node irNode) {
+private Node transform(AstNode node) {
+private Node transformNameAsString(Name n
+...[truncated deterministically]...
+et(Node target) {
+private static int transformTokenType(int token) {
+private Node newNode(int type) {
+private Node newNode(int type, Node child1) {
+private Node newNode(int type, Node child1, Node child2) {
+private Node newNode(int type, Node child1, Node child2, Node child3) {
+private Node newStringNode(String value) {
+private Node newStringNode(int type, String value) {
+private Node newNumberNode(Double value) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.SourceFile;
+import java.util.Collections;
+import junit.framework.TestCase;
+
+public class NodeTraversalIncompleteFunctionTest extends TestCase {
+
+  private Compiler compile(String source) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(
+        Collections.<SourceFile>emptyList(),
+        Collections.singletonList(SourceFile.fromCode("test.js", source)),
+        options);
+    return compiler;
+  }
+
+  public void testCompleteFunctionCompilesWithoutErrors() {
+    Compiler compiler = compile(
+        "function complete(value) { return value + 1; }\n"
+        + "complete(0);");
+
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  public void testFunctionDeclarationMissingParameterListDoesNotCrash() {
+    Compiler compiler = compile("function incomplete(");
+
+    assertTrue("Incomplete syntax should be reported as a parse error",
+        compiler.getErrorCount() > 0);
+  }
+
+  public void testFunctionDeclarationMissingBodyDoesNotCrash() {
+    Compiler compiler = compile("function incomplete()");
+
+    assertTrue("A function without a body should be reported as invalid",
+        compiler.getErrorCount() > 0);
+  }
+
+  public void testAnonymousFunctionExpressionMissingBodyDoesNotCrash() {
+    Compiler compiler = compile("var value = function()");
+
+    assertTrue("An incomplete function expression should be reported as invalid",
+        compiler.getErrorCount() > 0);
+  }
+
+  public void testFunctionDeclarationMissingNameDoesNotCrash() {
+    Compiler compiler = compile("function () {}");
+
+    assertTrue("A nameless function declaration should be reported as invalid",
+        compiler.getErrorCount() > 0);
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-37f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-37f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-37f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-37f-ai/.test_suite/com/google/javascript/jscomp/NodeTraversalIncompleteFunctionTest.java:3: error: cannot find symbol
+ [javac] import com.google.javascript.rhino.SourceFile;
+ [javac] ^
+ [javac] symbol: class SourceFile
+ [javac] location: package com.google.javascript.rhino
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 47 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

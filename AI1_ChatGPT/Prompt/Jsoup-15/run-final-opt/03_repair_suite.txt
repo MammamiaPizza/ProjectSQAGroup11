@@ -1,0 +1,86 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 15  Version: Jsoup-15b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 104
+Trigger failures:
+- org.jsoup.parser.ParserTest::handlesDataOnlyTags
+ --> junit.framework.AssertionFailedError: expected:<Hello []There> but was:<Hello ['); i++; ]There>
+Modified: org.jsoup.parser.TreeBuilderState
+
+Available API/signatures:
+[org.jsoup.parser.TreeBuilderState | java]
+package org.jsoup.parser;
+enum TreeBuilderState {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+private boolean exitTableBody(Token t, TreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(TreeBuilder tb) {
+private static String nullString = String.valueOf(0x0000);
+abstract boolean process(Token t, TreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static void handleRcData(Token.StartTag startTag, TreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, TreeBuilder tb) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class TreeBuilderStateDataOnlyTagsTest {
+
+    @Test
+    public void scriptContentContainingMarkupLikeJavaScriptDoesNotBecomeDocumentText() {
+        Document document = Jsoup.parse("<p>Hello <script>document.write('<p>'); i++;</script> There</p>");
+
+        assertEquals("Hello There", document.text());
+        assertEquals(1, document.select("p").size());
+    }
+
+    @Test
+    public void scriptContentWithNonMatchingEndTagDoesNotExitScriptData() {
+        Document document = Jsoup.parse(
+                "<p>Before <script>var s = '</not-script>'; var markup = '<em>'; </script> After</p>");
+
+        assertEquals("Before After", document.text());
+    }
+
+    @Test
+    public void unclosedScriptContentDoesNotLeakIntoVisibleTextAtEof() {
+        Document document = Jsoup.parse("<p>Hello <script>var value = '<p>'; value++;</script>");
+
+        assertEquals("Hello", document.text());
+    }
+
+    @Test
+    public void styleRawtextDoesNotBecomeVisibleDocumentText() {
+        Document document = Jsoup.parse(
+                "<p>Before <style>.notice { content: '<b>'; }</style> After</p>");
+
+        assertEquals("Before After", document.text());
+    }
+
+    @Test
+    public void titleRcdataPreservesMarkupLikeCharactersAndReturnsToNormalParsing() {
+        Document document = Jsoup.parse(
+                "<html><head><title>A <b>title</b> &amp; more</title></head><body>After</body></html>");
+
+        assertEquals("A <b>title</b> & more", document.title());
+        assertEquals("After", document.body().text());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.parser.TreeBuilderStateDataOnlyTagsTest::titleRcdataPreservesMarkupLikeCharactersAndReturnsToNormalParsing
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.parser.TreeBuilderStateDataOnlyTagsTest::titleRcdataPreservesMarkupLikeCharactersAndReturnsToNormalParsing

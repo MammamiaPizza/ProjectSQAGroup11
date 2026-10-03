@@ -1,0 +1,373 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 30  Version: JacksonDatabind-30b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ObjectMapper, com.fasterxml.jackson.databind.util.TokenBuffer
+Modified: com.fasterxml.jackson.databind.ObjectMapper, com.fasterxml.jackson.databind.util.TokenBuffer
+Triggers: com.fasterxml.jackson.databind.jsontype.TestExternalId::testBigDecimal965
+
+Bug/specification summary:
+Bug report: 965
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestExternalId::testBigDecimal965
+ --> junit.framework.AssertionFailedError: Expected BigDecimal = -10000000000.0000000001; got back BigDecimal = -1.0E+10
+Modified: com.fasterxml.jackson.databind.ObjectMapper, com.fasterxml.jackson.databind.util.TokenBuffer
+
+Prompt-01 test plan:
+TARGETS: ObjectMapper.writeValue/readValue round-trip with TokenBuffer, external type id for
+BigDecimal
+TARGETS: TokenBuffer.writeNumber(BigDecimal) must preserve unscaledValue and scale
+TARGETS: TokenBuffer.serialize(JsonGenerator) must write BigDecimal faithfully
+ORACLES: Assert round-tripped BigDecimal.equals(original) (same value and scale)
+CASES: Normal: BigDecimal like -10000000000.0000000001 (high precision)
+CASES: Boundary: BigDecimal with extreme scale (0, large positive/negative)
+CASES: Boundary: BigDecimal values that could be confused with scientific notation (e.g., 1E+2)
+RISKS: Cannot see TokenBuffer internal token storage; may use toString() instead of toPlainString()
+RISKS: External id configuration and full TokenBuffer number-handling logic not provided
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ObjectMapper (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+final ObjectMapper mapper = new ObjectMapper(); // can use static singleton, inject: just make sure to reuse!
+MyValue older = mapper.readValue(new File("my-older-stuff.json"), MyValue.class);
+public class ObjectMapper
+public enum DefaultTyping {
+public static class DefaultTypeResolverBuilder
+protected final DefaultTyping _appliesFor;
+public DefaultTypeResolverBuilder(DefaultTyping t) {
+@Override
+public boolean useForType(JavaType t)
+&& !TreeNode.class.isAssignableFrom(t.getRawClass()));
+return !t.isFinal() && !TreeNode.class.isAssignableFrom(t.getRawClass());
+private final static JavaType JSON_NODE_TYPE = SimpleType.constructUnsafe(JsonNode.class);
+protected final static AnnotationIntrospector DEFAULT_ANNOTATION_INTROSPECTOR = new JacksonAnnotationIntrospector();
+protected final static VisibilityChecker<?> STD_VISIBILITY_CHECKER = VisibilityChecker.Std.defaultInstance();
+@Deprecated
+protected final static PrettyPrinter _defaultPrettyPrinter = new DefaultPrettyPrinter();
+protected final JsonFactory _jsonFactory;
+protected TypeFactory _typeFactory;
+protected InjectableValues _injectableValues;
+protected SubtypeResolver _subtypeResolver;
+protected SimpleMixInResolver _mixIns;
+protected SerializationConfig _serializationConfig;
+protected DefaultSerializerProvider _serializerPr
+...[truncated deterministically]...
+efaultPrettyPrinter() {
+protected final void _configAndWriteValue(JsonGenerator g, Object value)
+protected final void _configAndWriteValue(JsonGenerator g, Object value, Class<?> viewClass)
+private final void _configAndWriteCloseable(JsonGenerator g, Object value, SerializationConfig cfg)
+private final void _writeCloseableValue(JsonGenerator g, Object value, SerializationConfig cfg)
+protected Object _readValue(DeserializationConfig cfg, JsonParser jp, JavaType valueType)
+protected Object _readMapAndClose(JsonParser jp, JavaType valueType)
+protected JsonToken _initForReading(JsonParser p) throws IOException
+protected void _verifySchemaType(FormatSchema schema)
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.io.*;
+import java.lang.reflect.Type;
+import java.net.URL;
+import java.text.DateFormat;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.io.CharacterEscapes;
+import com.fasterxml.jackson.core.io.SegmentedStringWriter;
+import com.fasterxml.jackson.core.type.ResolvedType;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.core.util.*;
+import com.fasterxml.jackson.databind.cfg.BaseSettings;
+import com.fasterxml.jackson.databind.cfg.ContextAttributes;
+import com.fasterxml.jackson.databind.cfg.HandlerInstantiator;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
+import com.fasterxml.jackson.databind.deser.*;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+import com.fasterxml.jackson.databind.jsontype.*;
+import com.fasterxml.jackson.databind.jsontype.impl.StdSubtypeResolver;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import com.fasterxml.jackson.databind.node.*;
+import com.fasterxml.jackson.databind.ser.*;
+import com.fasterxml.jackson.databind.type.*;
+import com.fasterxml.jackson.databind.util.RootNameLookup;
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+public class ObjectMapper
+
+/* METHOD ObjectMapper */
+public ObjectMapper(JsonFactory jf,
+ DefaultSerializerProvider sp, DefaultDeserializationContext dc)
+ {
+ /* 02-Mar-2009, tatu: Important: we MUST default to using
+ * the mapping factory, otherwise tree serialization will
+ * have problems with POJONodes.
+ * 03-Jan-2010, tatu: and obviously we also must pass 'this',
+ * to create actual linking.
+...[truncated deterministically]...
+} else {
+ _jsonFactory = jf;
+ if (jf.getCodec() == null) { // as per [JACKSON-741]
+ _jsonFactory.setCodec(this);
+ }
+ }
+ _subtypeResolver = new StdSubtypeResolver();
+ RootNameLookup rootNames = new RootNameLookup();
+ // and default type factory is shared one
+ _typeFactory = TypeFactory.defaultInstance();
+
+ SimpleMixInResolver mixins = new SimpleMixInResolver(null);
+ _mixIns = mixins;
+
+ BaseSettings base = DEFAULT_BASE.withClassIntrospector(defaultClassIntrospector());
+ _serializationConfig = new SerializationConfig(base,
+ _subtypeResolver, mixins, rootNames);
+ _deserializationConfig = new DeserializationConfig(base,
+ _subtypeResolver, mixins, rootNames);
+
+ // Some overrides we may need
+ final boolean needOrder = _jsonFactory.requiresPropertyOrdering();
+ if (needOrder ^ _serializationConfig.isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)) {
+ configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, needOrder);
+ }
+ 
+ _serializerProvider = (sp == null) ? new DefaultSerializerProvider.Impl() : sp;
+ _deserializationContext = (dc == null) ?
+ new DefaultDeserializationContext.Impl(BeanDeserializerFactory.instance) : dc;
+
+ // Default serializer factory is stateless, can just assign
+ _serializerFactory = BeanSerializerFactory.instance;
+ }
+
+/* METHOD ObjectMapper */
+protected ObjectMapper(ObjectMapper src)
+ {
+ _jsonFactory = src._jsonFactory.copy();
+ _jsonFactory.setCodec(this);
+ _subtypeResolver = src._subtypeResolver;
+ _typeFactory = src._typeFactory;
+ _injectableValues = src._injectableValues;
+
+ SimpleMixInResolver mixins = src._mixIns.copy();
+ _mixIns = mixins;
+ RootNameLookup rootNames = new RootNameLookup();
+ _serializationConfig = new SerializationConfig(src._serializationConfig, mixins, rootNames);
+ _des
+...[truncated deterministically]...
+#922], make sure to copy registered modules as appropriate
+ Set<Object> reg = _registeredModuleTypes;
+ if (reg == null) {
+ _registeredModuleTypes = null;
+ } else {
+ _registeredModuleTypes = new LinkedHashSet<Object>(reg);
+ }
+ }
+
+===== com.fasterxml.jackson.databind.util.TokenBuffer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.util;
+public class TokenBuffer
+protected final static int DEFAULT_GENERATOR_FEATURES = JsonGenerator.Feature.collectDefaults();
+protected ObjectCodec _objectCodec;
+protected int _generatorFeatures;
+protected boolean _closed;
+protected boolean _hasNativeTypeIds;
+protected boolean _hasNativeObjectIds;
+protected boolean _mayHaveNativeIds;
+protected Segment _first;
+protected Segment _last;
+protected int _appendAt;
+protected Object _typeId;
+protected Object _objectId;
+protected boolean _hasNativeId = false;
+protected JsonWriteContext _writeContext;
+@Deprecated
+public TokenBuffer(ObjectCodec codec) {
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+public TokenBuffer(JsonParser p) {
+public TokenBuffer(JsonParser p, DeserializationContext ctxt)
+@Override
+public Version version() {
+public JsonParser asParser()
+public JsonParser asParser(ObjectCodec codec)
+public JsonParser asParser(JsonParser src)
+public JsonToken firstToken() {
+@SuppressWarnings("resource")
+public TokenBuffer append(TokenBuffer other) throws IOException
+public void serialize(JsonGenerator gen) throws IOException
+public TokenBuffer deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+public String toString()
+private final void _appendNativeIds(StringBuilder sb)
+public JsonGenerator e
+...[truncated deterministically]...
+public Segment append(int index, JsonToken tokenType, Object value)
+public Segment appendRaw(int index, int rawTokenType, Object value)
+private void set(int index, JsonToken tokenType)
+private void set(int index, JsonToken tokenType, Object value)
+private void set(int index, int rawTokenType, Object value)
+private void set(int index, int rawTokenType, Object value, Object objectId, Object typeId)
+private final void assignNativeIds(int ind
+...[truncated deterministically]...
+nt i) { return i+i+1; }
+
+/* HEADER */
+package com.fasterxml.jackson.databind.util;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.TreeMap;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.base.ParserMinimalBase;
+import com.fasterxml.jackson.core.json.JsonReadContext;
+import com.fasterxml.jackson.core.json.JsonWriteContext;
+import com.fasterxml.jackson.core.util.ByteArrayBuilder;
+import com.fasterxml.jackson.databind.*;
+public class TokenBuffer
+
+/* METHOD TokenBuffer */
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+ {
+ _objectCodec = codec;
+ _generatorFeatures = DEFAULT_GENERATOR_FEATURES;
+ _writeContext = JsonWriteContext.createRootContext(null);
+ // at first we have just one segment
+ _first = _last = new Segment();
+ _appendAt = 0;
+ _hasNativeTypeIds = hasNativeIds;
+ _hasNativeObjectIds = hasNativeIds;
+
+ _mayHaveNativeIds = _hasNativeTypeIds | _hasNativeObjectIds;
+ }
+
+/* METHOD TokenBuffer */
+public TokenBuffer(JsonParser p, DeserializationContext ctxt)
+ {
+ _objectCodec = p.getCodec();
+ _generatorFeatures = DEFAULT_GENERATOR_FEATURES;
+ _writeContext = JsonWriteContext.createRootContext(null);
+ // at first we have just one segment
+ _first = _last = new Segment();
+ _appendAt = 0;
+ _hasNativeTypeIds = p.canReadTypeId();
+ _hasNativeObjectIds = p.canReadObjectId();
+ _mayHaveNativeIds = _hasNativeTypeIds | _hasNativeObjectIds;
+ }
+
+/* METHOD TokenBuffer */
+@Deprecated
+ public TokenBuffer(ObjectCodec codec) {
+ this(codec, false);
+ }
+
+/* METHOD TokenBuffer */
+public TokenBuffer(JsonParser p) {
+ this(p, null);
+ }
+
+/* METHOD version */
+@Override
+ public Version version() {
+ return com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION;
+ }
+
+/* METHOD version */
+@Override
+ public Version version() {
+ return com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION;
+ }
+
+/* METHOD writeBinary */
+@Override
+ public void writeBinary(Base64Variant b64variant, byte[]
+...[truncated deterministically]...
+this using multiple alternatives; but for
+ * now, let's try to limit number of conversions.
+ * The only (?) tricky thing is that of whether to preserve variant,
+ * seems pointless, so let's not worry about it unless there's some
+ * compelling reason to.
+ */
+ byte[] copy = new byte[len];
+ System.arraycopy(data, offset, copy, 0, len);
+ writeObject(copy);
+ }
+
+ /**
+ * Although we could support this method, it does not necessarily make
+ * sense: we can not make good use of streaming because buffer must
+ * hold all the data. Because of this, currently this will simply
+ * throw {@link UnsupportedOperationException}
+ */
+ @Override
+ public int writeBinary(Base64Variant b64variant, InputStream data, int dataLength) {
+ throw new UnsupportedOperationException();
+ }
+
+ /*
+ /***********************************************************
+ /* JsonGenerator implementation: native ids
+ /***********************************************************
+ */
+
+ @Override
+ public boolean canWriteTypeId() {
+ return _hasNativeTypeIds;
+ }
+
+ @Override
+ public boolean canWriteObjectId() {
+ return _hasNativeObjectIds;
+ }
+ 
+ @Override
+ public void writeTypeId(Object id) {
+ _typeId = id;
+ _hasNativeId = true;
+ }
+ 
+ @Override
+ public void writeObjectId(Object id) {
+ _objectId = id
+...[truncated deterministically]...
+ion
+ {
+ JsonToken t = jp.getCurrentToken();
+
+ // Let's handle field-name separately first
+ if (t == JsonToken.FIELD_NAME) {
+ if (_mayHaveNativeIds) {
+ _checkNativeIds(jp);
+ }
+ writeFieldName(jp.getCurrentName());
+ t = jp.nextToken();
+ // fall-through to copy the associated value
+ }
+
+ if (_mayHaveNativeIds) {
+ _checkNativeIds(jp);
+ }
+ 
+ switch (t) {
+ case START_ARRAY:
+ writeStartArray();
+ while (jp.nextToken() != JsonToken.END_ARRAY) {
+ copyCurrentStructure(jp);
+ }
+ writeEndArray();
+ break;
+ case START_OBJECT:
+ writeStartObject();
+ while (jp.nextToken() != JsonToken.END_OBJECT) {
+ copyCurrentStructure(jp);
+ }
+ writeEndObject();
+ break;
+ default: // others are simple:
+ copyCurrentEvent(jp);
+ }
+ }

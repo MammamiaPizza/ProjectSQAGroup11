@@ -1,0 +1,510 @@
+The current JUnit Test Suite compiles and runs successfully, but some reachable statements, branches,
+methods, or fault-related behaviors are not adequately tested.
+Analyze the production source code, current Test Suite, behavioral specification, bug report, Project Context,
+and coverage report.
+
+Requirements:
+1. Identify the reachable statements, conditions, branches, and methods that are not covered.
+2. Identify the behaviors related to the supplied bug report, API contract, or specification that are not
+adequately tested.
+3. Add only meaningful Test Cases that increase statement coverage, branch coverage, method coverage, or
+fault-detection capability.
+4. Prioritize uncovered code related to the supplied bug report or behavioral specification.
+5. Add Test Cases that could distinguish the incorrect behavior described in the bug report from the expected
+behavior.
+6. Include normal, boundary, invalid, null, and exceptional cases when relevant to the uncovered code.
+7. Do not duplicate the behavior of existing Test Cases.
+8. Do not modify the production source code.
+9. Use the JUnit version and build tool configured in the project.
+10. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+11. Do not invent APIs, dependencies, or expected behavior.
+12. Derive expected results only from the supplied specification, API documentation, bug report, public
+contract, permitted existing tests, and Project Context.
+13. Analyze only the Source Version and Project Context supplied in this prompt.
+14. Preserve all valid existing Test Cases.
+15. Keep all Test Cases independent and free from execution-order dependencies.
+16. Return the complete updated Java Test Class.
+17. After the Test Class, explain which uncovered statement, condition, branch, method, or fault-related
+behavior each new Test Case targets.
+Project ID:
+Csv
+Bug ID:
+9
+Source Version:
+Csv-9b
+JUnit Version:
+junit-4.11.jar
+Build Tool:
+Maven
+Target Class:
+org.apache.commons.csv.CSVRecord
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: Csv
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: Csv
+       Program: commons-csv
+    Build file: /root/defects4j/framework/projects/Csv/Csv.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-csv.git
+     Commit db: /root/defects4j/framework/projects/Csv/active-bugs.csv
+Number of bugs: 16
+--------------------------------------------------------------------------------
+
+Summary for Bug: Csv-9
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+2480dffa6d8343b189c6fb57b88b325c45f0b83f
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2014-05-15 16:26:26 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+CSV-118
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/CSV-118
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.csv.CSVRecordTest::testToMapWithNoHeader
+   --> java.lang.NullPointerException
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.csv.CSVRecord
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.csv.CSVRecord =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.csv;
+
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+/**
+ * A CSV record parsed from a CSV file.
+ *
+ * @version $Id$
+ */
+public final class CSVRecord implements Serializable, Iterable<String> {
+
+    private static final String[] EMPTY_STRING_ARRAY = new String[0];
+
+    private static final long serialVersionUID = 1L;
+
+    /** The accumulated comments (if any) */
+    private final String comment;
+
+    /** The column name to index mapping. */
+    private final Map<String, Integer> mapping;
+
+    /** The record number. */
+    private final long recordNumber;
+
+    /** The values of the record */
+    private final String[] values;
+
+    CSVRecord(final String[] values, final Map<String, Integer> mapping,
+            final String comment, final long recordNumber) {
+        this.recordNumber = recordNumber;
+        this.values = values != null ? values : EMPTY_STRING_ARRAY;
+        this.mapping = mapping;
+        this.comment = comment;
+    }
+
+    /**
+     * Returns a value by {@link Enum}.
+     *
+     * @param e
+     *            an enum
+     * @return the String at the given enum String
+     */
+    public String get(final Enum<?> e) {
+        return get(e.toString());
+    }
+
+    /**
+     * Returns a value by index.
+     *
+     * @param i
+     *            a column index (0-based)
+     * @return the String at the given index
+     */
+    public String get(final int i) {
+        return values[i];
+    }
+
+    /**
+     * Returns a value by name.
+     *
+     * @param name
+     *            the name of the column to be retrieved.
+     * @return the column value, maybe null depending on {@link CSVFormat#getNullString()}.
+     * @throws IllegalStateException
+     *             if no header mapping was provided
+     * @throws IllegalArgumentException
+     *             if {@code name} is not mapped or if the record is inconsistent
+     * @see #isConsistent()
+     * @see CSVFormat#withNullString(String)
+     */
+    public String get(final String name) {
+        if (mapping == null) {
+            throw new IllegalStateException(
+                    "No header mapping was specified, the record values can't be accessed by name");
+        }
+        final Integer index = mapping.get(name);
+        if (index == null) {
+            throw new IllegalArgumentException(String.format("Mapping for %s not found, expected one of %s", name,
+                    mapping.keySet()));
+        }
+        try {
+            return values[index.intValue()];
+        } catch (final ArrayIndexOutOfBoundsException e) {
+            throw new IllegalArgumentException(String.format(
+                    "Index for header '%s' is %d but CSVRecord only has %d values!", name, index,
+                    Integer.valueOf(values.length)));
+        }
+    }
+
+    /**
+     * Returns the comment for this record, if any.
+     *
+     * @return the comment for this record, or null if no comment for this
+     *         record is available.
+     */
+    public String getComment() {
+        return comment;
+    }
+
+    /**
+     * Returns the number of this record in the parsed CSV file.
+     *
+     * @return the number of this record.
+     */
+    public long getRecordNumber() {
+        return recordNumber;
+    }
+
+    /**
+     * Returns true if this record is consistent, false if not. Currently, the only check is matching the record size to
+     * the header size. Some programs can export files that fails this test but still produce parsable files.
+     *
+     * @return true of this record is valid, false if not
+     */
+    public boolean isConsistent() {
+        return mapping == null || mapping.size() == values.length;
+    }
+
+    /**
+     * Checks whether a given column is mapped, i.e. its name has been defined to the parser.
+     *
+     * @param name
+     *            the name of the column to be retrieved.
+     * @return whether a given column is mapped.
+     */
+    public boolean isMapped(final String name) {
+        return mapping != null && mapping.containsKey(name);
+    }
+
+    /**
+     * Checks whether a given columns is mapped and has a value.
+     *
+     * @param name
+     *            the name of the column to be retrieved.
+     * @return whether a given columns is mapped and has a value
+     */
+    public boolean isSet(final String name) {
+        return isMapped(name) && mapping.get(name).intValue() < values.length;
+    }
+
+    /**
+     * Returns an iterator over the values of this record.
+     *
+     * @return an iterator over the values of this record.
+     */
+    public Iterator<String> iterator() {
+        return toList().iterator();
+    }
+
+    /**
+     * Puts all values of this record into the given Map.
+     *
+     * @param map The Map to populate.
+     * @return the given map.
+     */
+    <M extends Map<String, String>> M putIn(final M map) {
+        for (final Entry<String, Integer> entry : mapping.entrySet()) {
+            final int col = entry.getValue().intValue();
+            if (col < values.length) {
+                map.put(entry.getKey(), values[col]);
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Returns the number of values in this record.
+     *
+     * @return the number of values.
+     */
+    public int size() {
+        return values.length;
+    }
+
+    /**
+     * Converts the values to a List.
+     *
+     * TODO: Maybe make this public?
+     * @return a new List
+     */
+    private List<String> toList() {
+        return Arrays.asList(values);
+    }
+
+    /**
+     * Copies this record into a new Map. The new map is not connect
+     *
+     * @return A new Map. The map is empty if the record has no headers.
+     */
+    public Map<String, String> toMap() {
+        return putIn(new HashMap<String, String>(values.length));
+    }
+
+    @Override
+    public String toString() {
+        return Arrays.toString(values);
+    }
+
+    String[] values() {
+        return values;
+    }
+
+
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.csv.CSVRecord
+
+Triggering tests:
+- org.apache.commons.csv.CSVRecordTest::testToMapWithNoHeader
+Current JUnit Test Suite:
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+import org.junit.Test;
+
+public class CSVRecordGeneratedTest {
+
+    private enum Header {
+        FIRST,
+        SECOND;
+
+        @Override
+        public String toString() {
+            return name().toLowerCase();
+        }
+    }
+
+    @Test
+    public void testNullValuesCreateEmptyRecordAndPreserveMetadata() {
+        final CSVRecord record = new CSVRecord(null, null, "comment", 17L);
+
+        assertEquals(0, record.size());
+        assertEquals("comment", record.getComment());
+        assertEquals(17L, record.getRecordNumber());
+        assertEquals("[]", record.toString());
+        assertEquals(0, record.values().length);
+        assertTrue(record.isConsistent());
+    }
+
+    @Test
+    public void testGetByIndexNameAndEnum() {
+        final Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", Integer.valueOf(0));
+        mapping.put("second", Integer.valueOf(1));
+
+        final CSVRecord record = new CSVRecord(new String[] { "one", "two" }, mapping, null, 1L);
+
+        assertEquals("one", record.get(0));
+        assertEquals("two", record.get("second"));
+        assertEquals("one", record.get(Header.FIRST));
+        assertEquals("two", record.get(Header.SECOND));
+    }
+
+    @Test
+    public void testGetByIndexRejectsOutOfRangeIndex() {
+        final CSVRecord record = new CSVRecord(new String[] { "only" }, null, null, 1L);
+
+        try {
+            record.get(1);
+            fail("An index beyond the record size must fail");
+        } catch (final ArrayIndexOutOfBoundsException expected) {
+            assertTrue(expected.getMessage() == null || expected.getMessage().length() >= 0);
+        }
+    }
+
+    @Test
+    public void testGetByNameRejectsNoMappingUnknownNameAndMissingValue() {
+        final CSVRecord recordWithoutHeaders = new CSVRecord(new String[] { "value" }, null, null, 1L);
+
+        try {
+            recordWithoutHeaders.get("column");
+            fail("Name-based access without headers must fail");
+        } catch (final IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("No header mapping"));
+        }
+
+        final Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("present", Integer.valueOf(0));
+        mapping.put("missingValue", Integer.valueOf(2));
+        final CSVRecord record = new CSVRecord(new String[] { "value" }, mapping, null, 1L);
+
+        try {
+            record.get("unknown");
+            fail("Accessing an unmapped header must fail");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Mapping for unknown not found"));
+        }
+
+        try {
+            record.get("missingValue");
+            fail("Accessing a mapped column beyond the available values must fail");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("CSVRecord only has 1 values"));
+        }
+    }
+
+    @Test
+    public void testMappedSetAndConsistencyStates() {
+        final CSVRecord recordWithoutHeaders = new CSVRecord(new String[] { "value" }, null, null, 1L);
+        assertFalse(recordWithoutHeaders.isMapped("column"));
+        assertFalse(recordWithoutHeaders.isSet("column"));
+        assertTrue(recordWithoutHeaders.isConsistent());
+
+        final Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", Integer.valueOf(0));
+        mapping.put("second", Integer.valueOf(1));
+        mapping.put("third", Integer.valueOf(2));
+
+        final CSVRecord inconsistentRecord = new CSVRecord(new String[] { "one", "two" }, mapping, null, 1L);
+
+        assertTrue(inconsistentRecord.isMapped("first"));
+        assertFalse(inconsistentRecord.isMapped("unknown"));
+        assertTrue(inconsistentRecord.isSet("second"));
+        assertFalse(inconsistentRecord.isSet("third"));
+        assertFalse(inconsistentRecord.isSet("unknown"));
+        assertFalse(inconsistentRecord.isConsistent());
+
+        mapping.remove("third");
+        final CSVRecord consistentRecord = new CSVRecord(new String[] { "one", "two" }, mapping, null, 1L);
+        assertTrue(consistentRecord.isConsistent());
+    }
+
+    @Test
+    public void testIteratorReturnsAllValuesIncludingNull() {
+        final CSVRecord record = new CSVRecord(new String[] { "first", null, "third" }, null, null, 1L);
+
+        final Iterator<String> iterator = record.iterator();
+
+        assertTrue(iterator.hasNext());
+        assertEquals("first", iterator.next());
+        assertTrue(iterator.hasNext());
+        assertNull(iterator.next());
+        assertTrue(iterator.hasNext());
+        assertEquals("third", iterator.next());
+        assertFalse(iterator.hasNext());
+    }
+
+    @Test
+    public void testPutInPopulatesProvidedMapAndSkipsUnavailableColumns() {
+        final Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", Integer.valueOf(0));
+        mapping.put("second", Integer.valueOf(1));
+        mapping.put("unavailable", Integer.valueOf(3));
+
+        final CSVRecord record = new CSVRecord(new String[] { "one", "two" }, mapping, null, 1L);
+        final Map<String, String> destination = new HashMap<String, String>();
+        destination.put("existing", "preserved");
+
+        final Map<String, String> returned = record.putIn(destination);
+
+        assertSame(destination, returned);
+        assertEquals("preserved", destination.get("existing"));
+        assertEquals("one", destination.get("first"));
+        assertEquals("two", destination.get("second"));
+        assertFalse(destination.containsKey("unavailable"));
+    }
+
+    @Test
+    public void testToMapCopiesMappedValuesIntoIndependentMap() {
+        final Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", Integer.valueOf(0));
+        mapping.put("second", Integer.valueOf(1));
+
+        final CSVRecord record = new CSVRecord(new String[] { "one", "two" }, mapping, null, 1L);
+
+        final Map<String, String> result = record.toMap();
+
+        assertEquals(2, result.size());
+        assertEquals("one", result.get("first"));
+        assertEquals("two", result.get("second"));
+
+        result.put("first", "changed");
+        assertEquals("one", record.get("first"));
+    }
+
+    @Test
+    public void testToMapWithoutHeaderMappingReturnsEmptyMap() {
+        final CSVRecord record = new CSVRecord(new String[] { "one", "two" }, null, null, 1L);
+
+        final Map<String, String> result = record.toMap();
+
+        assertTrue("A record without headers must produce an empty map", result.isEmpty());
+    }
+}
+
+Coverage report from the actual coverage tool:
+Actual Defects4J coverage summary.csv:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+38,38,24,24
+
+Coverage XML uncovered-code summary:
+Class: org.apache.commons.csv.CSVRecord
+Uncovered lines: (none)
+Partially covered branch lines: (none)

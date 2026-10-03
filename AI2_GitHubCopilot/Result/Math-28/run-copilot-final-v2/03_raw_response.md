@@ -1,0 +1,277 @@
+package org.apache.commons.math3.optimization.linear;
+
+ import java.util.ArrayList;
+ import java.util.Collection;
+
+ import org.apache.commons.math3.exception.MaxCountExceededException;
+ import org.apache.commons.math3.optimization.linear.NoFeasibleSolutionException;
+ import org.apache.commons.math3.exception.UnboundedSolutionException;
+ import org.apache.commons.math3.optimization.GoalType;
+ import org.apache.commons.math3.optimization.PointValuePair;
+ import org.junit.Assert;
+ import org.junit.Test;
+
+ /**
+  * Tests for {@link SimplexSolver} focusing on MATH-828 cycling bug
+  * and key functional paths: pivot column/row selection, iteration,
+  * phase-1 feasibility, optimization, and edge cases.
+  */
+ public class SimplexSolverTest {
+
+     /**
+      * MATH-828: degenerate LP that can cause cycling without a full
+      * Bland's-rule anti-cycling implementation.  The problem is
+      * constructed with equality constraints so that multiple basic
+      * variables sit at zero, creating repeated ties in the minimum
+      * ratio test.  The solver must finish without exceeding the
+      * iteration limit and must return the known optimal value.
+      */
+     @Test
+     public void testMath828Cycle() {
+         // 7 variables, 4 equality constraints -> degenerate basic solutions
+         // Optimal: x1=x2=x3=0.3, x4=0.1, x5=x6=x7=0, value=0.9
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1, 1, 1, 0, 0, 0, 0 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1, 1, 1, 0, 0, 0 }, Relationship.EQ, 1));
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 0, 0, 0, 1, 0, 0 }, Relationship.EQ, 0.3));
+         constraints.add(new LinearConstraint(
+                 new double[] { 0, 1, 0, 0, 0, 1, 0 }, Relationship.EQ, 0.3));
+         constraints.add(new LinearConstraint(
+                 new double[] { 0, 0, 1, 0, 0, 0, 1 }, Relationship.EQ, 0.3));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertNotNull("solution must not be null", solution);
+         Assert.assertEquals("optimal value", 0.9, solution.getValue(), 1e-6);
+         Assert.assertEquals("x1", 0.3, solution.getPoint()[0], 1e-6);
+         Assert.assertEquals("x2", 0.3, solution.getPoint()[1], 1e-6);
+         Assert.assertEquals("x3", 0.3, solution.getPoint()[2], 1e-6);
+     }
+
+     /**
+      * Basic maximization with two variables and two LEQ constraints.
+      * Optimal: x1=3, x2=2, value=19.
+      */
+     @Test
+     public void testSimpleMaximize() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 3, 5 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 2, 1 }, Relationship.LEQ, 8));
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 3 }, Relationship.LEQ, 9));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertEquals("optimal value", 19.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Basic minimization: minimize 2x1+3x2 subject to x1+x2>=1.
+      * Optimal: x1=1, x2=0, value=2.
+      */
+     @Test
+     public void testSimpleMinimize() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 2, 3 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1 }, Relationship.GEQ, 1));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MINIMIZE, true);
+
+         Assert.assertEquals("optimal value", 2.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Unbounded feasible region: maximize x1+x2 with only x1-x2<=0.
+      * The solver must throw UnboundedSolutionException.
+      */
+     @Test(expected = UnboundedSolutionException.class)
+     public void testUnboundedSolution() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1, 1 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, -1 }, Relationship.LEQ, 0));
+
+         SimplexSolver solver = new SimplexSolver();
+         solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     }
+
+     /**
+      * Infeasible constraints: x1<=1 and x1>=2.
+      * The solver must throw NoFeasibleSolutionException.
+      */
+     @Test(expected = NoFeasibleSolutionException.class)
+     public void testInfeasibleSolution() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1 }, Relationship.LEQ, 1));
+         constraints.add(new LinearConstraint(
+                 new double[] { 1 }, Relationship.GEQ, 2));
+
+         SimplexSolver solver = new SimplexSolver();
+         solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     }
+
+     /**
+      * Equality constraint: maximize x1+x2 subject to x1+x2=1.
+      * Optimal value is 1 (any point on the line segment).
+      */
+     @Test
+     public void testEqualityConstraint() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1, 1 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1 }, Relationship.EQ, 1));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertEquals("optimal value", 1.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Degenerate problem producing ties in the minimum-ratio test.
+      * Three constraints active at optimum (x1+x2<=1, x1<=0.5, x2<=0.5)
+      * in a 2-D space.  Exercises Bland's rule code path in getPivotRow.
+      */
+     @Test
+     public void testDegenerateWithTies() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1, 1 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1 }, Relationship.LEQ, 1));
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 0 }, Relationship.LEQ, 0.5));
+         constraints.add(new LinearConstraint(
+                 new double[] { 0, 1 }, Relationship.LEQ, 0.5));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertNotNull("solution must not be null", solution);
+         Assert.assertEquals("optimal value", 1.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Single-variable problem: maximize 5x subject to x<=10.
+      * Optimal: x=10, value=50.
+      */
+     @Test
+     public void testSingleVariable() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 5 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1 }, Relationship.LEQ, 10));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertEquals("optimal value", 50.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Large coefficients: maximize 1000x1+2000x2 subject to x1+x2<=1.
+      * Optimal: x1=0, x2=1, value=2000.
+      */
+     @Test
+     public void testLargeCoefficients() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1000, 2000 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1 }, Relationship.LEQ, 1));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertEquals("optimal value", 2000.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Objective with all-zero coefficients: any feasible solution is optimal.
+      * The solver must return value 0.
+      */
+     @Test
+     public void testZeroObjectiveCoefficients() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 0, 0 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1 }, Relationship.LEQ, 1));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertEquals("optimal value", 0.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Three-variable problem with multiple constraints.
+      * Maximize x1+2x2+3x3 subject to x1<=1, x2<=2, x3<=3, x1+x2+x3<=4.
+      * Optimal: x1=0, x2=1, x3=3, value=11.
+      */
+     @Test
+     public void testMultipleConstraints() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1, 2, 3 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 0, 0 }, Relationship.LEQ, 1));
+         constraints.add(new LinearConstraint(
+                 new double[] { 0, 1, 0 }, Relationship.LEQ, 2));
+         constraints.add(new LinearConstraint(
+                 new double[] { 0, 0, 1 }, Relationship.LEQ, 3));
+         constraints.add(new LinearConstraint(
+                 new double[] { 1, 1, 1 }, Relationship.LEQ, 4));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+         Assert.assertEquals("optimal value", 11.0, solution.getValue(), 1e-6);
+     }
+
+     /**
+      * Lower-bound only: minimize x1 subject to x1>=5.
+      * Optimal: x1=5, value=5.
+      */
+     @Test
+     public void testLowerBoundConstraint() {
+         LinearObjectiveFunction f = new LinearObjectiveFunction(
+                 new double[] { 1 }, 0);
+
+         Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+         constraints.add(new LinearConstraint(
+                 new double[] { 1 }, Relationship.GEQ, 5));
+
+         SimplexSolver solver = new SimplexSolver();
+         PointValuePair solution = solver.optimize(f, constraints, GoalType.MINIMIZE, true);
+
+         Assert.assertEquals("optimal value", 5.0, solution.getValue(), 1e-6);
+     }
+ }

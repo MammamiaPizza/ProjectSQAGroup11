@@ -1,0 +1,189 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 148  Version: Closure-148b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 196
+Trigger failures:
+- com.google.javascript.jscomp.PeepholeFoldConstantsTest::testFoldTypeof
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.SourceMapTest::testGoldenOutput0
+ --> junit.framework.ComparisonFailure: expected:<...ng definitions. **/
+ - com.google.javascript.jscomp.SourceMapTest::testGoldenOutput1
+ --> junit.framework.ComparisonFailure: expected:<...ode", "count": 1 }
+ - com.google.javascript.jscomp.SourceMapTest::testGoldenOutput2
+ --> junit.framework.ComparisonFailure: expected:<...ode", "count": 1 }
+ - com.google.javascript.jscomp.SourceMapTest::testGoldenOutput3
+ --> junit.framework.ComparisonFailure: expected:<...ode", "count": 1 }
+ - com.google.javascript.jscomp.SourceMapTest::testGoldenOutput4
+ --> junit.framework.ComparisonFailure: expected:<...ode", "count": 1 }
+Modified: com.google.javascript.jscomp.PeepholeFoldConstants, com.google.javascript.jscomp.SourceMap
+
+Available API/signatures:
+[com.google.javascript.jscomp.PeepholeFoldConstants | java]
+package com.google.javascript.jscomp;
+public class PeepholeFoldConstants extends AbstractPeepholeOptimization {
+private static final double MAX_FOLD_NUMBER = Math.pow(2, 53);
+@Override
+private Node tryFoldBinaryOperator(Node subtree) {
+private Node tryFoldTypeof(Node originalTypeofNode) {
+private Node tryFoldUnaryOperator(Node n) {
+private Node tryFoldInstanceof(Node n, Node left, Node right) {
+private Node tryFoldAssign(Node n, Node left, Node right) {
+private Node tryFoldAndOr(Node n, Node left, Node right) {
+private Node tryFoldLeftChildAdd(Node n, Node left, Node right) {
+private Node tryFoldAddConstant(Node n, Node left, Node right) {
+private Node tryFoldArithmetic(Node n, Node left, Node right) {
+private Node tryFoldAdd(Node node, Node left, Node right) {
+private Node tryFoldBitAndOr(Node n, Node left, Node right) {
+private Node tryFoldShift(Node n, Node left, Node right) {
+@SuppressWarnings("fallthrough")
+private Node tryFoldComparison(Node n, Node left, Node right) {
+private Node tryFoldKnownMethods(Node subtree) {
+private Node tryFoldStringIndexOf(Node n) {
+private Node tryFoldStringJoin(Node n) {
+private Node tryFoldGetElem(Node n, Node left, Node right) {
+private Node tryFoldGetProp(Node n, Node left, Node right) {
+
+[com.google.javascript.jscomp.SourceMap | java]
+package com.google.javascript.jscomp;
+public class SourceMap {
+static class Mapping {
+private List<Mapping> mappings = Lists.newArrayList();
+private Position offsetPosition = new Position(0, 0);
+private Position prefixPosition = new Position(0, 0);
+private static String escapeString(String value) {
+private int findLastLine() {
+public void appendTo(Appendable out, String name) throws IOException {
+private class LineMapper {
+private void openLine() throws IOException {
+private void closeLine() throws IOException {
+private void addCharEntry(String id) throws IOException {
+private int getAdjustedLine(Position p) {
+private int getAdjustedCol(Position p) {
+private boolean isOverlapped(Mapping m1, Mapping m2) {
+private void writeClosedMapping(Mapping m) throws IOException {
+private void writeCharsBetween(Mapping prev, Mapping next)
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.io.IOException;
+import java.io.StringWriter;
+
+public class Bug148Test extends CompilerTestCase {
+
+  @Override protected CompilerPass getProcessor(Compiler compiler) {
+    return new PeepholeFoldConstants(compiler); }
+
+  public void testFoldTypeofNumber() {
+    test("typeof 1", ""number""); }
+
+  public void testFoldTypeofString() {
+    test("typeof 'foo'", ""string""); }
+
+  public void testFoldTypeofBoolean() {
+    test("typeof true", ""boolean"");
+    test("typeof false", ""boolean""); }
+
+  public void testFoldTypeofNullAndVoid() {
+    test("typeof null", ""undefined"");
+    test("typeof void 0", ""undefined""); }
+
+  public void testFoldTypeofFunctionExpression() {
+    test("typeof function() {}", ""function""); }
+
+  public void testDoNotFoldTypeofUnknownIdentifier() {
+    testSame("typeof abc"); }
+
+  public void testDoNotFoldTypeofCallExpression() {
+    testSame("typeof abc()"); }
+
+  private Node newMappingNode(String sourceFile, int originalLine,
+      int originalCol, String originalName) {
+    Node node = new Node(Token.NAME);
+    node.putProp(Node.SOURCEFILE_PROP, sourceFile);
+    node.setLineno(originalLine);
+    node.setCharno(originalCol);
+    if (originalName != null) {
+      node.putProp(Node.ORIGINALNAME_PROP, originalName);
+    }
+    return node; }
+
+  public void testAppendToSingleLineMap() throws IOException {
+    SourceMap map = new SourceMap();
+    map.addMapping(newMappingNode("test.js", 1, 1, null),
+        new SourceMap.Position(0, 0), new SourceMap.Position(0, 5));
+    StringWriter out = new StringWriter();
+    map.appendTo(out, "test.js");
+
+ String expected =
+     "/** Begin line maps. **/{ \"file\" : \"test.js\", \"count\": 1 }\n" +
+     "[0,0,0,0,0]\n" +
+     "/** Begin file information. **/\n" +
+     "[]\n" +
+     "/** Begin mapping definitions. **/\n" +
+     "[\"test.js\", 1, 1]\n";
+ assertEquals(expected, out.toString()); }
+
+  public void testAppendToMultiLineMap() throws IOException {
+    SourceMap map = new SourceMap();
+    map.addMapping(newMappingNode("a.js", 1, 34, null),
+        new SourceMap.Position(0, 0), new SourceMap.Position(0, 6));
+    map.addMapping(newMappingNode("a.js", 5, 2, null),
+        new SourceMap.Position(0, 6), new SourceMap.Position(0, 10));
+    map.addMapping(newMappingNode("b.js", 1, 3, "event"),
+        new SourceMap.Position(0, 10), new SourceMap.Position(1, 6));
+    map.addMapping(newMappingNode("c.js", 1, 4, null),
+        new SourceMap.Position(1, 6), new SourceMap.Position(1, 7));
+    map.addMapping(newMappingNode("d.js", 3, 78, "foo"),
+        new SourceMap.Position(1, 7), new SourceMap.Position(1, 12));
+
+ StringWriter out = new StringWriter();
+ map.appendTo(out, "test.js");
+ String actual = out.toString();
+
+ assertTrue(actual.startsWith(
+     "/** Begin line maps. **/{ \"file\" : \"test.js\", \"count\": 2 }\n"));
+ assertTrue(actual.contains(
+     "/** Begin file information. **/\n[]\n[]\n"));
+ assertTrue(actual.contains("[\"a.js\", 1, 34]\n"));
+ assertTrue(actual.contains("[\"a.js\", 5, 2]\n"));
+ assertTrue(actual.contains("[\"b.js\", 1, 3, \"event\"]\n"));
+ assertTrue(actual.contains("[\"c.js\", 1, 4]\n"));
+ assertTrue(actual.contains("[\"d.js\", 3, 78, \"foo\"]\n")); }
+
+  public void testAppendToEmptyMapThrowsIllegalStateException() {
+    SourceMap map = new SourceMap();
+    try {
+      map.appendTo(new StringWriter(), "test.js");
+      fail("Expected IllegalStateException for an empty source map");
+    } catch (IllegalStateException expected) {
+      assertNotNull(expected);
+    } catch (IOException unexpected) {
+      fail("Unexpected IOException: " + unexpected);
+    } }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-148f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-148f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-148f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-148f-copilot/.test_suite/com/google/javascript/jscomp/Bug148Test.java:14: error: ')' expected
+ [javac] test("typeof 1", ""number""); }
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

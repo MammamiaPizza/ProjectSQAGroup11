@@ -1,0 +1,433 @@
+## 1. Public methods and constructors that should be tested
+
+### Static factory methods
+1. `CSVParser.parse(File file, Charset charset, CSVFormat format)`
+2. `CSVParser.parse(InputStream inputStream, Charset charset, CSVFormat format)`
+3. `CSVParser.parse(Path path, Charset charset, CSVFormat format)`
+4. `CSVParser.parse(Reader reader, CSVFormat format)`
+5. `CSVParser.parse(String string, CSVFormat format)`
+6. `CSVParser.parse(URL url, Charset charset, CSVFormat format)`
+
+### Public constructors
+7. `CSVParser(Reader reader, CSVFormat format)`
+8. `CSVParser(Reader reader, CSVFormat format, long characterOffset, long recordNumber)`
+
+### Public instance methods
+9. `close()`
+10. `getCurrentLineNumber()`
+11. `getFirstEndOfLine()`
+12. `getHeaderMap()`
+13. `getRecordNumber()`
+14. `getRecords()`
+15. `isClosed()`
+16. `iterator()`
+
+`nextRecord()` is package-private, not public. It is indirectly exercised by `getRecords()`, construction/header initialization, and `iterator()`. Tests in package `org.apache.commons.csv` could directly test it, but the supplied task specifically asks for public methods.
+
+---
+
+## 2. Input types and valid input ranges
+
+### CSV input sources
+The parser accepts input through:
+
+| API | Input type |
+|---|---|
+| `parse(File, Charset, CSVFormat)` | Existing/readable `File` containing CSV data |
+| `parse(InputStream, Charset, CSVFormat)` | Non-null `InputStream` |
+| `parse(Path, Charset, CSVFormat)` | Existing/readable `Path` |
+| `parse(Reader, CSVFormat)` | Non-null `Reader` |
+| `parse(String, CSVFormat)` | Non-null `String` |
+| `parse(URL, Charset, CSVFormat)` | Non-null reachable `URL` |
+| constructors | Non-null `Reader` |
+
+CSV content validity is substantially defined by the supplied `CSVFormat` and its downstream `Lexer`, neither of which is supplied in full. The visible parser code supports token outcomes including:
+
+- ordinary field token: `TOKEN`;
+- end of record: `EORECORD`;
+- end of file: `EOF`;
+- comments: `COMMENT`;
+- invalid parsing sequence: `INVALID`.
+
+### `CSVFormat` input
+All factories/constructors require a non-null `CSVFormat`, directly or indirectly.
+
+Relevant format options accessed by this class are:
+
+- `getTrim()`
+- `getTrailingDelimiter()`
+- `getNullString()`
+- `getHeader()`
+- `getIgnoreHeaderCase()`
+- `getSkipHeaderRecord()`
+- `getAllowMissingColumnNames()`
+
+Thus meaningful tests need formats that exercise combinations of:
+
+- no header;
+- explicitly supplied header;
+- header read from input (`getHeader()` returns empty array);
+- skip-header-record enabled/disabled;
+- case-sensitive/case-insensitive headers;
+- duplicate headers;
+- missing/empty header names;
+- trimming enabled/disabled;
+- trailing delimiter enabled/disabled;
+- configured null-string values.
+
+The exact way to construct such `CSVFormat` instances is not shown in the supplied source. It must be obtained from project APIs already available in the project, not invented.
+
+### Numeric constructor inputs
+For `CSVParser(Reader, CSVFormat, long characterOffset, long recordNumber)`:
+
+- Both parameters accept all Java `long` values in this implementation.
+- `characterOffset` is added to the lexer’s character position when constructing records.
+- internal `recordNumber` is initialized as `recordNumber - 1`, so the first returned record receives the supplied `recordNumber`.
+
+There is no visible validation for negative values, zero, `Long.MIN_VALUE`, or `Long.MAX_VALUE`. Therefore, expected behavior for unusual values is implementation behavior rather than a documented validity contract. In particular:
+- `recordNumber == Long.MIN_VALUE` causes arithmetic overflow in `recordNumber - 1`;
+- incrementing near `Long.MAX_VALUE` can overflow.
+
+No reliable intended result for those overflow cases is specified.
+
+---
+
+## 3. Conditions and reachable branches
+
+### Parsing and record construction (`nextRecord`, indirectly tested)
+The internal record-reading behavior has these observable branches:
+
+1. **`TOKEN`**
+   - Adds the current field value.
+   - Continues reading the same record.
+
+2. **`EORECORD`**
+   - Adds final field value.
+   - Ends the current record.
+
+3. **`EOF` with `reusableToken.isReady == true`**
+   - Adds the final pending field value.
+   - Returns a final record when values exist.
+
+4. **`EOF` with `reusableToken.isReady == false`**
+   - Does not add another value.
+   - Returns `null` if no prior values were accumulated.
+
+5. **`INVALID`**
+   - Throws `IOException` containing the current line number.
+
+6. **`COMMENT`**
+   - Builds a record comment string.
+   - Multiple comment tokens are concatenated using `Constants.LF`.
+   - The comment token is converted to `TOKEN` so another token is read.
+   - The comment is associated with the subsequently produced `CSVRecord` if a record is eventually produced.
+
+7. **Unexpected token type**
+   - Throws `IllegalStateException`.
+   - Reachability depends on possible `Token.Type` values generated by `Lexer`, which is not supplied.
+
+8. **Empty record list after parsing**
+   - Returns `null`.
+   - Does not increment `recordNumber`.
+
+9. **Non-empty record list**
+   - Increments `recordNumber`.
+   - Constructs and returns a `CSVRecord`.
+
+### Field normalization (`addRecordValue`)
+For every field:
+
+1. If `format.getTrim()` is true, `String.trim()` is applied.
+2. If this is the final field of a record, the cleaned value is empty, and `format.getTrailingDelimiter()` is true:
+   - the final empty value is omitted.
+3. Otherwise, if cleaned field value equals `format.getNullString()`:
+   - `null` is stored for the field.
+4. Otherwise:
+   - cleaned field text is stored.
+
+### Header initialization (`initializeHeader`)
+1. **No format header (`format.getHeader() == null`)**
+   - `headerMap` remains `null`.
+
+2. **Header configured**
+   - Creates either:
+     - `LinkedHashMap` for normal case-sensitive mapping, or
+     - case-insensitive `TreeMap` when `getIgnoreHeaderCase()` is true.
+
+3. **Empty header array**
+   - Reads the first CSV record as the header.
+   - That header record is consumed and is not subsequently returned as data by iteration/getRecords.
+
+4. **Explicit header array with `skipHeaderRecord == true`**
+   - Reads and discards one record from input before parsing data.
+
+5. **Explicit header array with `skipHeaderRecord == false`**
+   - Does not consume an input record.
+
+6. **Duplicate header name**
+   - Throws `IllegalArgumentException` when:
+     - the name is duplicate; and
+     - either the duplicate name is non-empty, or `allowMissingColumnNames` is false.
+
+7. **Duplicate empty/missing header name with missing names allowed**
+   - No exception.
+   - The map is updated with the latest index for that key because `Map.put()` overwrites prior mappings.
+
+### Iterator behavior
+The anonymous iterator has these branches:
+
+#### `hasNext()`
+1. Parser closed:
+   - returns `false`.
+
+2. Parser open and no cached record:
+   - invokes `nextRecord()` and caches its result.
+
+3. Parser open and cached record already exists:
+   - does not read another record.
+
+4. A record was read/cached:
+   - returns `true`.
+
+5. EOF was reached:
+   - returns `false`.
+
+6. `nextRecord()` throws `IOException`:
+   - throws `IllegalStateException` whose message includes the IOException class and text, with the IOException as cause.
+
+#### `next()`
+1. Parser closed:
+   - throws `NoSuchElementException("CSVParser has been closed")`.
+
+2. Cached record exists:
+   - returns it and clears the cache.
+
+3. No cached record:
+   - calls `nextRecord()` directly.
+
+4. No cached record and EOF:
+   - throws `NoSuchElementException("No more CSV records available")`.
+
+#### `remove()`
+- Always throws `UnsupportedOperationException`.
+
+---
+
+## 4. Normal, boundary, invalid, null, and exceptional cases
+
+### Normal cases
+- Parse one record and multiple records from a string/reader.
+- Iterate records using:
+  - repeated `hasNext()` then `next()`;
+  - repeated `next()` without prior `hasNext()`;
+  - enhanced `for` loop.
+- Parse final record with and without a final line terminator.
+- Read all remaining records through `getRecords()`.
+- Read a subset through iterator, then call `getRecords()` and verify it starts from the current parser position.
+- Obtain parser metadata:
+  - initial and advancing record number;
+  - current line number;
+  - first encountered EOL;
+  - header map;
+  - closed state.
+
+### Boundary cases
+- Empty input.
+- Input containing only a line terminator.
+- Single value.
+- Single empty field, subject to the actual lexer/format semantics.
+- Final record without final EOL.
+- Input ending after delimiter, with trailing-delimiter option both enabled and disabled.
+- Header-only input.
+- Empty configured header array when input is empty.
+- Multiple calls to `hasNext()` before one `next()`, ensuring no record is skipped.
+- `next()` after iterator exhaustion.
+- `hasNext()` after exhaustion.
+- Parser closure before iterator use and after obtaining an iterator.
+- Constructor record-number offset behavior, including first parsed record receiving the requested initial record number.
+- Character-offset behavior, provided the public `CSVRecord` API exposes character position and its contract is available.
+
+### Invalid and null cases explicitly supported by the visible source
+| API/input | Expected visible behavior |
+|---|---|
+| `parse(File, ..., ...)` with null file | `IllegalArgumentException` via `Assertions.notNull` |
+| `parse(File, ..., ...)` with null format | `IllegalArgumentException` |
+| `parse(InputStream, ..., ...)` with null stream | `IllegalArgumentException` |
+| `parse(InputStream, ..., ...)` with null format | `IllegalArgumentException` |
+| `parse(Path, ..., ...)` with null path | `IllegalArgumentException` |
+| `parse(Path, ..., ...)` with null format | `IllegalArgumentException` |
+| `parse(String, ...)` with null string | `IllegalArgumentException` |
+| `parse(String, ...)` with null format | `IllegalArgumentException` |
+| `parse(URL, ..., ...)` with null URL | `IllegalArgumentException` |
+| `parse(URL, ..., ...)` with null charset | `IllegalArgumentException` |
+| `parse(URL, ..., ...)` with null format | `IllegalArgumentException` |
+| constructors with null reader | `IllegalArgumentException` |
+| constructors with null format | `IllegalArgumentException` |
+| duplicate disallowed header | `IllegalArgumentException` |
+| invalid lexer token sequence | `IOException` |
+| reader I/O failure during iterator traversal | `IllegalStateException`, caused by `IOException` |
+| reader I/O failure through `getRecords()` | `IOException` |
+| `iterator().remove()` | `UnsupportedOperationException` |
+| `iterator().next()` after close | `NoSuchElementException` |
+| `iterator().next()` after EOF | `NoSuchElementException` |
+
+### Null charset ambiguity
+Only the URL overload explicitly validates `charset`.
+
+The other overloads pass charset into JDK APIs:
+- `new InputStreamReader(..., charset)`
+- `Files.newBufferedReader(path, charset)`
+
+The resulting null behavior is governed by the JDK and may be `NullPointerException`; it is not explicitly defined by this class’s documentation for all overloads. A test can document current behavior only if the project’s target Java/runtime is known, but a portable semantic assertion cannot be derived solely from this source.
+
+### I/O exceptional cases
+Possible sources:
+- non-existent/unreadable `File` or `Path`;
+- inaccessible/unavailable URL;
+- custom `InputStream`/`Reader` that throws `IOException`;
+- malformed CSV that makes the lexer produce `INVALID`;
+- `close()` failure from the underlying reader/lexer.
+
+The precise malformed CSV input needed to produce `INVALID` cannot be determined from this class alone because lexer and format rules are not supplied.
+
+---
+
+## 5. Required constructors, dependencies, and external objects
+
+### Direct dependencies required at runtime
+- `CSVFormat`
+- `Lexer`
+- `ExtendedBufferedReader`
+- `Token`
+- `CSVRecord`
+- `Assertions`
+- `Constants`
+- Standard Java I/O/NIO classes
+
+### Test fixtures likely needed
+- `StringReader` for deterministic in-memory inputs.
+- `ByteArrayInputStream` for the `InputStream` factory.
+- Temporary `File`/`Path` containing known CSV content for file/path factories.
+- A local temporary-file `URL` (for example, a `file:` URL) for URL parsing without network dependency.
+- A custom `Reader` that throws `IOException` to test iterator exception wrapping and direct `getRecords()` propagation.
+- A close-tracking or close-failing `Reader` if verifying `close()` delegation or failure behavior.
+- Appropriate `CSVFormat` objects built using APIs available in the project.
+
+### Important lifecycle point
+The parser owns a `Lexer` wrapping the provided reader. `close()` delegates to `lexer.close()`. Tests should close parser instances, especially those created around files, streams, and URLs.
+
+---
+
+## 6. JUnit version and build tool
+
+Supplied project context states:
+
+- **JUnit:** `junit-4.12.jar`
+- **Build tool:** Maven
+
+The triggering failure text uses `junit.framework.AssertionFailedError`, which is associated with JUnit’s legacy assertion hierarchy and can still appear in JUnit 4 environments. However, the supplied declared JUnit artifact/version is **JUnit 4.12**.
+
+No Maven `pom.xml`, test source, Surefire configuration, Java version, or project-specific test command was supplied. Therefore, only Maven and JUnit 4.12 can be stated reliably.
+
+---
+
+## 7. Available test oracle
+
+### Available sources of expected behavior
+1. **Javadoc in the supplied `CSVParser` source**
+   - null/precondition statements;
+   - declared exceptions;
+   - iterator behavior after close;
+   - iterator wrapping of `IOException`;
+   - `getRecords()` starting at current parse position;
+   - header-map ordering/copy semantics;
+   - record and line number descriptions.
+
+2. **Visible source behavior**
+   - Suitable for identifying branches and current implementation behavior.
+   - Must not be treated as the sole correctness oracle, because the prompt explicitly warns not to assume implementation correctness.
+
+3. **Bug report metadata**
+   - Bug: `CSV-224`
+   - Triggering test: `org.apache.commons.csv.CSVParserTest::testIteratorSequenceBreaking`
+   - Failure in buggy revision: expected `<[3]>` but was `<[4]>`
+   - Fixed revision date and ID are supplied, but fixed source/test content is not supplied.
+
+### Not supplied
+- The body of `CSVParserTest.testIteratorSequenceBreaking`.
+- The actual CSV-224 issue description/details.
+- Existing test sources.
+- Fixed-version diff.
+- Javadocs/source for `CSVFormat`, `CSVRecord`, `Lexer`, and `Token`.
+- Maven POM/dependency versions beyond JUnit.
+- Exact intended iterator sequence that yields expected value `3`.
+
+Therefore, the exact assertion needed to reproduce the reported defect cannot be established reliably from the supplied material alone.
+
+---
+
+## 8. Bug-report-related behaviors that should be tested
+
+The reported failure—expected record/value `3` but observed `4`—and test name `testIteratorSequenceBreaking` strongly identify iterator sequencing as the relevant area. Without inventing the missing test scenario, the following behavior categories should be covered:
+
+1. **No skipped record when mixing iterator operations**
+   - `hasNext()` must cache, not consume-and-discard, the next record.
+   - Repeated `hasNext()` must not advance beyond the next record.
+   - `next()` after `hasNext()` must return the cached next record.
+
+2. **No skipped record when `next()` is used directly**
+   - Repeated `next()` without `hasNext()` must return records in source order.
+
+3. **Multiple iterators obtained from one parser**
+   - `CSVParser` is stream-based and parser state is shared.
+   - Since `iterator()` returns a new iterator but all iterators call the same `CSVParser.nextRecord()`, interleaving two iterators can expose sequencing interactions.
+   - The intended semantics for independently interleaved iterators are not documented in the supplied source. Tests may safely verify that no unexpected duplicate/skip occurs only if the bug report or existing test defines that scenario.
+
+4. **Mixing `getRecords()` with iteration**
+   - Javadoc explicitly says `getRecords()` starts at current parser position.
+   - A test should verify remaining-record behavior after one or more records have already been consumed by an iterator.
+
+5. **End-of-input sequencing**
+   - `hasNext()` at EOF must return `false`.
+   - `next()` at EOF must throw `NoSuchElementException`.
+   - Repeated EOF checks must not alter parser state or record numbering unexpectedly.
+
+6. **Close sequencing**
+   - Existing iterator’s `hasNext()` after `parser.close()` returns `false`.
+   - Existing iterator’s `next()` after close throws `NoSuchElementException`.
+
+The bug report establishes that a sequence-related iterator regression exists in `Csv-16b`, but it does **not** provide enough detail to specify the exact API-call sequence or expected records beyond the observed mismatch between `3` and `4`.
+
+---
+
+## 9. Missing context needed for compilable and meaningful tests
+
+The following information is absent and is needed to produce robust tests, particularly a precise regression test for CSV-224:
+
+1. **Body of `CSVParserTest.testIteratorSequenceBreaking`**
+   - This is the most important missing item.
+   - It would define the precise operation sequence and expected record/value `3`.
+
+2. **CSV-224 bug report description or fixed-version patch**
+   - Needed to determine the intended iterator contract violated by the buggy source.
+
+3. **`CSVFormat` API/source**
+   - Needed to construct formats accurately for header, trim, trailing delimiter, null string, comments, and invalid syntax tests.
+   - The parser references format accessors, but the supplied source does not show the public builder/configuration API.
+
+4. **`CSVRecord` API/source**
+   - Needed to know how to obtain field values, record numbers, comments, and character positions in assertions.
+
+5. **`Lexer`/`Token` behavior**
+   - Needed to select valid CSV inputs for `COMMENT`, `INVALID`, multiline fields, EOF readiness, and EOL detection branches.
+
+6. **Existing project test conventions and Maven configuration**
+   - Needed for package naming, temporary-file utilities, style, Java source level, and available assertion libraries.
+
+7. **Definition of `Assertions.notNull`**
+   - The source indicates it throws an exception, and Javadocs say `IllegalArgumentException`, but its exact message and implementation are not supplied. Tests should avoid asserting messages unless its contract/source is available.
+
+8. **Target JDK/runtime**
+   - Needed if testing behavior from JDK APIs for null charsets or filesystem/URL exception types.
+
+In summary, basic API tests can be designed from the provided source and Javadocs, but a reliable, compilable regression test for **CSV-224 / `testIteratorSequenceBreaking`** requires at least the missing triggering-test body or bug-report scenario.

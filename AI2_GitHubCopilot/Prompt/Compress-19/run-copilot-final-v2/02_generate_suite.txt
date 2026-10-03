@@ -1,0 +1,287 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 19  Version: Compress-19b
+JUnit: junit-4.11.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraField
+Modified: org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraField
+Triggers: org.apache.commons.compress.archivers.zip.ZipFileTest::testExcessDataInZip64ExtraField
+
+Bug/specification summary:
+Bug report: COMPRESS-228
+Trigger failures:
+- org.apache.commons.compress.archivers.zip.ZipFileTest::testExcessDataInZip64ExtraField
+ --> java.util.zip.ZipException: central directory zip64 extended information extra field's length doesn't match central directory data. Expected length 16 but is 28
+Modified: org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraField
+
+Prompt-01 test plan:
+TARGETS: parseFromLocalFileData parsing size, compressedSize, relativeHeaderOffset, diskStartNumber
+boundaries.
+TARGETS: getCentralDirectoryLength/getCentralDirectoryData consistency after central parsing (28 vs
+old 16).
+TARGETS: setSize/setCompressedSize/setRelativeHeaderOffset/setDiskStartNumber length contributions
+and serialized output.
+TARGETS: getLocalFileDataLength vs getCentralDirectoryLength for local-only sizes (16) versus full
+central fields (28).
+ORACLES: failure message from ZipFileTest testExcessDataInZip64ExtraField: expected length 16 but is
+28.
+ORACLES: round-trip getCentralDirectoryData -> parse should preserve size, compressedSize,
+relativeHeaderOffset, diskStart.
+CASES: absent fields, only sizes set, all four zip64 fields set, trailing excess bytes in extra
+field.
+CASES: buffer offset/length boundaries when fewer than required bytes are available for parsing.
+RISKS: no central-directory parse method listed; infer expected fix from exception text and listed
+signatures only.
+RISKS: trigger archive bytes not supplied, so expected values rely on test name and failure message
+alone.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraField (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.zip;
+public class Zip64ExtendedInformationExtraField implements ZipExtraField {
+static final ZipShort HEADER_ID = new ZipShort(0x0001);
+public Zip64ExtendedInformationExtraField() { }
+public ZipShort getHeaderId() {
+public ZipShort getLocalFileDataLength() {
+public ZipShort getCentralDirectoryLength() {
+public byte[] getLocalFileDataData() {
+public byte[] getCentralDirectoryData() {
+public void parseFromLocalFileData(byte[] buffer, int offset, int length)
+public ZipEightByteInteger getSize() {
+public void setSize(ZipEightByteInteger size) {
+public ZipEightByteInteger getCompressedSize() {
+public void setCompressedSize(ZipEightByteInteger compressedSize) {
+public ZipEightByteInteger getRelativeHeaderOffset() {
+public void setRelativeHeaderOffset(ZipEightByteInteger rho) {
+public ZipLong getDiskStartNumber() {
+public void setDiskStartNumber(ZipLong ds) {
+private int addSizes(byte[] data) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.zip;
+import java.util.zip.ZipException;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.DWORD;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.WORD;
+public class Zip64ExtendedInformationExtraField implements ZipExtraField {
+
+/* METHOD Zip64ExtendedInformationExtraField */
+public Zip64ExtendedInformationExtraField(ZipEightByteInteger size,
+ ZipEightByteInteger compressedSize) {
+ this(size, compressedSize, null, null);
+ }
+
+/* METHOD Zip64ExtendedInformationExtraField */
+public Zip64ExtendedInformationExtraField(ZipEightByteInteger size,
+ ZipEightByteInteger compressedSize,
+ ZipEightByteInteger relativeHeaderOffset,
+ ZipLong diskStart) {
+ this.size = size;
+ this.compressedSize = compressedSize;
+ this.relativeHeaderOffset = relativeHeaderOffset;
+ this.diskStart = diskStart;
+ }
+
+/* METHOD Zip64ExtendedInformationExtraField */
+public Zip64ExtendedInformationExtraField() { }
+
+/* METHOD reparseCentralDirectoryData */
+public void reparseCentralDirectoryData(boolean hasUncompressedSize,
+ boolean hasCompressedSize,
+ boolean hasRelativeHeaderOffset,
+ boolean hasDiskStart)
+ throws ZipException {
+ if (rawCentralDirectoryData != null) {
+ int expectedLength = (hasUncompressedSize ? DWORD : 0)
+ + (hasCompressedSize ? DWORD : 0)
+ + (hasRelativeHeaderOffset ? DWORD : 0)
+ + (hasDiskStart ? WORD : 0);
+ if (rawCentralDirectoryData.length != expectedLength) {
+ throw new ZipException("central directory zip64 extended"
+ + " information extra field's length"
+ + " doesn't match central directory"
+ + " data. Expected length "
+ + expectedLength + " but is "
+ + rawCentralDirectoryData.length);
+ }
+ int offset = 0;
+ if (hasUncompressedSize) {
+ size = new ZipEightByteInteger(rawCentralDirectoryData, offset);
+ offset += DWORD;
+ }
+ if (hasCompressedSize) {
+ compressedSize = new ZipEightByteInteger(rawCentralDirectoryData,
+ offset);
+ offset += DWORD;
+ }
+ if (hasRelativeHeaderOffset) {
+ relativeHeaderOffset =
+ new ZipEightByteInteger(rawCentralDirectoryData, offset);
+ offset += DWORD;
+ }
+ if (hasDiskStart) {
+ diskStart = new ZipLong(rawCentralDirectoryData, offset);
+ offset += WORD;
+ }
+ }
+ }
+
+/* METHOD parseFromLocalFileData */
+public void parseFromLocalFileData(byte[] buffer, int offset, int length)
+ throws ZipException {
+ if (length == 0) {
+ // no local file data at all, may happen if an archive
+ // only holds a ZIP64 extended information extra field
+ // inside the central directory but not inside the local
+ // file header
+ return;
+ }
+ if (length < 2 * DWORD) {
+ throw new ZipException(LFH_MUST_HAVE_BOTH_SIZES_MSG);
+ }
+ size = new ZipEightByteInteger(buffer, offset);
+ offset += DWORD;
+ compressedSize = new ZipEightByteInteger(buffer, offset);
+ offset += DWORD;
+ int remaining = length - 2 * DWORD;
+ if (remaining >= DWORD) {
+ relativeHeaderOffset = new ZipEightByteInteger(buffer, offset);
+ offset += DWORD;
+ remaining -= DWORD;
+ }
+ if (remaining >= WORD) {
+ diskStart = new ZipLong(buffer, offset);
+ offset += WORD;
+ remaining -= WORD;
+ }
+ }
+
+/* METHOD parseFromCentralDirectoryData */
+public void parseFromCentralDirectoryData(byte[] buffer, int offset,
+ int length)
+ throws ZipException {
+ // store for processing in reparseCentralDirectoryData
+ rawCentralDirectoryData = new byte[length];
+ System.arraycopy(buffer, offset, rawCentralDirectoryData, 0, length);
+
+ // if there is no size information in here, we are screwed and
+ // can only hope things will get resolved by LFH data later
+ // But there are some cases that can be detected
+ // * all data is there
+ // * length == 24 -> both sizes and offset
+ // * length % 8 == 4 -> at least we can identify the diskStart field
+ if (length >= 3 * DWORD + WORD) {
+ parseFromLocalFileData(buffer, offset, length);
+ } else if (length == 3 * DWORD) {
+ size = new ZipEightByteInteger(buffer, offset);
+ offset += DWORD;
+ compressedSize = new ZipEightByteInteger(buffer, offset);
+ offset += DWORD;
+ relativeHeaderOffset = new ZipEightByteInteger(buffer, offset);
+ } else if (length % DWORD == WORD) {
+ diskStart = new ZipLong(buffer, offset + length - WORD);
+ }
+ }
+
+/* METHOD getCentralDirectoryLength */
+public ZipShort getCentralDirectoryLength() {
+ return new ZipShort((size != null ? DWORD : 0)
+ + (compressedSize != null ? DWORD : 0)
+ + (relativeHeaderOffset != null ? DWORD : 0)
+ + (diskStart != null ? WORD : 0));
+ }
+
+/* METHOD getCentralDirectoryData */
+public byte[] getCentralDirectoryData() {
+ byte[] data = new byte[getCentralDirectoryLength().getValue()];
+ int off = addSizes(data);
+ if (relativeHeaderOffset != null) {
+ System.arraycopy(relativeHeaderOffset.getBytes(), 0, data, off, DWORD);
+ off += DWORD;
+ }
+ if (diskStart != null) {
+ System.arraycopy(diskStart.getBytes(), 0, data, off, WORD);
+ off += WORD;
+ }
+ return data;
+ }
+
+/* METHOD getLocalFileDataLength */
+public ZipShort getLocalFileDataLength() {
+ return new ZipShort(size != null ? 2 * DWORD : 0);
+ }
+
+/* METHOD getLocalFileDataData */
+public byte[] getLocalFileDataData() {
+ if (size != null || compressedSize != null) {
+ if (size == null || compressedSize == null) {
+ throw new IllegalArgumentException(LFH_MUST_HAVE_BOTH_SIZES_MSG);
+ }
+ byte[] data = new byte[2 * DWORD];
+ addSizes(data);
+ return data;
+ }
+ return EMPTY;
+ }
+
+/* METHOD getCompressedSize */
+public ZipEightByteInteger getCompressedSize() {
+ return compressedSize;
+ }
+
+/* METHOD setCompressedSize */
+public void setCompressedSize(ZipEightByteInteger compressedSize) {
+ this.compressedSize = compressedSize;
+ }
+
+/* METHOD getDiskStartNumber */
+public ZipLong getDiskStartNumber() {
+ return diskStart;
+ }
+
+/* METHOD setDiskStartNumber */
+public void setDiskStartNumber(ZipLong ds) {
+ diskStart = ds;
+ }
+
+/* METHOD getHeaderId */
+public ZipShort getHeaderId() {
+ return HEADER_ID;
+ }
+
+/* METHOD getSize */
+public ZipEightByteInteger getSize() {
+ return size;
+ }
+
+/* METHOD setSize */
+public void setSize(ZipEightByteInteger size) {
+ this.size = size;
+ }
+
+/* METHOD getRelativeHeaderOffset */
+public ZipEightByteInteger getRelativeHeaderOffset() {
+ return relativeHeaderOffset;
+ }
+
+/* METHOD setRelativeHeaderOffset */
+public void setRelativeHeaderOffset(ZipEightByteInteger rho) {
+ relativeHeaderOffset = rho;
+ }
+
+/* METHOD addSizes */
+private int addSizes(byte[] data) {
+ int off = 0;
+ if (size != null) {
+ System.arraycopy(size.getBytes(), 0, data, 0, DWORD);
+ off += DWORD;
+ }
+ if (compressedSize != null) {
+ System.arraycopy(compressedSize.getBytes(), 0, data, off, DWORD);
+ off += DWORD;
+ }
+ return off;
+ }

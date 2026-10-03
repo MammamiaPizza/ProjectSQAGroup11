@@ -1,0 +1,318 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Codec  Bug: 8  Version: Codec-8b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.codec.binary.Base64, org.apache.commons.codec.binary.Base64InputStream
+Modified: org.apache.commons.codec.binary.Base64, org.apache.commons.codec.binary.Base64InputStream
+Triggers: org.apache.commons.codec.binary.Base64InputStreamTest::testCodec105
+
+Bug/specification summary:
+Bug report: CODEC-105
+Trigger failures:
+- org.apache.commons.codec.binary.Base64InputStreamTest::testCodec105
+ --> java.lang.ArrayIndexOutOfBoundsException: 2
+Modified: org.apache.commons.codec.binary.Base64, org.apache.commons.codec.binary.Base64InputStream
+
+Prompt-01 test plan:
+TARGETS: Base64InputStream.read() and read(byte[],int,int) in both encode/decode modes
+TARGETS: Base64InputStream constructors with lineLength, lineSeparator, doEncode params
+TARGETS: Base64.encode(byte[]) and decode(byte[]) as called internally by the stream
+ORACLES: no ArrayIndexOutOfBoundsException; output matches expected Base64 encoding/decoding
+ORACLES: encode: stream output equals Base64.encodeBase64(original); decode: recovered bytes equal
+original
+CASES: empty, single-byte, boundary sizes at MIME_CHUNK_SIZE (76) and PEM_CHUNK_SIZE (64)
+CASES: lengths 1 less, equal, 1 more than internal buffer capacity; non-null lineSeparator with
+varying sizes
+CASES: doEncode=true/false, urlSafe mode, maxResultSize limits in encodeBase64 overloads
+CASES: read(byte[],offset,len) with offset+len at array edge, len=0, len>buffer, partial reads after
+-1
+RISKS: bug exact root unknown; must detect any IndexOutOfBoundsException; cannot access private
+resizeBuffer; rely only on public API behavior
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.codec.binary.Base64 (java) =====
+/* API SIGNATURES */
+package org.apache.commons.codec.binary;
+public class Base64 implements BinaryEncoder, BinaryDecoder {
+public static final int MIME_CHUNK_SIZE = 76;
+public static final int PEM_CHUNK_SIZE = 64;
+public Base64() {
+public Base64(boolean urlSafe) {
+public Base64(int lineLength) {
+public Base64(int lineLength, byte[] lineSeparator) {
+public Base64(int lineLength, byte[] lineSeparator, boolean urlSafe) {
+public boolean isUrlSafe() {
+private void resizeBuffer() {
+public static boolean isBase64(byte octet) {
+public static boolean isArrayByteBase64(byte[] arrayOctet) {
+private static boolean containsBase64Byte(byte[] arrayOctet) {
+public static byte[] encodeBase64(byte[] binaryData) {
+public static String encodeBase64String(byte[] binaryData) {
+public static byte[] encodeBase64URLSafe(byte[] binaryData) {
+public static String encodeBase64URLSafeString(byte[] binaryData) {
+public static byte[] encodeBase64Chunked(byte[] binaryData) {
+public Object decode(Object pObject) throws DecoderException {
+public byte[] decode(String pArray) {
+public byte[] decode(byte[] pArray) {
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked) {
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked, boolean urlSafe) {
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked, boolean urlSafe, int maxResultSize) {
+public static byte[] decodeBase64(String base64String) {
+public static byte[] decodeBase64(byte[] base64Data) {
+static byte[] discardWhitespace(byte[] data) {
+private static boolean isWhiteSpace(byte byteToCheck) {
+public Object encode(Object pObject) throws EncoderException {
+public String encodeToString(byte[] pArray) {
+public byte[] encode(byte[] pArray) {
+private static long getEncodeLength(byte[] pArray, int chunkSize, byte[] chunkSeparator) {
+public static BigInteger decodeInteger(byte[] pArray) {
+public static byte[] encodeInteger(BigInteger bigInt) {
+static byte[] toIntegerBytes(BigInteger bigInt) {
+private void reset() {
+
+/* HEADER */
+package org.apache.commons.codec.binary;
+import java.math.BigInteger;
+import org.apache.commons.codec.BinaryDecoder;
+import org.apache.commons.codec.BinaryEncoder;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.EncoderException;
+public class Base64 implements BinaryEncoder, BinaryDecoder {
+
+/* METHOD Base64 */
+public Base64(boolean urlSafe) {
+ this(MIME_CHUNK_SIZE, CHUNK_SEPARATOR, urlSafe);
+ }
+
+/* METHOD Base64 */
+public Base64(int lineLength, byte[] lineSeparator, boolean urlSafe) {
+ if (lineSeparator == null) {
+ lineLength = 0; // disable chunk-separating
+ lineSeparator = CHUNK_SEPARATOR; // this just gets ignored
+ }
+ this.lineLength = lineLength > 0 ? (lineLength / 4) * 4 : 0;
+ this.lineSeparator = new byte[lineSeparator.length];
+ System.arraycopy(lineSeparator, 0, this.lineSeparator, 0, lineSeparator.length);
+ if (lineLength > 0) {
+ this.encodeSize = 4 + lineSeparator.length;
+ } else {
+ this.encodeSize = 4;
+ }
+ this.decodeSize = this.encodeSize - 1;
+ if (containsBase64Byte(lineSeparator)) {
+ String sep = StringUtils.newStringUtf8(lineSeparator);
+ throw new IllegalArgumentException("lineSeperator must not contain base64 characters: [" + sep + "]");
+ }
+ this.encodeTable = urlSafe ? URL_SAFE_ENCODE_TABLE : STANDARD_ENCODE_TABLE;
+ }
+
+/* METHOD Base64 */
+public Base64() {
+ this(0);
+ }
+
+/* METHOD Base64 */
+public Base64(int lineLength) {
+ this(lineLength, CHUNK_SEPARATOR);
+ }
+
+/* METHOD Base64 */
+public Base64(int lineLength, byte[] lineSeparator) {
+ this(lineLength, lineSeparator, false);
+ }
+
+/* METHOD encodeBase64URLSafe */
+public static byte[] encodeBase64URLSafe(byte[] binaryData) {
+ return encodeBase64(binaryData, false, true);
+ }
+
+/* METHOD encodeBase64URLSafeString */
+public static String encodeBase64URLSafeString(byte[] binaryData) {
+ return StringUtils.newStringUtf8(encodeBase64(binaryData, false, true));
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked, boolean urlSafe) {
+ return encodeBase64(binaryData, isChunked, urlSafe, Integer.MAX_VALUE);
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked, boolean urlSafe, int maxResultSize) {
+ if (binaryData == null || binaryData.length == 0) {
+ return binaryData;
+ }
+
+ long len = getEncodeLength(binaryData, MIME_CHUNK_SIZE, CHUNK_SEPARATOR);
+ if (len > maxResultSize) {
+ throw new IllegalArgumentException("Input array too big, the output array would be bigger (" +
+ len +
+ ") than the specified maxium size of " +
+ maxResultSize);
+ }
+ 
+ Base64 b64 = isChunked ? new Base64(urlSafe) : new Base64(0, CHUNK_SEPARATOR, urlSafe);
+ return b64.encode(binaryData);
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData) {
+ return encodeBase64(binaryData, false);
+ }
+
+/* METHOD encodeBase64String */
+public static String encodeBase64String(byte[] binaryData) {
+ return StringUtils.newStringUtf8(encodeBase64(binaryData, false));
+ }
+
+/* METHOD encodeBase64Chunked */
+public static byte[] encodeBase64Chunked(byte[] binaryData) {
+ return encodeBase64(binaryData, true);
+ }
+
+/* METHOD encodeBase64 */
+public static byte[] encodeBase64(byte[] binaryData, boolean isChunked) {
+ return encodeBase64(binaryData, isChunked, false);
+ }
+
+/* METHOD isBase64 */
+public static boolean isBase64(byte octet) {
+ return octet == PAD || (octet >= 0 && octet < DECODE_TABLE.length && DECODE_TABLE[octet] != -1);
+ }
+
+/* METHOD isArrayByteBase64 */
+public static boolean isArrayByteBase64(byte[] arrayOctet) {
+ for (int i = 0; i < arrayOctet.length; i++) {
+ if (!isBase64(arrayOctet[i]) && !isWhiteSpace(arrayOctet[i])) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+===== org.apache.commons.codec.binary.Base64InputStream (java) =====
+/* API SIGNATURES */
+package org.apache.commons.codec.binary;
+public class Base64InputStream extends FilterInputStream {
+public Base64InputStream(InputStream in) {
+public Base64InputStream(InputStream in, boolean doEncode) {
+public Base64InputStream(InputStream in, boolean doEncode, int lineLength, byte[] lineSeparator) {
+public int read() throws IOException {
+public int read(byte b[], int offset, int len) throws IOException {
+public boolean markSupported() {
+
+/* HEADER */
+package org.apache.commons.codec.binary;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+public class Base64InputStream extends FilterInputStream {
+
+/* METHOD Base64InputStream */
+public Base64InputStream(InputStream in) {
+ this(in, false);
+ }
+
+/* METHOD Base64InputStream */
+public Base64InputStream(InputStream in, boolean doEncode) {
+ super(in);
+ this.doEncode = doEncode;
+ this.base64 = new Base64(false);
+ }
+
+/* METHOD Base64InputStream */
+public Base64InputStream(InputStream in, boolean doEncode, int lineLength, byte[] lineSeparator) {
+ super(in);
+ this.doEncode = doEncode;
+ this.base64 = new Base64(lineLength, lineSeparator);
+ }
+
+/* METHOD read */
+public int read(byte b[], int offset, int len) throws IOException {
+ if (b == null) {
+ throw new NullPointerException();
+ } else if (offset < 0 || len < 0) {
+ throw new IndexOutOfBoundsException();
+ } else if (offset > b.length || offset + len > b.length) {
+ throw new IndexOutOfBoundsException();
+ } else if (len == 0) {
+ return 0;
+ } else {
+ int readLen = 0;
+ /*
+ Rationale for while-loop on (readLen == 0):
+ -----
+ Base64.readResults() usually returns > 0 or EOF (-1). In the
+ rare case where it returns 0, we just keep trying.
+
+ This is essentially an undocumented contract for InputStream
+ implementors that want their code to work properly with
+ java.io.InputStreamReader, since the latter hates it when
+ InputStream.read(byte[]) returns a zero. Unfortunately our
+ readResults() call must return 0 if a large amount of the data
+ being decoded was non-base64, so this while-loop enables proper
+ interop with InputStreamReader for that scenario.
+ -----
+ This is a fix for CODEC-101
+ */
+ while (readLen == 0) {
+ if (!base64.hasData()) {
+ byte[] buf = new byte[doEncode ? 4096 : 8192];
+ int c = in.read(buf);
+ if (c > 0 && b.length == len) {
+ base64.setInitialBuffer(b, offset, len);
+ }
+ if (doEncode) {
+ base64.encode(buf, 0, c);
+ } else {
+ base64.decode(buf, 0, c);
+ }
+ }
+ readLen = base64.readResults(b, offset, len);
+ }
+ return readLen;
+ }
+ }
+
+/* METHOD read */
+public int read() throws IOException {
+ int r = read(singleByte, 0, 1);
+ while (r == 0) {
+ r = read(singleByte, 0, 1);
+ }
+ if (r > 0) {
+ return singleByte[0] < 0 ? 256 + singleByte[0] : singleByte[0];
+ }
+ return -1;
+ }
+
+/* METHOD markSupported */
+public boolean markSupported() {
+ return false; // not an easy job to support marks
+ }
+
+/* METHOD readResults */
+readResults() call must return 0 if a large amount of the data
+ being decoded was non-base64, so this while-loop enables proper
+ interop with InputStreamReader for that scenario.
+ -----
+ This is a fix for CODEC-101
+ */
+ while (readLen == 0) {
+ if (!base64.hasData()) {
+ byte[] buf = new byte[doEncode ? 4096 : 8192];
+ int c = in.read(buf);
+ if (c > 0 && b.length == len) {
+ base64.setInitialBuffer(b, offset, len);
+ }
+ if (doEncode) {
+ base64.encode(buf, 0, c);
+ } else {
+ base64.decode(buf, 0, c);
+ }
+ }
+ readLen = base64.readResults(b, offset, len);
+ }

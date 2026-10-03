@@ -1,0 +1,423 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 162  Version: Closure-162b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.Scope, com.google.javascript.jscomp.ScopedAliases
+Modified: com.google.javascript.jscomp.Scope, com.google.javascript.jscomp.ScopedAliases
+Triggers: com.google.javascript.jscomp.ScopedAliasesTest::testForwardJsDoc
+
+Bug/specification summary:
+Bug report: 548
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testForwardJsDoc
+ --> junit.framework.AssertionFailedError: expected:<[STRING foo.Foo.Bar 4 [source_file: testcode]
+Modified: com.google.javascript.jscomp.Scope, com.google.javascript.jscomp.ScopedAliases
+
+Prompt-01 test plan:
+TARGETS: ScopedAliases.Traversal.visit,fixTypeNode; Scope.getVar,Scope.Var.toString
+ORACLES: ScopedAliasesTest.testForwardJsDoc expected string; Var has correct name & source file
+after alias resolution
+CASES: alias used before define (forward) in same scope, after define, nested alias chains, alias in
+global vs local scope, missing alias (error)
+RISKS: assertion tied to Var.toString format; may miss other forward JSDoc usages; fix could regress
+non‑JSDoc alias handling
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.Scope (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public class Scope
+private final Map<String, Var> vars = new LinkedHashMap<String, Var>();
+@Override public boolean apply(Var var) {
+public static class Var
+@Override
+public String getName() {
+public Node getNode() {
+public StaticSourceFile getSourceFile() {
+public Var getSymbol() {
+public Var getDeclaration() {
+public Node getParentNode() {
+public boolean isBleedingFunction() {
+public boolean isGlobal() {
+public boolean isLocal() {
+public boolean isConst() {
+public boolean isDefine() {
+public Node getInitialValue() {
+public JSType getType() {
+public Node getNameNode() {
+public JSDocInfo getJSDocInfo() {
+public boolean isTypeInferred() {
+public String getInputName() {
+public boolean isNoShadow() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+public String toString() {
+public static class Arguments extends Var {
+public Node getRootNode() {
+public Scope getParent() {
+public StaticScope<JSType> getParentScope() {
+public ObjectType getTypeOfThis() {
+public StaticSlot<JSType> getSlot(String name) {
+public StaticSlot<JSType> getOwnSlot(String name) {
+public Var getVar(String name) {
+public Var getArgumentsVar() {
+public boolean isDeclared(String name, boolean recurse) {
+public Iterator<Var> getVars() {
+public Iterable<Var> getReferences(Var var) {
+public StaticScope<JSType> getScope(Var var) {
+public Iterable<Var> getAllSymbols() {
+public int getVarCount() {
+public Iterator<Var> getDeclarativelyUnboundVarsWithoutTypes() {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import static com.google.javascript.rhino.jstype.JSTypeNative.GLOBAL_THIS;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterators;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.StaticReference;
+import com.google.javascript.rhino.jstype.StaticScope;
+import com.google.javascript.rhino.jstype.StaticSlot;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import com.google.javascript.rhino.jstype.StaticSymbolTable;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+public class Scope
+
+/* METHOD Scope */
+Scope(Node rootNode, AbstractCompiler compiler) {
+ this.parent = null;
+ this.rootNode = rootNode;
+ thisType = compiler.getTypeRegistry().getNativeObjectType(GLOBAL_THIS);
+ this.isBottom = false;
+ this.depth = 0;
+ }
+
+/* METHOD Scope */
+Scope(Scope parent, Node rootNode) {
+ Preconditions.checkNotNull(parent);
+ Preconditions.checkArgument(rootNode != parent.rootNode);
+
+ this.parent = parent;
+ this.rootNode = rootNode;
+ JSType nodeType = rootNode.getJSType();
+ if (nodeType != null && nodeType.isFunctionType()) {
+ thisType = nodeType.toMaybeFunctionType().getTypeOfThis();
+ } else {
+ thisType = parent.thisType;
+ }
+ this.isBottom = false;
+ this.depth = parent.depth + 1;
+ }
+
+/* METHOD Scope */
+Scope(Node rootNode, ObjectType thisType) {
+ this.parent = null;
+ this.rootNode = rootNode;
+ this.thisType = thisType;
+ this.isBottom = true;
+ this.depth = 0;
+ }
+
+/* METHOD getInputName */
+public String getInputName() {
+ if (input == null)
+ return "<non-file>";
+ else
+ return input.getName();
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "Scope.Var " + name + "{" + type + "}";
+ }
+
+/* METHOD getVar */
+public Var getVar(String name) {
+ Var var = vars.get(name);
+ if (var != null) {
+ return var;
+ } else if (parent != null) { // Recurse up the parent Scope
+ return parent.getVar(name);
+ } else {
+ return null;
+ }
+ }
+
+/* METHOD isDeclared */
+public boolean isDeclared(String name, boolean recurse) {
+ Scope scope = this;
+ if (scope.vars.containsKey(name))
+ return true;
+
+ if (scope.parent != null && recurse) {
+ return scope.parent.isDeclared(name, recurse);
+ }
+ return false;
+ }
+
+/* METHOD getName */
+@Override
+ public String getName() {
+ return name;
+ }
+
+/* METHOD getSourceFile */
+@Override
+ public StaticSourceFile getSourceFile() {
+ return nameNode.getStaticSourceFile();
+ }
+
+/* METHOD isGlobal */
+public boolean isGlobal() {
+ return scope.isGlobal();
+ }
+
+/* METHOD isLocal */
+public boolean isLocal() {
+ return scope.isLocal();
+ }
+
+/* METHOD getRootNode */
+@Override
+ public Node getRootNode() {
+ return rootNode;
+ }
+
+/* METHOD getParent */
+public Scope getParent() {
+ return parent;
+ }
+
+/* METHOD getParentScope */
+@Override
+ public StaticScope<JSType> getParentScope() {
+ return parent;
+ }
+
+/* METHOD getSlot */
+@Override
+ public StaticSlot<JSType> getSlot(String name) {
+ return getVar(name);
+ }
+
+/* METHOD getOwnSlot */
+@Override
+ public StaticSlot<JSType> getOwnSlot(String name) {
+ return vars.get(name);
+ }
+
+/* METHOD getReferences */
+@Override
+ public Iterable<Var> getReferences(Var var) {
+ return ImmutableList.of(var);
+ }
+
+/* METHOD getScope */
+@Override
+ public StaticScope<JSType> getScope(Var var) {
+ return var.scope;
+ }
+
+/* METHOD Var */
+private Var(boolean inferred, String name, Node nameNode, JSType type,
+ Scope scope, int index, CompilerInput input, boolean isDefine,
+ JSDocInfo info) {
+ this.name = name;
+ this.nameNode = nameNode;
+ this.type = type;
+ this.scope = scope;
+ this.index = index;
+ this.input = input;
+ this.isDefine = isDefine;
+ this.info = info;
+ this.typeInferred = inferred;
+ }
+
+===== com.google.javascript.jscomp.ScopedAliases (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class ScopedAliases implements HotSwapCompilerPass {
+@Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node root, Node originalRoot) {
+private interface AliasUsage {
+public void applyAlias();
+private class AliasedNode implements AliasUsage {
+public void applyAlias() {
+private class AliasedTypeNode implements AliasUsage {
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> aliasUsages = Lists.newArrayList();
+private final Map<String, Var> aliases = Maps.newHashMap();
+private List<AliasUsage> getAliasUsages() {
+private boolean isCallToScopeMethod(Node n) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+public final boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+private SourcePosition<AliasTransformation> getSourceRegion(Node n) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformation;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformationHandler;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.SourcePosition;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import javax.annotation.Nullable;
+class ScopedAliases implements HotSwapCompilerPass {
+
+/* METHOD report */
+private void report(NodeTraversal t, Node n, DiagnosticType error,
+ String... arguments) {
+ compiler.report(t.makeError(n, error, arguments));
+ hasErrors = true;
+ }
+
+/* METHOD ScopedAliases */
+ScopedAliases(AbstractCompiler compiler,
+ @Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+ AliasTransformationHandler transformationHandler) {
+ this.compiler = compiler;
+ this.preprocessorSymbolTable = preprocessorSymbolTable;
+ this.transformationHandler = transformationHandler;
+ }
+
+/* METHOD hotSwapScript */
+@Override
+ public void hotSwapScript(Node root, Node originalRoot) {
+ Traversal traversal = new Traversal();
+ NodeTraversal.traverse(compiler, root, traversal);
+
+ if (!traversal.hasErrors()) {
+
+ // Apply the aliases.
+ for (AliasUsage aliasUsage : traversal.getAliasUsages()) {
+ aliasUsage.applyAlias();
+ }
+
+ // Remove the alias definitions.
+ for (Node aliasDefinition : traversal.getAliasDefinitionsInOrder()) {
+ if (aliasDefinition.getParent().getType() == Token.VAR &&
+ aliasDefinition.getParent().hasOneChild()) {
+ aliasDefinition.getParent().detachFromParent();
+ } else {
+ aliasDefinition.detachFromParent();
+ }
+ }
+
+ // Collapse the scopes.
+ for (Node scopeCall : traversal.getScopeCalls()) {
+ Node expressionWithScopeCall = scopeCall.getParent();
+ Node scopeClosureBlock = scopeCall.getLastChild().getLastChild();
+ scopeClosureBlock.detachFromParent();
+ expressionWithScopeCall.getParent().replaceChild(
+ expressionWithScopeCall,
+ scopeClosureBlock);
+ NodeUtil.tryMergeBlock(scopeClosureBlock);
+ }
+
+ if (traversal.getAliasUsages().size() > 0 ||
+ traversal.getAliasDefinitionsInOrder().size() > 0 ||
+ traversal.getScopeCalls().size() > 0) {
+ compiler.reportCodeChange();
+ }
+ }
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (isCallToScopeMethod(n)) {
+ validateScopeCall(t, n, n.getParent());
+ }
+
+ // Validate the top level of the goog.scope block.
+ if (t.getScopeDepth() == 2) {
+ int type = n.getType();
+ if (type == Token.NAME && parent.getType() == Token.VAR) {
+ if (n.hasChildren() && n.getFirstChild().isQualifiedName()) {
+ String name = n.getString();
+ Var aliasVar = t.getScope().getVar(name);
+ aliases.put(name, aliasVar);
+ aliasDefinitionsInOrder.add(n);
+
+ String qualifiedName =
+ aliasVar.getInitialValue().getQualifiedName();
+ transformation.addAlias(name, qualifiedName);
+ // Return early, to ensure that we don't record a definition
+ // twice.
+ return;
+ } else {
+ report(t, n, GOOG_SCOPE_NON_ALIAS_LOCAL, n.getString());
+ }
+ }
+ if (type == Token.NAME && NodeUtil.isAssignmentOp(parent) &&
+ n == parent.getFirstChild()) {
+ report(t, n, GOOG_SCOPE_ALIAS_REDEFINED, n.getString());
+ }
+
+ if (type == Token.RETURN) {
+ report(t, n, GOOG_SCOPE_USES_RETURN);
+ } else if (type == Token.THIS) {
+ report(t, n, GOOG_SCOPE_REFERENCES_THIS);
+ } else if (type == Token.THROW) {
+ report(t, n, GOOG_SCOPE_USES_THROW);
+ }
+ }
+
+ // Validate all descendent scopes of the goog.scope block.
+ if (t.getScopeDepth() >= 2) {
+ // Check if this name points to an alias.
+ if (n.getType() == Token.NAME) {
+ String name = n.getString();
+ Var aliasVar = aliases.get(name);
+ if (aliasVar != null &&
+ t.getScope().getVar(name) == aliasVar) {
+ // Note, to support the transitive case, it's important we don't
+ // clone aliasedNode here. For example,
+ // var g = goog; var d = g.dom; d.createElement('DIV');
+ // The node in aliasedNode (which is "g") will be replaced in the
+ // changes pass above with "goog". If we cloned here, we'd end up
+ // with <code>g.dom.createElement('DIV')</code>.
+ Node aliasedNode = aliasVar.getInitialValue();
+ aliasUsages.add(new AliasedNode(n, aliasedNode));
+ }
+ }
+
+ JSDocInfo info = n.getJSDocInfo();
+ if (info != null) {
+ for (Node node : info.getTypeNodes()) {
+ fixTypeNode(node);
+ }
+ }
+
+ // TODO(robbyw): Error for goog.scope not at root.
+ }
+ }

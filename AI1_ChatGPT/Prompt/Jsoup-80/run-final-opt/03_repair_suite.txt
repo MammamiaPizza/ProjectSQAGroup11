@@ -1,0 +1,117 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 80  Version: Jsoup-80b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1015
+Trigger failures:
+- org.jsoup.parser.XmlTreeBuilderTest::handlesDodgyXmlDecl
+ --> java.lang.IndexOutOfBoundsException: Index: 0, Size: 0
+Modified: org.jsoup.parser.XmlTreeBuilder
+
+Available API/signatures:
+[org.jsoup.parser.XmlTreeBuilder | java]
+package org.jsoup.parser;
+public class XmlTreeBuilder extends TreeBuilder {
+@Override
+protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+final String data = token.getData();
+private void popStackToClose(Token.EndTag endTag) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.XmlDeclaration;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class XmlTreeBuilderAdditionalTest {
+
+    @Test
+    public void parsesValidXmlDeclarationAndPreservesItsAttributes() {
+        Document document = Jsoup.parse(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Root id=\"r\"/>",
+                "",
+                Parser.xmlParser());
+
+        Node declaration = document.childNode(0);
+        assertTrue(declaration instanceof XmlDeclaration);
+        assertEquals("1.0", declaration.attr("version"));
+        assertEquals("UTF-8", declaration.attr("encoding"));
+
+        Element root = document.child(0);
+        assertEquals("Root", root.tagName());
+        assertEquals("r", root.attr("id"));
+        assertEquals(Document.OutputSettings.Syntax.xml, document.outputSettings().syntax());
+    }
+
+    @Test
+    public void handlesEmptyProcessingInstructionLikeDeclarationBeforeRoot() {
+        Document document = Jsoup.parse(
+                "<??><root><child/></root>",
+                "",
+                Parser.xmlParser());
+
+        Element root = document.child(0);
+        assertEquals("root", root.tagName());
+        assertEquals(1, root.children().size());
+        assertEquals("child", root.child(0).tagName());
+    }
+
+    @Test
+    public void handlesEmptyBangDeclarationLikeCommentBeforeRoot() {
+        Document document = Jsoup.parse(
+                "<!?><root attribute=\"value\"/>",
+                "",
+                Parser.xmlParser());
+
+        Element root = document.child(0);
+        assertEquals("root", root.tagName());
+        assertEquals("value", root.attr("attribute"));
+    }
+
+    @Test
+    public void preservesCaseTextAndSelfClosingElementsInXmlMode() {
+        Document document = Jsoup.parse(
+                "<Root id=\"1\">text<Empty /></Root>",
+                "",
+                Parser.xmlParser());
+
+        Element root = document.child(0);
+        assertEquals("Root", root.tagName());
+        assertEquals("1", root.attr("id"));
+        assertEquals("text", root.text());
+        assertEquals(1, root.children().size());
+        assertEquals("Empty", root.child(0).tagName());
+    }
+
+    @Test
+    public void ignoresUnmatchedEndTagsAndContinuesAtDocumentLevel() {
+        Document document = Jsoup.parse(
+                "<root>one</root></orphan><after/>",
+                "",
+                Parser.xmlParser());
+
+        assertEquals(2, document.children().size());
+        assertEquals("root", document.child(0).tagName());
+        assertEquals("after", document.child(1).tagName());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.parser.XmlTreeBuilderAdditionalTest::handlesEmptyProcessingInstructionLikeDeclarationBeforeRoot
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.parser.XmlTreeBuilderAdditionalTest::handlesEmptyProcessingInstructionLikeDeclarationBeforeRoot

@@ -1,0 +1,139 @@
+package com.google.javascript.rhino;
+
+ import static org.junit.Assert.*;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for IR factory methods, targeting bug #727 where tryFinally incorrectly
+  * validates its arguments (requiring label names instead of blocks) and tryCatch
+  * may throw when wrapping catchNode in a block.
+  */
+ public class IRTest {
+   // --- Function factory ---
+   @Test
+   public void testFunctionBasic() {
+     Node name = IR.name("f");
+     Node params = IR.paramList();
+     Node body = IR.block();
+     Node fn = IR.function(name, params, body);
+     assertNotNull(fn);
+     assertTrue(fn.isFunction());
+   }
+
+   @Test
+   public void testFunctionWithSingleParam() {
+     Node name = IR.name("foo");
+     Node params = IR.paramList(IR.name("x"));
+     Node body = IR.block(IR.returnNode());
+     Node fn = IR.function(name, params, body);
+     assertTrue(fn.isFunction());
+     assertEquals("foo", name.getString());
+   }
+
+   // --- Block factory ---
+   @Test
+   public void testBlockEmpty() {
+     Node b = IR.block();
+     assertNotNull(b);
+     assertTrue(b.isBlock());
+     assertEquals(0, b.getChildCount());
+   }
+
+   @Test
+   public void testBlockWithStatements() {
+     Node b = IR.block(
+             IR.exprResult(IR.number(1)),
+             IR.returnNode(IR.number(2)));
+     assertTrue(b.isBlock());
+     assertEquals(2, b.getChildCount());
+   }
+
+   // --- ParamList factory ---
+   @Test
+   public void testParamListEmpty() {
+     Node p = IR.paramList();
+     assertTrue(p.isParamList());
+     assertEquals(0, p.getChildCount());
+   }
+
+   @Test
+   public void testParamListWithName() {
+     Node p = IR.paramList(IR.name("a"));
+     assertTrue(p.isParamList());
+     assertEquals(1, p.getChildCount());
+   }
+
+   // --- Bug #727: tryFinally incorrectly requires label names ---
+   /**
+    * Valid try–finally with block bodies should succeed.
+    * Buggy version threw IllegalStateException; fixed version accepts blocks.
+    */
+   @Test
+   public void testIssue727_1() {
+     Node tryBody = IR.block();
+     Node finallyBody = IR.block();
+     Node n = IR.tryFinally(tryBody, finallyBody);
+     assertNotNull(n);
+     assertTrue(n.isTry());
+   }
+
+   /**
+    * Passing label names to tryFinally should be rejected (they are not blocks).
+    * Buggy version incorrectly accepted them; fixed version throws.
+    */
+   @Test(expected = IllegalStateException.class)
+   public void testIssue727_2() {
+     Node tryBody = IR.labelName("trylab");
+     Node finallyBody = IR.labelName("finlab");
+     IR.tryFinally(tryBody, finallyBody);
+   }
+
+   // --- Bug #727: tryCatch may throw when wrapping catch node ---
+   /**
+    * Valid try–catch should succeed.
+    * Buggy version threw IllegalStateException; fixed version works.
+    */
+   @Test
+   public void testIssue727_3() {
+     Node tryBody = IR.block();
+     Node catchNode = IR.catchNode(IR.name("e"), IR.block());
+     Node n = IR.tryCatch(tryBody, catchNode);
+     assertNotNull(n);
+     assertTrue(n.isTry());
+   }
+
+   // --- tryCatchFinally validity ---
+   /**
+    * tryCatchFinally with valid blocks should succeed.
+    * Depends on tryCatch working; the fix makes this call succeed.
+    */
+   @Test
+   public void testTryCatchFinallyValid() {
+     Node tryBody = IR.block();
+     Node catchNode = IR.catchNode(IR.name("ex"), IR.block());
+     Node finallyBody = IR.block();
+     Node n = IR.tryCatchFinally(tryBody, catchNode, finallyBody);
+     assertNotNull(n);
+     assertTrue(n.isTry());
+   }
+
+   // --- Edge cases: empty node ---
+   @Test
+   public void testEmptyNode() {
+     Node e = IR.empty();
+     assertNotNull(e);
+     assertTrue(e.isEmpty());
+     assertFalse(e.isBlock());
+   }
+
+   // --- Additional coverage: script, var ---
+   @Test
+   public void testScriptWithStatements() {
+     Node s = IR.script(
+             IR.exprResult(IR.number(3)),
+             IR.returnNode());
+     assertNotNull(s);
+     assertTrue(s.isScript());
+   }
+ }

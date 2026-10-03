@@ -1,0 +1,247 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 57  Version: Math-57b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.stat.clustering.KMeansPlusPlusClusterer
+Modified: org.apache.commons.math.stat.clustering.KMeansPlusPlusClusterer
+Triggers: org.apache.commons.math.stat.clustering.KMeansPlusPlusClustererTest::testSmallDistances
+
+Bug/specification summary:
+Bug report: MATH-546
+Trigger failures:
+- org.apache.commons.math.stat.clustering.KMeansPlusPlusClustererTest::testSmallDistances
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math.stat.clustering.KMeansPlusPlusClusterer
+
+Prompt-01 test plan:
+TARGETS: KMeansPlusPlusClusterer clustering path, especially chooseInitialCenters distance-weighted selection. 
+TARGETS: getNearestCluster behavior when point-to-center distances are extremely small. 
+ORACLES: Existing trigger KMeansPlusPlusClustererTest::testSmallDistances is the expected-result source. 
+CASES: Cluster close but distinct Clusterable points using a fixed Random for reproducible center selection. 
+CASES: Boundary where squared distances sum to a very small value during subsequent-center choice. 
+CASES: Normal separated points to retain ordinary nearest-center assignment behavior. 
+RISKS: Tiny-distance arithmetic may lose selection discrimination or select an incorrect center. 
+RISKS: Available context omits test data, cluster expectations, and public clustering-method signatures.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.stat.clustering.KMeansPlusPlusClusterer (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.stat.clustering;
+public class KMeansPlusPlusClusterer<T extends Clusterable<T>> {
+public static enum EmptyClusterStrategy {
+public KMeansPlusPlusClusterer(final Random random) {
+public KMeansPlusPlusClusterer(final Random random, final EmptyClusterStrategy emptyStrategy) {
+final int max = (maxIterations < 0) ? Integer.MAX_VALUE : maxIterations;
+for (final Cluster<T> cluster : clusters) {
+assignPointsToClusters(final Collection<Cluster<T>> clusters, final Collection<T> points) {
+for (final T p : points) {
+chooseInitialCenters(final Collection<T> points, final int k, final Random random) {
+final List<T> pointSet = new ArrayList<T>(points);
+final List<Cluster<T>> resultSet = new ArrayList<Cluster<T>>();
+final T firstPoint = pointSet.remove(random.nextInt(pointSet.size()));
+final double[] dx2 = new double[pointSet.size()];
+final T p = pointSet.get(i);
+final Cluster<T> nearest = getNearestCluster(resultSet, p);
+final double d = p.distanceFrom(nearest.getCenter());
+final double r = random.nextDouble() * sum;
+final T p = pointSet.remove(i);
+private T getPointFromLargestVarianceCluster(final Collection<Cluster<T>> clusters) {
+final T center = cluster.getCenter();
+final Variance stat = new Variance();
+for (final T point : cluster.getPoints()) {
+final double variance = stat.getResult();
+final List<T> selectedPoints = selected.getPoints();
+private T getPointFromLargestNumberCluster(final Collection<Cluster<T>> clusters) {
+final int number = cluster.getPoints().size();
+private T getFarthestPoint(final Collection<Cluster<T>> clusters) {
+final List<T> points = cluster.getPoints();
+final double distance = points.get(i).distanceFrom(center);
+getNearestCluster(final Collection<Cluster<T>> clusters, final T point) {
+for (final Cluster<T> c : clusters) {
+final double distance = point.distanceFrom(c.getCenter());
+
+/* HEADER */
+package org.apache.commons.math.stat.clustering;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Random;
+import org.apache.commons.math.exception.ConvergenceException;
+import org.apache.commons.math.exception.util.LocalizedFormats;
+import org.apache.commons.math.stat.descriptive.moment.Variance;
+public class KMeansPlusPlusClusterer<T extends Clusterable<T>> {
+
+/* METHOD KMeansPlusPlusClusterer */
+public KMeansPlusPlusClusterer(final Random random) {
+ this(random, EmptyClusterStrategy.LARGEST_VARIANCE);
+ }
+
+/* METHOD KMeansPlusPlusClusterer */
+public KMeansPlusPlusClusterer(final Random random, final EmptyClusterStrategy emptyStrategy) {
+ this.random = random;
+ this.emptyStrategy = emptyStrategy;
+ }
+
+/* METHOD chooseInitialCenters */
+private static <T extends Clusterable<T>> List<Cluster<T>>
+ chooseInitialCenters(final Collection<T> points, final int k, final Random random) {
+
+ final List<T> pointSet = new ArrayList<T>(points);
+ final List<Cluster<T>> resultSet = new ArrayList<Cluster<T>>();
+
+ // Choose one center uniformly at random from among the data points.
+ final T firstPoint = pointSet.remove(random.nextInt(pointSet.size()));
+ resultSet.add(new Cluster<T>(firstPoint));
+
+ final double[] dx2 = new double[pointSet.size()];
+ while (resultSet.size() < k) {
+ // For each data point x, compute D(x), the distance between x and
+ // the nearest center that has already been chosen.
+ int sum = 0;
+ for (int i = 0; i < pointSet.size(); i++) {
+ final T p = pointSet.get(i);
+ final Cluster<T> nearest = getNearestCluster(resultSet, p);
+ final double d = p.distanceFrom(nearest.getCenter());
+ sum += d * d;
+ dx2[i] = sum;
+ }
+
+ // Add one new data point as a center. Each point x is chosen with
+ // probability proportional to D(x)2
+ final double r = random.nextDouble() * sum;
+ for (int i = 0 ; i < dx2.length; i++) {
+ if (dx2[i] >= r) {
+ final T p = pointSet.remove(i);
+ resultSet.add(new Cluster<T>(p));
+ break;
+ }
+ }
+ }
+
+ return resultSet;
+
+ }
+
+/* METHOD getPointFromLargestVarianceCluster */
+private T getPointFromLargestVarianceCluster(final Collection<Cluster<T>> clusters) {
+
+ double maxVariance = Double.NEGATIVE_INFINITY;
+ Cluster<T> selected = null;
+ for (final Cluster<T> cluster : clusters) {
+ if (!cluster.getPoints().isEmpty()) {
+
+ // compute the distance variance of the current cluster
+ final T center = cluster.getCenter();
+ final Variance stat = new Variance();
+ for (final T point : cluster.getPoints()) {
+ stat.increment(point.distanceFrom(center));
+ }
+ final double variance = stat.getResult();
+
+ // select the cluster with the largest variance
+ if (variance > maxVariance) {
+ maxVariance = variance;
+ selected = cluster;
+ }
+
+ }
+ }
+
+ // did we find at least one non-empty cluster ?
+ if (selected == null) {
+ throw new ConvergenceException(LocalizedFormats.EMPTY_CLUSTER_IN_K_MEANS);
+ }
+
+ // extract a random point from the cluster
+ final List<T> selectedPoints = selected.getPoints();
+ return selectedPoints.remove(random.nextInt(selectedPoints.size()));
+
+ }
+
+/* METHOD getPointFromLargestNumberCluster */
+private T getPointFromLargestNumberCluster(final Collection<Cluster<T>> clusters) {
+
+ int maxNumber = 0;
+ Cluster<T> selected = null;
+ for (final Cluster<T> cluster : clusters) {
+
+ // get the number of points of the current cluster
+ final int number = cluster.getPoints().size();
+
+ // select the cluster with the largest number of points
+ if (number > maxNumber) {
+ maxNumber = number;
+ selected = cluster;
+ }
+
+ }
+
+ // did we find at least one non-empty cluster ?
+ if (selected == null) {
+ throw new ConvergenceException(LocalizedFormats.EMPTY_CLUSTER_IN_K_MEANS);
+ }
+
+ // extract a random point from the cluster
+ final List<T> selectedPoints = selected.getPoints();
+ return selectedPoints.remove(random.nextInt(selectedPoints.size()));
+
+ }
+
+/* METHOD assignPointsToClusters */
+private static <T extends Clusterable<T>> void
+ assignPointsToClusters(final Collection<Cluster<T>> clusters, final Collection<T> points) {
+ for (final T p : points) {
+ Cluster<T> cluster = getNearestCluster(clusters, p);
+ cluster.addPoint(p);
+ }
+ }
+
+/* METHOD getFarthestPoint */
+private T getFarthestPoint(final Collection<Cluster<T>> clusters) {
+
+ double maxDistance = Double.NEGATIVE_INFINITY;
+ Cluster<T> selectedCluster = null;
+ int selectedPoint = -1;
+ for (final Cluster<T> cluster : clusters) {
+
+ // get the farthest point
+ final T center = cluster.getCenter();
+ final List<T> points = cluster.getPoints();
+ for (int i = 0; i < points.size(); ++i) {
+ final double distance = points.get(i).distanceFrom(center);
+ if (distance > maxDistance) {
+ maxDistance = distance;
+ selectedCluster = cluster;
+ selectedPoint = i;
+ }
+ }
+
+ }
+
+ // did we find at least one non-empty cluster ?
+ if (selectedCluster == null) {
+ throw new ConvergenceException(LocalizedFormats.EMPTY_CLUSTER_IN_K_MEANS);
+ }
+
+ return selectedCluster.getPoints().remove(selectedPoint);
+
+ }
+
+/* METHOD getNearestCluster */
+private static <T extends Clusterable<T>> Cluster<T>
+ getNearestCluster(final Collection<Cluster<T>> clusters, final T point) {
+ double minDistance = Double.MAX_VALUE;
+ Cluster<T> minCluster = null;
+ for (final Cluster<T> c : clusters) {
+ final double distance = point.distanceFrom(c.getCenter());
+ if (distance < minDistance) {
+ minDistance = distance;
+ minCluster = c;
+ }
+ }
+ return minCluster;
+ }

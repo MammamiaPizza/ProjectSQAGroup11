@@ -1,0 +1,110 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 1  Version: Jsoup-1b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 23
+Trigger failures:
+- org.jsoup.parser.ParserTest::createsStructureFromBodySnippet
+ --> junit.framework.AssertionFailedError: expected:<[foo bar baz]> but was:<[bar baz foo]>
+Modified: org.jsoup.nodes.Document
+
+Available API/signatures:
+[org.jsoup.nodes.Document | java]
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Document extends Element {
+@param baseUri base URI of document
+@see org.jsoup.Jsoup#parse
+@see #createShell
+public Document(String baseUri) {
+@param baseUri baseUri of document
+@return document with html, head, and body elements.
+static public Document createShell(String baseUri) {
+@return {@code head}
+public Element head() {
+@return {@code body}
+public Element body() {
+@return Trimed title, or empty string if none set.
+public String title() {
+@param title string to set as title
+public void title(String title) {
+@param tagName element tag name (e.g. {@code a})
+@return new element
+public Element createElement(String tagName) {
+@return this document after normalisation
+public Document normalise() {
+private void normalise(Element element) {
+@Override
+public String outerHtml() {
+@param text unencoded text
+@return this document
+public Element text(String text) {
+public String nodeName() {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+import org.jsoup.Jsoup;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+public class DocumentNormaliseRegressionTest {
+
+    @Test
+    public void bodySnippetPreservesTextOrderAroundNestedElement() {
+        Document document = Jsoup.parseBodyFragment("foo <b>bar</b> baz");
+
+        assertEquals("foo bar baz", document.body().text());
+
+        String html = document.outerHtml();
+        assertTrue(html.indexOf("foo") < html.indexOf("bar"));
+        assertTrue(html.indexOf("bar") < html.indexOf("baz"));
+    }
+
+    @Test
+    public void normaliseMovesHeadTextBeforeExistingBodyText() {
+        Document document = Document.createShell("");
+        document.head().appendChild(new TextNode("head text", ""));
+        document.body().appendChild(new TextNode("body text", ""));
+
+        document.normalise();
+
+        assertEquals("head text body text", document.body().text());
+        assertTrue(document.outerHtml().indexOf("head text") < document.outerHtml().indexOf("body text"));
+    }
+
+    @Test
+    public void shellProvidesHeadBodyAndEmptyTitle() {
+        Document document = Document.createShell("http://example.com/");
+
+        assertNotNull(document.head());
+        assertNotNull(document.body());
+        assertEquals("", document.title());
+    }
+
+    @Test
+    public void titleIsTrimmedAndDocumentTextDoesNotRemoveHead() {
+        Document document = Document.createShell("");
+        document.title("  Example Title  ");
+
+        document.text("Body content");
+
+        assertEquals("Example Title", document.title());
+        assertEquals("Body content", document.body().text());
+        assertNotNull(document.head().getElementsByTag("title").first());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.DocumentNormaliseRegressionTest::normaliseMovesHeadTextBeforeExistingBodyText
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.DocumentNormaliseRegressionTest::normaliseMovesHeadTextBeforeExistingBodyText

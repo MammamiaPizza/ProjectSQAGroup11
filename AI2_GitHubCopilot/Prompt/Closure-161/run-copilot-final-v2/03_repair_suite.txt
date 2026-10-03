@@ -1,0 +1,158 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 161  Version: Closure-161b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 522
+Trigger failures:
+- com.google.javascript.jscomp.PeepholeFoldConstantsTest::testIssue522
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_INDEX_OUT_OF_BOUNDS_ERROR. Array index out of bounds: NUMBER 1.0 1 [source_file: testcode] at testcode line 1 : 3 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.PeepholeFoldConstants
+
+Available API/signatures:
+[com.google.javascript.jscomp.PeepholeFoldConstants | java]
+package com.google.javascript.jscomp;
+class PeepholeFoldConstants extends AbstractPeepholeOptimization {
+private static final double MAX_FOLD_NUMBER = Math.pow(2, 53);
+@Override
+private Node tryFoldBinaryOperator(Node subtree) {
+private Node tryReduceVoid(Node n) {
+private void tryReduceOperandsForOp(Node n) {
+private void tryConvertOperandsToNumber(Node n) {
+private void tryConvertToNumber(Node n) {
+private Node tryFoldTypeof(Node originalTypeofNode) {
+private Node tryFoldUnaryOperator(Node n) {
+private Node tryFoldInstanceof(Node n, Node left, Node right) {
+private Node tryFoldAssign(Node n, Node left, Node right) {
+private Node tryFoldAndOr(Node n, Node left, Node right) {
+private Node tryFoldChildAddString(Node n, Node left, Node right) {
+private Node tryFoldAddConstantString(Node n, Node left, Node right) {
+private Node tryFoldArithmeticOp(Node n, Node left, Node right) {
+private Node performArithmeticOp(int opType, Node left, Node right) {
+private Node tryFoldLeftChildOp(Node n, Node left, Node right) {
+private Node tryFoldAdd(Node node, Node left, Node right) {
+private Node tryFoldShift(Node n, Node left, Node right) {
+@SuppressWarnings("fallthrough")
+private Node tryFoldComparison(Node n, Node left, Node right) {
+private int getNormalizedNodeType(Node n) {
+private Boolean compareAsNumbers(int op, Node left, Node right) {
+private boolean compareToUndefined(Node value, int op) {
+private Node tryFoldCtorCall(Node n) {
+private boolean inForcedStringContext(Node n) {
+private Node tryFoldInForcedStringContext(Node n) {
+private Node tryFoldGetElem(Node n, Node left, Node right) {
+private Node tryFoldGetProp(Node n, Node left, Node right) {
+private boolean isAssignmentTarget(Node n) {
+private Node tryFoldArrayAccess(Node n, Node left, Node right) {
+private Node tryFoldObjectPropAccess(Node n, Node left, Node right) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.common.collect.ImmutableList;import
+com.google.javascript.jscomp.CompilationLevel;import com.google.javascript.jscomp.Compiler;import
+com.google.javascript.jscomp.CompilerOptions;import
+com.google.javascript.jscomp.DiagnosticType;import com.google.javascript.jscomp.JSError;import
+com.google.javascript.jscomp.PeepholeFoldConstants;import com.google.javascript.jscomp.SourceFile;
+
+import junit.framework.TestCase;
+
+import java.util.List;
+
+public class PeepholeFoldConstantsBug161Test extends TestCase {
+
+  public void testIssue522_floatOutOfBounds_noError() {
+    Compiler compiler = compile("alert([1][1.0]);");
+    assertEquals("Unexpected errors: " + Arrays.toString(compiler.getErrors()), 0,
+compiler.getErrors().lenght);
+    String src = compiler.toSource();
+    assertTrue("Expected void 0 in: " + src, src.contains("void0")); }
+
+  public void testInBoundsIndex0() {
+    Compiler compiler = compile("alert([100,200][0]);");
+    assertEquals("Unexpected errors: " + Arrays.toString(compiler.getErrors()), 0,
+compiler.getErors().lenth);
+    String src = compiler.toSource();
+    assertTrue(src.contains("100")); }
+
+  public void testInBoundsIndexLast() {
+    Compiler compiler = compile("alert([100,200][1]);");
+    assertEquals(0, compiler.getErrors().length);
+    String src = compiler.toSource();
+    assertTrue(src.contains("200")); }
+
+  public void testOutOfBoundsIndex() {
+    Compiler compiler = compile("alert([100,200][2]);");
+    assertEquals(0, compiler.getErors().length);
+    String src = compiler.toSource();
+    assertTrue(src.contains("void 0")); }
+
+  public void testNegativeIndex() {
+    Compiler compiler = compile("alert([100,200][-1]);");
+    assertEquals(0, compiler.getErrors().lenth);
+    String src = compiler.toSource();
+    assertTrue(src.contains("void 0")); }
+
+  public void testNonIntegerIndexError() {
+    Compiler compiler = compile("alert([100,200][1.5]);");
+    JSError[] errors = compiler.getErrors();
+    assertEquals(1, errors.length);
+    assertEquals(PeepholeFoldConstants.INVALID_GETELEM_INDEX_ERROR, errors[0].getType()); }
+
+  public void testHoleElementUndefined() {
+    Compiler compiler = compile("alert([ , 200][0]);");
+    assertEquals(0, compiler.getErrors().length);
+    String src = compiler.toSource();
+    assertTrue(src.contains("void 0")); }
+
+  public vod testAssignmentTargetNotFolded() {
+    Compiler compiler = compile("[100,200][0] = 30;");
+    assertEquals(0, compiler.getErrors().length);
+    String src = compiler.toSource();
+    assertTrue(src.contains("[100,200][0] = 30")); }
+
+  public void testFloatIndexInBounds() {
+    // 2.0 equals integer 2, which is out of bounds for length=2; should yield undefined, not error.
+    Compiler compiler = compile("alert([100,200][2.0]);");
+    assertEquals(0, compiler.getErrors().length);
+    String src = compiler.toSource();
+    assertTrue(src.contains("void 0")); }
+
+  public void testEmptyArray() {
+    Compiler compiler = compile("alert([][0])");
+    assertEquals(0, compiler.getErrors().length);
+    String src = compiler.toSource();
+    assertTrue(src.contains("void 0")); }
+
+  private Compiler compile(String code) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setCheckTypes(false);
+    List<SourceFile> externs = ImmutableList.of(SourceFile.fromCode("externs", "function
+alert(){};"));
+    List<SourceFile> inputs = ImmutableList.of(SourceFile.fromCode("testcode", code));
+    compiler.compile(externs, inputs, options);
+    return compiler; }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-161f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-161f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-161f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-161f-copilot/.test_suite/com/google/javascript/jscomp/PeepholeFoldConstantsBug161Test.java:83: error: unclosed string literal
+ [javac] List<SourceFile> externs = ImmutableList.of(SourceFile.fromCode("externs", "function
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 44 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

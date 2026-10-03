@@ -1,0 +1,175 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: JacksonDatabind  Bug: 51  Version: JacksonDatabind-51b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+Bug/specification summary:
+Bug report: 1270
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestCustomTypeIdResolver::testPolymorphicTypeViaCustom
+ --> com.fasterxml.jackson.databind.JsonMappingException: Problem deserializing property 'options' (expected type: [simple type, class java.lang.Object]; actual type: java.util.LinkedHashMap), problem: Can not set com.fasterxml.jackson.databind.jsontype.TestCustomTypeIdResolver$Poly1Base field com.fasterxml.jackson.databind.jsontype.TestCustomTypeIdResolver$Base1270.options to java.util.LinkedHashMap
+Modified: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase | java]
+package com.fasterxml.jackson.databind.jsontype.impl;
+public abstract class TypeDeserializerBase
+protected final TypeIdResolver _idResolver;
+protected final JavaType _baseType;
+protected final BeanProperty _property;
+protected final JavaType _defaultImpl;
+protected final String _typePropertyName;
+protected final boolean _typeIdVisible;
+protected final Map<String,JsonDeserializer<Object>> _deserializers;
+protected JsonDeserializer<Object> _defaultImplDeserializer;
+protected TypeDeserializerBase(TypeDeserializerBase src, BeanProperty property)
+@Override
+public abstract TypeDeserializer forProperty(BeanProperty prop);
+public abstract JsonTypeInfo.As getTypeInclusion();
+public String baseTypeName() { return _baseType.getRawClass().getName(); }
+public final String getPropertyName() { return _typePropertyName; }
+public TypeIdResolver getTypeIdResolver() { return _idResolver; }
+public Class<?> getDefaultImpl() {
+public String toString()
+protected final JsonDeserializer<Object> _findDefaultImplDeserializer(DeserializationContext ctxt) throws IOException
+synchronized (_defaultImpl) {
+@Deprecated
+protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt) throws IOException {
+protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt, Object typeId)
+ctxt.reportMappingException("No (native) type id found when one was expected for polymorphic type handling");
+
+Existing test summary (method names/assertions only):
+Test methods: customTypeIdResolverMustDeserializeObjectPropertyAsResolvedSubtype
+Representative assertions:
+assertTrue(result.options instanceof Poly1Base);
+assertEquals("custom value", value.name);
+assertEquals(13, value.number);
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+75,30,36,6
+
+Line/branch gaps:
+Class: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+Uncovered lines: 230, 243, 247, 248, 249, 250, 253, 254, 256, 201, 202, 203, 205, 207, 208, 209, 212, 213, 214, 217, 218, 153, 154, 156, 157, 159, 162, 163, 277, 278 ... (+60 more)
+Partially covered branch lines: 78 (50% (1/2)), 144 (50% (1/2)), 151 (50% (1/2)), 173 (50% (1/2)), 174 (50% (1/2)), 184 (50% (1/2)), 78 (50% (1/2)), 144 (50% (1/2)), 151 (50% (1/2)), 173 (50% (1/2)), 174 (50% (1/2)), 184 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase]
+228: return _deserializeWithNativeTypeId(jp, ctxt, jp.getTypeId());
+229: }
+230: 
+231: /**
+232: * Helper method called when {@link JsonParser} indicates that it can use
+---
+241: if (typeId == null) {
+242: /* 04-May-2014, tatu: Should error be obligatory, or should there be another method
+243: * for "try to deserialize with native tpye id"?
+244: */
+245: deser = _findDefaultImplDeserializer(ctxt);
+---
+245: deser = _findDefaultImplDeserializer(ctxt);
+246: if (deser == null) {
+247: ctxt.reportMappingException("No (native) type id found when one was expected for polymorphic type handling");
+248: return null;
+249: }
+---
+246: if (deser == null) {
+247: ctxt.reportMappingException("No (native) type id found when one was expected for polymorphic type handling");
+248: return null;
+249: }
+250: } else {
+---
+247: ctxt.reportMappingException("No (native) type id found when one was expected for polymorphic type handling");
+248: return null;
+249: }
+250: } else {
+251: String typeIdStr = (typeId instanceof String) ? (String) typeId : String.valueOf(typeId);
+---
+248: return null;
+249: }
+250: } else {
+251: String typeIdStr = (typeId instanceof String) ? (String) typeId : String.valueOf(typeId);
+252: deser = _findDeserializer(ctxt, typeIdStr);
+---
+251: String typeIdStr = (typeId instanceof String) ? (String) typeId : String.valueOf(typeId);
+252: deser = _findDeserializer(ctxt, typeIdStr);
+253: }
+254: return deser.deserialize(jp, ctxt);
+255: }
+---
+252: deser = _findDeserializer(ctxt, typeIdStr);
+253: }
+254: return deser.deserialize(jp, ctxt);
+255: }
+256: 
+---
+254: return deser.deserialize(jp, ctxt);
+255: }
+256: 
+257: /**
+258: * Helper method called when given type id can not be resolved into 
+---
+199: if (_defaultImpl == null) {
+200: if (!ctxt.isEnabled(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE)) {
+201: return NullifyingDeserializer.instance;
+202: }
+203: return null;
+---
+200: if (!ctxt.isEnabled(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE)) {
+201: return NullifyingDeserializer.instance;
+202: }
+203: return null;
+204: }
+---
+201: return NullifyingDeserializer.instance;
+202: }
+203: return null;
+204: }
+205: Class<?> raw = _defaultImpl.getRawClass();
+---
+203: return null;
+204: }
+205: Class<?> raw = _defaultImpl.getRawClass();
+206: if (ClassUtil.is
+...[truncated deterministically]...
+turn _defaultImplDeserializer;
+---
+212: _defaultImplDeserializer = ctxt.findContextualValueDeserializer(
+213: _defaultImpl, _property);
+214: }
+215: return _defaultImplDeserializer;
+216: }
+---
+215: return _defaultImplDeserializer;
+216: }
+217: }
+218: 
+219: /**
+---
+216: }
+217: }
+218: 
+219: /**
+220: * Helper method called when {@link JsonParser} indicates that it can use
+---
+151: if (type == null) {
+152: // As per [JACKSON-614], use the default impl if no type id available:
+153: deser = _findDefaultImplDeserializer(ctxt);
+154: if (deser == null) {
+155: // 10-May-2016, tatu: We may get some help...
+---
+152: // As per [JACKSON-614], use the default impl if no type id available:
+153: deser = _findDefaultImplDeserializer(ctxt);
+154: if (deser == null) {
+155: // 10-May-2016, tatu: We may get some help...
+156: JavaType actual = _handleUnknownTypeId(ctxt, typeId, _idResolver, _baseType);
+---
+154: if (deser == null) {
+155: // 10-May-2016, tatu: We may get some help...
+156: JavaType actual = _handleUnknownTypeId(ctxt, typeId, _idResolver, _baseType);
+157: if (actual == null) { // what should this be taken to mean?
+158: // TODO: try to figure out something better

@@ -1,0 +1,334 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 37  Version: Compress-37b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-355
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::survivesBlankLinesInPaxHeader
+ --> java.lang.NegativeArraySizeException
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarArchiveInputStream | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveInputStream extends ArchiveInputStream {
+private Map<String, String> globalPaxHeaders = new HashMap<String, String>();
+public TarArchiveInputStream(final InputStream is) {
+public TarArchiveInputStream(final InputStream is, final String encoding) {
+public TarArchiveInputStream(final InputStream is, final int blockSize) {
+public TarArchiveInputStream(final InputStream is, final int blockSize, final int recordSize) {
+@Override
+public void close() throws IOException {
+public int getRecordSize() {
+public int available() throws IOException {
+public long skip(final long n) throws IOException {
+final long skipped = is.skip(Math.min(n, available));
+public boolean markSupported() {
+public void mark(final int markLimit) {
+public synchronized void reset() {
+public TarArchiveEntry getNextTarEntry() throws IOException {
+/* skip to the end of the last record */
+final byte[] headerBuf = getRecord();
+} catch (final IllegalArgumentException e) {
+final byte[] longLinkData = getLongNameData();
+final byte[] longNameData = getLongNameData();
+private void skipRecordPadding() throws IOException {
+final long numRecords = (this.entrySize / this.recordSize) + 1;
+final long padding = (numRecords * this.recordSize) - this.entrySize;
+final long skipped = IOUtils.skip(is, padding);
+protected byte[] getLongNameData() throws IOException {
+final ByteArrayOutputStream longName = new ByteArrayOutputStream();
+private byte[] getRecord() throws IOException {
+protected boolean isEOFRecord(final byte[] record) {
+return record == null
+...[truncated deterministically]...
+irectory() {
+public ArchiveEntry getNextEntry() throws IOException {
+private void tryToConsumeSecondEOFRecord() throws IOException {
+final boolean marked = is.markSupported();
+public int read(final byte[] buf, final int offset, int numToRead) throws IOException {
+public boolean canReadEntryData(final ArchiveEntry ae) {
+final TarArchiveEntry te = (TarArchiveEntry) ae;
+public TarArchiveEntry getCurrentEntry() {
+protected final void setCurrentEntry(final TarArchiveEntry e) {
+protected final boolean isAtEOF() {
+protected final void setAtEOF(final boolean b) {
+private void consumeRemainderOfLastBlock() throws IOException {
+final long bytesReadOfLastBlock = getBytesRead() % blockSize;
+final long skipped = IOUtils.skip(is, blockSize - bytesReadOfLastBlock);
+public static boolean matches(final byte[] signature, final int length) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+
+ /**
+  * Tests for blank/empty line handling in PAX extended headers
+  * (COMPRESS-355: NegativeArraySizeException on blank lines).
+  */
+ public class TarArchiveInputStreamPaxBlankLineTest {
+
+     private static final int BLOCK_SIZE = 512;
+     private static final int RECORD_SIZE = 512;
+
+     // ---- helpers ----
+
+     private byte[] buildHeader(String name, long size, byte typeFlag) {
+         byte[] buf = new byte[BLOCK_SIZE];
+         // name field: 100 bytes starting at offset 0
+         byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+         System.arraycopy(nameBytes, 0, buf, 0, Math.min(nameBytes.length, 100));
+
+         // mode: default 0644 = "000644\0" at offset 100, length 8
+         System.arraycopy("000644\0".getBytes(), 0, buf, 100, 7);
+
+         // uid/gid: "000000\0" at 108 and 116
+         System.arraycopy("000000\0".getBytes(), 0, buf, 108, 7);
+         System.arraycopy("000000\0".getBytes(), 0, buf, 116, 7);
+
+         // size: octal at offset 124, length 12
+         String sizeStr = String.format("%011o", size);
+         System.arraycopy(sizeStr.getBytes(), 0, buf, 124, 11);
+         buf[135] = ' ';
+
+         // mtime: offset 136, length 12
+         System.arraycopy("00000000000 ".getBytes(), 0, buf, 136, 12);
+
+         // checksum: 8 spaces initially at offset 148
+         System.arraycopy("        ".getBytes(), 0, buf, 148, 8);
+
+         // type flag at offset 156
+         buf[156] = typeFlag;
+
+         // linkname: 100 bytes at offset 157 (all null)
+         // no need to fill
+
+         // magic: "ustar\0" at offset 257
+         System.arraycopy("ustar\0".getBytes(), 0, buf, 257, 6);
+
+         // version: "00" at offset 263
+         buf[263] = '0';
+         buf[264] = '0';
+
+         // compute and set checksum at offset 148 (8 bytes)
+         long sum = 0;
+         for (int i = 0; i < BLOCK_SIZE; i++) {
+             // checksum field is treated as spaces for computation
+             if (i >= 148 && i < 156) {
+                 sum += ' ';
+             } else {
+                 sum += buf[i] & 0xFF;
+             }
+         }
+         // Checksum is 6 octal digits + null + space
+         String csum = String.format("%06o", sum);
+         System.arraycopy((csum + "\0 ").getBytes(), 0, buf, 148, 8);
+
+         return buf;
+     }
+
+     private TarArchiveInputStream newTis(byte[] data) {
+         return new TarArchiveInputStream(new ByteArrayInputStream(data), BLOCK_SIZE, RECORD_SIZE);
+     }
+
+     /**
+      * Build tar bytes: a PAX header record containing the given pax data,
+      * followed by a normal file record with the given name and size=0.
+      * Pax header record name is "PaxHeader\0...".
+      */
+     private byte[] buildSimplePaxTar(String paxData, String fileName) throws Exception {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         // PAX header record
+         byte[] paxBuf = buildHeader("././@PaxHeader", paxData.getBytes("UTF-8").length, (byte)
+'x');
+         bos.write(paxBuf);
+         // round up to 512-byte blocks
+         byte[] paxPayload = paxData.getBytes("UTF-8");
+         bos.write(paxPayload);
+         int rem = (BLOCK_SIZE - (paxPayload.length % BLOCK_SIZE)) % BLOCK_SIZE;
+         bos.write(new byte[rem]);
+
+         // file entry
+         byte[] fileBuf = buildHeader(fileName, 0, (byte) '0');
+         bos.write(fileBuf);
+         // end-of-archive: two zero blocks
+         bos.write(new byte[BLOCK_SIZE]);
+         bos.write(new byte[BLOCK_SIZE]);
+         return bos.toByteArray();
+     }
+
+     // ---- test cases ----
+
+     @Test
+     public void survivesSingleBlankLineInPaxHeader() throws Exception {
+         // Single blank line between two valid PAX keywords
+         String paxData = "16 path=foo.txt\n\n21 size=00000000000\n";
+         byte[] tar = buildSimplePaxTar(paxData, "foo.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull("Entry should not be null", entry);
+         assertEquals("Entry name should be foo.txt", "foo.txt", entry.getName());
+         assertNull("No more entries", tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesMultipleConsecutiveBlankLines() throws Exception {
+         // Multiple consecutive blank lines
+         String paxData = "16 path=bar.txt\n\n\n21 size=00000000000\n";
+         byte[] tar = buildSimplePaxTar(paxData, "bar.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("bar.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLineAtStartOfPaxData() throws Exception {
+         // Blank line at the very beginning of PAX data
+         String paxData = "\n16 path=baz.txt\n21 size=00000000000\n";
+         byte[] tar = buildSimplePaxTar(paxData, "baz.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("baz.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLineAtEndOfPaxData() throws Exception {
+         // Blank line at the end of PAX data (after last keyword)
+         String paxData = "16 path=qux.txt\n21 size=00000000000\n\n";
+         byte[] tar = buildSimplePaxTar(paxData, "qux.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("qux.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesOnlyBlankLinesInPaxData() throws Exception {
+         // PAX header contains only blank lines (no keywords)
+         String paxData = "\n\n\n";
+         byte[] tar = buildSimplePaxTar(paxData, "onlyblanks.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("onlyblanks.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLineConsistingOfSpacesAndTabs() throws Exception {
+         // A line that consists only of spaces and tabs
+         String paxData = "16 path=spaces.txt\n \t \n21 size=00000000000\n";
+         byte[] tar = buildSimplePaxTar(paxData, "spaces.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("spaces.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLineWithCarriageReturn() throws Exception {
+         // Blank line with a trailing carriage return (Windows-style blank line)
+         // Note: PAX uses \n as line separator; a line ending in \r\n has
+         // an empty keyword and '\r' is part of the line content for a blank line.
+         // We test that \r\n (empty + \r) does not throw.
+         String paxData = "16 path=crlf.txt\n\r\n21 size=00000000000\n";
+         byte[] tar = buildSimplePaxTar(paxData, "crlf.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("crlf.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLineBeforeRecordPadding() throws Exception {
+         // Blank line right before the record boundary (filling up the
+         // PAX payload such that a blank line sits near end)
+         // Build pax data that leaves a blank line just before the block fill
+         String paxData = "16 path=pad.txt\n21 size=00000000000\n\n";
+         byte[] tar = buildSimplePaxTar(paxData, "pad.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("pad.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLinesWithCorrectEntryAttributes() throws Exception {
+         // Verify that after skipping blank lines, remaining key=value pairs
+         // are still parsed correctly (name + size)
+         String paxData = "20 size=00000000042\n\n16 path=big.txt\n";
+         byte[] tar = buildSimplePaxTar(paxData, "big.txt");
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("big.txt", entry.getName());
+         assertEquals(42, entry.getSize());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+
+     @Test
+     public void survivesBlankLinesWithGlobalPaxHeader() throws Exception {
+         // Global PAX header with blank lines, followed by a normal entry
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         // Global PAX header record (type 'g')
+         String globalPax = "25 globexkey=globexval\n\n26 PATH=fromglobal.txt\n";
+         byte[] gBuf = buildHeader("././@PaxHeader", globalPax.getBytes("UTF-8").length, (byte)
+'g');
+         bos.write(gBuf);
+         byte[] gPayload = globalPax.getBytes("UTF-8");
+         bos.write(gPayload);
+         int grem = (BLOCK_SIZE - (gPayload.length % BLOCK_SIZE)) % BLOCK_SIZE;
+         bos.write(new byte[grem]);
+
+         // Normal file (note: PATH keyword in global is applied by convention)
+         byte[] fBuf = buildHeader("localfile.txt", 0, (byte) '0');
+         bos.write(fBuf);
+
+         // End-of-archive
+         bos.write(new byte[BLOCK_SIZE]);
+         bos.write(new byte[BLOCK_SIZE]);
+
+         byte[] tar = bos.toByteArray();
+         TarArchiveInputStream tis = newTis(tar);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         // Global PAX with PATH=fromglobal.txt should rename entry
+         assertEquals("fromglobal.txt", entry.getName());
+         assertNull(tis.getNextTarEntry());
+         tis.close();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 8
+ - org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesMultipleConsecutiveBlankLines
+ - org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLinesWithGlobalPaxHeader
+ - org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLineAtEndOfPaxData
+Failing generated tests: org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLineAtEndOfPaxData, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLineAtStartOfPaxData, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLineBeforeRecordPadding, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLineConsistingOfSpacesAndTabs, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLineWithCarriageReturn, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesBlankLinesWithGlobalPaxHeader, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesMultipleConsecutiveBlankLines, org.apache.commons.compress.archivers.tar.TarArchiveInputStreamPaxBlankLineTest::survivesSingleBlankLineInPaxHeader

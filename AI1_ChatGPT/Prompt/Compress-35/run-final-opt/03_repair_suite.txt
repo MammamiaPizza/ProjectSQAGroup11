@@ -1,0 +1,185 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 35  Version: Compress-35b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-335
+Trigger failures:
+- org.apache.commons.compress.DetectArchiverTestCase::testCOMPRESS335
+ --> org.apache.commons.compress.archivers.ArchiveException: No Archiver found for the stream signature
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarUtils | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarUtils {
+static final ZipEncoding FALLBACK_ENCODING = new ZipEncoding() {
+public boolean canEncode(String name) { return true; }
+public ByteBuffer encode(String name) {
+final int length = name.length();
+public String decode(byte[] buffer) {
+/** Private constructor to prevent instantiation of this utility class. */
+private TarUtils(){
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+final boolean negative = buffer[offset] == (byte) 0xff;
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+public static String parseName(byte[] buffer, final int offset, final int length) {
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+final int limit = b.limit() - b.position();
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+final int bits = (length - 1) * 8;
+final byte[] b = val.toByteArray();
+final byte fill = (byte) (negative ? 0xff : 0);
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static long computeCheckSum(final byte[] buf) {
+public static boolean verifyCheckSum(byte[] header) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Arrays;
+
+import org.junit.Test;
+
+public class TarUtilsChecksumTest {
+
+    @Test
+    public void computeCheckSumUsesUnsignedByteValues() {
+        byte[] bytes = new byte[] { 0, (byte) 0x80, (byte) 0xff };
+
+        assertEquals(383L, TarUtils.computeCheckSum(bytes));
+    }
+
+    @Test
+    public void verifyCheckSumAcceptsStandardUnsignedChecksum() {
+        byte[] header = new byte[512];
+        header[0] = 'f';
+        header[1] = 'i';
+        header[2] = 'l';
+        header[3] = 'e';
+        header[100] = '0';
+        header[257] = 'u';
+        header[258] = 's';
+        header[259] = 't';
+        header[260] = 'a';
+        header[261] = 'r';
+        storeChecksum(header, unsignedChecksumWithSpaces(header));
+
+        assertTrue(TarUtils.verifyCheckSum(header));
+    }
+
+    @Test
+    public void verifyCheckSumTreatsChecksumFieldAsSpaces() {
+        byte[] header = new byte[512];
+        Arrays.fill(header, TarConstants.CHKSUM_OFFSET,
+                TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN, (byte) ' ');
+        long checksum = TarUtils.computeCheckSum(header);
+        writeChecksumField(header, checksum);
+
+        assertTrue(TarUtils.verifyCheckSum(header));
+    }
+
+    @Test
+    public void verifyCheckSumAcceptsUnsignedChecksumForHighBitBytes() {
+        byte[] header = new byte[512];
+        header[0] = (byte) 0x80;
+        storeChecksum(header, unsignedChecksumWithSpaces(header));
+
+        assertTrue(TarUtils.verifyCheckSum(header));
+    }
+
+    @Test
+    public void verifyCheckSumAcceptsHistoricSignedChecksumForHighBitBytes() {
+        byte[] header = new byte[512];
+        header[0] = (byte) 0x80;
+        storeChecksum(header, signedChecksumWithSpaces(header));
+
+        assertTrue(TarUtils.verifyCheckSum(header));
+    }
+
+    @Test
+    public void verifyCheckSumRejectsHeaderWhoseContentChangedAfterChecksumWasStored() {
+        byte[] header = new byte[512];
+        header[0] = 'a';
+        storeChecksum(header, unsignedChecksumWithSpaces(header));
+        header[1] = 'b';
+
+        assertFalse(TarUtils.verifyCheckSum(header));
+    }
+
+    @Test
+    public void verifyCheckSumRejectsNonOctalChecksumField() {
+        byte[] header = new byte[512];
+        header[0] = 'a';
+        Arrays.fill(header, TarConstants.CHKSUM_OFFSET,
+                TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN, (byte) ' ');
+        header[TarConstants.CHKSUM_OFFSET] = '0';
+        header[TarConstants.CHKSUM_OFFSET + 1] = '0';
+        header[TarConstants.CHKSUM_OFFSET + 2] = 'x';
+        header[TarConstants.CHKSUM_OFFSET + 3] = '0';
+        header[TarConstants.CHKSUM_OFFSET + 4] = '0';
+        header[TarConstants.CHKSUM_OFFSET + 5] = '0';
+        header[TarConstants.CHKSUM_OFFSET + 6] = 0;
+        header[TarConstants.CHKSUM_OFFSET + 7] = ' ';
+
+        assertFalse(TarUtils.verifyCheckSum(header));
+    }
+
+    private static void storeChecksum(byte[] header, long checksum) {
+        writeChecksumField(header, checksum);
+    }
+
+    private static void writeChecksumField(byte[] header, long checksum) {
+        String octal = Long.toOctalString(checksum);
+        while (octal.length() < 6) {
+            octal = "0" + octal;
+        }
+        if (octal.length() > 6) {
+            throw new IllegalArgumentException("Checksum does not fit in a tar checksum field");
+        }
+
+        for (int i = 0; i < 6; i++) {
+            header[TarConstants.CHKSUM_OFFSET + i] = (byte) octal.charAt(i);
+        }
+        header[TarConstants.CHKSUM_OFFSET + 6] = 0;
+        header[TarConstants.CHKSUM_OFFSET + 7] = ' ';
+    }
+
+    private static long unsignedChecksumWithSpaces(byte[] header) {
+        long sum = 0;
+        for (int i = 0; i < header.length; i++) {
+            byte value = inChecksumField(i) ? (byte) ' ' : header[i];
+            sum += value & 0xff;
+        }
+        return sum;
+    }
+
+    private static long signedChecksumWithSpaces(byte[] header) {
+        long sum = 0;
+        for (int i = 0; i < header.length; i++) {
+            sum += inChecksumField(i) ? ' ' : header[i];
+        }
+        return sum;
+    }
+
+    private static boolean inChecksumField(int index) {
+        return index >= TarConstants.CHKSUM_OFFSET
+                && index < TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.compress.archivers.tar.TarUtilsChecksumTest::verifyCheckSumRejectsNonOctalChecksumField
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.compress.archivers.tar.TarUtilsChecksumTest::verifyCheckSumRejectsNonOctalChecksumField

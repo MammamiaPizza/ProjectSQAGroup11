@@ -1,0 +1,383 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 135  Version: Closure-135b
+JUnit: junit4-core.jar  Build: Ant
+Target: com.google.javascript.jscomp.DevirtualizePrototypeMethods, com.google.javascript.rhino.jstype.FunctionType
+Modified: com.google.javascript.jscomp.DevirtualizePrototypeMethods, com.google.javascript.rhino.jstype.FunctionType
+Triggers: com.google.javascript.jscomp.DevirtualizePrototypeMethodsTest::testRewritePrototypeMethods2, com.google.javascript.jscomp.TypeCheckTest::testGoodExtends9
+
+Bug/specification summary:
+Bug report: 59
+Trigger failures:
+- com.google.javascript.jscomp.DevirtualizePrototypeMethodsTest::testRewritePrototypeMethods2
+ --> junit.framework.AssertionFailedError: expected:<[FUNCTION a = function (this:a): ?, NAME JSCompiler_StaticMethods_foo$self = a, FUNCTION JSCompiler_StaticMethods_foo = function (a): number, NAME JSCompiler_StaticMethods_bar$self = a, FUNCTION JSCompiler_StaticMethods_bar = function (a, number): number, FUNCTION JSCompiler_StaticMethods_baz = function (a): ?, NEW a = a, CALL JSCompiler_StaticMethods_foo = number, CALL JSCompiler_StaticMethods_bar = number, CALL JSCompiler_StaticMethods_baz = ?]> but was:<[FUNCTION a = function (this:a): ?, NAME JSCompiler_StaticMethods_foo$self = null, FUNCTION JSCompiler_StaticMethods_foo = function (a): number, NAME JSCompiler_StaticMethods_bar$self = null, FUNCTION JSCompiler_StaticMethods_bar = function (a, number): number, FUNCTION JSCompiler_StaticMethods_baz = function (a): ?, NEW a = a, CALL JSCompiler_StaticMethods_foo = number, CALL JSCompiler_StaticMethods_bar = number, CALL JSCompiler_StaticMethods_baz = ?]>
+ - com.google.javascript.jscomp.TypeCheckTest::testGoodExtends9
+ --> junit.framework.AssertionFailedError: unexpected warnings(s):
+Modified: com.google.javascript.jscomp.DevirtualizePrototypeMethods, com.google.javascript.rhino.jstype.FunctionType
+
+Prompt-01 test plan:
+TARGETS: DevirtualizePrototypeMethods.rewriteDefinition (maps this to $self)
+TARGETS: DevirtualizePrototypeMethods.fixFunctionType (updates rewritten method type)
+ORACLES: $self variable JSType must equal original 'this' type (a) after rewrite
+ORACLES: compiled output matches expected $self type string (e.g., $self = a)
+ORACLES: no unexpected type-check warnings after devirtualization (testGoodExtends9)
+CASES: prototype method on named type, called on instance (normal case)
+CASES: subclass extends parent with devirtualized method (boundary: inheritance)
+CASES: this type is unknown/nullable → $self may be null (error vs boundary)
+RISKS: fix only verified for simple FunctionType; may miss union/unknown this types
+RISKS: type propagation may fail if $self is reassigned inside rewritten method body
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.DevirtualizePrototypeMethods (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class DevirtualizePrototypeMethods implements CompilerPass {
+@Override
+public void process(Node externs, Node root) {
+private static boolean isCall(UseSite site) {
+private static boolean isPrototypeMethodDefinition(Node node) {
+private String getRewrittenMethodName(String orginalMethodName) {
+private void rewriteDefinition(Node node, String newMethodName) {
+private void fixFunctionType(Node functionNode) {
+private void replaceReferencesToThis(Node node, String name) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.javascript.jscomp.DefinitionsRemover.Definition;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import java.util.Collection;
+import java.util.List;
+class DevirtualizePrototypeMethods implements CompilerPass {
+
+/* METHOD DevirtualizePrototypeMethods */
+DevirtualizePrototypeMethods(AbstractCompiler compiler) {
+ this.compiler = compiler;
+ }
+
+/* METHOD rewriteDefinition */
+private void rewriteDefinition(Node node, String newMethodName) {
+ Node parent = node.getParent();
+ Node functionNode = parent.getLastChild();
+ Node expr = parent.getParent();
+ Node block = expr.getParent();
+
+ Node newNameNode = Node.newString(Token.NAME, newMethodName);
+ parent.removeChild(functionNode);
+ newNameNode.addChildToFront(functionNode);
+ block.replaceChild(expr, new Node(Token.VAR, newNameNode));
+
+ // add extra argument
+ String self = newMethodName + "$self";
+ Node argList = functionNode.getFirstChild().getNext();
+ argList.addChildToFront(Node.newString(Token.NAME, self));
+
+ // rewrite body
+ Node body = functionNode.getLastChild();
+ replaceReferencesToThis(body, self);
+
+ // fix type
+ fixFunctionType(functionNode);
+
+ compiler.reportCodeChange();
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ SimpleDefinitionFinder defFinder = new SimpleDefinitionFinder(compiler);
+ defFinder.process(externs, root);
+
+ for (DefinitionSite defSite : defFinder.getDefinitionSites()) {
+ rewriteDefinitionIfEligible(defSite, defFinder);
+ }
+ }
+
+/* METHOD rewriteCallSites */
+private void rewriteCallSites(SimpleDefinitionFinder defFinder,
+ Definition definition,
+ String newMethodName) {
+ Collection<UseSite> useSites = defFinder.getUseSites(definition);
+ for (UseSite site : useSites) {
+ Node node = site.node;
+ Node parent = node.getParent();
+
+ Node objectNode = node.getFirstChild();
+ node.removeChild(objectNode);
+ parent.replaceChild(node, objectNode);
+ parent.addChildToFront(Node.newString(Token.NAME, newMethodName));
+ compiler.reportCodeChange();
+ }
+ }
+
+/* METHOD fixFunctionType */
+private void fixFunctionType(Node functionNode) {
+ FunctionType type = (FunctionType) functionNode.getJSType();
+ if (type != null) {
+ JSTypeRegistry typeRegistry = compiler.getTypeRegistry();
+
+ List<JSType> parameterTypes = Lists.newArrayList();
+ parameterTypes.add(type.getTypeOfThis());
+
+ for (Node param : type.getParameters()) {
+ parameterTypes.add(param.getJSType());
+ }
+
+ ObjectType thisType =
+ typeRegistry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+ JSType returnType = type.getReturnType();
+
+ JSType newType = typeRegistry.createFunctionType(
+ thisType, returnType, parameterTypes);
+ functionNode.setJSType(newType);
+ }
+ }
+
+/* METHOD rewriteDefinitionIfEligible */
+private void rewriteDefinitionIfEligible(DefinitionSite defSite,
+ SimpleDefinitionFinder defFinder) {
+
+ if (defSite.inExterns ||
+ !defSite.inGlobalScope ||
+ !isEligibleDefinition(defFinder, defSite)) {
+ return;
+ }
+
+ Node node = defSite.node;
+
+ // TODO(user) support rewritting methods defined as part of
+ // object literals
+...[truncated deterministically]...
+Parent();
+ ancestor != null;
+ ancestor = ancestor.getParent()) {
+ if (NodeUtil.isControlStructure(ancestor)) {
+ return;
+ }
+ }
+
+ // TODO(user) The code only works if there is a single definition
+ // associated with a property name. Once this pass starts using
+ // the NameReferenceGraph to disambiguate call sites, it will be
+ // necessary to consider type information when generating static
+ // method names and/or append unique ids to duplicate static
+ // method names.
+ // Whatever scheme we use should not break stable renaming.
+ String newMethodName = getRewrittenMethodName(
+ node.getLastChild().getString());
+ rewriteDefinition(node, newMethodName);
+ rewriteCallSites(defFinder, defSite.definition, newMethodName);
+ }
+
+/* METHOD getRewrittenMethodName */
+private String getRewrittenMethodName(String orginalMethodName) {
+ return "JSCompiler_StaticMethods_" + orginalMethodName;
+ }
+
+/* METHOD isEligibleDefinition */
+private boolean isEligibleDefinition(SimpleDefinitionFinder defFinder,
+ DefinitionSite definitionSite) {
+
+ Definition definition = definitionSite.definition;
+ JSModule definitionModule = definitionSite.module;
+
+ // Only functions may be rewritten.
+ // Functions that access "arguments" are not eligible since
+ // rewrite changes the structure of this object.
+ Node rValue = definition.getRValue();
+ if (rValue == null ||
+ !NodeUtil.isFunction(rValue) ||
+ NodeUtil.isVarArgsFunction(rValue)) {
+ return false;
+ }
+
+ // Exporting a method prevents rewrite.
+ Node lValue = definition.getLValue();
+ if ((lValue == null) ||
+ !NodeUtil.isGetProp(lValue)) {
+ return false;
+ }
+ CodingConvention codingCon
+...[truncated deterministically]...
+property in a module loaded before the
+ // definition module prevents rewrite; accessing a variable
+ // before definition results in a parse error.
+ JSModule callModule = site.module;
+ if ((definitionModule != callModule) &&
+ ((callModule == null) ||
+ !moduleGraph.dependsOn(callModule, definitionModule))) {
+ return false;
+ }
+ }
+
+ return true;
+ }
+
+===== com.google.javascript.rhino.jstype.FunctionType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public class FunctionType extends PrototypeObjectType {
+private enum Kind {
+private List<ObjectType> implementedInterfaces = ImmutableList.of();
+@VisibleForTesting
+/** Creates an instance for a function that is an interface. */
+@Override
+public boolean isInstanceType() {
+public boolean isConstructor() {
+public boolean isInterface() {
+public boolean isOrdinaryFunction() {
+public boolean isFunctionType() {
+public boolean canBeCalled() {
+public Iterable<Node> getParameters() {
+public Node getParametersNode() {
+public int getMinArguments() {
+public int getMaxArguments() {
+public JSType getReturnType() {
+public FunctionPrototypeType getPrototype() {
+public void setPrototypeBasedOn(ObjectType baseType) {
+public boolean setPrototype(FunctionPrototypeType prototype) {
+public Iterable<ObjectType> getAllImplementedInterfaces() {
+private void addRelatedInterfaces(ObjectType instance, Set<ObjectType> set) {
+/** Returns interfaces implemented directly by a class or its superclass. */
+public Iterable<ObjectType> getImplementedInterfaces() {
+public void setImplementedInterfaces(List<ObjectType> implementedInterfaces) {
+public boolean hasProperty(String name) {
+public JSType getPropertyType(String name) {
+public boolean isPropertyTypeInferred(String property) {
+public JSType getLeastS
+...[truncated deterministically]...
+e(String propertyName) {
+public boolean equals(Object otherType) {
+public int hashCode() {
+public boolean hasEqualCallType(FunctionType otherType) {
+public String toString() {
+private void appendVarArgsString(StringBuilder builder, JSType paramType) {
+public boolean isSubtype(JSType that) {
+public <T> T visit(Visitor<T> visitor) {
+public ObjectType getInstanceType() {
+public boolean hasInstanceType() {
+public ObjectType ge
+...[truncated deterministically]...
+etTemplateTypeName() {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+public class FunctionType extends PrototypeObjectType {
+
+/* METHOD FunctionType */
+@VisibleForTesting
+ public FunctionType(JSTypeRegistry registry, String name, Node source,
+ Node parameters, JSType returnType) {
+ this(registry, name, source, parameters, returnType, null, null, false,
+ false);
+ }
+
+/* METHOD FunctionType */
+public FunctionType(JSTypeRegistry registry, String name, Node source,
+ Node parameters, JSType returnType, ObjectType typeOfThis) {
+ this(registry, name, source, parameters, returnType, typeOfThis,
+ null, false, false);
+ }
+
+/* METHOD FunctionType */
+public FunctionType(JSTypeRegistry registry, String name, Node source,
+ Node parameters, JSType returnType, ObjectType typeOfThis,
+ String templateTypeName) {
+ this(registry, name, source, parameters, returnType, typeOfThis,
+ templateTypeName, false, false);
+ }
+
+/* METHOD FunctionType */
+FunctionType(JSTypeRegistry registry, String name, Node source,
+ Node parameters, JSType returnType, ObjectType typeOfThis,
+ String templateTypeName, boolean isConstructor, boolean nativeType) {
+ super(registry, name,
+ registry.getNativeObjectType(JSTypeNative.FUNCTION_INSTANCE_TYPE),
+ nativeType);
+ Preconditions.checkArgument(source == null ||
+ Token.FUNCTION == source.getType());
+ this.source = source;
+ this.kind = isConstructor ? Kind.CONSTRUCTOR
+...[truncated deterministically]...
+peOfThis.isNoObjectType() ?
+ typeOfThis : new InstanceObjectType(registry, this, nativeType);
+ } else {
+ this.typeOfThis = typeOfThis != null ?
+ typeOfThis :
+ registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+ }
+ // The call type should be set up last because we are calling getReturnType,
+ // which may be overloaded and depend on other properties being set.
+ this.call = new ArrowType(registry, parameters,
+ (returnType == null ? getReturnType() : returnType));
+ this.templateTypeName = templateTypeName;
+ }
+
+/* METHOD FunctionType */
+FunctionType(JSTypeRegistry registry, String name, Node source) {
+ super(registry, name,
+ registry.getNativeObjectType(JSTypeNative.FUNCTION_INSTANCE_TYPE));
+ Preconditions.checkArgument(source == null ||
+ Token.FUNCTION == source.getType());
+ Preconditions.checkArgument(name != null);
+ this.source = source;
+ this.call = null;
+ this.kind = Kind.INTERFACE;
+ this.typeOfThis = new InstanceObjectType(registry, this);
+ }
+
+/* METHOD getLeastSupertype */
+@Override
+ public JSType getLeastSupertype(JSType that) {
+ // NOTE(nicksantos): When we remove the unknown type, the function types
+ // form a lattice with the universal constructor at the top of the lattice,
+ // and the NoObject type at the bottom of the lattice.
+ //
+ // When we introduce the unknown type, it's much more difficult to make
+ // heads or tails of the partial ordering of types, because there's no
+ // clear hierarchy between the different components (parameter types and
+ // return types) in the ArrowType.
+ //
+ // Rather than make the situation more complicated by introducing new
+ // types (like unions of functions), we just
+...[truncated deterministically]...
+;
+ }
+
+ JSType functionInstance = registry.getNativeType(
+ JSTypeNative.FUNCTION_INSTANCE_TYPE);
+ if (functionInstance.equals(that)) {
+ return that;
+ } else if (functionInstance.equals(this)) {
+ return this;
+ }
+
+ return registry.getNativeType(JSTypeNative.U2U_CONSTRUCTOR_TYPE);
+ }
+
+ return super.getLeastSupertype(that);
+ }

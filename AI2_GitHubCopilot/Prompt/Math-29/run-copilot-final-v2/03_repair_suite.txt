@@ -1,0 +1,534 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 29  Version: Math-29b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-803
+Trigger failures:
+- org.apache.commons.math3.linear.SparseRealVectorTest::testEbeDivideMixedTypes
+ --> junit.framework.AssertionFailedError: entry #0, left = 0.0, right = 0.0 expected:<NaN> but was:<0.0>
+ - org.apache.commons.math3.linear.SparseRealVectorTest::testEbeMultiplyMixedTypes
+ --> junit.framework.AssertionFailedError: entry #5, left = 0.0, right = Infinity expected:<NaN> but was:<0.0>
+ - org.apache.commons.math3.linear.SparseRealVectorTest::testEbeMultiplySameType
+ --> junit.framework.AssertionFailedError: entry #5, left = 0.0, right = Infinity expected:<NaN> but was:<0.0>
+Modified: org.apache.commons.math3.linear.OpenMapRealVector
+
+Available API/signatures:
+[org.apache.commons.math3.linear.OpenMapRealVector | java]
+package org.apache.commons.math3.linear;
+public class OpenMapRealVector extends SparseRealVector
+public static final double DEFAULT_ZERO_TOLERANCE = 1.0e-12;
+public OpenMapRealVector() {
+public OpenMapRealVector(int dimension) {
+public OpenMapRealVector(int dimension, double epsilon) {
+protected OpenMapRealVector(OpenMapRealVector v, int resize) {
+public OpenMapRealVector(int dimension, int expectedSize) {
+public OpenMapRealVector(int dimension, int expectedSize, double epsilon) {
+public OpenMapRealVector(double[] values) {
+public OpenMapRealVector(double[] values, double epsilon) {
+public OpenMapRealVector(Double[] values) {
+public OpenMapRealVector(Double[] values, double epsilon) {
+public OpenMapRealVector(OpenMapRealVector v) {
+public OpenMapRealVector(RealVector v) {
+private OpenIntToDoubleHashMap getEntries() {
+protected boolean isDefaultValue(double value) {
+@Override
+public RealVector add(RealVector v) {
+public OpenMapRealVector add(OpenMapRealVector v) {
+public OpenMapRealVector append(OpenMapRealVector v) {
+public OpenMapRealVector append(RealVector v) {
+final OpenMapRealVector res = new OpenMapRealVector(this, v.getDimension());
+public OpenMapRealVector append(double d) {
+public OpenMapRealVector copy() {
+public double dotProduct(OpenMapRealVector v) {
+public double dotProduct(RealVector v) {
+public OpenMapRealVector ebeDivide(RealVector v) {
+public OpenMapRealVector ebeMultiply(RealVector v) {
+public OpenMapRealVector getSubVector(int index, int n) {
+public int getDimension() {
+public double getDistance(OpenMapRealVector v) {
+final double value = iter.value();
+public d
+...[truncated deterministically]...
+ector v) {
+public void setEntry(int index, double value) {
+public void setSubVector(int index, RealVector v) {
+public void set(double value) {
+public OpenMapRealVector subtract(OpenMapRealVector v) {
+public RealVector subtract(RealVector v) {
+public OpenMapRealVector unitVector() {
+public void unitize() {
+public double[] toArray() {
+public int hashCode() {
+public boolean equals(Object obj) {
+public double getSparsity() {
+public java.util.Iterator<Entry> sparseIterator() {
+protected class OpenMapEntry extends Entry {
+protected OpenMapEntry(Iterator iter) {
+public double getValue() {
+public void setValue(double value) {
+public int getIndex() {
+protected class OpenMapSparseIterator implements java.util.Iterator<Entry> {
+protected OpenMapSparseIterator() {
+public boolean hasNext() {
+public Entry next() {
+public void remove() {
+
+Generated JUnit Test:
+package org.apache.commons.math3.linear;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for IEEE 754 edge cases in {@link OpenMapRealVector#ebeDivide(RealVector)}
+  * and {@link OpenMapRealVector#ebeMultiply(RealVector)}, exposing bug MATH-803.
+  *
+  * <p>The buggy implementation iterates only over stored (non-default) entries of
+  * {@code this}, so default-zero entries are skipped. When a default zero must
+  * interact with Infinity, NaN, or another zero, the result is incorrect:
+  * <ul>
+  *   <li>{@code 0.0 / 0.0} yields {@code 0.0} instead of {@code NaN}</li>
+  *   <li>{@code 0.0 × Infinity} yields {@code 0.0} instead of {@code NaN}</li>
+  * </ul>
+  */
+ public class OpenMapRealVectorIEEE754Test {
+
+     private static final double DELTA = 1.0e-15;
+
+     @Test
+     public void testEbeDivideAllDefaultZerosYieldsNaN() {
+         // 0.0 / 0.0 = NaN per IEEE 754
+         // Bug: loop skips all default entries; result incorrectly stays 0.0
+         OpenMapRealVector v1 = new OpenMapRealVector(3);
+         OpenMapRealVector v2 = new OpenMapRealVector(3);
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         for (int i = 0; i < 3; i++) {
+             assertTrue("0.0 / 0.0 should be NaN at index " + i,
+                        Double.isNaN(result.getEntry(i)));
+         }
+     }
+
+     @Test
+     public void testEbeMultiplyDefaultZeroTimesInfinityYieldsNaN() {
+         // 0.0 * Infinity = NaN per IEEE 754
+         // Bug: default zeros of 'this' are not iterated, leaving 0.0 instead of NaN
+         OpenMapRealVector v1 = new OpenMapRealVector(3);
+         OpenMapRealVector v2 = new OpenMapRealVector(3);
+         v2.setEntry(0, Double.POSITIVE_INFINITY);
+         v2.setEntry(1, Double.NEGATIVE_INFINITY);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertTrue("0 × +Inf should be NaN", Double.isNaN(result.getEntry(0)));
+         assertTrue("0 × -Inf should be NaN", Double.isNaN(result.getEntry(1)));
+         assertEquals("0 × 0 should be 0",0.0, result.getEntry(2), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyDefaultZeroTimesNaNYieldsNaN() {
+         // 0.0 * NaN = NaN per IEEE 754
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         v2.setEntry(0, Double.NaN);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertTrue("0 × NaN should be NaN", Double.isNaN(result.getEntry(0)));
+         assertEquals("0 × 0 should be 0", 0.0, result.getEntry(1), DELTA);
+     }
+
+     @Test
+     public void testEbeDivideNonZeroByDefaultZeroYieldsInfinity() {
+         // x / 0.0 = ±Infinity for x ≠ 0
+         // Non-zero entries of 'this' are stored and iterated, so this works on buggy
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         v1.setEntry(0,5.0);
+         v1.setEntry(1, -3.0);
+         OpenMapRealVector v2 = new OpenMapRealVector(2); // all default zero
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         assertTrue("5.0 / 0.0 = +Inf", Double.isInfinite(result.getEntry(0)) && result.getEntry(0)
+> 0);
+         assertTrue("-3.0 / 0.0 = -Inf", Double.isInfinite(result.getEntry(1)) && result.getEntry(1)
+< 0);
+     }
+
+     @Test
+     public void testEbeDivideDefaultZeroByNonZeroYieldsZero() {
+         // 0.0 / x = 0.0 for finite x ≠ 0
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         v2.setEntry(0, 7.0);
+         v2.setEntry(1, -2.0);
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         assertEquals(0.0, result.getEntry(0), DELTA);
+         assertEquals(0.0, result.getEntry(1), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyDefaultZeroByNonZeroYieldsZero() {
+         // 0 * x = 0 for finite x
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         v2.setEntry(0,42.0);
+         v2.setEntry(1, -17.0);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertEquals(0.0, result.getEntry(0), DELTA);
+         assertEquals(0.0, result.getEntry(1), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyNormalValues() {
+         double[] a = {1.0,2.0,3.0};
+         double[] b = {4..0,5.0,6.0};
+         OpenMapRealVector v1 = new OpenMapRealVector(a);
+         OpenMapRealVector v2 = new OpenMapRealVector(b);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertEquals(4.0, result.getEntry(0), DELTA);
+         assertEquals(10.0, result.getEntry(1), DELTA);
+         assertEquals(18.0, result.getEntry(2), DELTA);
+     }
+
+     @Test
+     public void testEbeDivideNormalValues() {
+         double[] a = {8.0,6.0,4.0};
+         double[] b = {2..0,3.0,0.5};
+         OpenMapRealVector v1 = new OpenMapRealVector(a);
+         OpenMapRealVector v2 = new OpenMapRealVector(b);
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         assertEquals(4.0, result.getEntry(0), DELTA);
+         assertEquals(2.0, result.getEntry(1), DELTA);
+         assertEquals(8.0, result.getEntry(2), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyMixedDefaultAndSpecial() {
+         // this: positions 2,3 stored; positions 0,1,4,5 are default zero
+         OpenMapRealVector v1 = new OpenMapRealVector(6);
+         v1.setEntry(2,3.0);
+         v1.setEntry(3, -2.0);
+
+         // v: Inf, -Inf, normal, normal, NaN, and default zero
+         OpenMapRealVector v2 = new OpenMapRealVector(6);
+         v2.setEntry(0, Double.POSITIVE_INFINITY);
+         v2.setEntry(1, Double.NEGATIVE_INFINITY);
+         v2.setEntry(2,10.0);
+         v2.setEntry(3,10.0);
+         v2.setEntry(4, Double.NaN);
+         // position5 stays default zero
+
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+
+         assertTrue("0 × +Inf = NaN", Double.isNaN(result.getEntry(0)));
+         assertTrue("0 × -Inf = NaN", Double.isNaN(result.getEntry(1)));
+         assertEquals("3 × 10 = 30",30.0, result.getEntry(2), DELTA);
+         assertEquals("-2 × 10 = -20", -20.0, result.getEntry(3), DELTA);
+         assertTrue("0 × NaN = NaN", Double.isNaN(result.getEntry(4)));
+         assertEquals("0 × 0 = 0",0.0, result.getEntry(5), DELTA);
+     }
+
+     @Test
+     public void testEbeDivideMixedDefaultAndSpecial() {
+         // v1: position1 stored; positions0,2,3,4 are default zero
+         OpenMapRealVector v1 = new OpenMapRealVector(5);
+         v1.setEntry(1,8.0);
+
+         // v2: position0=4.0, position2=0.0, position3=+Inf, positions1,4 default zero
+         OpenMapRealVector v2 = new OpenMapRealVector(5);
+         v2.setEntry(0,4.0);
+         v2.setEntry(2,0.0);
+         v2.setEntry(3, Double.POSITIVE_INFINITY);
+
+         OpenMapRealVector result = v1.ebeDivide(v2);
+
+         assertEquals("0 / 4 = 0",0.0, result.getEntry(0), DELTA);
+         // 8.0 / 0.0 (v2[1] default zero) = +Inf
+         assertTrue("8 / 0 = +Inf", Double.isInfinite(result.getEntry(1)) && result.getEntry(1) >
+0);
+         // 0 / 0 = NaN
+         assertTrue("0 / 0 = NaN", Double.isNaN(result.getEntry(2)));
+         assertEquals("0 / Inf = 0", 0.0, result.getEntry(3), DELTA);
+         // 0 (default) / 0 (default) = NaN
+         assertTrue("0 / 0 = NaN", Double.isNaN(result.getEntry(4)));
+     }
+
+     @Test
+     public void testEbeMultiplyStoredInfinityTimesDefaultZero() {
+         // Infinity * 0 = NaN. 'this' has stored Infinity, so the loop processes it.
+         // This case works correctly even in the buggy version, confirming the asymmetry.
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         v1.setEntry(0, Double.POSITIVE_INFINITY);
+         v1.setEntry(1, Double.NEGATIVE_INFINITY);
+         OpenMapRealVector v2 = new OpenMapRealVector(2); // default zeros
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertTrue("+Inf × 0 = NaN", Double.isNaN(result.getEntry(0)));
+         assertTrue("-Inf × 0 = NaN", Double.isNaN(result.getEntry(1)));
+     }
+
+     @Test
+     public void testDimensionMismatchThrows() {
+         OpenMapRealVector v1 = new OpenMapRealVector(3);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         try {
+             v1.ebeMultiply(v2);
+             fail("ebeMultiply should throw on dimension mismatch");
+         } catch (Exception e) {
+             // expected
+         }
+         try {
+             v1.ebeDivide(v2);
+             fail("ebeDivide should throw on dimension mismatch");
+         } catch (Exception e) {
+             // expected
+         }
+     }
+ }
+
+I had several typos. Let me fix them:
+
+ - static org.junit.Assert.assertEquals → should be org.junit.Assert.*
+ - org.apache.commons.math3.linear → should be org.apache.commons.math3.linear (missing 's' in some)
+ - Various constant name typos
+ - Method name typos
+
+Let me produce a clean, correct final version.
+
+ package org.apache.commons.math3.linear;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for IEEE 754 edge cases in {@link OpenMapRealVector#ebeDivide(RealVector)}
+  * and {@link OpenMapRealVector#ebeMultiply(RealVector)}, exposing bug MATH-803.
+  *
+  * <p>The buggy implementation iterates only over stored (non-default) entries of
+  * {@code this}, so default-zero entries are skipped. When a default zero must
+  * interact with Infinity, NaN, or another zero, the result is incorrect:
+  * <ul>
+  *   <li>{@code 0.0 / 0.0} yields {@code 0.0} instead of {@code NaN}</li>
+  *   <li>{@code 0.0 * Infinity} yields {@code 0.0} instead of {@code NaN}</li>
+  * </ul>
+  */
+ public class OpenMapRealVectorIEEE754Test {
+
+     private static final double DELTA = 1.0e-15;
+
+     @Test
+     public void testEbeDivideAllDefaultZerosYieldsNaN() {
+         // 0.0 / 0.0 = NaN per IEEE 754
+         // Bug: loop skips all default entries; result incorrectly stays0.0
+         OpenMapRealVector v1 = new OpenMapRealVector(3);
+         OpenMapRealVector v2 = new OpenMapRealVector(3);
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         for (int i =0; i <3; i++) {
+             assertTrue("0.0 / 0.0 should be NaN at index " + i,
+                        Double.isNaN(result.getEntry(i)));
+         }
+     }
+
+     @Test
+     public void testEbeMultiplyDefaultZeroTimesInfinityYieldsNaN() {
+         // 0..0 * Infinity = NaN per IEEE 754
+         // Bug: default zeros of 'this' are not iterated, leaving 0.0 instead of NaN
+         OpenMapRealVector v1 = new OpenMapRealVector(3);
+         OpenMapRealVector v2 = new OpenMapRealVector(3);
+         v2.setEntry(0, Double.POSITIVE_INFINITY);
+         v2.setEntry(1, Double.NEGATIVE_INFINITY);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertTrue("0 × +Inf should be NaN", Double.isNaN(result.getEntry(0)));
+         assertTrue("0 × -Inf should be NaN", Double.isNaN(result.getEntry(1)));
+         assertEquals("0 × 0 should be 0", 0.0, result.getEntry(2), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyDefaultZeroTimesNaNYieldsNaN() {
+         // 0.0 * NaN = NaN per IEEE 754
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         v2.setEntry(0, Double.NaN);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertTrue("0 × NaN should be NaN", Double.isNaN(result.getEntry(0)));
+         assertEquals("0 × 0 should be 0", 0.0, result.getEntry(1), DELTA);
+     }
+
+     @Test
+     public void testEbeDivideNonZeroByDefaultZeroYieldsInfinity() {
+         // x / 0.0 = ±Infinity for x ≠ 0
+         // Non-zero entries of 'this' are stored and iterated, so this works on buggy
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         v1.setEntry(0,5.0);
+         v1.setEntry(1, -3.0);
+         OpenMapRealVector v2 = new OpenMapRealVector(2); // all default zero
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         assertTrue("5..0 / 0.0 = +Inf", Double.isInfinite(result.getEntry(0)) && result.getEntry(0)
+> 0);
+         assertTrue("-3.0 / 0.0 = -Inf", Double.isInfinite(result.getEntry(1)) && result.getEntry(1)
+< 0);
+     }
+
+     @Test
+     public void testEbeDivideDefaultZeroByNonZeroYieldsZero() {
+         // 0.0 / x = 0.0 for finite x ≠ 0
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         v2.setEntry(0,7.0);
+         v2.setEntry(1, -2.0);
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         assertEquals(0.0, result.getEntry(0), DELTA);
+         assertEquals(0.0, result.getEntry(1), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyDefaultZeroByNonZeroYieldsZero() {
+         // 0 × x = 0 for finite x
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         v2.setEntry(0,42.0);
+         v2.setEntry(1, -17..0);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertEquals(0.0, result.getEntry(0), DELTA);
+         assertEquals(0.0, result.getEntry(1), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyNormalValues() {
+         double[] a = {1.0,2.0,3.0};
+         double[] b = {4..0,5.0,6.0};
+         OpenMapRealVector v1 = new OpenMapRealVector(a);
+         OpenMapRealVector v2 = new OpenMapRealVector(b);
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertEquals(4.0, result.getEntry(0), DELTA);
+         assertEquals(10.0, result.getEntry(1), DELTA);
+         assertEquals(18.0, result.getEntry(2), DELTA);
+     }
+
+     @Test
+     public void testEbeDivideNormalValues() {
+         double[] a = {8.0,6.0,4.0};
+         double[] b = {2..0,3.0,0.5};
+         OpenMapRealVector v1 = new OpenMapRealVector(a);
+         OpenMapRealVector v2 = new OpenMapRealVector(b);
+         OpenMapRealVector result = v1.ebeDivide(v2);
+         assertEquals(4.0, result.getEntry(0), DELTA);
+         assertEquals(2.0, result.getEntry(1), DELTA);
+         assertEquals(8.0, result.getEntry(2), DELTA);
+     }
+
+     @Test
+     public void testEbeMultiplyMixedDefaultAndSpecial() {
+         // this: positions 2,3 stored; positions0,1,4,5 are default zero
+         OpenMapRealVector v1 = new OpenMapRealVector(6);
+         v1.setEntry(2,3.0);
+         v1.setEntry(3, -2.0);
+
+         // v: Inf, -Inf, normal, normal, NaN, and default zero
+         OpenMapRealVector v2 = new OpenMapRealVector(6);
+         v2.setEntry(0, Double.POSITIVE_INFINITY);
+         v2.setEntry(1, Double.NEGATIVE_INFINITY);
+         v2.setEntry(2,10.0);
+         v2.setEntry(3,10.0);
+         v2.setEntry(4, Double.NaN);
+         // position5 stays default zero
+
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+
+         assertTrue("0 × +Inf = NaN", Double.isNaN(result.getEntry(0)));
+         assertTrue("0 × -Inf = NaN", Double.isNaN(result.getEntry(1)));
+         assertEquals("3 × 10 = 30",30.0, result.getEntry(2), DELTA);
+         assertEquals("-2 × 10 = -20", -20.0, result.getEntry(3), DELTA);
+         assertTrue("0 × NaN = NaN", Double.isNaN(result.getEntry(4)));
+         assertEquals("0 × 0 = 0",0.0, result.getEntry(5), DELTA);
+     }
+
+     @Test
+     public void testEbeDivideMixedDefaultAndSpecial() {
+         // v1: position1 stored; positions0,2,3,4 are default zero
+         OpenMapRealVector v1 = new OpenMapRealVector(5);
+         v1.setEntry(1,8.0);
+
+         // v2: position0=4.0, position2=0.0, position3=+Inf, positions1,4 default zero
+         OpenMapRealVector v2 = new OpenMapRealVector(5);
+         v2.setEntry(0,4.0);
+         v2.setEntry(2,0.0);
+         v2.setEntry(3, Double.POSITIVE_INFINITY);
+
+         OpenMapRealVector result = v1.ebeDivide(v2);
+
+         assertEquals("0 / 4 = 0",0.0, result.getEntry(0), DELTA);
+         // 8.0 / 0.0 (v2[1] default zero) = +Inf
+         assertTrue("8 / 0 = +Inf", Double.isInfinite(result.getEntry(1)) && result.getEntry(1) >
+0);
+         // 0 / 0 = NaN
+         assertTrue("0 / 0 = NaN", Double.isNaN(result.getEntry(2)));
+         assertEquals("0 / Inf = 0", 0.0, result.getEntry(3), DELTA);
+         // 0 (default) / 0 (default) = NaN
+         assertTrue("0 / 0 = NaN", Double.isNaN(result.getEntry(4)));
+     }
+
+     @Test
+     public void testEbeMultiplyStoredInfinityTimesDefaultZero() {
+         // Infinity * 0 = NaN. 'this' has stored Infinity, so the loop processes it.
+         // This case works correctly even in the buggy version, confirming the asymmetry.
+         OpenMapRealVector v1 = new OpenMapRealVector(2);
+         v1.setEntry(0, Double.POSITIVE_INFINITY);
+         v1.setEntry(1, Double.NEGATIVE_INFINITY);
+         OpenMapRealVector v2 = new OpenMapRealVector(2); // default zeros
+         OpenMapRealVector result = v1.ebeMultiply(v2);
+         assertTrue("+Inf × 0 = NaN", Double.isNaN(result.getEntry(0)));
+         assertTrue("-Inf × 0 = NaN", Double.isNaN(result.getEntry(1)));
+     }
+
+     @Test
+     public void testDimensionMismatchThrows() {
+         OpenMapRealVector v1 = new OpenMapRealVector(3);
+         OpenMapRealVector v2 = new OpenMapRealVector(2);
+         try {
+             v1.ebeMultiply(v2);
+             fail("ebeMultiply should throw on dimension mismatch");
+         } catch (Exception e) {
+             // expected
+         }
+         try {
+             v1.ebeDivide(v2);
+             fail("ebeDivide should throw on dimension mismatch");
+         } catch (Exception e) {
+             // expected
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-29f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-29f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-29f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 3.0-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-29f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-29f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-29f-copilot/target/test-classes
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/geometry/partitioning/utilities/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/exception/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/optimization/linear/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/exception/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/stat/descriptive/moment/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-29f-copilot/target/classes/org/apache/commons/math3/package-info.class
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-29f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-29f-copilot/.test_suite/org/apache/commons/math3/linear/OpenMapRealVectorIEEE754Test.java:105: error: '}' expected
+ [javac] double[] b = {4..0,5.0,6.0};
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 14 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

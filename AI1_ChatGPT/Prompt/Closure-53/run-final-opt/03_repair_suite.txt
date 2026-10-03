@@ -1,0 +1,135 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 53  Version: Closure-53b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 545
+Trigger failures:
+- com.google.javascript.jscomp.InlineObjectLiteralsTest::testBug545
+ --> java.lang.RuntimeException: INTERNAL COMPILER ERROR.
+Modified: com.google.javascript.jscomp.InlineObjectLiterals
+
+Available API/signatures:
+[com.google.javascript.jscomp.InlineObjectLiterals | java]
+package com.google.javascript.jscomp;
+class InlineObjectLiterals implements CompilerPass {
+public static final String VAR_PREFIX = "JSCompiler_object_inline_";
+@Override
+public void process(Node externs, Node root) {
+private class InliningBehavior implements Behavior {
+private final Set<Var> staleVars = Sets.newHashSet();
+public void afterExitScope(NodeTraversal t, ReferenceMap referenceMap) {
+private void blacklistVarReferencesInTree(Node root, final Scope scope) {
+public void visit(Node node) {
+private boolean isVarInlineForbidden(Var var) {
+private boolean isInlinableObject(List<Reference> refs) {
+private boolean isVarOrAssignExprLhs(Node n) {
+private void fillInitialValues(Reference init, Map<String, Node> initvals) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.common.base.Supplier;
+import org.junit.Test;
+
+public class InlineObjectLiteralsBug545Test extends CompilerTestCase {
+
+  public InlineObjectLiteralsBug545Test() {
+    super("");
+  }
+
+  @Override
+  protected CompilerPass getProcessor(Compiler compiler) {
+    return new InlineObjectLiterals(
+        compiler,
+        new Supplier<String>() {
+          private int id;
+
+          @Override
+          public String get() {
+            return String.valueOf(id++);
+          }
+        });
+  }
+
+  @Override
+  protected int getNumRepetitions() {
+    return 1;
+  }
+
+  @Test
+  public void testBug545SelfReferentialReassignmentDoesNotCrashOrInline() {
+    testSame(
+        "function f() {"
+            + "var x = {a: 1};"
+            + "x = {a: x.a};"
+            + "return x.a;"
+            + "}");
+  }
+
+  @Test
+  public void testSimpleObjectPropertyIsInlined() {
+    test(
+        "function f() { var x = {a: 1}; return x.a; }",
+        "function f() {"
+            + "var JSCompiler_object_inline_a_0 = 1;"
+            + "return JSCompiler_object_inline_a_0;"
+            + "}");
+  }
+
+  @Test
+  public void testDirectObjectReferencePreventsInlining() {
+    testSame(
+        "function f() {"
+            + "var x = {a: 1};"
+            + "return x;"
+            + "}");
+  }
+
+  @Test
+  public void testMethodCallPropertyReferencePreventsInlining() {
+    testSame(
+        "function f() {"
+            + "var x = {m: function() { return 1; }};"
+            + "return x.m();"
+            + "}");
+  }
+
+  @Test
+  public void testGlobalObjectIsNotInlined() {
+    testSame("var x = {a: 1}; x.a;");
+  }
+
+  @Test
+  public void testNestedScopeSelfReferentialAssignmentDoesNotCrash() {
+    testSame(
+        "function f() {"
+            + "var x = {a: 1};"
+            + "function g() { x = {a: x.a}; }"
+            + "g();"
+            + "return x.a;"
+            + "}");
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-53f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-53f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-53f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-53f-ai/.test_suite/com/google/javascript/jscomp/InlineObjectLiteralsBug545Test.java:6: error: cannot find symbol
+ [javac] public class InlineObjectLiteralsBug545Test extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 42 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

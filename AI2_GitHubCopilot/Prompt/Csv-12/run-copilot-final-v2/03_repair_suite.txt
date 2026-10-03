@@ -1,0 +1,239 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 12  Version: Csv-12b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-128
+Trigger failures:
+- org.apache.commons.csv.CSVParserTest::testExcelHeaderCountLessThanData
+ --> java.lang.IllegalArgumentException: The header contains a duplicate name: "" in [A, B, C, , ]
+Modified: org.apache.commons.csv.CSVFormat
+
+Available API/signatures:
+[org.apache.commons.csv.CSVFormat | java]
+package org.apache.commons.csv;
+public final class CSVFormat implements Serializable {
+public static final CSVFormat RFC4180 = DEFAULT.withIgnoreEmptyLines(false);
+public static final CSVFormat EXCEL = DEFAULT.withIgnoreEmptyLines(false);
+private static boolean isLineBreak(final char c) {
+private static boolean isLineBreak(final Character c) {
+public static CSVFormat newFormat(final char delimiter) {
+final Set<String> dupCheck = new HashSet<String>();
+for (final String hdr : header) {
+@Override
+public boolean equals(final Object obj) {
+final CSVFormat other = (CSVFormat) obj;
+public String format(final Object... values) {
+final StringWriter out = new StringWriter();
+} catch (final IOException e) {
+public Character getCommentMarker() {
+public char getDelimiter() {
+public Character getEscapeCharacter() {
+public String[] getHeader() {
+public boolean getAllowMissingColumnNames() {
+public boolean getIgnoreEmptyLines() {
+public boolean getIgnoreSurroundingSpaces() {
+public String getNullString() {
+public Character getQuoteCharacter() {
+public QuoteMode getQuoteMode() {
+public String getRecordSeparator() {
+public boolean getSkipHeaderRecord() {
+public int hashCode()
+public boolean isCommentMarkerSet() {
+public boolean isEscapeCharacterSet() {
+public boolean isNullStringSet() {
+public boolean isQuoteCharacterSet() {
+public CSVParser parse(final Reader in) throws IOException {
+public CSVPrinter print(final Appendable out) throws IOException {
+public String toString() {
+final StringBuilder sb = new StringBuilder();
+private void validate() throws IllegalArgumentException {
+public CSVFormat withCommentMarker(
+...[truncated deterministically]...
+CSVFormat withEscape(final char escape) {
+public CSVFormat withEscape(final Character escape) {
+public CSVFormat withHeader(final String... header) {
+public CSVFormat withAllowMissingColumnNames(final boolean allowMissingColumnNames) {
+public CSVFormat withIgnoreEmptyLines(final boolean ignoreEmptyLines) {
+public CSVFormat withIgnoreSurroundingSpaces(final boolean ignoreSurroundingSpaces) {
+public CSVFormat withNullString(final String nullString) {
+public CSVFormat withQuote(final char quoteChar) {
+public CSVFormat withQuote(final Character quoteChar) {
+public CSVFormat withQuoteMode(final QuoteMode quoteModePolicy) {
+public CSVFormat withRecordSeparator(final char recordSeparator) {
+public CSVFormat withRecordSeparator(final String recordSeparator) {
+public CSVFormat withSkipHeaderRecord(final boolean skipHeaderRecord) {
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+ import java.io.StringReader;
+ import java.util.Arrays;
+ import java.util.List;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for {@link CSVFormat} focusing on the bug CSV-128: duplicate empty-string headers
+  * are incorrectly rejected when {@code allowMissingColumnNames} is {@code true}.
+  */
+ public class CSVFormatBugTest {
+
+     /**
+      * Replicates the failing trigger test: header ["A","B","C","",""] (count=5)
+      * with EXCEL (allowMissingColumnNames=true) plus a data line of 5 columns.
+      * Must not throw IllegalArgumentException.
+      */
+     @Test
+     public void testExcelHeaderCountLessThanData() throws IOException {
+         CSVFormat format = CSVFormat.EXCEL.withHeader("A", "B", "C", "", "");
+         CSVParser parser = format.parse(new StringReader("1,2,3,4,5"));
+         List<CSVRecord> records = parser.getRecords();
+         assertFalse("Expected at least one record", records.isEmpty());
+         CSVRecord record = records.get(0);
+         assertEquals("1", record.get("A"));
+         assertEquals("2", record.get("B"));
+         assertEquals("3", record.get("C"));
+         assertEquals("4", record.get(0)); // column 3 maps to empty string header
+         assertEquals("5", record.get(1)); // column 4 maps to second empty string header
+         parser.close();
+     }
+
+     /**
+      * Duplicate non-empty headers must always throw, regardless of allowMissingColumnNames.
+      * EXCEL has allowMissingColumnNames=true.
+      */
+     @Test(expected = IllegalArgumentException.class)
+     public void testDuplicateNonEmptyHeaderWithExcel() {
+         CSVFormat.EXCEL.withHeader("X", "Y", "X");
+     }
+
+     /**
+      * Duplicate non-empty headers must always throw, even with RFC4180
+(allowMissingColumnNames=false).
+      */
+     @Test(expected = IllegalArgumentException.class)
+     public void testDuplicateNonEmptyHeaderWithRFC4180() {
+         CSVFormat.RFC4180.withHeader("X", "Y", "X");
+     }
+
+     /**
+      * Header [""] (all empty, allowMissing=true) must be accepted and parsing must work.
+      */
+     @Test
+     public void testAllEmptyHeadersWithExcel() throws IOException {
+         CSVFormat format = CSVFormat.EXCEL.withHeader("", "");
+         CSVParser parser = format.parse(new StringReader("a,b"));
+         CSVRecord record = parser.getRecords().get(0);
+         assertEquals("a", record.get(""));
+         assertEquals("b", record.get(1));
+         parser.close();
+     }
+
+     /**
+      * With allowMissingColumnNames=false (RFC4180) duplicate empty headers should throw.
+      */
+     @Test(expected = IllegalArgumentException.class)
+     public void testAllEmptyHeadersWithRFC4180Throws() {
+         CSVFormat.RFC4180.withHeader("", "");
+     }
+
+     /**
+      * Empty header array (no columns) should be valid and allow normal parsing.
+      */
+     @Test
+     public void testEmptyHeaderArray() throws IOException {
+         CSVFormat format = CSVFormat.EXCEL.withHeader();
+         CSVParser parser = format.parse(new StringReader("1,2"));
+         List<CSVRecord> records = parser.getRecords();
+         assertEquals(1, records.size());
+         assertEquals("1", records.get(0).get(0));
+         assertEquals("2", records.get(0).get(1));
+         parser.close();
+     }
+
+     /**
+      * Resetting header to null must work and produce a format without header mapping.
+      */
+     @Test
+     public void testNullHeader() throws IOException {
+         CSVFormat format = CSVFormat.EXCEL.withHeader((String[]) null);
+         assertNull(format.getHeader());
+         CSVParser parser = format.parse(new StringReader("x,y"));
+         List<CSVRecord> records = parser.getRecords();
+         assertEquals(1, records.size());
+         assertEquals("x", records.get(0).get(0));
+         parser.close();
+     }
+
+     /**
+      * Header count < column count with allowMissing=true and only non-empty headers.
+      * Must not throw, extra data columns are allowed.
+      */
+     @Test
+     public void testHeaderCountLessThanDataNoEmptyStrings() throws IOException {
+         CSVFormat format = CSVFormat.EXCEL.withHeader("A", "B");
+         CSVParser parser = format.parse(new StringReader("1,2,3"));
+         List<CSVRecord> records = parser.getRecords();
+         assertEquals(1, records.size());
+         CSVRecord record = records.get(0);
+         assertEquals("1", record.get("A"));
+         assertEquals("2", record.get("B"));
+         parser.close();
+     }
+
+     /**
+      * Header count > column count with allowMissing=true.
+      * Must parse successfully, missing columns are simply not present.
+      */
+     @Test
+     public void testHeaderCountMoreThanDataWithExcel() throws IOException {
+         CSVFormat format = CSVFormat.EXCEL.withHeader("A", "B", "C");
+         CSVParser parser = format.parse(new StringReader("1,2"));
+         List<CSVRecord> records = parser.getRecords();
+         assertEquals(1, records.size());
+         CSVRecord record = records.get(0);
+         assertEquals("1", record.get("A"));
+         assertEquals("2", record.get("B"));
+         parser.close();
+     }
+
+     /**
+      * Many empty header strings with allowMissing=true must not trigger a duplicate error.
+      */
+     @Test
+     public void testManyEmptyHeadersWithExcel() {
+         String[] headers = new String[10];
+         Arrays.fill(headers, "");
+         CSVFormat format = CSVFormat.EXCEL.withHeader(headers);
+         assertNotNull(format);
+     }
+
+     /**
+      * Verify the exception message contains the duplicate name and "duplicate".
+      */
+     @Test
+     public void testDuplicateExceptionMessage() {
+         try {
+             CSVFormat.EXCEL.withHeader("X", "Y", "X");
+             fail("Expected IllegalArgumentException");
+         } catch (IllegalArgumentException e) {
+             String msg = e.getMessage();
+             assertTrue("Message should mention 'duplicate'", msg.contains("duplicate"));
+             assertTrue("Message should contain the duplicate header name", msg.contains("X"));
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.csv.CSVFormatBugTest::testExcelHeaderCountLessThanData
+ - org.apache.commons.csv.CSVFormatBugTest::testManyEmptyHeadersWithExcel
+ - org.apache.commons.csv.CSVFormatBugTest::testAllEmptyHeadersWithExcel
+Failing generated tests: org.apache.commons.csv.CSVFormatBugTest::testAllEmptyHeadersWithExcel, org.apache.commons.csv.CSVFormatBugTest::testEmptyHeaderArray, org.apache.commons.csv.CSVFormatBugTest::testExcelHeaderCountLessThanData, org.apache.commons.csv.CSVFormatBugTest::testManyEmptyHeadersWithExcel

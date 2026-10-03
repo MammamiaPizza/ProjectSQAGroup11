@@ -1,0 +1,276 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 39  Version: Math-39b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator
+Modified: org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator
+Triggers: org.apache.commons.math.ode.nonstiff.DormandPrince853IntegratorTest::testTooLargeFirstStep
+
+Bug/specification summary:
+Bug report: MATH-727
+Trigger failures:
+- org.apache.commons.math.ode.nonstiff.DormandPrince853IntegratorTest::testTooLargeFirstStep
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator
+
+Prompt-01 test plan:
+TARGETS: EmbeddedRungeKuttaIntegrator.integrate(ExpandableStatefulODE,double), initial-step filtering/last-step logic.
+ORACLES: Existing DormandPrince853IntegratorTest.testTooLargeFirstStep assertion and integrator state/time results.
+CASES: Too-large first step toward target; verify integration reaches target without the trigger assertion failure.
+CASES: Forward and backward target directions around first-step bounds, if supported by existing test fixtures.
+RISKS: Abstract target; test through concrete DormandPrince853Integrator and available ODE fixtures.
+RISKS: Context omits exact expected values, step-size bounds, and failure assertion details.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.ode.nonstiff;
+public abstract class EmbeddedRungeKuttaIntegrator
+public abstract int getOrder();
+public double getSafety() {
+public void setSafety(final double safety) {
+@Override
+public void integrate(final ExpandableStatefulODE equations, final double t)
+final boolean forward = t > equations.getTime();
+final double[] y0 = equations.getCompleteState();
+final double[] y = y0.clone();
+final double[] yTmp = y0.clone();
+final RungeKuttaStepInterpolator interpolator = (RungeKuttaStepInterpolator) prototype.copy();
+final boolean nextIsLast = forward ? (nextT >= t) : (nextT <= t);
+final boolean filteredNextIsLast = forward ? (filteredNextT >= t) : (filteredNextT <= t);
+public double getMinReduction() {
+public void setMinReduction(final double minReduction) {
+public double getMaxGrowth() {
+public void setMaxGrowth(final double maxGrowth) {
+
+/* HEADER */
+package org.apache.commons.math.ode.nonstiff;
+import org.apache.commons.math.exception.MathIllegalArgumentException;
+import org.apache.commons.math.exception.MathIllegalStateException;
+import org.apache.commons.math.ode.ExpandableStatefulODE;
+import org.apache.commons.math.util.FastMath;
+
+/* METHOD EmbeddedRungeKuttaIntegrator */
+protected EmbeddedRungeKuttaIntegrator(final String name, final boolean fsal,
+ final double[] c, final double[][] a, final double[] b,
+ final RungeKuttaStepInterpolator prototype,
+ final double minStep, final double maxStep,
+ final double scalAbsoluteTolerance,
+ final double scalRelativeTolerance) {
+
+ super(name, minStep, maxStep, scalAbsoluteTolerance, scalRelativeTolerance);
+
+ this.fsal = fsal;
+ this.c = c;
+ this.a = a;
+ this.b = b;
+ this.prototype = prototype;
+
+ exp = -1.0 / getOrder();
+
+ // set the default values of the algorithm control parameters
+ setSafety(0.9);
+ setMinReduction(0.2);
+ setMaxGrowth(10.0);
+
+ }
+
+/* METHOD EmbeddedRungeKuttaIntegrator */
+protected EmbeddedRungeKuttaIntegrator(final String name, final boolean fsal,
+ final double[] c, final double[][] a, final double[] b,
+ final RungeKuttaStepInterpolator prototype,
+ final double minStep, final double maxStep,
+ final double[] vecAbsoluteTolerance,
+ final double[] vecRelativeTolerance) {
+
+ super(name, minStep, maxStep, vecAbsoluteTolerance, vecRelativeTolerance);
+
+ this.fsal = fsal;
+ this.c = c;
+ this.a = a;
+ this.b = b;
+ this.prototype = prototype;
+
+ exp = -1.0 / getOrder();
+
+ // set the default values of the algorithm control parameters
+ setSafety(0.9);
+ setMinReduction(0.2);
+ setMaxGrowth(10.0);
+
+ }
+
+/* METHOD integrate */
+@Override
+ public void integrate(final ExpandableStatefulODE equations, final double t)
+ throws MathIllegalStateException, MathIllegalArgumentException {
+
+ sanityChecks(equations, t);
+ setEquations(equations);
+ final boolean forward = t > equations.getTime();
+
+ // create some internal working arrays
+ final double[] y0 = equations.getCompleteState();
+ final double[] y = y0.clone();
+ final int stages = c.length + 1;
+ final double[][] yDotK = new double[stages][y.length];
+ final double[] yTmp = y0.clone();
+ final double[] yDotTmp = new double[y.length];
+
+ // set up an interpolator sharing the integrator arrays
+ final RungeKuttaStepInterpolator interpolator = (RungeKuttaStepInterpolator) prototype.copy();
+ interpolator.reinitialize(this, yTmp, yDotK, forward,
+ equations.getPrimaryMapper(), equations.getSecondaryMappers());
+ interpolator.storeTime(equations.getTime());
+
+ // set up integration control objects
+ stepStart = equations.getTime();
+ double hNew = 0;
+ boolean firstTime = true;
+ initIntegration(equations.getTime(), y0, t);
+
+ // main integration loop
+ isLastStep = false;
+ do {
+
+ interpolator.shift();
+
+ // iterate over step size, ensuring local normalized error is smaller than 1
+ double error = 10;
+ while (error >= 1.0) {
+
+ if (firstTime || !fsal) {
+ // first stage
+ computeDerivatives(stepStart, y, yDotK[0]);
+ }
+
+ if (firstTime) {
+ final double[] scale = new double[mainSetDimension];
+ if (vecAbsoluteTolerance == null) {
+ for (int i = 0; i < scale.length; ++i) {
+ scale[i] = scalAbsoluteTolerance + scalRelativeTolerance * FastMath.abs(y[i]);
+ }
+ } else {
+ for (int i = 0; i < scale.length; ++i) {
+ scale[i] = vecAbsoluteTolerance[i] + vecRelativeTolerance[i] * FastMath.abs(y[i]);
+ }
+ }
+ hNew = initializeStep(forward, getOrder(), scale,
+ stepStart, y, yDotK[0], yTmp, yDotK[1]);
+ firstTime = false;
+ }
+
+ stepSize = hNew;
+
+ // next stages
+ for (int k = 1; k < stages; ++k) {
+
+ for (int j = 0; j < y0.length; ++j) {
+ double sum = a[k-1][0] * yDotK[0][j];
+ for (int l = 1; l < k; ++l) {
+ sum += a[k-1][l] * yDotK[l][j];
+ }
+ yTmp[j] = y[j] + stepSize * sum;
+ }
+
+ computeDerivatives(stepStart + c[k-1] * stepSize, yTmp, yDotK[k]);
+
+ }
+
+ // estimate the state at the end of the step
+ for (int j = 0; j < y0.length; ++j) {
+ double sum = b[0] * yDotK[0][j];
+ for (int l = 1; l < stages; ++l) {
+ sum += b[l] * yDotK[l][j];
+ }
+ yTmp[j] = y[j] + stepSize * sum;
+ }
+
+ // estimate the error at the end of the step
+ error = estimateError(yDotK, y, yTmp, stepSize);
+ if (error >= 1.0) {
+ // reject the step and attempt to reduce error by stepsize control
+ final double factor =
+ FastMath.min(maxGrowth,
+ FastMath.max(minReduction, safety * FastMath.pow(error, exp)));
+ hNew = filterStep(stepSize * factor, forward, false);
+ }
+
+ }
+
+ // local error is small enough: accept the step, trigger events and step handlers
+ interpolator.storeTime(stepStart + stepSize);
+ System.arraycopy(yTmp, 0, y, 0, y0.length);
+ System.arraycopy(yDotK[stages - 1], 0, yDotTmp, 0, y0.length);
+ stepStart = acceptStep(interpolator, y, yDotTmp, t);
+ System.arraycopy(y, 0, yTmp, 0, y.length);
+
+ if (!isLastStep) {
+
+ // prepare next step
+ interpolator.storeTime(stepStart);
+
+ if (fsal) {
+ // save the last evaluation for the next step
+ System.arraycopy(yDotTmp, 0, yDotK[0], 0, y0.length);
+ }
+
+ // stepsize control for next step
+ final double factor =
+ FastMath.min(maxGrowth, FastMath.max(minReduction, safety * FastMath.pow(error, exp)));
+ final double scaledH = stepSize * factor;
+ final double nextT = stepStart + scaledH;
+ final boolean nextIsLast = forward ? (nextT >= t) : (nextT <= t);
+ hNew = filterStep(scaledH, forward, nextIsLast);
+
+ final double filteredNextT = stepStart + hNew;
+ final boolean filteredNextIsLast = forward ? (filteredNextT >= t) : (filteredNextT <= t);
+ if (filteredNextIsLast) {
+ hNew = t - stepStart;
+ }
+
+ }
+
+ } while (!isLastStep);
+
+ // dispatch results
+ equations.setTime(stepStart);
+ equations.setCompleteState(y);
+
+ resetInternalState();
+
+ }
+
+/* METHOD getSafety */
+public double getSafety() {
+ return safety;
+ }
+
+/* METHOD setSafety */
+public void setSafety(final double safety) {
+ this.safety = safety;
+ }
+
+/* METHOD getMinReduction */
+public double getMinReduction() {
+ return minReduction;
+ }
+
+/* METHOD setMinReduction */
+public void setMinReduction(final double minReduction) {
+ this.minReduction = minReduction;
+ }
+
+/* METHOD getMaxGrowth */
+public double getMaxGrowth() {
+ return maxGrowth;
+ }
+
+/* METHOD setMaxGrowth */
+public void setMaxGrowth(final double maxGrowth) {
+ this.maxGrowth = maxGrowth;
+ }

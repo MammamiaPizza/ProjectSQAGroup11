@@ -1,0 +1,481 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 13  Version: Compress-13b
+JUnit: junit-4.10.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+Triggers: org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamTest::winzipBackSlashWorkaround, org.apache.commons.compress.archivers.zip.ZipFileTest::testWinzipBackSlashWorkaround
+
+Bug/specification summary:
+Bug report: COMPRESS-176
+Trigger failures:
+- org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamTest::winzipBackSlashWorkaround
+ --> junit.framework.AssertionFailedError: expected:<ä[/]> but was:<ä[\]>
+ - org.apache.commons.compress.archivers.zip.ZipFileTest::testWinzipBackSlashWorkaround
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: ä\ü.txt
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+
+Prompt-01 test plan:
+TARGETS: ZipArchiveEntry name normalization/getName, raw-name retention, and platform-dependent separator handling.
+ORACLES: Trigger assertions: decoded "ä\\/" expected from "ä\\"; ZipFile lookup must not retain "ä\\ü.txt".
+CASES: Archive entries with backslash names, including non-ASCII "ä\\ü.txt", read via ZipArchiveInputStream and ZipFile.
+CASES: Verify normalized slash name and successful lookup using slash-separated equivalent.
+RISKS: setName(String, byte[]) is protected; public constructor behavior alone may not exercise archive decoding.
+RISKS: Context lacks archive fixture construction details and explicit expected behavior for Unix/FAT or ordinary backslashes.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.zip.ZipArchiveEntry (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.zip;
+public class ZipArchiveEntry extends java.util.zip.ZipEntry
+public static final int PLATFORM_UNIX = 3;
+public static final int PLATFORM_FAT = 0;
+private GeneralPurposeBit gpb = new GeneralPurposeBit();
+public ZipArchiveEntry(String name) {
+public ZipArchiveEntry(java.util.zip.ZipEntry entry) throws ZipException {
+public ZipArchiveEntry(ZipArchiveEntry entry) throws ZipException {
+protected ZipArchiveEntry() {
+public ZipArchiveEntry(File inputFile, String entryName) {
+@Override
+public Object clone() {
+public int getMethod() {
+public void setMethod(int method) {
+public int getInternalAttributes() {
+public void setInternalAttributes(int value) {
+public long getExternalAttributes() {
+public void setExternalAttributes(long value) {
+public void setUnixMode(int mode) {
+public int getUnixMode() {
+public int getPlatform() {
+protected void setPlatform(int platform) {
+public void setExtraFields(ZipExtraField[] fields) {
+public ZipExtraField[] getExtraFields() {
+public ZipExtraField[] getExtraFields(boolean includeUnparseable) {
+public void addExtraField(ZipExtraField ze) {
+public void addAsFirstExtraField(ZipExtraField ze) {
+public void removeExtraField(ZipShort type) {
+public void removeUnparseableExtraFieldData() {
+public ZipExtraField getExtraField(ZipShort type) {
+public UnparseableExtraFieldData getUnparseableExtraFieldData() {
+public void setExtra(byte[] extra) throws RuntimeException {
+protected void setExtra() {
+public void setCentralDirectoryExtra(byte[] b) {
+public byte[] getLocalFileDataExtra() {
+public byte[] getCentralDirectoryExtra() {
+public String getName() {
+public boolean isDirectory() {
+protected void setName(String name) {
+public long getSize() {
+public void setSize(long size) {
+protected void setName(String name, byte[] rawName) {
+public byte[] getRawName() {
+public int hashCode() {
+public GeneralPurposeBit getGeneralPurposeBit() {
+public void setGeneralPurposeBit(GeneralPurposeBit b) {
+private void mergeExtraFields(ZipExtraField[] f, boolean local)
+public Date getLastModifiedDate() {
+public boolean equals(Object obj) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.zip;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.zip.ZipException;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+public class ZipArchiveEntry extends java.util.zip.ZipEntry
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(File inputFile, String entryName) {
+ this(inputFile.isDirectory() && !entryName.endsWith("/") ? 
+ entryName + "/" : entryName);
+ if (inputFile.isFile()){
+ setSize(inputFile.length());
+ }
+ setTime(inputFile.lastModified());
+ // TODO are there any other fields we can set here?
+ }
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(java.util.zip.ZipEntry entry) throws ZipException {
+ super(entry);
+ setName(entry.getName());
+ byte[] extra = entry.getExtra();
+ if (extra != null) {
+ setExtraFields(ExtraFieldUtils.parse(extra, true,
+ ExtraFieldUtils
+ .UnparseableExtraField.READ));
+ } else {
+ // initializes extra data to an empty byte array
+ setExtra();
+ }
+ setMethod(entry.getMethod());
+ this.size = entry.getSize();
+ }
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(ZipArchiveEntry entry) throws ZipException {
+ this((java.util.zip.ZipEntry) entry);
+ setInternalAttributes(entry.getInternalAttributes());
+ setExternalAttributes(entry.getExternalAttributes());
+ setExtraFields(entry.getExtraFields(true));
+ }
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(String name) {
+ super(name);
+ setName(name);
+ }
+
+/* METHOD ZipArchiveEntry */
+protected ZipArchiveEntry() {
+ this("");
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object obj) {
+ if (this == obj) {
+ return true;
+ }
+ if (obj == null || getClass() != obj.getClass()) {
+ return false;
+ }
+ ZipArchiveEntry other = (ZipArchiveEntry) obj;
+ String myName = getName();
+ String otherName = other.getName();
+ if (myName == null) {
+ if (otherName != null) {
+ return false;
+ }
+ } else if (!myName.equals(otherName)) {
+ return false;
+ }
+ String myComment = getComment();
+ String otherComment = other.getComment();
+ if (myComment == null) {
+ if (otherComment != null) {
+ return false;
+ }
+ } else if (!myComment.equals(otherComment)) {
+ return false;
+ }
+ return getTime() == other.getTime()
+ && getInternalAttributes() == other.getInternalAttributes()
+ && getPlatform() == other.getPlatform()
+ && getExternalAttributes() == other.getExternalAttributes()
+ && getMethod() == other.getMethod()
+ && getSize() == other.getSize()
+ && getCrc() == other.getCrc()
+ && getCompressedSize() == other.getCompressedSize()
+ && Arrays.equals(getCentralDirectoryExtra(),
+ other.getCentralDirectoryExtra())
+ && Arrays.equals(getLocalFileDataExtra(),
+ other.getLocalFileDataExtra())
+ && gpb.equals(other.gpb);
+ }
+
+/* METHOD clone */
+@Override
+ public Object clone() {
+ ZipArchiveEntry e = (ZipArchiveEntry) super.clone();
+
+ e.setInternalAttributes(getInternalAttributes());
+ e.setExternalAttributes(getExternalAttributes());
+ e.setExtraFields(getExtraFields(true));
+ return e;
+ }
+
+/* METHOD setUnixMode */
+public void setUnixMode(int mode) {
+ // CheckStyle:MagicNumberCheck OFF - no point
+ setExternalAttributes((mode << SHORT_SHIFT)
+ // MS-DOS read-only attribute
+ | ((mode & 0200) == 0 ? 1 : 0)
+ // MS-DOS directory flag
+ | (isDirectory() ? 0x10 : 0));
+ // CheckStyle:MagicNumberCheck ON
+ platform = PLATFORM_UNIX;
+ }
+
+/* METHOD getExtraFields */
+public ZipExtraField[] getExtraFields(boolean includeUnparseable) {
+ if (extraFields == null) {
+ return !includeUnparseable || unparseableExtra == null
+ ? new ZipExtraField[0]
+ : new ZipExtraField[] { unparseableExtra };
+ }
+ List<ZipExtraField> result =
+ new ArrayList<ZipExtraField>(extraFields.values());
+ if (includeUnparseable && unparseableExtra != null) {
+ result.add(unparseableExtra);
+ }
+ return result.toArray(new ZipExtraField[0]);
+ }
+
+/* METHOD setExtra */
+@Override
+ public void setExtra(byte[] extra) throws RuntimeException {
+ try {
+ ZipExtraField[] local =
+ ExtraFieldUtils.parse(extra, true,
+ ExtraFieldUtils.UnparseableExtraField.READ);
+ mergeExtraFields(local, true);
+ } catch (ZipException e) {
+ // actually this is not possible as of Commons Compress 1.1
+ throw new RuntimeException("Error parsing extra fields for entry: "
+ + getName() + " - " + e.getMessage(), e);
+ }
+ }
+
+/* METHOD setMethod */
+@Override
+ public void setMethod(int method) {
+ if (method < 0) {
+ throw new IllegalArgumentException(
+ "ZIP compression method can not be negative: " + method);
+ }
+ this.method = method;
+ }
+
+/* METHOD addExtraField */
+public void addExtraField(ZipExtraField ze) {
+ if (ze instanceof UnparseableExtraFieldData) {
+ unparseableExtra = (UnparseableExtraFieldData) ze;
+ } else {
+ if (extraFields == null) {
+ extraFields = new LinkedHashMap<ZipShort, ZipExtraField>();
+ }
+ extraFields.put(ze.getHeaderId(), ze);
+ }
+ setExtra();
+ }
+
+/* METHOD addAsFirstExtraField */
+public void addAsFirstExtraField(ZipExtraField ze) {
+ if (ze instanceof UnparseableExtraFieldData) {
+ unparseableExtra = (UnparseableExtraFieldData) ze;
+ } else {
+ LinkedHashMap<ZipShort, ZipExtraField> copy = extraFields;
+ extraFields = new LinkedHashMap<ZipShort, ZipExtraField>();
+ extraFields.put(ze.getHeaderId(), ze);
+ if (copy != null) {
+ copy.remove(ze.getHeaderId());
+ extraFields.putAll(copy);
+ }
+ }
+ setExtra();
+ }
+
+/* METHOD removeExtraField */
+public void removeExtraField(ZipShort type) {
+ if (extraFields == null) {
+ throw new java.util.NoSuchElementException();
+ }
+ if (extraFields.remove(type) == null) {
+ throw new java.util.NoSuchElementException();
+ }
+ setExtra();
+ }
+
+/* METHOD getExtraField */
+public ZipExtraField getExtraField(ZipShort type) {
+ if (extraFields != null) {
+ return extraFields.get(type);
+ }
+ return null;
+ }
+
+/* METHOD setCentralDirectoryExtra */
+...[truncated deterministically]...
+w new RuntimeException(e.getMessage(), e);
+ }
+ }
+
+/* METHOD getLocalFileDataExtra */
+public byte[] getLocalFileDataExtra() {
+ byte[] extra = getExtra();
+ return extra != null ? extra : new byte[0];
+ }
+
+/* METHOD getLastModifiedDate */
+public Date getLastModifiedDate() {
+ return new Date(getTime());
+ }
+
+/* METHOD getInternalAttributes */
+public int getInternalAttributes() {
+ return internalAttributes;
+ }
+
+/* METHOD setInternalAttributes */
+public void setInternalAttributes(int value) {
+ internalAttributes = value;
+ }
+
+/* METHOD getExternalAttributes */
+public long getExternalAttributes() {
+ return externalAttributes;
+ }
+
+/* METHOD setExternalAttributes */
+public void setExternalAttributes(long value) {
+ externalAttributes = value;
+ }
+
+/* METHOD getUnixMode */
+public int getUnixMode() {
+ return platform != PLATFORM_UNIX ? 0 :
+ (int) ((getExternalAttributes() >> SHORT_SHIFT) & SHORT_MASK);
+ }
+
+/* METHOD setExtraFields */
+public void setExtraFields(ZipExtraField[] fields) {
+ extraFields = new LinkedHashMap<ZipShort, ZipExtraField>();
+ for (int i = 0; i < fields.length; i++) {
+ if (fields[i] instanceof UnparseableExtraFieldData) {
+ unparseableExtra = (UnparseableExtraFieldData) fields[i];
+ } else {
+ extraFields.put(fields[i].getHeaderId(), fields[i]);
+ }
+ }
+ setExtra();
+ }
+
+/* METHOD getExtraFields */
+public ZipExtraField[] getExtraFields() {
+ return getExtraFields(false);
+ }
+
+/* METHOD removeUnparseableExtraFieldData */
+public void removeUnparseableExtraFieldData() {
+ if (unparseableExtra == null) {
+ throw new java.util.NoSuchElementException();
+ }
+ unparseableExtra = null;
+ setExtra();
+ }
+
+/* METHOD setExtra */
+protected void setExtra() {
+ super.setExtra(ExtraFieldUtils.mergeLocalFileDataData(getExtraFields(true)));
+ }
+
+/* METHOD getCentralDirectoryExtra */
+public byte[] getCentralDirectoryExtra() {
+ return ExtraFieldUtils.mergeCentralDirectoryData(getExtraFields(true));
+ }
+
+/* METHOD getName */
+@Override
+ public String getName() {
+ return name == null ? super.getName() : name;
+ }
+
+/* METHOD isDirectory */
+@Override
+ public boolean isDirectory() {
+ return getName().endsWith("/");
+ }
+
+/* METHOD getRawName */
+public byte[] getRawName() {
+ if (rawName != null) {
+ byte[] b = new byte[rawName.length];
+ System.arraycopy(rawName, 0, b, 0, rawName.length);
+ return b;
+ }
+ return null;
+ }
+
+/* METHOD getMethod */
+@Override
+ public int getMethod() {
+ return method;
+ }
+
+/* METHOD getPlatform */
+public int getPlatform() {
+ return platform;
+ }
+
+/* METHOD setPlatform */
+protected void setPlatform(int platform) {
+ this.platform = platform;
+ }
+
+/* METHOD getUnparseableExtraFieldData */
+public UnparseableExtraFieldData getUnparseableExtraFieldData() {
+ return unparseableExtra;
+ }
+
+/* METHOD setName */
+protected void setName(String name) {
+ this.name = name;
+ }
+
+/* METHOD getSize */
+@Override
+ public long getSize() {
+ return size;
+ }
+
+/* METHOD setSize */
+@Override
+ public void setSize(long size) {
+ if (size < 0) {
+ throw new IllegalArgumentException("invalid entry size");
+ }
+ this.size = size;
+ }
+
+/* METHOD setName */
+protected void setName(String name, byte[] rawName) {
+ setName(name);
+ this.rawName = rawName;
+ }
+
+/* METHOD getGeneralPurposeBit */
+public GeneralPurposeBit getGeneralPurposeBit() {
+ return gpb;
+ }
+
+/* METHOD setGeneralPurposeBit */
+public void setGeneralPurposeBit(GeneralPurposeBit b) {
+ gpb = b;
+ }
+
+/* METHOD mergeExtraFields */
+private void mergeExtraFields(ZipExtraField[] f, boolean local)
+ throws ZipException {
+ if (extraFields == null) {
+ setExtraFields(f);
+ } else {
+ for (int i = 0; i < f.length; i++) {
+ ZipExtraField existing;
+ if (f[i] instanceof UnparseableExtraFieldData) {
+ existing = unparseableExtra;
+ } else {
+ existing = getExtraField(f[i].getHeaderId());
+ }
+ if (existing == null) {
+ addExtraFi
+...[truncated deterministically]...
+a();
+ existing.parseFromLocalFileData(b, 0, b.length);
+ } else {
+ byte[] b = f[i].getCentralDirectoryData();
+ existing.parseFromCentralDirectoryData(b, 0, b.length);
+ }
+ }
+ }
+ setExtra();
+ }
+ }

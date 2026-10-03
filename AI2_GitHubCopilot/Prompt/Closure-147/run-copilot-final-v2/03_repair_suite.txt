@@ -1,0 +1,255 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 147  Version: Closure-147b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 182
+Trigger failures:
+- com.google.javascript.jscomp.CheckGlobalThisTest::testIssue182a
+ --> junit.framework.AssertionFailedError: There should be one error. expected:<1> but was:<0>
+ - com.google.javascript.jscomp.CheckGlobalThisTest::testIssue182b
+ --> junit.framework.AssertionFailedError: There should be one error. expected:<1> but was:<0>
+ - com.google.javascript.jscomp.RuntimeTypeCheckTest::testValueWithInnerFn
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.CheckGlobalThis, com.google.javascript.jscomp.RuntimeTypeCheck
+
+Available API/signatures:
+[com.google.javascript.jscomp.CheckGlobalThis | java]
+package com.google.javascript.jscomp;
+final class CheckGlobalThis implements Callback {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private boolean shouldReportThis(Node n, Node parent) {
+private JSDocInfo getFunctionJsDocInfo(Node n) {
+
+[com.google.javascript.jscomp.RuntimeTypeCheck | java]
+package com.google.javascript.jscomp;
+class RuntimeTypeCheck implements CompilerPass {
+private static final Comparator<JSType> ALPHA = new Comparator<JSType>() {
+public int compare(JSType t1, JSType t2) {
+private String getName(JSType type) {
+@Override
+public void process(Node externs, Node root) {
+private static class AddMarkers
+private AddMarkers(AbstractCompiler compiler) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void visitFunction(NodeTraversal t, Node n) {
+@Nullable ObjectType interfaceType) {
+private Node findNodeToInsertAfter(Node n) {
+private Node findEnclosingConstructorDeclaration(Node n) {
+private boolean isClassDefiningCall(Node next) {
+private static class AddChecks
+private AddChecks(AbstractCompiler compiler) {
+private void visitReturn(NodeTraversal t, Node n) {
+private Node createCheckTypeCallNode(JSType type, Node expr) {
+private Node createCheckerNode(JSType type) {
+private void addBoilerplateCode() {
+private static Node jsCode(String prop) {
+@VisibleForTesting
+RuntimeTypeCheck.class.getResourceAsStream(
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import junit.framework.TestCase;
+
+ import java.util.List;
+
+ public class Bug182Test extends TestCase {
+
+     // --- CheckGlobalThis tests (reporting dangerous global 'this' usage) ---
+
+     public void testIssue182a_callbackArgument() {
+         // The buggy version fails to traverse functions that are direct children
+         // of a CALL node, so this unsafe use of global 'this' is not reported.
+         String js = "function foo() {}\n" +
+                     "foo(function() { this.bar = 1; });";
+         int warnings = compileAndGetGlobalThisWarnings(js);
+         assertEquals("There should be one error.", 1, warnings);
+     }
+
+     public void testIssue182b_eventHandlerCallback() {
+         // Another pattern where a function is passed as an argument and should
+         // still be flagged when it uses global 'this'.
+         String js = "function addHandler(fn) {}\n" +
+                     "addHandler(function() {\n" +
+                     "  this.data = 'value';\n" +
+                     "});";
+         int warnings = compileAndGetGlobalThisWarnings(js);
+         assertEquals("There should be one error.", 1, warnings);
+     }
+
+     public void testGlobalThisInNamedFunctionAssignment() {
+         // Regular assignment should still be traversed and flagged.
+         String js = "var a = function() { this.x = 1; };";
+         int warnings = compileAndGetGlobalThisWarnings(js);
+         assertEquals("Named function assignment should report unsafe this.", 1, warnings);
+     }
+
+     public void testGlobalThisInConstructorIgnored() {
+         // @constructor annotation should suppress the warning.
+         String js = "/** @constructor */ function MyClass() { this.x = 1; }";
+         int warnings = compileAndGetGlobalThisWarnings(js);
+         assertEquals("Constructor should not report global this.", 0, warnings);
+     }
+
+     public void testGlobalThisInPrototypeMethodIgnored() {
+         // Prototype method assignment should be suppressed.
+         String js = "function A() {}\n" +
+                     "A.prototype.m = function() { this.prop = 1; };";
+         int warnings = compileAndGetGlobalThisWarnings(js);
+         assertEquals("Prototype method should not report global this.", 0, warnings);
+     }
+
+     public void testGlobalThisInOverriddenMethodIgnored() {
+         // @override annotation should cause traversal to be skipped.
+         String js = "/** @override */\n" +
+                     "MyProto.m = function() { this.x = 1; };";
+         int warnings = compileAndGetGlobalThisWarnings(js);
+         assertEquals("Overridden method should not report global this.", 0, warnings);
+     }
+
+     // --- RuntimeTypeCheck tests ---
+
+     public void testValueWithInnerFn() {
+         // The buggy version may insert the type check before the inner function
+         // declaration or omit it entirely. The correct behavior is to insert
+         // the check AFTER any inner function declarations and BEFORE the return.
+         String js = "/** @return {string} */\n" +
+                     "function f() {\n" +
+                     "  function inner() {\n" +
+                     "  }\n" +
+                     "  return \"hello\";\n" +
+                     "}";
+         String result = compileWithRuntimeTypeCheck(js);
+
+         // The check call must appear after the inner function definition.
+         int innerIdx = result.indexOf("function inner()");
+         int checkIdx = result.indexOf("$jscomp.typecheck.checkType(");
+         int returnIdx = result.indexOf("return \"hello\"");
+
+         assertTrue("Output does not contain inner function.", innerIdx != -1);
+         assertTrue("Output does not contain checkType call.", checkIdx != -1);
+         assertTrue("Output does not contain return statement.", returnIdx != -1);
+
+         assertTrue("CheckType call must appear after inner function.",
+                    innerIdx < checkIdx);
+         assertTrue("CheckType call must appear before return statement.",
+  checkIdx < returnIdx);
+     }
+
+     public void testReturnWithoutInnerFn() {
+         // No inner function: check is inserted before the return.
+         String js = "/** @return {number} */\n" +
+                     "function f() { return 42; }";
+         String result = compileWithRuntimeTypeCheck(js);
+         int checkIdx = result.indexOf("$jscomp.typecheck.checkType(");
+         int returnIdx = result.indexOf("return 42");
+         assertTrue("CheckType call missing.", checkIdx != -1);
+         assertTrue("CheckType call must appear before return.", checkIdx < returnIdx);
+     }
+
+     public void testReturnNoAnnotationsSkipsCheck() {
+         // Without a known return type, no check should be inserted.
+         String js = "function f() { return 42; }";
+         String result = compileWithRuntimeTypeCheck(js);
+         assertTrue("CheckType should not appear for unannotated return.",
+                    result.indexOf("$jscomp.typecheck.checkType(") == -1);
+     }
+
+     public void testReturnNullInsertsCheck() {
+         // Returning null (a known type) should get a check.
+         String js = "/** @return {?} */\n" +
+                     "function f() { return null; }";
+         String result = compileWithRuntimeTypeCheck(js);
+         assertTrue("Null return should be checked.",
+                    result.indexOf("$jscomp.typecheck.checkType(") != -1);
+     }
+
+     public void testParameterCheckInserted() {
+         // Verify that parameter type checks are added at the start of the
+         // function body, after any inner function declarations.
+         String js = "/** @param {number} x */\n" +
+                     "function f(x) {\n" +
+                     "  function inner() {}\n" +
+                     "  return x;\n" +
+                     "}";
+         String result = compileWithRuntimeTypeCheck(js);
+         int innerIdx = result.indexOf("function inner()");
+         int paramCheckIdx = result.indexOf("$jscomp.typecheck.checkType(x");
+         assertTrue("Parameter check missing.", paramCheckIdx != -1);
+         assertTrue("Parameter check must be after inner function.",
+                    innerIdx < paramCheckIdx);
+     }
+
+     public void testFunctionWithNoReturnOnlyParams() {
+         // Should insert parameter checks but no return check.
+         String js = "/** @param {string} s */\n" +
+                     "function f(s) {\n" +
+                     "  var x = s;\n" +
+                     "}";
+         String result = compileWithRuntimeTypeCheck(js);
+         // Expect at least one check for the parameter.
+         assertTrue("Parameter check for 's' should exist.",
+                    result.indexOf("$jscomp.typecheck.checkType(s") != -1);
+         // No return check, but also no return statement.
+         int returnIdx = result.indexOf("return");
+         assertTrue("No return check expected, there is no return statement.",
+                    returnIdx == -1 || result.indexOf("checkType(", returnIdx) == -1);
+     }
+
+     // --- Helpers ---
+
+     private int compileAndGetGlobalThisWarnings(String js) {
+         Compiler compiler = new Compiler();
+         CompilerOptions options = new CompilerOptions();
+         options.setWarningLevel(DiagnosticGroups.GLOBAL_THIS, CheckLevel.WARNING);
+         Result result = compiler.compile(
+                 SourceFile.fromCode("externs", ""),
+                 SourceFile.fromCode("test", js),
+                 options);
+         int count = 0;
+         for (JSError error : result.warnings) {
+             if (error.getType().equals(CheckGlobalThis.GLOBAL_THIS)) {
+                 count++;
+             }
+         }
+         return count;
+     }
+
+     private String compileWithRuntimeTypeCheck(String js) {
+         Compiler compiler = new Compiler();
+         CompilerOptions options = new CompilerOptions();
+         // Enable runtime type checks during compilation.
+         options.runtimeTypeCheck = true;
+         // Disable optimizations to keep the output structure predictable.
+         options.setRemoveDeadCode(false);
+         Result result = compiler.compile(
+                 SourceFile.fromCode("externs", ""),
+                 SourceFile.fromCode("test", js),
+                 options);
+         assertTrue("Compilation should succeed.", result.success);
+         return compiler.toSource();
+     }
+ }```
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-147f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-147f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-147f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-147f-copilot/.test_suite/com/google/javascript/jscomp/Bug182Test.java:183: error: illegal character: '`'
+ [javac] }```
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

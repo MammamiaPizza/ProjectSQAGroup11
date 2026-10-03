@@ -1,0 +1,221 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 2  Version: Collections-2b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Ant
+Bug/specification summary:
+Bug report: COLLECTIONS-214
+Trigger failures:
+- org.apache.commons.collections.TestExtendedProperties::testInclude
+ --> junit.framework.ComparisonFailure: expected:<i[nclude]> but was:<i[mport]>
+Modified: org.apache.commons.collections.ExtendedProperties
+
+Available API/signatures:
+[org.apache.commons.collections.ExtendedProperties | java]
+package org.apache.commons.collections;
+public class ExtendedProperties extends Hashtable {
+protected String file;
+protected String basePath;
+protected String fileSeparator = System.getProperty("file.separator");
+protected boolean isInitialized = false;
+protected static String include = "include";
+protected ArrayList keysAsListed = new ArrayList();
+protected final static String START_TOKEN="${";
+protected final static String END_TOKEN="}";
+protected String interpolate(String base) {
+protected String interpolateHelper(String base, List priorVariables) {
+private static String escape(String s) {
+private static String unescape(String s) {
+private static int countPreceding(String line, int index, char ch) {
+private static boolean endsWithSlash(String line) {
+static class PropertiesReader extends LineNumberReader {
+public PropertiesReader(Reader reader) {
+public String readProperty() throws IOException {
+static class PropertiesTokenizer extends StringTokenizer {
+public PropertiesTokenizer(String string) {
+public boolean hasMoreTokens() {
+public String nextToken() {
+public ExtendedProperties() {
+public ExtendedProperties(String file) throws IOException {
+public ExtendedProperties(String file, String defaultFile) throws IOException {
+public boolean isInitialized() {
+public String getInclude() {
+public void setInclude(String inc) {
+public void load(InputStream input) throws IOException {
+public synchronized void load(InputStream input, String enc) throws IOException {
+public Object getProperty(String key) {
+public void addProperty(String key, Object value) {
+private void addPropertyDirect(
+...[truncated deterministically]...
+rt(String key, short defaultValue) {
+public Short getShort(String key, Short defaultValue) {
+public int getInt(String name) {
+public int getInt(String name, int def) {
+public int getInteger(String key) {
+public int getInteger(String key, int defaultValue) {
+public Integer getInteger(String key, Integer defaultValue) {
+public long getLong(String key) {
+public long getLong(String key, long defaultValue) {
+public Long getLong(String key, Long defaultValue) {
+public float getFloat(String key) {
+public float getFloat(String key, float defaultValue) {
+public Float getFloat(String key, Float defaultValue) {
+public double getDouble(String key) {
+public double getDouble(String key, double defaultValue) {
+public Double getDouble(String key, Double defaultValue) {
+public static ExtendedProperties convertProperties(Properties props) {
+
+Generated JUnit Test:
+package org.apache.commons.collections;
+
+ import static org.junit.Assert.*;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.File;
+ import java.io.FileWriter;
+ import java.io.IOException;
+ import java.io.InputStream;
+
+ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+
+ /**
+  * Tests for COLLECTIONS-214: ExtendedProperties.load(InputStream)
+  * incorrectly overwrites the static "include" field when a loaded
+  * property key matches the current include property name.
+  */
+ public class TestExtendedPropertiesInclude {
+
+     /** Fresh instance used to reset the static include field between tests. */
+     private ExtendedProperties resetter;
+
+     @Before
+     public void setUp() {
+         resetter = new ExtendedProperties();
+         resetter.setInclude("include");
+     }
+
+     @After
+     public void tearDown() {
+         resetter.setInclude("include");
+     }
+
+     @Test
+     public void testDefaultInclude() {
+         assertEquals("include", new ExtendedProperties().getInclude());
+     }
+
+     @Test
+     public void testLoadDoesNotOverwriteInclude() throws IOException {
+         String data = "include = import\nother = value\n";
+         InputStream in = new ByteArrayInputStream(data.getBytes("ISO-8859-1"));
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(in);
+         assertEquals("include", props.getInclude());
+     }
+
+     @Test
+     public void testSetInclude() {
+         ExtendedProperties props = new ExtendedProperties();
+         props.setInclude("import");
+         assertEquals("import", props.getInclude());
+     }
+
+     @Test
+     public void testIncludeIsStatic() {
+         ExtendedProperties a = new ExtendedProperties();
+         ExtendedProperties b = new ExtendedProperties();
+         assertEquals(a.getInclude(), b.getInclude());
+         a.setInclude("changed");
+         assertEquals("changed", b.getInclude());
+     }
+
+     @Test
+     public void testLoadPreservesPropertyValue() throws IOException {
+         String data = "include = targetFile.properties\n";
+         InputStream in = new ByteArrayInputStream(data.getBytes("ISO-8859-1"));
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(in);
+         assertEquals("targetFile.properties", props.getProperty("include"));
+         assertEquals("include", props.getInclude());
+     }
+
+     @Test
+     public void testMultipleLoadsDoNotChangeInclude() throws IOException {
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(new ByteArrayInputStream("include = first\n".getBytes("ISO-8859-1")));
+         assertEquals("include", props.getInclude());
+         props.load(new ByteArrayInputStream("include = second\n".getBytes("ISO-8859-1")));
+         assertEquals("include", props.getInclude());
+     }
+
+     @Test
+     public void testLoadSubstringKeys() throws IOException {
+         String data = "includes = yes\nincluded = true\n";
+         InputStream in = new ByteArrayInputStream(data.getBytes("ISO-8859-1"));
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(in);
+         assertEquals("include", props.getInclude());
+     }
+
+     @Test
+     public void testEmptyLoad() throws IOException {
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(new ByteArrayInputStream(new byte[0]));
+         assertEquals("include", props.getInclude());
+     }
+
+     @Test
+     public void testLoadAfterChangingIncludeKey() throws IOException {
+         new ExtendedProperties().setInclude("import");
+         String data = "import = someFile.properties\n";
+         InputStream in = new ByteArrayInputStream(data.getBytes("ISO-8859-1"));
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(in);
+         assertEquals("import", props.getInclude());
+     }
+
+     @Test
+     public void testLoadWithEncoding() throws IOException {
+         String data = "include = val\nkey = val2\n";
+         InputStream in = new ByteArrayInputStream(data.getBytes("UTF-8"));
+         ExtendedProperties props = new ExtendedProperties();
+         props.load(in, "UTF-8");
+         assertEquals("include", props.getInclude());
+     }
+
+     @Test
+     public void testConstructorLoad() throws IOException {
+         File temp = File.createTempFile("test-ep-", ".properties");
+         temp.deleteOnExit();
+         FileWriter w = new FileWriter(temp);
+         w.write("include = import\nother = value\n");
+         w.close();
+         try {
+             ExtendedProperties props = new ExtendedProperties(temp.getAbsolutePath());
+             assertEquals("include", props.getInclude());
+         } finally {
+             temp.delete();
+         }
+     }
+
+     @Test
+     public void testGetIncludeConsistency() {
+         ExtendedProperties a = new ExtendedProperties();
+         ExtendedProperties b = new ExtendedProperties();
+         assertEquals(a.getInclude(), b.getInclude());
+         a.setInclude("test");
+         assertEquals("test", b.getInclude());
+         assertEquals(a.getInclude(), b.getInclude());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.collections.TestExtendedPropertiesInclude::testGetIncludeConsistency
+ - org.apache.commons.collections.TestExtendedPropertiesInclude::testLoadAfterChangingIncludeKey
+ - org.apache.commons.collections.TestExtendedPropertiesInclude::testLoadPreservesPropertyValue
+Failing generated tests: org.apache.commons.collections.TestExtendedPropertiesInclude::testGetIncludeConsistency, org.apache.commons.collections.TestExtendedPropertiesInclude::testIncludeIsStatic, org.apache.commons.collections.TestExtendedPropertiesInclude::testLoadAfterChangingIncludeKey, org.apache.commons.collections.TestExtendedPropertiesInclude::testLoadPreservesPropertyValue

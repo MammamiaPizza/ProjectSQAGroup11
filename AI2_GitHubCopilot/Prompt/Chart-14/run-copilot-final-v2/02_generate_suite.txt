@@ -1,0 +1,426 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Chart  Bug: 14  Version: Chart-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Target: org.jfree.chart.plot.CategoryPlot, org.jfree.chart.plot.XYPlot
+Modified: org.jfree.chart.plot.CategoryPlot, org.jfree.chart.plot.XYPlot
+Triggers: org.jfree.chart.plot.junit.CategoryPlotTests::testRemoveRangeMarker, org.jfree.chart.plot.junit.CategoryPlotTests::testRemoveDomainMarker, org.jfree.chart.plot.junit.XYPlotTests::testRemoveRangeMarker, org.jfree.chart.plot.junit.XYPlotTests::testRemoveDomainMarker
+
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.chart.plot.junit.CategoryPlotTests::testRemoveRangeMarker
+ --> java.lang.NullPointerException
+ - org.jfree.chart.plot.junit.CategoryPlotTests::testRemoveDomainMarker
+ --> java.lang.NullPointerException
+ - org.jfree.chart.plot.junit.XYPlotTests::testRemoveRangeMarker
+ --> java.lang.NullPointerException
+ - org.jfree.chart.plot.junit.XYPlotTests::testRemoveDomainMarker
+ --> java.lang.NullPointerException
+Modified: org.jfree.chart.plot.CategoryPlot, org.jfree.chart.plot.XYPlot
+
+Prompt-01 test plan:
+TARGETS: CategoryPlot.removeDomainMarker, CategoryPlot.removeRangeMarker, XYPlot.removeDomainMarker,
+XYPlot.removeRangeMarker
+ORACLES: No NullPointerException when removing marker from plot with no markers; should handle
+uninitialized internal list
+CASES: Remove domain/range marker from fresh plot (no markers added); add marker then remove; remove
+twice; remove nonexistent
+CASES: Remove marker from CategoryPlot with only range markers; remove from XYPlot with only domain
+markers; boundary: one marker
+RISKS: Cannot inspect internal marker storage; must rely on public API, only exception-free behavior
+verifiable
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jfree.chart.plot.CategoryPlot (java) =====
+/* API SIGNATURES */
+package org.jfree.chart.plot;
+public class CategoryPlot extends Plot implements ValueAxisPlot,
+public static final boolean DEFAULT_DOMAIN_GRIDLINES_VISIBLE = false;
+public static final boolean DEFAULT_RANGE_GRIDLINES_VISIBLE = true;
+public static final Paint DEFAULT_GRIDLINE_PAINT = Color.WHITE;
+public static final boolean DEFAULT_CROSSHAIR_VISIBLE = false;
+public static final Paint DEFAULT_CROSSHAIR_PAINT = Color.blue;
+public CategoryPlot() {
+public String getPlotType() {
+public PlotOrientation getOrientation() {
+public void setOrientation(PlotOrientation orientation) {
+public RectangleInsets getAxisOffset() {
+public void setAxisOffset(RectangleInsets offset) {
+public CategoryAxis getDomainAxis() {
+public CategoryAxis getDomainAxis(int index) {
+public void setDomainAxis(CategoryAxis axis) {
+public void setDomainAxis(int index, CategoryAxis axis) {
+public void setDomainAxis(int index, CategoryAxis axis, boolean notify) {
+public void setDomainAxes(CategoryAxis[] axes) {
+public int getDomainAxisIndex(CategoryAxis axis) {
+public AxisLocation getDomainAxisLocation() {
+public AxisLocation getDomainAxisLocation(int index) {
+public void setDomainAxisLocation(AxisLocation location) {
+public void setDomainAxisLocation(AxisLocation location, boolean notify) {
+public void setDomainAxisLocation(int index, AxisLocation locat
+...[truncated deterministically]...
+ic void setFixedRangeAxisSpace(AxisSpace space, boolean notify) {
+public List getCategories() {
+public List getCategoriesForAxis(CategoryAxis axis) {
+public boolean getDrawSharedDomainAxis() {
+public void setDrawSharedDomainAxis(boolean draw) {
+public boolean isDomainZoomable() {
+public boolean isRangeZoomable() {
+public double getAnchorValue() {
+public void setAnchorValue(double value) {
+public void setAnchorValue(double value, boolean notify) {
+public boolean equals(Object obj) {
+public Object clone() throws CloneNotSupportedException {
+private void writeObject(ObjectOutputStream stream) throws IOException {
+private void readObject(ObjectInputStream stream)
+
+/* METHOD CategoryPlot */
+public CategoryPlot(CategoryDataset dataset,
+ CategoryAxis domainAxis,
+ ValueAxis rangeAxis,
+ CategoryItemRenderer renderer) {
+
+ super();
+
+ this.orientation = PlotOrientation.VERTICAL;
+
+ // allocate storage for dataset, axes and renderers
+ this.domainAxes = new ObjectList();
+ this.domainAxisLocations = new ObjectList();
+ this.rangeAxes = new ObjectList();
+ this.rangeAxisLocations = new ObjectList();
+ 
+ this.datasetToDomainAxisMap = new ObjectList();
+ this.datasetToRangeAxisMap = new ObjectList();
+
+ this.renderers = new ObjectList();
+
+ this.datasets = new ObjectList();
+ this.datasets.set(0, dataset);
+ if (dataset != null) {
+ dataset.addChangeListener(this);
+ }
+
+ this.axisOffset = new RectangleInsets(4.0, 4.0, 4.0, 4.0);
+
+ setDomainAxisLocation(AxisLocation.BOTTOM_OR_LEFT, false);
+ setRangeAxisLocation(AxisLocation.TOP_OR_LEFT, false);
+
+ this.renderers.set(0, renderer);
+ if (renderer != null) {
+ renderer.setPlot(this);
+ renderer.addChangeListener(this);
+ }
+
+ this.domainAxes.set(0, domainAxis);
+ this.mapDatasetToDomainAxis(0, 0);
+ if (domainAxis != null) {
+ domainAxis.setPlot(this);
+ domainAxis.addChangeListener(this);
+ }
+ this.drawSharedDomainAxis = false;
+
+ this.rangeAxes.set(0, rangeAxis);
+ this.mapDatasetToRangeAxis(0, 0);
+ if (rangeAxis != null) {
+ rangeAxis.setPlot(this);
+ rangeAxis.addChangeListener(this);
+ }
+ 
+ configureDomainAxes();
+ configureRangeAxes();
+
+ this.domainGridlinesVisible = DEFAULT_DOMAIN_GRIDLINES_VISIBLE;
+ this.domainGridlinePosition = CategoryAnchor.MIDDLE;
+ this.domainGridlineStroke = DEFAULT_GRIDLINE_STROKE;
+ this.domainGridlinePaint = DEFAULT_GRIDLINE_PAINT;
+
+ this.rangeGridlinesVisible = DEFAULT_RANGE_GRIDLINES_VISIBLE;
+ this.rangeGridlineStroke = DEFAULT_GRIDLINE_STROKE;
+ this.rangeGridlinePaint = DEFAULT_GRIDLINE_PAINT;
+
+ this.foregroundDomainMarkers = new HashMap();
+ this.backgroundDomainMarkers = new HashMap();
+ this.foregroundRangeMarkers = new HashMa
+...[truncated deterministically]...
+line = new ValueMarker(0.0, new Color(0.8f, 0.8f, 0.8f, 
+ 0.5f), new BasicStroke(1.0f), new Color(0.85f, 0.85f, 0.95f, 
+ 0.5f), new BasicStroke(1.0f), 0.6f);
+ addRangeMarker(baseline, Layer.BACKGROUND);
+
+ this.anchorValue = 0.0;
+
+ this.rangeCrosshairVisible = DEFAULT_CROSSHAIR_VISIBLE;
+ this.rangeCrosshairValue = 0.0;
+ this.rangeCrosshairStroke = DEFAULT_CROSSHAIR_STROKE;
+ this.rangeCrosshairPaint = DEFAULT_CROSSHAIR_PAINT;
+ 
+ this.annotations = new java.util.ArrayList();
+
+ }
+
+/* METHOD CategoryPlot */
+public CategoryPlot() {
+ this(null, null, null, null);
+ }
+
+/* METHOD datasetChanged */
+public void datasetChanged(DatasetChangeEvent event) {
+
+ int count = this.rangeAxes.size();
+ for (int axisIndex = 0; axisIndex < count; axisIndex++) {
+ ValueAxis yAxis = getRangeAxis(axisIndex);
+ if (yAxis != null) {
+ yAxis.configure();
+ }
+ }
+ if (getParent() != null) {
+ getParent().datasetChanged(event);
+ }
+ else {
+ PlotChangeEvent e = new PlotChangeEvent(this);
+ e.setType(ChartChangeEventType.DATASET_UPDATED);
+ notifyListeners(e);
+ }
+
+ }
+
+/* METHOD clone */
+public Object clone() throws CloneNotSupportedException {
+ 
+ CategoryPlot clone = (CategoryPlot) super.clone();
+ 
+ clone.domainAxes = new ObjectList();
+ for (int i = 0; i < this.domainAxes.size(); i++) {
+ CategoryAxis xAxis = (CategoryAxis) this.domainAxes.get(i);
+ if (xAxis != null) {
+ CategoryAxis clonedAxis = (CategoryAxis) xAxis.clone();
+ clone.setDomainAxis(i, clonedAxis);
+ }
+ }
+ clone.domainAxisLocations 
+ = (ObjectList) this.domainAxisLocations.clone();
+
+ clone.rangeAxes = new ObjectList();
+ for (int i = 0; i < this.rangeAxes.size(); i++) {
+ ValueAxis yAxis = (ValueAxis) this.rangeAxes.ge
+...[truncated deterministically]...
+ne();
+ if (this.fixedDomainAxisSpace != null) {
+ clone.fixedDomainAxisSpace = (AxisSpace) ObjectUtilities.clone(
+ this.fixedDomainAxisSpace);
+ }
+ if (this.fixedRangeAxisSpace != null) {
+ clone.fixedRangeAxisSpace = (AxisSpace) ObjectUtilities.clone(
+ this.fixedRangeAxisSpace);
+ }
+ 
+ return clone;
+ 
+ }
+
+===== org.jfree.chart.plot.XYPlot (java) =====
+/* API SIGNATURES */
+package org.jfree.chart.plot;
+public class XYPlot extends Plot implements ValueAxisPlot, Zoomable,
+public static final Paint DEFAULT_GRIDLINE_PAINT = Color.WHITE;
+public static final boolean DEFAULT_CROSSHAIR_VISIBLE = false;
+public static final Paint DEFAULT_CROSSHAIR_PAINT = Color.blue;
+private transient Point2D quadrantOrigin = new Point2D.Double(0.0, 0.0);
+public XYPlot() {
+public String getPlotType() {
+public PlotOrientation getOrientation() {
+public void setOrientation(PlotOrientation orientation) {
+public RectangleInsets getAxisOffset() {
+public void setAxisOffset(RectangleInsets offset) {
+public ValueAxis getDomainAxis() {
+public ValueAxis getDomainAxis(int index) {
+public void setDomainAxis(ValueAxis axis) {
+public void setDomainAxis(int index, ValueAxis axis) {
+public void setDomainAxis(int index, ValueAxis axis, boolean notify) {
+public void setDomainAxes(ValueAxis[] axes) {
+public AxisLocation getDomainAxisLocation() {
+public void setDomainAxisLocation(AxisLocation location) {
+public void setDomainAxisLocation(AxisLocation location, boolean notify) {
+public RectangleEdge getDomainAxisEdge() {
+public int getDomainAxisCount() {
+public void clearDomainAxes() {
+public void configureDomainAxes() {
+public AxisLocation getDomainAxisLocation(int index) {
+public void setDomainAxisLocation(int index, AxisLocat
+...[truncated deterministically]...
+e, boolean notify) {
+public AxisSpace getFixedRangeAxisSpace() {
+public void setFixedRangeAxisSpace(AxisSpace space) {
+public void setFixedRangeAxisSpace(AxisSpace space, boolean notify) {
+public boolean isDomainZoomable() {
+public boolean isRangeZoomable() {
+public int getSeriesCount() {
+public LegendItemCollection getFixedLegendItems() {
+public void setFixedLegendItems(LegendItemCollection items) {
+public LegendItemCollection getLegendItems() {
+public boolean equa
+...[truncated deterministically]...
+ctInputStream stream)
+
+/* METHOD XYPlot */
+public XYPlot(XYDataset dataset,
+ ValueAxis domainAxis,
+ ValueAxis rangeAxis,
+ XYItemRenderer renderer) {
+
+ super();
+
+ this.orientation = PlotOrientation.VERTICAL;
+ this.weight = 1; // only relevant when this is a subplot
+ this.axisOffset = new RectangleInsets(4.0, 4.0, 4.0, 4.0);
+
+ // allocate storage for datasets, axes and renderers (all optional)
+ this.domainAxes = new ObjectList();
+ this.domainAxisLocations = new ObjectList();
+ this.foregroundDomainMarkers = new HashMap();
+ this.backgroundDomainMarkers = new HashMap();
+
+ this.rangeAxes = new ObjectList();
+ this.rangeAxisLocations = new ObjectList();
+ this.foregroundRangeMarkers = new HashMap();
+ this.backgroundRangeMarkers = new HashMap();
+
+ this.datasets = new ObjectList();
+ this.renderers = new ObjectList();
+
+ this.datasetToDomainAxisMap = new TreeMap();
+ this.datasetToRangeAxisMap = new TreeMap();
+
+ this.datasets.set(0, dataset);
+ if (dataset != null) {
+ dataset.addChangeListener(this);
+ }
+
+ this.renderers.set(0, renderer);
+ if (renderer != null) {
+ renderer.setPlot(this);
+ renderer.addChangeListener(this);
+ }
+
+ this.domainAxes.set(0, domainAxis);
+ this.mapDatasetToDomainAxis(0, 0);
+ if (domainAxis != null) {
+ domainAxis.setPlot(this);
+ domainAxis.addChangeListener(this);
+ }
+ this.domainAxisLocations.set(0, AxisLocation.BOTTOM_OR_LEFT);
+
+ this.rangeAxes.set(0, rangeAxis);
+ this.mapDatasetToRangeAxis(0, 0);
+ if (rangeAxis != null) {
+ rangeAxis.setPlot(this);
+ rangeAxis.addChangeListener(this);
+ }
+ this.rangeAxisLocations.set(0, AxisLocation.BOTTOM_OR_LEFT);
+
+ configureDomainAxes();
+ configureRangeAxes();
+
+ this.domainGridlinesVisible = true;
+ this.domainGridlineStroke = DEFAULT_GRIDLINE_STROKE;
+ this.domainGridlinePaint = DEFAULT_GRIDLINE_PAINT;
+
+ this.domainZeroBaselineVisible = false;
+ this.domainZeroBaselinePaint = Color.black;
+ this.domainZeroBaselineStroke = new BasicStroke(0.5f);
+
+ this.rangeGridlinesVisible = true;
+ this.ran
+...[truncated deterministically]...
+int = DEFAULT_GRIDLINE_PAINT;
+
+ this.rangeZeroBaselineVisible = false;
+ this.rangeZeroBaselinePaint = Color.black;
+ this.rangeZeroBaselineStroke = new BasicStroke(0.5f);
+
+ this.domainCrosshairVisible = false;
+ this.domainCrosshairValue = 0.0;
+ this.domainCrosshairStroke = DEFAULT_CROSSHAIR_STROKE;
+ this.domainCrosshairPaint = DEFAULT_CROSSHAIR_PAINT;
+
+ this.rangeCrosshairVisible = false;
+ this.rangeCrosshairValue = 0.0;
+ this.rangeCrosshairStroke = DEFAULT_CROSSHAIR_STROKE;
+ this.rangeCrosshairPaint = DEFAULT_CROSSHAIR_PAINT;
+
+ this.annotations = new java.util.ArrayList();
+
+ }
+
+/* METHOD XYPlot */
+public XYPlot() {
+ this(null, null, null, null);
+ }
+
+/* METHOD datasetChanged */
+public void datasetChanged(DatasetChangeEvent event) {
+ configureDomainAxes();
+ configureRangeAxes();
+ if (getParent() != null) {
+ getParent().datasetChanged(event);
+ }
+ else {
+ PlotChangeEvent e = new PlotChangeEvent(this);
+ e.setType(ChartChangeEventType.DATASET_UPDATED);
+ notifyListeners(e);
+ }
+ }
+
+/* METHOD equals */
+public boolean equals(Object obj) {
+
+ if (obj == this) {
+ return true;
+ }
+ if (!(obj instanceof XYPlot)) {
+ return false;
+ }
+
+ XYPlot that = (XYPlot) obj;
+ if (this.weight != that.weight) {
+ return false;
+ }
+ if (this.orientation != that.orientation) {
+ return false;
+ }
+ if (!this.domainAxes.equals(that.domainAxes)) {
+ return false;
+ }
+ if (!this.domainAxisLocations.equals(that.domainAxisLocations)) {
+ return false;
+ }
+ if (this.rangeCrosshairLockedOnData
+ != that.rangeCrosshairLockedOnData) {
+ return false;
+ }
+ if (this.domainGridlinesVisible != that.domainGridlinesVisible) {
+ return false;
+ }
+ if (this.rangeGridlinesVisible !=
+...[truncated deterministically]...
+ties.equal(this.rangeTickBandPaint, 
+ that.rangeTickBandPaint)) {
+ return false;
+ }
+ if (!this.quadrantOrigin.equals(that.quadrantOrigin)) {
+ return false;
+ }
+ for (int i = 0; i < 4; i++) {
+ if (!PaintUtilities.equal(this.quadrantPaint[i], 
+ that.quadrantPaint[i])) {
+ return false;
+ }
+ }
+ return super.equals(obj);
+ }

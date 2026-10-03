@@ -1,0 +1,353 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 157  Version: Closure-157b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.parsing.IRFactory, com.google.javascript.jscomp.RenamePrototypes
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.parsing.IRFactory, com.google.javascript.jscomp.RenamePrototypes
+Triggers: com.google.javascript.jscomp.CodePrinterTest::testObjectLit2, com.google.javascript.jscomp.CodePrinterTest::testObjectLit3, com.google.javascript.jscomp.CodePrinterTest::testGetter, com.google.javascript.jscomp.CodePrinterTest::testSetter, com.google.javascript.jscomp.FunctionNamesTest::testFunctionsNamesAndIds, com.google.javascript.jscomp.RenamePropertiesTest::testPrototypePropertiesAsObjLitKeys2, com.google.javascript.jscomp.RenamePropertiesTest::testPrototypePropertiesAsObjLitKeys3, com.google.javascript.jscomp.SimpleDefinitionFinderTest::testDefineNumber, com.google.javascript.jscomp.parsing.IRFactoryTest::testObjectLiteral6, com.google.javascript.jscomp.parsing.IRFactoryTest::testObjectLiteral7, com.google.javascript.jscomp.parsing.IRFactoryTest::testObjectLiteral8, com.google.javascript.jscomp.parsing.ParserTest::testObjectLiteralDoc1
+
+Bug/specification summary:
+Bug report: 347
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testObjectLit2
+ --> junit.framework.ComparisonFailure: expected:<var x={[1]:1}> but was:<var x={["1"]:1}>
+ - com.google.javascript.jscomp.CodePrinterTest::testObjectLit3
+ --> junit.framework.ComparisonFailure: expected:<var x={[3E9]:1}> but was:<var x={["3000000000"]:1}>
+ - com.google.javascript.jscomp.CodePrinterTest::testGetter
+ --> junit.framework.ComparisonFailure: expected:<var x={get ["a"](){return 1}}> but was:<var x={get [a](){return 1}}>
+ - com.google.javascript.jscomp.CodePrinterTest::testSetter
+ --> junit.framework.ComparisonFailure: expected:<var x={get ["a"](){return 1}}> but was:<var x={get [a](){return 1}}>
+ - com.google.javascript.jscomp.FunctionNamesTest::testFunctionsNamesAndIds
+ --> junit.framework.AssertionFailedError: Function id/name mismatch expected:<{0=goog.widget.member_fn, 1=goog.
+...[truncated deterministically]...
+ailure: expected:<...: true]
+ - com.google.javascript.jscomp.parsing.IRFactoryTest::testObjectLiteral7
+ --> junit.framework.ComparisonFailure: expected:<...ue]
+ - com.google.javascript.jscomp.parsing.IRFactoryTest::testObjectLiteral8
+ --> junit.framework.ComparisonFailure: expected:<...ue]
+ - com.google.javascript.jscomp.parsing.ParserTest::testObjectLiteralDoc1
+ --> junit.framework.AssertionFailedError: expected:<40> but was:<39>
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.parsing.IRFactory, com.google.javascript.jscomp.RenamePrototypes
+
+Prompt-01 test plan:
+TARGETS: CodeGenerator.addExpr treats numeric obj-lit keys vs string keys; IRFactory transforms
+obj-lit nodes; RenamePrototypes.canRenameObjLitProperty.
+ORACLES: Expected output from CodePrinterTest (e.g., "[1]:1", "get "a""), IRFactoryTest counts,
+RenamePropertiesTest key rename decisions.
+CASES: Integer keys, large double (3E9) keys, getter/setter bracket keys with string quotes,
+doc-associated object literals, prototype-property rename via obj-lit.
+RISKS: Negative/Infinity/NaN keys, Unicode escapes in keys, reserved words as keys, nested obj lits
+may expose missing quote/rename logic.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CodeGenerator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CodeGenerator {
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+static String jsString(String s, CharsetEncoder outputCharsetEncoder) {
+static String regexpEscape(String s, CharsetEncoder outputCharsetEncoder) {
+static String escapeToDoubleQuotedJsString(String s) {
+static String regexpEscape(String s) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+private Context clearContextForNoInOperator(Context context) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Charsets;
+import com.google.common.base.Preconditions;
+import com.google.javascript.jscomp.NodeUtil.MatchNotFunction;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+class CodeGenerator {
+
+/* METHOD identifierEscape */
+static String identifierEscape(String s) {
+ // First check if escaping is needed at all -- in most cases it isn't.
+ if (NodeUtil.isLatin(s)) {
+ return s;
+ }
+
+ // Now going through the string to escape non-latin characters if needed.
+ StringBuilder sb = new StringBuilder();
+ for (int i = 0; i < s.length(); i++) {
+ char c = s.charAt(i);
+ // Identifiers should always go to Latin1/ ASCII characters because
+ // different browser's rules for valid identifier characters are
+ // crazy.
+ if (c > 0x1F && c < 0x7F) {
+ sb.append(c);
+ } else {
+ appendHexJavaScriptRepresentation(sb, c);
+ }
+ }
+
+/* METHOD tagAsStrict */
+public void tagAsStrict() {
+ add("'use strict';");
+ }
+
+/* METHOD isIndirectEval */
+private boolean isIndirectEval(Node n) {
+ return n.getType() == Token.NAME && "eval".equals(n.getString()) &&
+ !n.getBooleanProp(Node.DIRECT_EVAL);
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ int codePoint, Appendable out)
+ throws IOException {
+ if (Character.isSupplementaryCodePoint(codePoint)) {
+ // Handle supplementary unicode values which are not representable in
+ // javascript. We deal with these by escaping them as two 4B sequences
+ // so that they
+...[truncated deterministically]...
+nd back.
+ char[] surrogates = Character.toChars(codePoint);
+ appendHexJavaScriptRepresentation(surrogates[0], out);
+ appendHexJavaScriptRepresentation(surrogates[1], out);
+ return;
+ }
+ out.append("\\u")
+ .append(HEX_CHARS[(codePoint >>> 12) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 8) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 4) & 0xf])
+ .append(HEX_CHARS[codePoint & 0xf]);
+ }
+
+/* METHOD add */
+void add(Node n, Context context) {
+ if (!cc.continueProcessing()) {
+ return;
+ }
+
+ int type = n.getType();
+ String opstr = NodeUtil.opToStr(type);
+ int childCount = n.getChildCount();
+ Node first = n.getFirstChild();
+ Node last = n.getLastChild();
+
+ // Handle all binary operators
+ if (opstr != null && first != last) {
+ Preconditions.checkState(
+ childCount == 2,
+ "Bad binary operator \"%s\": expected 2 arguments but got %s",
+ opstr, childCount);
+ int p = NodeUtil.precedence(type);
+ addLeftExpr(first, p, context);
+ cc.addOp(opstr, true);
+
+ // For right-hand-side of operations, only pass context
+...[truncated deterministically]...
+the code we parse back.
+ // NEG is a weird case because Rhino parses "- -2" as "2".
+ if (n.getFirstChild().getType() == Token.NUMBER) {
+ cc.addNumber(-n.getFirstChild().getDouble());
+ } else {
+ cc.addOp(NodeUtil.opToStrNoFail(type), false);
+ addExpr(first, NodeUtil.precedence(type));
+ }
+
+ break;
+ }
+
+===== com.google.javascript.jscomp.parsing.IRFactory (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.parsing;
+public class IRFactory {
+private final Set<String> ALLOWED_DIRECTIVES = Sets.newHashSet("use strict");
+"class", "const", "enum", "export", "extends", "import", "super");
+"class", "const", "enum", "export", "extends", "import", "super",
+"implements", "interface", "let", "package", "private", "protected",
+"public", "static", "yield");
+private Node createTemplateNode() {
+private void setFileOverviewJsDoc(Node irNode) {
+private Node transformBlock(AstNode node) {
+private void handlePossibleFileOverviewJsDoc(Comment comment) {
+private JSDocInfo handleJsDoc(AstNode node) {
+private Node transform(AstNode node) {
+private Node transformNameAsString(Name node) {
+private void setSourceInfo(Node irNode, AstNode node) {
+private JsDocInfoParser createJsDocInfoParser(Comment node) {
+private int position2charno(int position) {
+private Node justTr
+...[truncated deterministically]...
+boolean validAssignmentTarget(Node target) {
+private static int transformTokenType(int token) {
+private Node newNode(int type) {
+private Node newNode(int type, Node child1) {
+private Node newNode(int type, Node child1, Node child2) {
+private Node newNode(int type, Node child1, Node child2, Node child3) {
+private Node newStringNode(String value) {
+private Node newStringNode(int type, String value) {
+private Node newNumberNode(Double value) {
+
+/* HEADER */
+package com.google.javascript.jscomp.parsing;
+import static com.google.javascript.jscomp.mozilla.rhino.Token.CommentType.JSDOC;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.mozilla.rhino.ErrorReporter;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ArrayLiteral;
+import com.google.javascript.jscomp.mozilla.rhino.ast.Assignment;
+import com.google.javascript.jscomp.mozilla.rhino.ast.AstNode;
+import com.google.javascript.jscomp.mozilla.rhino.ast.AstRoot;
+import com.google.javascript.jscomp.mozilla.rhino.ast.Block;
+import com.google.javascript.jscomp.mozilla.rhino.ast.BreakStatement;
+import com.google.javascript.jscomp.mozilla.rhino.ast.CatchClause;
+import com.google.javascript.jscomp.mozilla.rhino.ast.Comment;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ConditionalExpression;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ContinueStatement;
+import com.google.javascript.jscomp.mozilla.rhino.ast.DoLoop;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ElementGet;
+import com.google.javascript.jscomp.mozilla.rhino.ast.EmptyExpression;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ExpressionSta
+...[truncated deterministically]...
+script.jscomp.mozilla.rhino.ast.ObjectProperty;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ParenthesizedExpression;
+import com.google.javascript.jscomp.mozilla.rhino.ast.PropertyGet;
+import com.google.javascript.jscomp.mozilla.rhino.ast.RegExpLiteral;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ReturnStatement;
+import com.google.javascript.jscomp.mozilla.rhino.ast.Scope;
+import com.google.javascript.jscomp.mozilla.rhino.ast.StringLiteral;
+import com.google.javascript.jscomp.mozilla.rhino.ast.SwitchCase;
+import com.google.javascript.jscomp.mozilla.rhino.ast.SwitchStatement;
+import com.google.javascript.jscomp.mozilla.rhino.ast.ThrowStatement;
+import com.google.javascript.jscomp.mozilla.rhino.ast.TryStatement;
+import com.google.javascript.jscomp.mozilla.rhino.ast.UnaryExpression;
+import com.google.javascript.jscomp.mozilla.rhino.ast.VariableDeclaration;
+import com.google.javascript.jscomp.mozilla.rhino.ast.VariableInitializer;
+import com.google.javascript.jscomp.mozilla.rhino.ast.WhileLoop;
+import com.google.javascript.jscomp.mozilla.rhino.ast.WithStatement;
+import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Set;
+public class IRFactory {
+
+===== com.google.javascript.jscomp.RenamePrototypes (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class RenamePrototypes implements CompilerPass {
+private class Property {
+private boolean canRenamePrototypeProperty() {
+private boolean canRenameObjLitProperty() {
+public int compare(Property a1, Property a2) {
+private final Set<Node> stringNodes = new HashSet<Node>();
+private final Set<Node> prototypeObjLits = new HashSet<Node>();
+@Nullable char[] reservedCharacters,
+@Nullable VariableMap prevUsedRenameMap) {
+public void process(Node externs, Node root) {
+private void reusePrototypeNames(Set<Property> properties) {
+private class ProcessExternedProperties extends AbstractPostOrderCallback {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private class ProcessProperties extends AbstractPostOrderCallback {
+private void processPrototypeParent(Node n, CompilerInput input) {
+private void markPrototypePropertyCandidate(Node n, CompilerInput input) {
+private void markObjLitPropertyCandidate(Node n, CompilerInput input) {
+private void markPropertyAccessCandidate(Node n, CompilerInput input) {
+private Property getProperty(String name) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.javascript.jscomp.AbstractCompiler.LifeCycleStage;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import javax.annotation.Nullable;
+class RenamePrototypes implements CompilerPass {
+
+/* METHOD process */
+public void process(Node externs, Node root) {
+ Preconditions.checkState(compiler.getLifeCycleStage().isNormalized());
+
+ NodeTraversal.traverse(compiler, externs,
+ new ProcessExternedProperties());
+ NodeTraversal.traverse(compiler, root, new ProcessProperties());
+
+ // Gather the properties to rename, sorted by count.
+ SortedSet<Property> propsByFrequency =
+ new TreeSet<Property>(FREQUENCY_COMPARATOR);
+
+ for (Iterator<Map.Entry<String, Property>> it =
+ properties.entrySet().iterator(); it.hasNext(); ) {
+ Property a = it.next().getValue();
+ if (a.canRename() && !reservedNames.contains(a.oldName)) {
+ propsByFrequency.add(a);
+ } else {
+ it.remove();
+
+ // If we're not renaming this, make sure we don't name something
+ // else to this name.
+ reservedNames.add(a.oldName);
+ }
+ }
+
+ // Try and reuse as many names from the previous compilation as possible.
+ if (prevUsedRenameMap != null) {
+ reusePrototypeNames(propsByFrequency);
+ }
+
+ // Generate new names.
+ NameGenerator nameGen = new NameGenerator(reservedNames, "",
+ reservedCharacters);
+ StringBuilder debug = new StringBuilder();
+ for (Property a : propsByFrequency) {
+ if (a.newName == null) {
+ a.newName = nameGen.generateNextName();
+ reservedNames.add(a.newName);
+ }
+
+ debug.append(a.oldName).append(" => ").append(a.newName).append('\n');
+ }
+
+ compiler.addToDebugLog("JS property assignments:\n" + debug);
+
+ // Update the string nodes.
+ boolean changed = false;
+ for (Node n : stringNodes) {
+ String oldName = n.getString();
+ Property a = properties.get(oldName);
+ if (a != null && a.newName != null) {
+ n.setString(a.newName);
+ changed = changed || !a.newName.equals(oldName);
+ }
+ }
+
+ if (changed) {
+ compiler.reportCodeChange();
+ }
+
+ compiler.setLifeCycleStage(LifeCycleStage.NORMALIZED_OBFUSCATED);
+ }

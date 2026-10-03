@@ -1,0 +1,446 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 76  Version: Jsoup-76b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.parser.HtmlTreeBuilderState
+Modified: org.jsoup.parser.HtmlTreeBuilderState
+Triggers: org.jsoup.parser.HtmlParserTest::preSkipsFirstNewline
+
+Bug/specification summary:
+Bug report: 825
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::preSkipsFirstNewline
+ --> junit.framework.AssertionFailedError: expected:<
+Modified: org.jsoup.parser.HtmlTreeBuilderState
+
+Prompt-01 test plan:
+TARGETS: HtmlTreeBuilderState process(), especially states handling pre/code/text area tags and
+initial whitespace newline skipping behavior
+ORACLES: HTML spec-compliant parsing; text content after <pre>/<textarea>/<code> tags should NOT
+consume a leading newline if immediately following the start tag
+CASES: Leading newline after <pre> (boundary), no-newline after <pre> (normal), empty <pre></pre>,
+nested tags inside <pre>, <textarea> newline handling, attribute-rich <pre> tags
+RISKS: Enum state machine complex; behavior may differ across InBody/AfterHead states; limited to
+public HtmlParserTest context only
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.HtmlTreeBuilderState (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+enum HtmlTreeBuilderState {
+private boolean anythingElse(Token t, HtmlTreeBuilder tb) {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+final int stackSize = stack.size();
+private boolean exitTableBody(Token t, HtmlTreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(HtmlTreeBuilder tb) {
+private static String nullString = String.valueOf('\u0000');
+abstract boolean process(Token t, HtmlTreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static boolean isWhitespace(String data) {
+private static void handleRcData(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, HtmlTreeBuilder tb) {
+static final class Constants {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import java.util.ArrayList;
+enum HtmlTreeBuilderState {
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ tb.insert(t.asCharacter());
+ return true;
+ }
+ switch (t.type) {
+ case Comment:
+ tb.insert(t.asComment());
+ break;
+ case Doctype:
+ tb.error(this);
+ return false;
+ case StartTag:
+ Token.StartTag start = t.asStartTag();
+ String name = start.normalName();
+ if (name.equals("html")) {
+ return InBody.process(t, tb);
+ } else if (StringUtil.in(name, "base", "basefont", "bgsound", "command", "link")) {
+ Element el = tb.insertEmpty(start);
+ // jsoup special: update base the frist time it is seen
+ if (name.equals("base") && el.hasAttr("href"))
+ tb.maybeSetBaseUri(el);
+ } else if (name.equals("meta")) {
+ Element meta = tb.insertEmpty(start);
+ // todo: charset switches
+ } else if (name.equals("title")) {
+ handleRcData(start, tb);
+ } else if (StringUtil.in(name, "noframes", "style")) {
+ handleRawtext(start, tb);
+ } else if (name.equals("noscript")) {
+ // else if noscript && scripting flag = true: rawtext (jsoup doesn't run script, to handle as noscript)
+ tb.insert(start);
+ tb.transition(InHeadNoscript);
+ } else if (name.equals("script")) {
+ // skips some script rules as won't execute them
+
+ tb.tokeniser.transition(TokeniserState.ScriptData);
+ tb.markInsertionMode();
+ tb.transition(Text);
+ tb.insert(start);
+ } else if (name.equals("head")) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ break;
+ case EndTag:
+ Token.EndTag end = t.asEndTag();
+ name = end.normalName();
+ if (name.equals("head")) {
+ tb.pop();
+ tb.transition(AfterHead);
+ } else if (StringUtil.in(name, "body", "html", "br")) {
+ return anythingElse(t, tb);
+ } else {
+ tb.error(this);
+ return false;
+ }
+ break;
+ default:
+ return anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (t.isDoctype()) {
+ tb.error(this);
+ } else if (t.isStartTag() && t.asStartTag().normalName().equals("html")) {
+ return tb.process(t, InBody);
+ } else if (t.isEndTag() && t.asEndTag().normalName().equals("noscript")) {
+ tb.pop();
+ tb.transition(InHead);
+ } else if (isWhitespace(t) || t.isComment() || (t.isStartTag() && StringUtil.in(t.asStartTag().normalName(),
+ "basefont", "bgsound", "link", "meta", "noframes", "style"))) {
+ return tb.process(t, InHead);
+ } else if (t.isEndTag() && t.asEndTag().normalName().equals("br")) {
+ return anythingElse(t, tb);
+ } else if ((t.isStartTag() && StringUtil.in(t.asStartTag().normalName(), "head", "noscript")) || t.isEndTag()) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ tb.insert(t.asCharacter());
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (t.isDoctype()) {
+ tb.error(this);
+ } else if (t.isStartTag()) {
+ Token.StartTag startTag = t.asStartTag();
+ String name = startTag.normalName();
+ if (name.equals("html")) {
+ return tb.process(t, InBody);
+ } else if (name.equals("body")) {
+ tb.insert(startTag);
+ tb.framesetOk(false);
+ tb.transition(InBody);
+ } else if (name.equals("frameset")) {
+ tb.insert(startTag);
+ tb.transition(InFrameset);
+ } else if (StringUtil.in(name, "base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "title")) {
+ tb.error(this);
+ Element head = tb.getHeadElement();
+ tb.push(head);
+ tb.process(t, InHead);
+ tb.removeFromStack(head);
+ } else if (name.equals("head")) {
+ tb.error(this);
+ return false;
+ } else {
+ anythingElse(t, tb);
+ }
+ } else if (t.isEndTag()) {
+ if (StringUtil.in(t.asEndTag().normalName(), "body", "html")) {
+ anythingElse(t, tb);
+ } else {
+ tb.error(this);
+ return false;
+ }
+ } else {
+ anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ return true; // ignore whitespace
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (t.isDoctype()) {
+ // todo: parse error check on expected doctypes
+ // todo: quirk state check on doctype ids
+ Token.Doctype d = t.asDoctype();
+ DocumentType doctype = new DocumentType(
+ tb.settings.normalizeTag(d.getName()), d.getPublicIdentifier(), d.getSystemIdentifier());
+ doctype.setPubSysKey(d.getPubSysKey());
+ tb.getDocument().appendChild(doctype);
+ if (d.isForceQuirks())
+ tb.getDocument().quirksMode(Document.QuirksMode.quirks);
+ tb.transition(BeforeHtml);
+ } else {
+ // todo: check not iframe srcdoc
+ tb.transition(BeforeHtml);
+ return tb.process(t); // re-process token
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (t.isDoctype()) {
+ tb.error(this);
+ return false;
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (isWhitespace(t)) {
+ return true; // ignore whitespace
+ } else if (t.isStartTag() && t.asStartTag().normalName().equals("html")) {
+ tb.insert(t.asStartTag());
+ tb.transition(BeforeHead);
+ } else if (t.isEndTag() && (StringUtil.in(t.asEndTag().normalName(), "head", "body", "html", "br"))) {
+ return anythingElse(t, tb);
+ } else if (t.isEndTag()) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ return true;
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (t.isDoctype()) {
+ tb.error(this);
+ return false;
+ } else if (t.isStartTag() && t.asStartTag().normalName().equals("html")) {
+ return InBody.process(t, tb); // does not transition
+ } else if (t.isStartTag() && t.asStartTag().normalName().equals("head")) {
+ Element head = tb.insert(t.asStartTag());
+ tb.setHeadElement(head);
+ tb.transition(InHead);
+ } else if (t.isEndTag() && (StringUtil.in(t.asEndTag().normalName(), "head", "body", "html", "br"))) {
+ tb.processStartTag("head");
+ return tb.process(t);
+ } else if (t.isEndTag()) {
+ tb.error(this);
+ return false;
+ } else {
+ tb.processStartTag("head");
+ return tb.process(t);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ switch (t.type) {
+ case Character: {
+ Token.Character c = t.asCharacter();
+ if (c.getData().equals(nullString)) {
+ // todo confirm that check
+ tb.error(this);
+ return false;
+ } else if (tb.framesetOk() && isWhitespace(c)) { // don't check if whitespace if frames already closed
+ tb.reconstructFormattingElements();
+ tb.insert(c);
+ } else {
+ tb.reconstructFormattingElements();
+ tb.insert(c);
+ tb.framesetOk(false);
+ }
+ break;
+ }
+ case Comment: {
+ tb.insert(t.asComment());
+ break;
+ }
+ case Doctype: {
+ tb.error(this);
+ return false;
+ }
+ case StartTag:
+ Token.StartTag startTag = t.asStartTag();
+ // todo - refactor to a switch statement
+ String name = startTag.normalName();
+ if (name.equals("a")) {
+ if (tb.getActiveFormattingElement("a") != null) {
+ tb.
+...[truncated deterministically]...
+b.removeFromActiveFormattingElements(remainingA);
+ tb.removeFromStack(remainingA);
+ }
+ }
+ tb.reconstructFormattingElements();
+ Element a = tb.insert(startTag);
+ tb.pushActiveFormattingElements(a);
+ } else if (StringUtil.inSorted(name, Constants.InBodyStartEmptyFormatters)) {
+ tb.reconstructFormattingElements();
+ tb.insertEmpty(startTag);
+ tb.framesetOk(false);
+ } else if (StringUtil.inSorted(name, Constants.InBodyStartPClosers)) {
+ if (tb.inButtonScope("p")) {
+ tb.processEndTag("p");
+ }
+ tb.insert(startTag);
+ } else if (name.equals("span")) {
+ // same as final else, but short circuits lots of checks
+ tb.reconstructFormattingElements();
+ tb.insert(startTag);
+ } else if (name.equals("li")) {
+ tb.framesetOk(false);
+ ArrayList<Element> stack = tb.getStack();
+ for (int i = stack.size() - 1; i > 0; i--) {
+ Element el = stack.get(i);
+ if (el.nodeName().equals("li")) {
+ tb.processEndTag("li");
+ break;
+ }
+ if (tb.isSpecial(el) && !StringUtil.inSorted(el.nodeName(), Constants.InBodyStartLiBreakers))
+ break;
+ }
+ if (tb.inButtonScope("p")) {
+ tb.processEndTag("p");
+ }
+ tb.insert(startTag);
+ } else if (name.equals("html")) {
+ tb.error(this);
+ // merge attributes onto real html
+ Element html = tb.getStack().get(0);
+ for (Attribute attribute : startTag.getAttributes()) {
+ if (!html.hasAttr(attribute.getKey()))
+ html.attributes().put(attribute);
+ }
+ } else if (StringUtil.inSorted(name, Constants.InBodyStartToHead)) {
+ return tb.process(t, InHead);
+ } else if (name.equals("body")) {
+ tb.error(this);
+ ArrayList<Element> stack = tb.getStack();
+ if (stack.size() == 1 || (stack.size() > 2 && !stack.get(1).nodeName().equals("body"))) {
+ // only in fragment case
+ return false; // ignore
+ } else {
+ tb.framesetOk(false);
+ Element body = stack.get(1);
+ for (Attribute attribute : startTag.getAttributes()) {
+ if (!body.hasAttr(attribute.getKey()))
+ body.attributes().put(attribute);
+ }
+ }
+ } else if (name.equals("frameset")) {
+ tb.error(this);
+ ArrayList<Element> stack = tb.getStack();
+ if (stack.size() == 1 || (stack.size() > 2 && !stack.get(1).nodeName().equals("body"))) {
+ // only in fragment case
+ return false; // ignore
+ } else if (!tb.framesetOk()) {
+ return false; // ignore frameset
+ } else {
+ Element second = stack.get(1);
+ if (second.parent() != null)
+ second.remove();
+ // pop up to html element
+ while (stack
+...[truncated deterministically]...
+der up.
+ tb.removeFromStack(currentForm);
+ }
+ } else if (name.equals("p")) {
+ if (!tb.inButtonScope(name)) {
+ tb.error(this);
+ tb.processStartTag(name); // if no p to close, creates an empty <p></p>
+ return tb.process(endTag);
+ } else {
+ tb.generateImpliedEndTags(name);
+ if (!tb.currentElement().nodeName().equals(name))
+ tb.error(this);
+ tb.popStackToClose(name);
+ }
+ } else if (StringUtil.inSorted(name, Constants.DdDt)) {
+ if (!tb.inScope(name)) {
+ tb.error(this);
+ return false;
+ } else {
+ tb.generateImpliedEndTags(name);
+ if (!tb.currentElement().nodeName().equals(name))
+ tb.error(this);
+ tb.popStackToClose(name);
+ }
+ } else if (StringUtil.inSorted(name, Constants.Headings)) {
+ if (!tb.inScope(Constants.Headings)) {
+ tb.error(this);
+ return false;
+ } else {
+ tb.generateImpliedEndTags(name);
+ if (!tb.currentElement().nodeName().equals(name))
+ tb.error(this);
+ tb.popStackToClose(Constants.Headings);
+ }
+ } else if (name.equals("sarcasm")) {
+ // *sigh*
+ return anyOtherEndTag(t, tb);
+ } else if (StringUtil.inSorted(name, Constants.InBodyStartApplets)) {
+ if (!tb.inScope("name")) {
+ if (!tb.inScope(name)) {
+ tb.error(this);
+ return false;
+ }
+ tb.generateImpliedEndTags();
+ if (!tb.currentElement().nodeName().equals(name))
+ tb.error(this);
+ tb.popStackToClose(name);
+ tb.clearFormattingElementsToLastMarker();
+ }
+ } else if (name.equals("br")) {
+ tb.error(this);
+ tb.processStartTag("br");
+ return false;
+ } else {
+ return anyOtherEndTag(t, tb);
+ }
+
+ break;
+ case EOF:
+ // todo: error if stack contains something not dd, dt, li, p, tbody, td, tfoot, th, thead, tr, body, html
+ // stop parsing
+ break;
+ }
+ return true;
+ }

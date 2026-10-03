@@ -1,0 +1,139 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 168  Version: Closure-168b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 726
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue726
+ --> junit.framework.AssertionFailedError: expected a warning
+Modified: com.google.javascript.jscomp.TypedScopeCreator
+
+Available API/signatures:
+[com.google.javascript.jscomp.TypedScopeCreator | java]
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private final List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+@Override
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static class DiscoverEnumsAndTypedefs
+public void visit(NodeTraversal t, Node node, Node parent) {
+private JSType getNativeType(JSTypeNative nativeType) {
+private abstract class AbstractScopeBuilder
+private final List<Node> nonExternFunctions = Lists.newArrayList();
+private AbstractScopeBuilder(Scope scope) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void attachLiteralTypes(NodeTraversal t, Node n) {
+private void defineObjectLiteral(Node objectLit) {
+private void defineName(Node name, Node var, Node parent, JSDocInfo info) {
+@Nullable Node rValue,
+@Nullable String name,
+@Nullable JSDocInfo info,
+@Nullable Node lvalueNode) {
+private void defineSlot(Node name, Node parent, JSType type) {
+private boolean isQnameRootedInGlobalScope(Node n) {
+private Scope getQnameRootScope(Node n) {
+private FunctionType getFunctionType(@Nullable Var v) {
+private ObjectType getObjectSlot(String slotName) {
+private final class CollectProperties
+private static final class StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class GlobalScopeBuilder extends AbstractScopeBuilder {
+private GlobalScopeBuilder(Scope scope) {
+@Override public void visit(NodeTraversal t, Node n, Node parent) {
+private final class LocalScopeBuilder extends AbstractScopeBuilder {
+private LocalScopeBuilder(Scope scope) {
+private void handleFunctionInputs(Node fnNode) {
+private void declareArguments(Node functionNode) {
+private static class FirstOrderFunctionAnalyzer
+@Override public void process(Node externs, Node root) {
+@Override public void enterScope(NodeTraversal t) {
+private AstFunctionContents getFunctionAnalysisResults(@Nullable Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.jscomp.JSError;
+import org.junit.Test;
+
+public class TypedScopeCreatorEnumInitializerTest {
+
+  private static final String ENUM_INITIALIZER_MESSAGE =
+      "enum initializer must be an object literal or an enum";
+
+  private Compiler compile(String source) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", source),
+        options);
+    return compiler;
+  }
+
+  private boolean hasEnumInitializerWarning(Compiler compiler) {
+    for (JSError warning : compiler.getWarnings()) {
+      if (warning.description.contains(ENUM_INITIALIZER_MESSAGE)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Test
+  public void enumInitializedWithObjectLiteralDoesNotReportInitializerWarning() {
+    Compiler compiler =
+        compile(
+            "/** @enum {number} */\n"
+                + "var Numbers = { ONE: 1, TWO: 2 };\n");
+
+    assertEquals(0, compiler.getErrors().length);
+    assertFalse(hasEnumInitializerWarning(compiler));
+  }
+
+  @Test
+  public void enumInitializedFromAnotherEnumDoesNotReportInitializerWarning() {
+    Compiler compiler =
+        compile(
+            "/** @enum {number} */\n"
+                + "var Original = { ONE: 1 };\n"
+                + "/** @enum {number} */\n"
+                + "var Copy = Original;\n");
+
+    assertEquals(0, compiler.getErrors().length);
+    assertFalse(hasEnumInitializerWarning(compiler));
+  }
+
+  @Test
+  public void enumInitializedFromNonEnumNameReportsInitializerWarning() {
+    Compiler compiler =
+        compile(
+            "/** @type {number} */\n"
+                + "var ordinaryValue = 1;\n"
+                + "/** @enum {number} */\n"
+                + "var InvalidEnum = ordinaryValue;\n");
+
+    assertEquals(0, compiler.getErrors().length);
+    assertTrue(hasEnumInitializerWarning(compiler));
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.google.javascript.jscomp.TypedScopeCreatorEnumInitializerTest::enumInitializedFromNonEnumNameReportsInitializerWarning
+
+Extract test suite......................................................... OK
+Failing generated tests: com.google.javascript.jscomp.TypedScopeCreatorEnumInitializerTest::enumInitializedFromNonEnumNameReportsInitializerWarning

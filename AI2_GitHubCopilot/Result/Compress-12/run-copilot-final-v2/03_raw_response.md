@@ -1,0 +1,1282 @@
+package org.apache.commons.compress.archivers.tar;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.util.Arrays;
+
+ import org.apache.commons.compress.archivers.ArchiveEntry;
+
+ /**
+  * Tests for TarArchiveInputStream focusing on octal header field parsing,
+  * edge cases, and the COMPRESS-178 bug.
+  */
+ public class TarArchiveInputStreamTest {
+
+     // Tar constants for header construction
+     private static final int BLOCK_SIZE = 512;
+     private static final int RECORD_SIZE = BLOCK_SIZE;
+     private static final String MAGIC_GNU = "ustar  ";
+     private static final String VERSION_GNU = " \0";
+     private static final String MAGIC_POSIX = "ustar\0";
+     private static final String VERSION_POSIX = "00";
+     private static final String MAGIC_ANT = "ustar\0";
+     private static final String VERSION_ANT = "\0\0";
+
+     /**
+       * Builds a 512-byte tar header block with specified fields.
+       * Numeric fields are stored as octal strings with trailing NUL.
+       * Checksum is computed correctly.
+       */
+     private byte[] buildHeader(String name, long mode, long uid, long gid,
+             long size, long mtime, byte typeflag, String linkname,
+             String magic, String version, String uname, String gname,
+             long devmajor, long devminor, String prefix) {
+         byte[] header = new byte[BLOCK_SIZE];
+         // Fill with zeros
+         Arrays.fill(header, (byte) 0);
+
+         // Name (0-99)
+         putString(header, 0, 100, name);
+         // Mode (100-107)
+         putOctal(header, 100, 8, mode);
+         // Uid (108-115)
+         putOctal(header, 108, 8, uid);
+         // Gid (116-123)
+         putOctal(header, 116, 8, gid);
+         // Size (124-135)
+         putOctal(header, 124, 12, size);
+         // Mtime (136-147)
+         putOctal(header, 136, 12, mtime);
+         // Chksum (148-155): filled with spaces initially for checksum calc
+         Arrays.fill(header, 148, 156, (byte) ' ');
+         // Typeflag (156)
+         header[156] = typeflag;
+         // Linkname (157-256)
+         putString(header, 157, 100, linkname);
+         // Magic (257-262)
+         putString(header, 257, 6, magic);
+         // Version (263-264)
+         putString(header, 263, 2, version);
+         // Uname (265-296)
+         putString(header, 265, 32, uname);
+         // Gname (297-328)
+         putString(header, 297, 32, gname);
+         // Devmajor (329-336)
+         putOctal(header, 329, 8, devmajor);
+         // Devminor (337-344)
+         putOctal(header, 337, 8, devminor);
+         // Prefix (345-499)
+         putString(header, 345, 155, prefix);
+         // Compute checksum
+         long sum = 0;
+         for (int i = 0; i < BLOCK_SIZE; i++) {
+             sum += (header[i] & 0xFF);
+         }
+         putOctal(header, 148, 7, sum); // 6 digits + null, overwrites first 7 bytes
+         header[155] = (byte) ' '; // space after checksum
+         return header;
+     }
+
+     private void putString(byte[] buf, int offset, int length, String value) {
+         byte[] bytes = value != null ? value.getBytes() : new byte[0];
+         int copyLen = Math.min(bytes.length, length);
+         System.arraycopy(bytes, 0, buf, offset, copyLen);
+     }
+
+     private void putOctal(byte[] buf, int offset, int length, long value) {
+         String octal = Long.toOctalString(value);
+         int len = octal.length();
+         // Fill with '0' and then write octal, with a trailing NUL if space allows
+         int i;
+         for (i =0; i < length - len -1; i++) {
+             buf[offset + i] = (byte) '0';
+         }
+         // Write octal digits
+         for (int j =0; j < len && i + j < length; j++) {
+             buf[offset + i + j] = (byte) octal.charAt(j);
+         }
+         // Ensure NUL termination (already zeros from fill)
+         if (i + len < length) {
+             buf[offset + i + len] = (byte) 0; // NUL
+         }
+     }
+
+     /**
+       * Creates a byte array representing a tar file with one entry,
+       * including data blocks and end-of-archive marker (two zero blocks).
+       */
+     private byte[] createSingleEntryTar(byte[] header, byte[] content) {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         try {
+             bos.write(header);
+             if (content != null) {
+                 bos.write(content);
+                 // Pad to block boundary
+                 int padding = (BLOCK_SIZE - (content.length % BLOCK_SIZE)) % BLOCK_SIZE;
+                 if (padding >0) {
+                     bos.write(new byte[padding]);
+                 }
+             }
+             // Two zero blocks for EOF
+             bos.write(new byte[BLOCK_SIZE *2]);
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+         return bos.toByteArray();
+     }
+
+     /**
+       * Merges multiple entry tar representations into a single tar stream bytes.
+       * The end-of-archive marker (two zero blocks) is appended at the end.
+       */
+     private byte[] mergeTarEntries(byte[]... entries) {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         try {
+             for (byte[] entry : entries) {
+                 bos.write(entry);
+             }
+             // EOF marker
+             bos.write(new byte[BLOCK_SIZE *2]);
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+         return bos.toByteArray();
+     }
+
+     // --- Tests follow ---
+
+     /**
+      * COMPRESS-178: A size field containing '00{NUL}0765{NUL}' should not cause
+      * IllegalArgumentExcepton. parseOctal must handle embedded NUL bytes
+      * gracefully, treating the first NUL as a terminator.
+      */
+     @Test
+     public void testCOMPRESS178Bug_NULInOctalSizeField() throws IOException {
+         // Build a header with size field containing raw bytes: 0x30 '0', 0x30 '0', 0x00 NUL, 0x30
+'0', 0x37 '7', 0x36 '6', 0x35 '5', 0x00 NUL, padded to 12
+         byte[] header = buildHeader("test.txt", 0644, 0, 0, 0, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         // Overwrite the size field at offset 124 (12 bytes) with the problematic bytes
+         byte[] problematicSize = new byte[]{0x30, 0x30, 0x00, 0x30, 0x37, 0x36, 0x35, 0x00, 0, 0,
+0, 0};
+         System.arraycopy(problematicSize, 0, header, 124, 12);
+         // Recompute checksum because size field changed
+         recomputeChecksum(header);
+
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull("Entry should be returned without exception", entry);
+         // The size should be 0 because parseOctal stops at NUL after "00"
+         assertEquals("Parsed size from '00<NUL>0765<NUL>' should stop at first NUL, yielding 0", 0,
+entry.getSize());
+         tis.close();
+     }
+
+     private void recomputeChecksum(byte[] header) {
+         // Set chksum field to spaces
+         Arrays.fill(header, 148, 156, (byte) ' ');
+         long sum = 0;
+         for (int i =0; i < BLOCK_SIZE; i++) {
+             sum += (header[i] & 0xFF);
+         }
+         String octal = Long.toOctalString(sum);
+         // Write 6 digits, then NUL, then space
+         int padding =6 - octal.length();
+         int pos =148;
+         for (int i =0; i < padding; i++) {
+             header[pos++] = (byte) '0';
+         }
+         for (int i =0; i < octal.length(); i++) {
+             header[pos++] = (byte) octal.charAt(i);
+         }
+         header[pos++] =0;
+         header[pos] = (byte) ' ';
+     }
+
+     /**
+      * Parsing normal space-padded octal fields (mode, uid, gid, size, mtime).
+      */
+     @Test
+     public void testParseNormalOctalFields() throws IOException {
+         byte[] header = buildHeader("file.txt", 0100644, 1000, 1000, 1024L, 1000000L, (byte) '0',
+"",
+                 MAGIC_GNU, VERSION_GNU, "user", "group", 0, 0, "");
+         byte[] content = new byte[1024];
+         Arrays.fill(content, (byte) 'A');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("file.txt", entry.getName());
+         assertEquals(0100644, entry.getMode());
+         assertEquals(1000, entry.getUserId());
+         assertEquals(1000, entry.getGroupId());
+         assertEquals(1024L, entry.getSize());
+         // Mtime may not be stored exactly; check not negative
+         assertTrue(entry.getModTime().getTime() >=0);
+         tis.close();
+     }
+
+     /**
+      * An all-zero size field (NUL-terminated) should parse as size 0.
+      */
+     @Test
+     public void testAllZeroSizeField() throws IOException {
+         byte[] header = buildHeader("empty.txt", 0100644, 0, 0, 0, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         // Explicitly set size field to 11 zeros + NUL (already done by buildHeader with 0)
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(0, entry.getSize());
+         tis.close();
+     }
+
+     /**
+      * Size field with leading spaces before octal digits.
+      */
+     @Test
+     public void testSizeFieldWithLeadingSpaces() throws IOException {
+         byte[] header = buildHeader("file.txt", 0100644, 0, 0, 0, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         // Overwrite size field: 4 spaces + "765\0" + padding NULs to 12
+         Arrays.fill(header, 124, 136, (byte) 0);
+         System.arraycopy("    765\0".getBytes(), 0, header, 124, 8);
+         recomputeChecksum(header);
+
+         byte[] content = new byte[0765];
+         Arrays.fill(content, (byte) 'B');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         // The size should be 765 (octal)
+         assertEquals(0765, entry.getSize()); // 0765 octal =501 decimal
+         tis.close();
+     }
+
+     /**
+      * Size field with trailing spaces and NUL after octal.
+      */
+     @Test
+     public void testSizeFieldTrailingSpacesTest() throws IOException {
+         byte[] header = buildHeader("test", 010644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         // Overrite size: "100\0   \0\0\0" (total 12)
+         byte[] sizeBytes = new byte[]{0x31, 0x30, 0x30, 0x00, 0x20, 0x20, 0x20, 0x00, 0, 0, 0, 0};
+         System.arraycopy(sizeBytes, 0, header, 124, 12);
+         recomputeChecksum(header);
+
+         byte[] content = new byte[0100]; // octal 100 = 64 decimal
+         Arrays.fill(content, (byte) 'C');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(0100, entry.getSize()); // 64
+         tis.close();
+     }
+
+     /**
+      * Reading entry data and checking boundary: available() and read() returning -1 at end.
+      */
+     @Test
+     public void testReadAndSkipEntryDataBoundaries() throws IOException {
+         byte[] header = buildHeader("data.bin", 0100644, 0, 0, 256L, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "user", "group", 0, 0, "");
+         byte[] content = new byte[256];
+         for (int i = 0; i < content.length; i++) {
+             content[i] = (byte) (i & 0xFF);
+         }
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(256, entry.getSize());
+
+         // Read part of data
+         byte[] buf = new byte[100];
+         int read = tis.read(buf, 0, 100);
+         assertEquals(100, read);
+         // available should reflect remaining data
+         int avail = tis.available();
+         assertEquals(256 -100, avail);
+
+         // Read the rest
+         byte[] rest = new byte[200];
+         int read2 = tis.read(rest, 0, 200);
+         assertEquals(156, read2);
+         // At end, read should return -1
+         int read3 = tis.read(new byte[1], 0, 1);
+         assertEquals(-1, read3);
+         tis.close();
+     }
+
+     /**
+      * Skip beyond entry data: skip should move past entry and not throw.
+      */
+     @Test
+     public void testSkipBeyondEntrySize() throws IOException {
+         byte[] header = buildHeader("skip_test", 0100644, 0, 0, 100L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] content = new byte[100];
+         Arrays.fill(content, (byte) 'D');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         long skipped = tis.skip(150); // skip more than size
+         // skip should return actual bytes skipped (up to entry size)
+         assertTrue(skipped <=100);
+         // After skip, read should return -1
+         assertEquals(-1, tis.read(new byte[1], 0, 1));
+         tis.close();
+     }
+
+     /**
+      * Parsing multiple entries in one archive.
+      */
+     @Test
+     public void testMultipleEntries() throws IOException {
+         byte[] header1 = buildHeader("file1.txt", 010644, 0, 0, 50L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] content1 = new byte[50];
+         Arrays.fill(content1, (byte) '1');
+         byte[] entry1 = createSingleEntryTar(header1, content1);
+
+         byte[] header2 = buildHeader("file2.txt", 010644, 0, 0, 70L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] content2 = new byte[70];
+         Arrays.fill(content2, (byte) '2');
+         byte[] entry2 = createSingleEntryTar(header2, content2);
+
+         byte[] fullTar = mergeTarEntries(entry1, entry2);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(fullTar),
+BLOCK_SIZE, RECORD_SIZE);
+
+         TarArchiveEntry e1 = tis.getNextTarEntry();
+         assertNotNull(e1);
+         assertEquals("file1.txt", e1.getName());
+         assertEquals(50, e1.getSize());
+         byte[] data1 = new byte[50];
+         int r1 = tis.read(data1, 0, 50);
+         assertEquals(50, r1);
+
+         TarArchiveEntry e2 = tis.getNextTarEntry();
+         assertNotNull(e2);
+         assertEquals("file2.txt", e2.getName());
+         assertEquals(70, e2.getSize());
+         byte[] data2 = new byte[70];
+         int r2 = tis.read(data2, 0, 70);
+         assertEquals(70, r2);
+
+         // Third call should return null
+         TarArchiveEntry e3 = tis.getNextTarEntry();
+         assertNull(e3);
+         tis.close();
+     }
+
+     /**
+      * getNextEntry() should delegate to getNextTarEntry().
+      */
+     @Test
+     public void testGetNextEntryDelegates() throws IOException {
+         byte[] header = buildHeader("delegate.txt", 010644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         ArchiveEntry entry = tis.getNextEntry();
+         assertNotNull(entry);
+         assertTrue(entry instanceof TarArchiveEntry);
+         assertEquals("delegate.txt", entry.getName());
+         tis.close();
+     }
+
+     /**
+      * static matches() detects valid tar signatures.
+      */
+     @Test
+     public void testMatchesMethod() {
+         // POSIX magic
+         byte[] posixHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_POSIX, VERSION_POSIX, "root", "root", 0, 0, "");
+         assertTrue(TarArchiveInputStream.matches(posixHeader, posixHeader.length));
+
+         // GNU magic
+         byte[] gnuHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         assertTrue(TarArchiveInputStream.matches(gnuHeader, gnuHeader.length));
+
+         // ANt magic
+         byte[] antHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_ANT, VERSION_ANT, "root", "root", 0, 0, "");
+         assertTrue(TarArchiveInputStream.matches(antHeader, antHeader.length));
+
+         // Non-tar data
+         byte[] nonTar = new byte[512];
+         Arrays.fill(nonTar, (byte)'x');
+         assertFalse(TarArchiveInputStream.matches(nonTar, nonTar.length));
+
+         // Short array
+         byte[] shortBuf = new byte[10];
+         assertFalse(TarArchiveInputStream.matches(shortBuf, shortBuf.length));
+     }
+
+     /**
+       * Closing stream should not throw and subsequent operations may fail or return null.
+       */
+     @Test
+     public void testCloseNoException() throws IOException {
+         byte[] header = buildHeader("close.txt", 0644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         // Just close without reading
+         tis.close();
+         // Closing multiple times should not throw
+         tis.close();
+     }
+
+     /**
+      * Empty stream (only zero blocks) returns null on first getNextTarEntry.
+      */
+     @Test
+     public void testEmptyStreamReturnsNull() throws IOException {
+         byte[] emptyTar = new byte[BLOCK_SIZE *2];
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(emptyTar),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNull(entry);
+         tis.close();
+     }
+
+     /**
+      * Different block size constructor.
+      */
+     @Test
+     public void testConstructorWithBlockSize() throws IOException {
+         // Use block size 10240 (default block factor)
+         byte[] header = buildHeader("test.txt", 0755, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         // Padding to 10240 block? No, TarBuffer expects multiples of 512. 10240 is 20 *512.
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+10240);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("test.txt", entry.getName());
+         tis.close();
+     }
+
+     /**
+      * Default constructor (is) should use default block and record sizes.
+      */
+     @Test
+     public void testDefaultConstructor() throws IOException {
+         byte[] header = buildHeader("default.txt", 0644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes));
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("default.txt", entry.getName());
+         tis.close();
+     }
+ }
+
+I see the output got corrupted. Let me carefully rewrite the entire fixed test class without any
+corruption```java
+package org.apache.commons.compress.archivers.tar;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+
+/**
+
+ - Tests for TarArchiveInputStream focusing on octal header field parsing,
+ - edge cases, and the COMPRESS-178 bug.
+  */
+ public class TarArchiveInputStreamTest {
+  // Tar constants for header construction
+  private static final int BLOCK_SIZE = 512;
+  private static final int RECORD_SIZE = BLOCK_SIZE;
+  private static final String MAGIC_GNU = "ustar  ";
+  private static final String VERSION_GNU = " \0";
+  private static final String MAGIC_POSIX = "ustar\0";
+  private static final String VERSION_POSIX = "00";
+  private static final String MAGIC_ANT = "ustar\0";
+  private static final String VERSION_ANT = "\0\0";
+  /**
+  - Builds a 512-byte tar header block with specified fields.
+  - Numeric fields are stored as octal strings with trailing NUL.
+  - Checksum is computed correctly.
+    */
+   private byte[] buildHeader(String name, long mode, long uid, long gid,
+   long size, long mtime, byte typeflag, String linkname,
+   String magic, String version, String uname, String gname,
+   long devmajor, long devminor, String prefix) {
+   byte[] header = new byte[BLOCK_SIZE];
+   Arrays.fill(header, (byte) 0);
+   putString(header, 0, 100, name);
+   putOctal(header, 100, 8, mode);
+   putOctal(header, 108, 8, uid);
+   putOctal(header, 116, 8, gid);
+   putOctal(header, 124, 12, size);
+   putOctal(header, 136, 12, mtime);
+   Arrays.fill(header, 148, 156, (byte) ' ');
+   header[156] = typeflag;
+   putString(header, 157, 100, linkname);
+   putString(header, 257, 6, magic);
+   putString(header, 263, 2, version);
+   putString(header, 265, 32, uname);
+   putString(header, 297, 32, gname);
+   putOctal(header, 329, 8, devmajor);
+   putOctal(header, 337, 8, devminor);
+   putString(header, 345, 155, prefix);
+   long sum = 0;
+   for (int i = 0; i < BLOCK_SIZE; i++) {
+   sum += (header[i] & 0xFF);
+   }
+   putOctal(header, 148, 7, sum);
+   header[155] = (byte) ' ';
+   return header;
+  }
+  private void putString(byte[] buf, int offset, int length, String value) {
+      byte[] bytes = value != null ? value.getBytes() : new byte[0];
+      int copyLen = Math.min(bytes.length, length);
+      System.arraycopy(bytes, 0, buf, offset, copyLen);
+  }
+  private void putOctal(byte[] buf, int offset, int length, long value) {
+      String octal = Long.toOctalString(value);
+      int len = octal.length();
+      int i;
+      for (i = 0; i < length - len - 1; i++) {
+          buf[offset + i] = (byte) '0';
+      }
+      for (int j = 0; j < len && i + j < length; j++) {
+          buf[offset + i + j] = (byte) octal.charAt(j);
+      }
+      if (i + len < length) {
+          buf[offset + i + len] = (byte) 0;
+      }
+  }
+  /**
+  - Creates a byte array representing a tar file with one entry,
+  - including data blocks and end-of-archive marker (two zero blocks).
+    */
+   private byte[] createSingleEntryTar(byte[] header, byte[] content) {
+   ByteArrayOutputStream bos = new ByteArrayOutputStream();
+   try {
+   bos.write(header);
+   if (content != null) {
+       bos.write(content);
+       int padding = (BLOCK_SIZE - (content.length % BLOCK_SIZE)) % BLOCK_SIZE;
+       if (padding > 0) {
+           bos.write(new byte[padding]);
+       }
+   }
+   bos.write(new byte[BLOCK_SIZE
+   - 2]);
+   } catch (IOException e) {
+   throw new RuntimeException(e);
+   }
+   return bos.toByteArray();
+   }
+  /**
+  - Merges multiple entry tar representations into a single tar stream.
+  - The end-of-archive marker (two zero blocks) is appended at the end.
+    */
+   private byte[] mergeTarEntries(byte[]... entries) {
+   ByteArrayOutputStream bos = new ByteArrayOutputStream();
+   try {
+   for (byte[] entry : entries) {
+       bos.write(entry);
+   }
+   bos.write(new byte[BLOCK_SIZE
+   - 2]);
+   } catch (IOException e) {
+   throw new RuntimeException(e);
+   }
+   return bos.toByteArray();
+   }
+  // --- Tests ---
+  /**
+  - COMPRESS-178: A size field containing raw bytes 00<NUL>0765<NUL> should
+  - not cause IllegalArgumentException. parseOctal must handle embedded NUL
+  - bytes gracefully, treating the first NUL as a terminator.
+    */
+   @Test
+   public void testCOMPRESS178Bug_NULInOctalSizeField() throws IOException {
+   byte[] header = buildHeader("test.txt", 0644, 0, 0, 0, 0, (byte) '0', "",
+       MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+   byte[] problematicSize = new byte[]{0x30, 0x30, 0x00, 0x30, 0x37, 0x36, 0x35, 0x00, 0, 0, 0, 0};
+   System.arraycopy(problematicSize, 0, header, 124, 12);
+   recomputeChecksum(header);
+   byte[] tarBytes = createSingleEntryTar(header, null);
+   TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+   TarArchiveEntry entry = tis.getNextTarEntry();
+   assertNotNull("Entry should be returned without exception", entry);
+   assertEquals("Parsed size should stop at first NUL, yielding 0", 0, entry.getSize());
+   tis.close();
+  }
+  private void recomputeChecksum(byte[] header) {
+      Arrays.fill(header, 148, 156, (byte) ' ');
+      long sum = 0;
+      for (int i = 0; i < BLOCK_SIZE; i++) {
+          sum += (header[i] & 0xFF);
+      }
+      String octal = Long.toOctalString(sum);
+      int padding = 6 - octal.length();
+      int pos = 148;
+      for (int i = 0; i < padding; i++) {
+          header[pos++] = (byte) '0';
+      }
+      for (int i = 0; i < octal.length(); i++) {
+          header[pos++] = (byte) octal.charAt(i);
+      }
+      header[pos++] = 0;
+      header[pos] = (byte) ' ';
+  }
+  @Test
+  public void testParseNormalOctalFields() throws IOException {
+      byte[] header = buildHeader("file.txt", 0100644, 1000, 1000, 1024L, 1000000L, (byte) '0', "",
+              MAGIC_GNU, VERSION_GNU, "user", "group", 0, 0, "");
+      byte[] content = new byte[1024];
+      Arrays.fill(content, (byte) 'A');
+      byte[] tarBytes = createSingleEntryTar(header, content);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNotNull(entry);
+      assertEquals("file.txt", entry.getName());
+      assertEquals(0100644, entry.getMode());
+      assertEquals(1000, entry.getUserId());
+      assertEquals(1000, entry.getGroupId());
+      assertEquals(1024L, entry.getSize());
+      assertTrue(entry.getModTime().getTime() >= 0);
+      tis.close();
+  }
+  @Test
+  public void testAllZeroSizeField() throws IOException {
+      byte[] header = buildHeader("empty.txt", 0100644, 0, 0, 0, 0, (byte) '0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] tarBytes = createSingleEntryTar(header, null);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNotNull(entry);
+      assertEquals(0, entry.getSize());
+      tis.close();
+  }
+  @Test
+  public void testSizeFieldWithLeadingSpaces() throws IOException {
+      byte[] header = buildHeader("file.txt", 0100644, 0, 0, 0, 0, (byte) '0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      Arrays.fill(header, 124, 136, (byte) 0);
+      System.arraycopy("    765\0".getBytes(), 0, header, 124, 8);
+      recomputeChecksum(header);
+   byte[] content = new byte[0765];
+   Arrays.fill(content, (byte) 'B');
+   byte[] tarBytes = createSingleEntryTar(header, content);
+   TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+   TarArchiveEntry entry = tis.getNextTarEntry();
+   assertNotNull(entry);
+   assertEquals(0765, entry.getSize());
+   tis.close();
+  }
+  @Test
+  public void testSizeFieldTrailingSpaces() throws IOException {
+      byte[] header = buildHeader("test", 0100644, 0, 0, 0L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] sizeBytes = new byte[]{0x31, 0x30, 0x30, 0x00, 0x20, 0x20, 0x20, 0x00, 0, 0, 0, 0};
+      System.arraycopy(sizeBytes, 0, header, 124, 12);
+      recomputeChecksum(header);
+   byte[] content = new byte[0100];
+   Arrays.fill(content, (byte) 'C');
+   byte[] tarBytes = createSingleEntryTar(header, content);
+   TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+   TarArchiveEntry entry = tis.getNextTarEntry();
+   assertNotNull(entry);
+   assertEquals(0100, entry.getSize());
+   tis.close();
+  }
+  @Test
+  public void testReadAndSkipEntryDataBoundaries() throws IOException {
+      byte[] header = buildHeader("data.bin", 0100644, 0, 0, 256L, 0, (byte) '0', "",
+              MAGIC_GNU, VERSION_GNU, "user", "group", 0, 0, "");
+      byte[] content = new byte[256];
+      for (int i = 0; i < content.length; i++) {
+          content[i] = (byte) (i & 0xFF);
+      }
+      byte[] tarBytes = createSingleEntryTar(header, content);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNotNull(entry);
+      assertEquals(256, entry.getSize());
+   byte[] buf = new byte[100];
+   int read = tis.read(buf, 0, 100);
+   assertEquals(100, read);
+   int avail = tis.available();
+   assertEquals(256 - 100, avail);
+
+   byte[] rest = new byte[200];
+   int read2 = tis.read(rest, 0, 200);
+   assertEquals(156, read2);
+   int read3 = tis.read(new byte[1], 0, 1);
+   assertEquals(-1, read3);
+   tis.close();
+  }
+  @Test
+  public void testSkipBeyondEntrySize() throws IOException {
+      byte[] header = buildHeader("skip_test", 0100644, 0, 0, 100L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] content = new byte[100];
+      Arrays.fill(content, (byte) 'D');
+      byte[] tarBytes = createSingleEntryTar(header, content);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNotNull(entry);
+      long skipped = tis.skip(150);
+      assertTrue(skipped <=100);
+      assertEquals(-1, tis.read(new byte[1], 0, 1));
+      tis.close();
+  }
+  @Test
+  public void testMultipleEntries() throws IOException {
+      byte[] header1 = buildHeader("file1.txt", 0100644, 0, 0, 50L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] content1 = new byte[50];
+      Arrays.fill(content1, (byte) '1');
+      byte[] entry1 = createSingleEntryTar(header1, content1);
+   byte[] header2 = buildHeader("file2.txt", 0100644, 0, 0, 70L, 0L, (byte)'0', "",
+           MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+   byte[] content2 = new byte[70];
+   Arrays.fill(content2, (byte) '2');
+   byte[] entry2 = createSingleEntryTar(header2, content2);
+
+   byte[] fullTar = mergeTarEntries(entry1, entry2);
+   TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(fullTar),
+BLOCK_SIZE, RECORD_SIZE);
+
+   TarArchiveEntry e1 = tis.getNextTarEntry();
+   assertNotNull(e1);
+   assertEquals("file1.txt", e1.getName());
+   assertEquals(50, e1.getSize());
+   byte[] data1 = new byte[50];
+   int r1 = tis.read(data1, 0, 50);
+   assertEquals(50, r1);
+
+   TarArchiveEntry e2 = tis.getNextTarEntry();
+   assertNotNull(e2);
+   assertEquals("file2.txt", e2.getName());
+   assertEquals(70, e2.getSize());
+   byte[] data2 = new byte[70];
+   int r2 = tis.read(data2, 0, 70);
+   assertEquals(70, r2);
+
+   TarArchiveEntry e3 = tis.getNextTarEntry();
+   assertNull(e3);
+   tis.close();
+  }
+  @Test
+  public void testGetNextEntryDelegates() throws IOException {
+      byte[] header = buildHeader("delegate.txt", 0100644, 0, 0, 0L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] tarBytes = createSingleEntryTar(header, null);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+      ArchiveEntry entry = tis.getNextEntry();
+      assertNotNull(entry);
+      assertTrue(entry instanceof TarArchiveEntry);
+      assertEquals("delegate.txt", entry.getName());
+      tis.close();
+  }
+  @Test
+  public void testMatchesMethod() {
+      byte[] posixHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+              MAGIC_POSIX, VERSION_POSIX, "root", "root", 0, 0, "");
+      assertTrue(TarArchiveInputStream.matches(posixHeader, posixHeader.length));
+   byte[] gnuHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+           MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+   assertTrue(TarArchiveInputStream.matches(gnuHeader, gnuHeader.length));
+
+   byte[] antHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+           MAGIC_ANT, VERSION_ANT, "root", "root", 0, 0, "");
+   assertTrue(TarArchiveInputStream.matches(antHeader, antHeader.length));
+
+   byte[] nonTar = new byte[512];
+   Arrays.fill(nonTar, (byte)'x');
+   assertFalse(TarArchiveInputStream.matches(nonTar, nonTar.length));
+
+   byte[] shortBuf = new byte[10];
+   assertFalse(TarArchiveInputStream.matches(shortBuf, shortBuf.length));
+  }
+  @Test
+  public void testCloseNoException() throws IOException {
+      byte[] header = buildHeader("close.txt", 0644, 0, 0, 0L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] tarBytes = createSingleEntryTar(header, null);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+      tis.close();
+      tis.close();
+  }
+  @Test
+  public void testEmptyStreamReturnsNull() throws IOException {
+      byte[] emptyTar = new byte[BLOCK_SIZE
+  * 2];
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(emptyTar),
+BLOCK_SIZE, RECORD_SIZE);
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNull(entry);
+      tis.close();
+  }
+  @Test
+  public void testConstructorWithBlockSize() throws IOException {
+      byte[] header = buildHeader("test.txt", 0755, 0, 0, 0L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] tarBytes = createSingleEntryTar(header, null);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+10240);
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNotNull(entry);
+      assertEquals("test.txt", entry.getName());
+      tis.close();
+  }
+  @Test
+  public void testDefaultConstructor() throws IOException {
+      byte[] header = buildHeader("default.txt", 0644, 0, 0, 0L, 0L, (byte)'0', "",
+              MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+      byte[] tarBytes = createSingleEntryTar(header, null);
+      TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes));
+      TarArchiveEntry entry = tis.getNextTarEntry();
+      assertNotNull(entry);
+      assertEquals("default.txt", entry.getName());
+      tis.close();
+  }
+
+}
+
+ I see the output is getting corrupted. The issue is that my text is being rendered with formatting
+issues. Let me try a different approach and use a clean write.```java
+ package org.apache.commons.compress.archivers.tar;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.util.Arrays;
+
+ import org.apache.commons.compress.archivers.ArchiveEntry;
+
+ /**
+  * Tests for TarArchiveInputStream focusing on octal header field parsing,
+  * edge cases, and the COMPRESS-178 bug.
+  */
+ public class TarArchiveInputStreamTest {
+
+     private static final int BLOCK_SIZE = 512;
+     private static final int RECORD_SIZE = BLOCK_SIZE;
+     private static final String MAGIC_GNU = "ustar  ";
+     private static final String VERSION_GNU = " \0";
+     private static final String MAGIC_POSIX = "ustar\0";
+     private static final String VERSION_POSIX = "00";
+     private static final String MAGIC_ANT = "ustar\0";
+     private static final String VERSION_ANT = "\0\0";
+
+     private byte[] buildHeader(String name, long mode, long uid, long gid,
+             long size, long mtime, byte typeflag, String linkname,
+             String magic, String version, String uname, String gname,
+             long devmajor, long devminor, String prefix) {
+         byte[] header = new byte[BLOCK_SIZE];
+         Arrays.fill(header, (byte) 0);
+         putString(header, 0, 100, name);
+         putOctal(header, 100, 8, mode);
+         putOctal(header, 108, 8, uid);
+         putOctal(header, 116, 8, gid);
+         putOctal(header, 124, 12, size);
+         putOctal(header, 136, 12, mtime);
+         Arrays.fill(header, 148, 156, (byte) ' ');
+         header[156] = typeflag;
+         putString(header, 157, 100, linkname);
+         putString(header, 257, 6, magic);
+         putString(header, 263, 2, version);
+         putString(header, 265, 32, uname);
+         putString(header, 297, 32, gname);
+         putOctal(header, 329, 8, devmajor);
+         putOctal(header, 337, 8, devminor);
+         putString(header, 345, 155, prefix);
+
+         long sum = 0;
+         for (int i = 0; i < BLOCK_SIZE; i++) {
+             sum += (header[i] & 0xFF);
+         }
+         putOctal(header, 148, 7, sum);
+         header[155] = (byte) ' ';
+         return header;
+     }
+
+     private void putString(byte[] buf, int offset, int length, String value) {
+         byte[] bytes = value != null ? value.getBytes() : new byte[0];
+         int copyLen = Math.min(bytes.length, length);
+         System.arraycopy(bytes, 0, buf, offset, copyLen);
+     }
+
+     private void putOctal(byte[] buf, int offset, int length, long value) {
+         String octal = Long.toOctalString(value);
+         int len = octal.length();
+         int i;
+         for (i = 0; i < length - len - 1; i++) {
+             buf[offset + i] = (byte) '0';
+         }
+         for (int j = 0; j < len && i + j < length; j++) {
+             buf[offset + i + j] = (byte) octal.charAt(j);
+         }
+         if (i + len < length) {
+             buf[offset + i + len] = (byte) 0;
+         }
+     }
+
+     private byte[] createSingleEntryTar(byte[] header, byte[] content) {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         try {
+             bos.write(header);
+             if (content != null) {
+                 bos.write(content);
+                 int padding = (BLOCK_SIZE - (content.length % BLOCK_SIZE)) % BLOCK_SIZE;
+                 if (padding > 0) {
+                     bos.write(new byte[padding]);
+                 }
+             }
+             bos.write(new byte[BLOCK_SIZE * 2]);
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+         return bos.toByteArray();
+     }
+
+     private byte[] mergeTarEntries(byte[]... entries) {
+         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         try {
+             for (byte[] entry : entries) {
+                 bos.write(entry);
+             }
+             bos.write(new byte[BLOCK_SIZE * 2]);
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+         return bos.toByteArray();
+     }
+
+     /**
+      * COMPRESS-178: size field with raw bytes 00 NUL 0765 NUL should not cause
+      * IllegalArgumentException. parseOctal must treat the first NUL as a terminator.
+      */
+     @Test
+     public void testCOMPRESS178Bug_NULInOctalSizeField() throws IOException {
+         byte[] header = buildHeader("test.txt", 0644, 0, 0, 0, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] problematicSize = new byte[]{0x30, 0x30, 0x00, 0x30, 0x37, 0x36, 0x35, 0x00, 0, 0,
+0, 0};
+         System.arraycopy(problematicSize, 0, header, 124, 12);
+         recomputeChecksum(header);
+
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull("Entry should be returned without exception", entry);
+         assertEquals("Parsed size should stop at first NUL", 0, entry.getSize());
+         tis.close();
+     }
+
+     private void recomputeChecksum(byte[] header) {
+         Arrays.fill(header, 148, 156, (byte) ' ');
+         long sum = 0;
+         for (int i =0; i < BLOCK_SIZE; i++) {
+             sum += (header[i] & 0xFF);
+         }
+         String octal = Long.toOctalString(sum);
+         int padding =6 - octal.length();
+         int pos =148;
+         for (int i =0; i < padding; i++) {
+             header[pos++] = (byte) '0';
+         }
+         for (int i =0; i < octal.length(); i++) {
+             header[pos++] = (byte) octal.charAt(i);
+         }
+         header[pos++] =0;
+         header[pos] = (byte) ' ';
+     }
+
+     @Test
+     public void testParseNormalOctalFields() throws IOException {
+         byte[] header = buildHeader("file.txt", 0100644, 1000, 1000, 1024L, 1000000L, (byte) '0',
+"",
+                 MAGIC_GNU, VERSION_GNU, "user", "group", 0, 0, "");
+         byte[] content = new byte[1024];
+         Arrays.fill(content, (byte) 'A');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("file.txt", entry.getName());
+         assertEquals(0100644, entry.getMode());
+         assertEquals(1000, entry.getUserId());
+         assertEquals(1000, entry.getGroupId());
+         assertEquals(1024L, entry.getSize());
+         assertTrue(entry.getModTime().getTime() >= 0);
+         tis.close();
+     }
+
+     @Test
+     public void testAllZeroSizeField() throws IOException {
+         byte[] header = buildHeader("empty.txt", 0100644, 0, 0, 0, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(0, entry.getSize());
+         tis.close();
+     }
+
+     @Test
+     public void testSizeFieldWithLeadingSpaces() throws IOException {
+         byte[] header = buildHeader("file.txt", 0100644, 0, 0, 0, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         Arrays.fill(header, 124, 136, (byte) 0);
+         System.arraycopy("    765\0".getBytes(), 0, header, 124, 8);
+         recomputeChecksum(header);
+
+         byte[] content = new byte[0765];
+         Arrays.fill(content, (byte) 'B');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(0765, entry.getSize());
+         tis.close();
+     }
+
+     @Test
+     public void testSizeFieldTrailingSpaces() throws IOException {
+         byte[] header = buildHeader("test", 0100644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] sizeBytes = new byte[]{0x31, 0x30, 0x30, 0x00, 0x20, 0x20, 0x20, 0x00, 0, 0, 0, 0};
+         System.arraycopy(sizeBytes, 0, header, 124, 12);
+         recomputeChecksum(header);
+
+         byte[] content = new byte[0100];
+         Arrays.fill(content, (byte) 'C');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(0100, entry.getSize());
+         tis.close();
+     }
+
+     @Test
+     public void testReadAndSkipEntryDataBoundaries() throws IOException {
+         byte[] header = buildHeader("data.bin", 0100644, 0, 0, 256L, 0, (byte) '0', "",
+                 MAGIC_GNU, VERSION_GNU, "user", "group", 0, 0, "");
+         byte[] content = new byte[256];
+         for (int i = 0; i < content.length; i++) {
+             content[i] = (byte) (i & 0xFF);
+         }
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals(256, entry.getSize());
+
+         byte[] buf = new byte[100];
+         int read = tis.read(buf, 0, 100);
+         assertEquals(100, read);
+         int avail = tis.available();
+         assertEquals(256 - 100, avail);
+
+         byte[] rest = new byte[200];
+         int read2 = tis.read(rest, 0, 200);
+         assertEquals(156, read2);
+         int read3 = tis.read(new byte[1], 0, 1);
+         assertEquals(-1, read3);
+         tis.close();
+     }
+
+     @Test
+     public void testSkipBeyondEntrySize() throws IOException {
+         byte[] header = buildHeader("skip_test", 0100644, 0, 0, 100L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] content = new byte[100];
+         Arrays.fill(content, (byte) 'D');
+         byte[] tarBytes = createSingleEntryTar(header, content);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         long skipped = tis.skip(150);
+         assertTrue(skipped <= 100);
+         assertEquals(-1, tis.read(new byte[1], 0, 1));
+         tis.close();
+     }
+
+     @Test
+     public void testMultipleEntries() throws IOException {
+         byte[] header1 = buildHeader("file1.txt", 0100644, 0, 0, 50L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] content1 = new byte[50];
+         Arrays.fill(content1, (byte) '1');
+         byte[] entry1 = createSingleEntryTar(header1, content1);
+
+         byte[] header2 = buildHeader("file2.txt", 0100644, 0, 0, 70L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] content2 = new byte[70];
+         Arrays.fill(content2, (byte) '2');
+         byte[] entry2 = createSingleEntryTar(header2, content2);
+
+         byte[] fullTar = mergeTarEntries(entry1, entry2);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(fullTar),
+BLOCK_SIZE, RECORD_SIZE);
+
+         TarArchiveEntry e1 = tis.getNextTarEntry();
+         assertNotNull(e1);
+         assertEquals("file1.txt", e1.getName());
+         assertEquals(50, e1.getSize());
+         byte[] data1 = new byte[50];
+         int r1 = tis.read(data1, 0, 50);
+         assertEquals(50, r1);
+
+         TarArchiveEntry e2 = tis.getNextTarEntry();
+         assertNotNull(e2);
+         assertEquals("file2.txt", e2.getName());
+         assertEquals(70, e2.getSize());
+         byte[] data2 = new byte[70];
+         int r2 = tis.read(data2, 0, 70);
+         assertEquals(70, r2);
+
+         TarArchiveEntry e3 = tis.getNextTarEntry();
+         assertNull(e3);
+         tis.close();
+     }
+
+     @Test
+     public void testGetNextEntryDelegates() throws IOException {
+         byte[] header = buildHeader("delegate.txt", 0100644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         ArchiveEntry entry = tis.getNextEntry();
+         assertNotNull(entry);
+         assertTrue(entry instanceof TarArchiveEntry);
+         assertEquals("delegate.txt", entry.getName());
+         tis.close();
+     }
+
+     @Test
+     public void testMatchesMethod() {
+         byte[] posixHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_POSIX, VERSION_POSIX, "root", "root", 0, 0, "");
+         assertTrue(TarArchiveInputStream.matches(posixHeader, posixHeader.length));
+
+         byte[] gnuHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         assertTrue(TarArchiveInputStream.matches(gnuHeader, gnuHeader.length));
+
+         byte[] antHeader = buildHeader("test", 0666, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_ANT, VERSION_ANT, "root", "root", 0, 0, "");
+         assertTrue(TarArchiveInputStream.matches(antHeader, antHeader.length));
+
+         byte[] nonTar = new byte[512];
+         Arrays.fill(nonTar, (byte)'x');
+         assertFalse(TarArchiveInputStream.matches(nonTar, nonTar.length));
+
+         byte[] shortBuf = new byte[10];
+         assertFalse(TarArchiveInputStream.matches(shortBuf, shortBuf.length));
+     }
+
+     @Test
+     public void testCloseNoException() throws IOException {
+         byte[] header = buildHeader("close.txt", 0644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+BLOCK_SIZE, RECORD_SIZE);
+         tis.close();
+         tis.close();
+     }
+
+     @Test
+     public void testEmptyStreamReturnsNull() throws IOException {
+         byte[] emptyTar = new byte[BLOCK_SIZE * 2];
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(emptyTar),
+BLOCK_SIZE, RECORD_SIZE);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNull(entry);
+         tis.close();
+     }
+
+     @Test
+     public void testConstructorWithBlockSize() throws IOException {
+         byte[] header = buildHeader("test.txt", 0755, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes),
+10240);
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("test.txt", entry.getName());
+         tis.close();
+     }
+
+     @Test
+     public void testDefaultConstructor() throws IOException {
+         byte[] header = buildHeader("default.txt", 0644, 0, 0, 0L, 0L, (byte)'0', "",
+                 MAGIC_GNU, VERSION_GNU, "root", "root", 0, 0, "");
+         byte[] tarBytes = createSingleEntryTar(header, null);
+         TarArchiveInputStream tis = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes));
+         TarArchiveEntry entry = tis.getNextTarEntry();
+         assertNotNull(entry);
+         assertEquals("default.txt", entry.getName());
+         tis.close();
+     }
+ }

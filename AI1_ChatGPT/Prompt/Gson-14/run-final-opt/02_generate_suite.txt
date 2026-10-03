@@ -1,0 +1,386 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Gson  Bug: 14  Version: Gson-14b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.google.gson.internal.$Gson$Types
+Modified: com.google.gson.internal.$Gson$Types
+Triggers: com.google.gson.internal.bind.RecursiveTypesResolveTest::testDoubleSupertype, com.google.gson.internal.bind.RecursiveTypesResolveTest::testIssue440WeakReference, com.google.gson.internal.bind.RecursiveTypesResolveTest::testSubSupertype, com.google.gson.internal.bind.RecursiveTypesResolveTest::testDoubleSubtype, com.google.gson.internal.bind.RecursiveTypesResolveTest::testIssue603PrintStream, com.google.gson.internal.bind.RecursiveTypesResolveTest::testSuperSubtype, com.google.gson.internal.bind.RecursiveTypesResolveTest::testRecursiveResolveSimple
+
+Bug/specification summary:
+Bug report: 1074
+Trigger failures:
+- com.google.gson.internal.bind.RecursiveTypesResolveTest::testDoubleSupertype
+ --> junit.framework.AssertionFailedError: expected:<? super java.lang.Number> but was:<? super ? super java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testIssue440WeakReference
+ --> java.lang.StackOverflowError
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testSubSupertype
+ --> junit.framework.AssertionFailedError: expected:<?> but was:<? extends ? super java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testDoubleSubtype
+ --> junit.framework.AssertionFailedError: expected:<? extends java.lang.Number> but was:<? extends ? extends java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testIssue603PrintStream
+ --> java.lang.StackOverflowError
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testSuperSubtype
+ --> junit.framework.AssertionFailedError: expected:<?> but was:<? super ? extends java.lang.Number>
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testRecursiveResolveSimple
+ --> java.lang.StackOverflowError
+Modified: com.google.gson.internal.$Gson$Types
+
+Prompt-01 test plan:
+TARGETS: $Gson$Types.resolve(Type, Class, Type), especially recursive TypeVariable and WildcardType resolution.
+TARGETS: subtypeOf/supertypeOf wildcard normalization and bound replacement during resolve.
+ORACLES: Trigger assertions: avoid nested "? super ? super Number" and "? extends ? extends Number".
+ORACLES: Trigger assertions: mixed extends/super bounds resolve to unbounded "?" where expected.
+ORACLES: Trigger behavior: recursive generic resolution terminates without StackOverflowError.
+CASES: Resolve repeated lower-bound wildcard: ? super Number remains singly bounded.
+CASES: Resolve repeated upper-bound wildcard: ? extends Number remains singly bounded.
+CASES: Resolve nested opposite wildcards to expected unbounded wildcard.
+CASES: Exercise recursive type-variable graphs reflected by RecursiveTypesResolveTest scenarios.
+RISKS: Context omits source bodies/type fixtures; derive expectations only from listed trigger outcomes.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.gson.internal.$Gson$Types (java) =====
+/* API SIGNATURES */
+package com.google.gson.internal;
+public final class $Gson$Types {
+private $Gson$Types() {
+public static GenericArrayType arrayOf(Type componentType) {
+public static WildcardType subtypeOf(Type bound) {
+public static WildcardType supertypeOf(Type bound) {
+return new WildcardTypeImpl(new Type[] { Object.class }, lowerBounds);
+public static Type canonicalize(Type type) {
+public static Class<?> getRawType(Type type) {
+return Object.class;
+static boolean equal(Object a, Object b) {
+public static boolean equals(Type a, Type b) {
+static int hashCodeOrZero(Object o) {
+public static String typeToString(Type type) {
+static Type getGenericSupertype(Type context, Class<?> rawType, Class<?> toResolve) {
+while (rawType != Object.class) {
+static Type getSupertype(Type context, Class<?> contextRawType, Class<?> supertype) {
+public static Type getArrayComponentType(Type array) {
+public static Type getCollectionElementType(Type context, Class<?> contextRawType) {
+Type collectionType = getSupertype(context, contextRawType, Collection.class);
+public static Type[] getMapKeyAndValueTypes(Type context, Class<?> contextRawType) {
+if (context == Properties.class) {
+return new Type[] { String.class, String.class }; // TODO: test subclasses of Properties!
+Type mapType = getSupertype(context, contextRawType, Map.class);
+return new Type[] { Object.class, Object.class };
+public static Type resolve(Type context, Class<?> contextRawType, Type toResolve) {
+static Type resolveTypeVariable(Type context, Class<?> contextRawType, TypeVariable<?> unknown) {
+private static int indexOf(Object[] array, Object toFind) {
+private static Class<?> declaringClassOf(TypeVariable<?> typeVariable) {
+static void checkNotPrimitive(Type type) {
+private static final class ParameterizedTypeImpl implements ParameterizedType, Serializable {
+public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments) {
+public Type[] getActualTypeArguments() {
+public Type getRawType() {
+public Type getOwnerType() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+@Override public String toString() {
+private static final class GenericArrayTypeImpl implements GenericArrayType, Serializable {
+public GenericArrayTypeImpl(Type componentType) {
+public Type getGenericComponentType() {
+@Override public boolean equals(Object o) {
+private static final class WildcardTypeImpl implements WildcardType, Serializable {
+public WildcardTypeImpl(Type[] upperBounds, Type[] lowerBounds) {
+checkArgument(upperBounds[0] == Object.class);
+this.upperBound = Object.class;
+public Type[] getUpperBounds() {
+public Type[] getLowerBounds() {
+} else if (upperBound == Object.class) {
+
+/* HEADER */
+package com.google.gson.internal;
+import java.io.Serializable;
+import java.lang.reflect.Array;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.GenericDeclaration;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Properties;
+import static com.google.gson.internal.$Gson$Preconditions.checkArgument;
+import static com.google.gson.internal.$Gson$Preconditions.checkNotNull;
+
+/* METHOD $Gson$Types */
+private $Gson$Types() {
+ throw new UnsupportedOperationException();
+ }
+
+/* METHOD getMapKeyAndValueTypes */
+public static Type[] getMapKeyAndValueTypes(Type context, Class<?> contextRawType) {
+ /*
+ * Work around a problem with the declaration of java.util.Properties. That
+ * class should extend Hashtable<String, String>, but it's declared to
+ * extend Hashtable<Object, Object>.
+ */
+ if (context == Properties.class) {
+ return new Type[] { String.class, String.class }; // TODO: test subclasses of Properties!
+ }
+
+ Type mapType = getSupertype(context, contextRawType, Map.class);
+ // TODO: strip wildcards?
+ if (mapType instanceof ParameterizedType) {
+ ParameterizedType mapParameterizedType = (ParameterizedType) mapType;
+ return mapParameterizedType.getActualTypeArguments();
+ }
+ return new Type[] { Object.class, Object.class };
+ }
+
+ public static Type resolve(Type context, Class<?> contextRawType, Type toResolve) {
+ // this implementation is made a little more complicated in an attempt to avoid object-creation
+ while (true) {
+ if (toResolve instanceof TypeVariable) {
+ TypeVariable<?> typeVariable = (TypeVariable<?>) toResolve;
+ toResolve = resolveTypeVariable(context, contextRawType, typeVariable);
+ if (toResolve == typeVariable) {
+ return toResolve;
+ }
+
+ } else if (toResolve instanceof Class && ((Class<?>) toResolve).isArray()) {
+ Class<?> original = (Class<?>) toResolve;
+ Type componentType = original.getComponentType();
+ Type newComponentType = resolve(context, contextRawType, componentType);
+ return componentType == newComponentType
+ ? original
+ : arrayOf(newComponentType);
+
+ } else if (toResolve instanceof GenericArrayType) {
+ GenericArrayType original = (GenericArrayType) toResolve;
+ Type componentType = original.getGenericComponentType();
+ Type newComponentType = resolve(context, contextRawType, componentType);
+ return componentType == newComponentType
+ ? original
+ : arrayOf(newComponentType);
+
+ } else if (toResolve instanceof ParameterizedType) {
+ ParameterizedType original = (ParameterizedType) toResolve;
+ Type ownerType = original.getOwnerType();
+ Type newOwnerType = resolve(context, contextRawType, ownerType);
+ boolean changed = newOwnerType != ownerType;
+
+ Type[] args = original.getActualTypeArguments();
+ for (int t = 0, length = args.length; t < length; t++) {
+ Type resolvedTypeArgument = resolve(context, contextRawType, args[t]);
+ if (resolvedTypeArgument != args[t]) {
+ if (!changed) {
+ args = args.clone();
+ changed = true;
+ }
+ args[t] = resolvedTypeArgument;
+ }
+ }
+
+ return changed
+ ? newParameterizedTypeWithOwner(newOwnerType, original.getRawType(), args)
+ : original;
+
+ } else if (toResolve instanceof WildcardType) {
+ WildcardType original = (WildcardType) toResolve;
+ Type[] originalLowerBound = original.getLowerBounds();
+ Type[] originalUpperBound = original.getUpperBounds();
+
+ if (originalLowerBound.length == 1) {
+ Type lowerBound = resolve(context, contextRawType, originalLowerBound[0]);
+ if (lowerBound != originalLowerBound[0]) {
+ return supertypeOf(lowerBound);
+ }
+ } else if (originalUpperBound.length == 1) {
+ Type upperBound = resolve(context, contextRawType, originalUpperBound[0]);
+ if (upperBound != originalUpperBound[0]) {
+ return subtypeOf(upperBound);
+ }
+ }
+ return original;
+
+ } else {
+ return toResolve;
+ }
+ }
+ }
+
+ static Type resolveTypeVariable(Type context, Class<?> contextRawType, TypeVariable<?> unknown) {
+ Class<?> declaredByRaw = declaringClassOf(unknown);
+
+ // we can't reduce this further
+ if (declaredByRaw == null) {
+ return unknown;
+ }
+
+ Type declaredBy = getGenericSupertype(context, contextRawType, declaredByRaw);
+ if (declaredBy instanceof ParameterizedType) {
+ int index = indexOf(declaredByRaw.getTypeParameters(), unknown);
+ return ((ParameterizedType) declaredBy).getActualTypeArguments()[index];
+ }
+
+ return unknown;
+ }
+
+/* METHOD getRawType */
+public static Class<?> getRawType(Type type) {
+ if (type instanceof Class<?>) {
+ // type is a normal class.
+ return (Class<?>) type;
+
+ } else if (type instanceof ParameterizedType) {
+ ParameterizedType parameterizedType = (ParameterizedType) type;
+
+ // I'm not exactly sure why getRawType() returns Type instead of Class.
+ // Neal isn't either but suspects some pathological case related
+ // to nested classes exists.
+ Type rawType = parameterizedType.getRawType();
+ checkArgument(rawType instanceof Class);
+ return (Class<?>) rawType;
+
+ } else if (type instanceof GenericArrayType) {
+ Type componentType = ((GenericArrayType)type).getGenericComponentType();
+ return Array.newInstance(getRawT
+...[truncated deterministically]...
+won't work if there are multiple.
+ // having a raw type that's more general than necessary is okay
+ return Object.class;
+
+ } else if (type instanceof WildcardType) {
+ return getRawType(((WildcardType) type).getUpperBounds()[0]);
+
+ } else {
+ String className = type == null ? "null" : type.getClass().getName();
+ throw new IllegalArgumentException("Expected a Class, ParameterizedType, or "
+ + "GenericArrayType, but <" + type + "> is of type " + className);
+ }
+ }
+
+ static boolean equal(Object a, Object b) {
+ return a == b || (a != null && a.equals(b));
+ }
+
+ /**
+ * Returns true if {@code a} and {@code b} are equal.
+ */
+ public static boolean equals(Type a, Type b) {
+ if (a == b) {
+ // also handles (a == null && b == null)
+ return true;
+
+ } else if (a instanceof Class) {
+ // Class already specifies equals().
+ return a.equals(b);
+
+ } else if (a instanceof ParameterizedType) {
+ if (!(b instanceof ParameterizedType)) {
+ return false;
+ }
+
+ // TODO: save a .clone() call
+ ParameterizedType pa = (ParameterizedType) a;
+ ParameterizedType pb = (ParameterizedType) b;
+ return equal(pa.getOwnerType(), pb.getOwnerType())
+ && pa.getRawType().equals(pb.getRawType())
+ && Arrays.equals(pa.getActualTypeArguments(), pb.getActualTypeArguments());
+
+ } else if (a instanceof GenericArrayType) {
+ if (!(b instanceof GenericArrayType)) {
+ return false;
+ }
+
+ GenericArrayType ga = (GenericArrayType) a;
+ GenericArrayType gb = (GenericArrayType) b;
+ return equals(ga.getGenericComponentType(), gb.getGenericComponentType());
+
+ } else if (a instanceof WildcardType) {
+ if (!(b instanceof WildcardType)) {
+ return false;
+ }
+
+ WildcardType wa = (WildcardType) a;
+ WildcardType wb = (WildcardType) b;
+ return Arrays.equals(wa.getUpperBounds(), wb.getUpperBounds())
+ && Arrays.equals(wa.getLowerBounds(), wb.getLowerBounds());
+
+ } else if (a instanceof TypeVariable) {
+ if (!(b instanceof TypeVariable)) {
+ return false;
+ }
+ TypeVariable<?> va = (TypeVariable<?>) a;
+ TypeVariable<?> vb = (TypeVariable<?>) b;
+ return va.getGenericDeclaration() == vb.getGenericDeclaration()
+ && va.getName().equals(vb.getName());
+
+ } else {
+ // This isn't a type we support. Could be a generic array type, wildcard type, etc.
+ return false;
+ }
+ }
+
+/* METHOD arrayOf */
+public static GenericArrayType arrayOf(Type componentType) {
+ return new GenericArrayTypeImpl(componentType);
+ }
+
+/* METHOD supertypeOf */
+public static WildcardType supertypeOf(Type bound) {
+ Type[] lowerBounds;
+ lowerBounds = new Type[] { bound };
+ return new WildcardTypeImpl(new Type[] { Object.class }, lowerBounds);
+ }
+
+/* METHOD canonicalize */
+public static Type canonicalize(Type type) {
+ if (type instanceof Class) {
+ Class<?> c = (Class<?>) type;
+ return c.isArray() ? new GenericArrayTypeImpl(canonicalize(c.getComponentType())) : c;
+
+ } else if (type instanceof ParameterizedType) {
+ ParameterizedType p = (ParameterizedType) type;
+ return new ParameterizedTypeImpl(p.getOwnerType(),
+ p.getRawType(), p.getActualTypeArguments());
+
+ } else if (type instanceof GenericArrayType) {
+ GenericArrayType g = (GenericArrayType) type;
+ return new GenericArrayTypeImpl(g.getGenericComponentType());
+
+ } else if (type instanceof WildcardType) {
+ WildcardType w = (WildcardType) type;
+ return new WildcardTypeImpl(w.getUpperBounds(), w.getLowerBounds());
+
+ } else {
+ // type is either serializable as-is or unsupported
+ return type;
+ }
+ }
+
+/* METHOD equals */
+public static boolean equals(Type a, Type b) {
+ if (a == b) {
+ // also handles (a == null && b == null)
+ return true;
+
+ } else if (a instanceof Class) {
+ // Class already specifies equals().
+ return a.equals(b);
+
+ } else if (a instanceof ParameterizedType) {
+ if (!(b instanceof ParameterizedType)) {
+ return false;
+ }
+
+ // TODO: save a .clone() call
+ ParameterizedType pa = (P
+...[truncated deterministically]...
+ype) {
+ ParameterizedType mapParameterizedType = (ParameterizedType) mapType;
+ return mapParameterizedType.getActualTypeArguments();
+ }
+ return new Type[] { Object.class, Object.class };
+ }

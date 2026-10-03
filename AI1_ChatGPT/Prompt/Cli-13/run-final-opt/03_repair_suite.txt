@@ -1,0 +1,204 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 13  Version: Cli-13b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-61
+Trigger failures:
+- org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeTest::testLoopingOptionLookAlike2
+ --> junit.framework.ComparisonFailure: expected:<Unexpected [testfile.txt while processing ]> but was:<Unexpected [value "testfile.txt" found while processing input]>
+Modified: org.apache.commons.cli2.WriteableCommandLine, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.ArgumentImpl
+
+Available API/signatures:
+[org.apache.commons.cli2.WriteableCommandLine | java]
+package org.apache.commons.cli2;
+public interface WriteableCommandLine extends CommandLine {
+void addOption(final Option option);
+void addValue(final Option option, final Object value);
+void setDefaultValues(final Option option, final List defaultValues);
+void addSwitch(final Option option, final boolean value) throws IllegalStateException;
+void setDefaultSwitch(final Option option, final Boolean defaultSwitch);
+void addProperty(final String property, final String value);
+boolean looksLikeOption(final String argument);
+
+[org.apache.commons.cli2.commandline.WriteableCommandLineImpl | java]
+package org.apache.commons.cli2.commandline;
+public class WriteableCommandLineImpl
+private final Properties properties = new Properties();
+private final List options = new ArrayList();
+private final Map nameToOption = new HashMap();
+private final Map values = new HashMap();
+private final Map switches = new HashMap();
+private final Map defaultValues = new HashMap();
+private final Map defaultSwitches = new HashMap();
+public void addOption(Option option) {
+public boolean hasOption(final Option option) {
+final boolean present = options.contains(option);
+public Option getOption(final String trigger) {
+public Set getProperties() {
+public boolean looksLikeOption(final String trigger) {
+for (final Iterator i = prefixes.iterator(); i.hasNext();) {
+final String prefix = (String) i.next();
+public String toString() {
+final StringBuffer buffer = new StringBuffer();
+for (final Iterator i = normalised.iterator(); i.hasNext();) {
+final String arg = (String) i.next();
+public List getOptions() {
+public Set getOptionTri
+...[truncated deterministically]...
+ents.next();
+final String allValues = stripBoundaryQuotes(allValuesQuoted);
+final String token = values.nextToken();
+public Set getPrefixes() {
+public char getInitialSeparator() {
+public char getSubsequentSeparator() {
+public Set getTriggers() {
+public String getConsumeRemaining() {
+public List getDefaultValues() {
+public Validator getValidator() {
+public void validate(final WriteableCommandLin
+...[truncated deterministically]...
+.contains(DisplaySetting.DISPLAY_ARGUMENT_BRACKETED);
+final int max = (maximum == Integer.MAX_VALUE) ? 2 : maximum;
+public String getDescription() {
+final HelpLine helpLine = new HelpLineImpl(this, depth);
+public int getMaximum() {
+public int getMinimum() {
+public String stripBoundaryQuotes(String token) {
+public boolean isRequired() {
+public void defaults(final WriteableCommandLine commandLine) {
+
+Generated JUnit Test:
+package org.apache.commons.cli2.bug;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.cli2.OptionException;
+import org.apache.commons.cli2.commandline.WriteableCommandLineImpl;
+import org.apache.commons.cli2.option.ArgumentImpl;
+
+public class BugLoopingOptionLookAlikeRegressionTest extends TestCase {
+
+    private ArgumentImpl argument(final String name, final int minimum, final int maximum) {
+        return new ArgumentImpl(name, null, minimum, maximum, '\0', '\0',
+                null, null, null, 0);
+    }
+
+    private WriteableCommandLineImpl commandLine(final ArgumentImpl root) {
+        return new WriteableCommandLineImpl(root, new ArrayList());
+    }
+
+    public void testUnexpectedValueUsesRawValueAndEmptyRootContext() throws Exception {
+        final ArgumentImpl input = argument("", 0, 0);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+        commandLine.addValue(input, "testfile.txt");
+
+        try {
+            input.validate(commandLine, input);
+            fail("An argument with maximum zero must reject a supplied value");
+        } catch (OptionException expected) {
+            assertEquals("Unexpected testfile.txt while processing ", expected.getMessage());
+        }
+    }
+
+    public void testUnexpectedValueReportsFirstValueBeyondMaximum() throws Exception {
+        final ArgumentImpl input = argument("", 0, 1);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+        commandLine.addValue(input, "first");
+        commandLine.addValue(input, "second");
+
+        try {
+            input.validate(commandLine, input);
+            fail("A second value must exceed an argument maximum of one");
+        } catch (OptionException expected) {
+            assertEquals("Unexpected second while processing ", expected.getMessage());
+        }
+    }
+
+    public void testValuesWithinConfiguredBoundsValidate() throws Exception {
+        final ArgumentImpl input = argument("input", 1, 2);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+        commandLine.addValue(input, "one");
+        commandLine.addValue(input, "two");
+
+        input.validate(commandLine, input);
+        assertEquals(Arrays.asList(new String[] { "one", "two" }),
+                commandLine.getValues(input));
+    }
+
+    public void testMissingRequiredValueIsRejected() throws Exception {
+        final ArgumentImpl input = argument("input", 1, 1);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+
+        try {
+            input.validate(commandLine, input);
+            fail("A required argument must reject an empty value list");
+        } catch (OptionException expected) {
+            assertTrue(expected.getMessage().indexOf("input") >= 0);
+        }
+    }
+
+    public void testAddingArgumentValueAlsoRecordsArgumentAsPresent() {
+        final ArgumentImpl input = argument("input", 0, 1);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+
+        commandLine.addValue(input, "value");
+
+        assertTrue(commandLine.hasOption(input));
+        assertEquals(Collections.singletonList("value"), commandLine.getValues(input));
+    }
+
+    public void testExplicitValuesTakePrecedenceOverDefaults() {
+        final ArgumentImpl input = argument("input", 0, 2);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+        final List defaults = Collections.singletonList("default");
+
+        commandLine.setDefaultValues(input, defaults);
+        commandLine.addValue(input, "specified");
+
+        assertEquals(Collections.singletonList("specified"), commandLine.getValues(input));
+    }
+
+    public void testDefaultsAreReturnedWhenNoExplicitValuesExist() {
+        final ArgumentImpl input = argument("input", 0, 2);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+        final List defaults = Collections.singletonList("default");
+
+        commandLine.setDefaultValues(input, defaults);
+
+        assertEquals(defaults, commandLine.getValues(input));
+    }
+
+    public void testBoundaryQuotesAreRemovedWithoutChangingUnquotedValue() {
+        final ArgumentImpl input = argument("input", 0, 1);
+
+        assertEquals("plain", input.stripBoundaryQuotes("plain"));
+        assertEquals("quoted value", input.stripBoundaryQuotes("\"quoted value\""));
+        assertEquals("quoted value", input.stripBoundaryQuotes("'quoted value'"));
+    }
+
+    public void testArgumentRootDoesNotClassifyDashPrefixedTextAsOption() {
+        final ArgumentImpl input = argument("input", 0, 1);
+        final WriteableCommandLineImpl commandLine = commandLine(input);
+
+        assertFalse(commandLine.looksLikeOption("--not-configured"));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeRegressionTest::testUnexpectedValueUsesRawValueAndEmptyRootContext
+ - org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeRegressionTest::testBoundaryQuotesAreRemovedWithoutChangingUnquotedValue
+ - org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeRegressionTest::testUnexpectedValueReportsFirstValueBeyondMaximum
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeRegressionTest::testBoundaryQuotesAreRemovedWithoutChangingUnquotedValue, org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeRegressionTest::testUnexpectedValueReportsFirstValueBeyondMaximum, org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeRegressionTest::testUnexpectedValueUsesRawValueAndEmptyRootContext

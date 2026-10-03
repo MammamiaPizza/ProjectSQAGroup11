@@ -1,0 +1,309 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 58  Version: Math-58b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.optimization.fitting.GaussianFitter
+Modified: org.apache.commons.math.optimization.fitting.GaussianFitter
+Triggers: org.apache.commons.math.optimization.fitting.GaussianFitterTest::testMath519
+
+Bug/specification summary:
+Bug report: MATH-519
+Trigger failures:
+- org.apache.commons.math.optimization.fitting.GaussianFitterTest::testMath519
+ --> org.apache.commons.math.exception.NotStrictlyPositiveException: -1.277 is smaller than, or equal to, the minimum (0)
+Modified: org.apache.commons.math.optimization.fitting.GaussianFitter
+
+Prompt-01 test plan:
+TARGETS: GaussianFitter.fit(), ParameterGuesser.guess(), basicGuess().
+TARGETS: GaussianFitter.gradient() computing partial derivatives of Gaussian.
+ORACLES: Fitted sigma>0, amplitude≥0; initial guess from ParameterGuesser must be valid.
+ORACLES: Gradient values match analytic derivatives of Gaussian.
+CASES: Normal symmetric peak with noise; minimal (3 points); all points identical.
+CASES: Boundary: monotonic increasing/no interior maximum; all same x.
+CASES: Error: null observations, empty array, single point.
+RISKS: Negative sigma arises from basicGuess() sorting/selection logic.
+RISKS: Cannot inspect exact test data; only known trigger MATH-519 NotStrictlyPositive.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.optimization.fitting.GaussianFitter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.optimization.fitting;
+public class GaussianFitter extends CurveFitter {
+public GaussianFitter(DifferentiableMultivariateVectorialOptimizer optimizer) {
+public double[] fit(double[] initialGuess) {
+final ParametricUnivariateRealFunction f = new ParametricUnivariateRealFunction() {
+private final ParametricUnivariateRealFunction g = new Gaussian.Parametric();
+public double value(double x, double[] p) {
+public double[] gradient(double x, double[] p) {
+public double[] fit() {
+final double[] guess = (new ParameterGuesser(getObservations())).guess();
+public static class ParameterGuesser {
+public ParameterGuesser(WeightedObservedPoint[] observations) {
+public double[] guess() {
+private double[] basicGuess(WeightedObservedPoint[] points) {
+private int findMaxY(WeightedObservedPoint[] points) {
+for (final WeightedObservedPoint point : points) {
+private boolean isBetween(double value, double boundary1, double boundary2) {
+private Comparator<WeightedObservedPoint> createWeightedObservedPointComparator() {
+public int compare(WeightedObservedPoint p1, WeightedObservedPoint p2) {
+
+/* HEADER */
+package org.apache.commons.math.optimization.fitting;
+import java.util.Arrays;
+import java.util.Comparator;
+import org.apache.commons.math.analysis.function.Gaussian;
+import org.apache.commons.math.analysis.ParametricUnivariateRealFunction;
+import org.apache.commons.math.exception.NullArgumentException;
+import org.apache.commons.math.exception.NumberIsTooSmallException;
+import org.apache.commons.math.exception.OutOfRangeException;
+import org.apache.commons.math.exception.ZeroException;
+import org.apache.commons.math.exception.NotStrictlyPositiveException;
+import org.apache.commons.math.exception.util.LocalizedFormats;
+import org.apache.commons.math.optimization.DifferentiableMultivariateVectorialOptimizer;
+import org.apache.commons.math.optimization.fitting.CurveFitter;
+import org.apache.commons.math.optimization.fitting.WeightedObservedPoint;
+public class GaussianFitter extends CurveFitter {
+
+/* METHOD GaussianFitter */
+public GaussianFitter(DifferentiableMultivariateVectorialOptimizer optimizer) {
+ super(optimizer);
+ }
+
+/* METHOD fit */
+public double[] fit(double[] initialGuess) {
+ final ParametricUnivariateRealFunction f = new ParametricUnivariateRealFunction() {
+ private final ParametricUnivariateRealFunction g = new Gaussian.Parametric();
+
+ public double value(double x, double[] p) {
+ double v = Double.POSITIVE_INFINITY;
+ try {
+ v = g.value(x, p);
+ } catch (NotStrictlyPositiveException e) {
+ // Do nothing.
+ }
+ return v;
+ }
+
+ public double[] gradient(double x, double[] p) {
+ double[] v = { Double.POSITIVE_INFINITY,
+ Double.POSITIVE_INFINITY,
+ Double.POSITIVE_INFINITY };
+ try {
+ v = g.gradient(x, p);
+ } catch (NotStrictlyPositiveException e) {
+ // Do nothing.
+ }
+ return v;
+ }
+ };
+
+ return fit(f, initialGuess);
+ }
+
+/* METHOD value */
+public double value(double x, double[] p) {
+ double v = Double.POSITIVE_INFINITY;
+ try {
+ v = g.value(x, p);
+ } catch (NotStrictlyPositiveException e) {
+ // Do nothing.
+ }
+ return v;
+ }
+
+/* METHOD gradient */
+public double[] gradient(double x, double[] p) {
+ double[] v = { Double.POSITIVE_INFINITY,
+ Double.POSITIVE_INFINITY,
+ Double.POSITIVE_INFINITY };
+ try {
+ v = g.gradient(x, p);
+ } catch (NotStrictlyPositiveException e) {
+ // Do nothing.
+ }
+ return v;
+ }
+
+/* METHOD ParameterGuesser */
+public ParameterGuesser(WeightedObservedPoint[] observations) {
+ if (observations == null) {
+ throw new NullArgumentException(LocalizedFormats.INPUT_ARRAY);
+ }
+ if (observations.length < 3) {
+ throw new NumberIsTooSmallException(observations.length, 3, true);
+ }
+ this.observations = observations.clone();
+ }
+
+/* METHOD fit */
+public double[] fit() {
+ final double[] guess = (new ParameterGuesser(getObservations())).guess();
+ return fit(new Gaussian.Parametric(), guess);
+ }
+
+/* METHOD guess */
+public double[] guess() {
+ if (parameters == null) {
+ parameters = basicGuess(observations);
+ }
+ return parameters.clone();
+ }
+
+/* METHOD createWeightedObservedPointComparator */
+private Comparator<WeightedObservedPoint> createWeightedObservedPointComparator() {
+ return new Comparator<WeightedObservedPoint>() {
+ public int compare(WeightedObservedPoint p1, WeightedObservedPoint p2) {
+ if (p1 == null && p2 == null) {
+ return 0;
+ }
+ if (p1 == null) {
+ return -1;
+ }
+ if (p2 == null) {
+ return 1;
+ }
+ if (p1.getX() < p2.getX()) {
+ return -1;
+ }
+ if (p1.getX() > p2.getX()) {
+ return 1;
+ }
+ if (p1.getY() < p2.getY()) {
+ return -1;
+ }
+ if (p1.getY() > p2.getY()) {
+ return 1;
+ }
+ if (p1.getWeight() < p2.getWeight()) {
+ return -1;
+ }
+ if (p1.getWeight() > p2.getWeight()) {
+ return 1;
+ }
+ return 0;
+ }
+ };
+ }
+
+/* METHOD compare */
+public int compare(WeightedObservedPoint p1, WeightedObservedPoint p2) {
+ if (p1 == null && p2 == null) {
+ return 0;
+ }
+ if (p1 == null) {
+ return -1;
+ }
+ if (p2 == null) {
+ return 1;
+ }
+ if (p1.getX() < p2.getX()) {
+ return -1;
+ }
+ if (p1.getX() > p2.getX()) {
+ return 1;
+ }
+ if (p1.getY() < p2.getY()) {
+ return -1;
+ }
+ if (p1.getY() > p2.getY()) {
+ return 1;
+ }
+ if (p1.getWeight() < p2.getWeight()) {
+ return -1;
+ }
+ if (p1.getWeight() > p2.getWeight()) {
+ return 1;
+ }
+ return 0;
+ }
+
+/* METHOD basicGuess */
+private double[] basicGuess(WeightedObservedPoint[] points) {
+ Arrays.sort(points, createWeightedObservedPointComparator());
+ double[] params = new double[3];
+
+ int maxYIdx = findMaxY(points);
+ params[0] = points[maxYIdx].getY();
+ params[1] = points[maxYIdx].getX();
+
+ double fwhmApprox;
+ try {
+ double halfY = params[0] + ((params[1] - params[0]) / 2.0);
+ double fwhmX1 = interpolateXAtY(points, maxYIdx, -1, halfY);
+ double fwhmX2 = interpolateXAtY(points, maxYIdx, +1, halfY);
+ fwhmApprox = fwhmX2 - fwhmX1;
+ } catch (OutOfRangeException e) {
+ fwhmApprox = points[points.length - 1].getX() - points[0].getX();
+ }
+ params[2] = fwhmApprox / (2.0 * Math.sqrt(2.0 * Math.log(2.0)));
+
+ return params;
+ }
+
+/* METHOD getInterpolationPointsForY */
+private WeightedObservedPoint[] getInterpolationPointsForY(WeightedObservedPoint[] points,
+ int startIdx, int idxStep, double y)
+ throws OutOfRangeException {
+ if (idxStep == 0) {
+ throw new ZeroException();
+ }
+ for (int i = startIdx;
+ (idxStep < 0) ? (i + idxStep >= 0) : (i + idxStep < points.length);
+ i += idxStep) {
+ if (isBetween(y, points[i].getY(), points[i + idxStep].getY())) {
+ return (idxStep < 0) ?
+ new WeightedObservedPoint[] { points[i + idxStep], points[i] } :
+ new WeightedObservedPoint[] { points[i], points[i + idxStep] };
+ }
+ }
+
+ double minY = Double.POSITIVE_INFINITY;
+ double maxY = Double.NEGATIVE_INFINITY;
+ for (final WeightedObservedPoint point : points) {
+ minY = Math.min(minY, point.getY());
+ maxY = Math.max(maxY, point.getY());
+ }
+ throw new OutOfRangeException(y, minY, maxY);
+ }
+
+/* METHOD interpolateXAtY */
+private double interpolateXAtY(WeightedObservedPoint[] points,
+ int startIdx, int idxStep, double y)
+ throws OutOfRangeException {
+ if (idxStep == 0) {
+ throw new ZeroException();
+ }
+ WeightedObservedPoint[] twoPoints = getInterpolationPointsForY(points, startIdx, idxStep, y);
+ WeightedObservedPoint pointA = twoPoints[0];
+ WeightedObservedPoint pointB = twoPoints[1];
+ if (pointA.getY() == y) {
+ return pointA.getX();
+ }
+ if (pointB.getY() == y) {
+ return pointB.getX();
+ }
+ return pointA.getX() +
+ (((y - pointA.getY()) * (pointB.getX() - pointA.getX())) /
+ (pointB.getY() - pointA.getY()));
+ }
+
+/* METHOD findMaxY */
+private int findMaxY(WeightedObservedPoint[] points) {
+ int maxYIdx = 0;
+ for (int i = 1; i < points.length; i++) {
+ if (points[i].getY() > points[maxYIdx].getY()) {
+ maxYIdx = i;
+ }
+ }
+ return maxYIdx;
+ }
+
+/* METHOD isBetween */
+private boolean isBetween(double value, double boundary1, double boundary2) {
+ return (value >= boundary1 && value <= boundary2) ||
+ (value >= boundary2 && value <= boundary1);
+ }

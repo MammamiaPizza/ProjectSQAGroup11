@@ -1,0 +1,189 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 69  Version: Jsoup-69b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 429
+Trigger failures:
+- org.jsoup.nodes.FormElementTest::removeFormElement
+ --> junit.framework.AssertionFailedError: expected:<2> but was:<3>
+Modified: org.jsoup.nodes.FormElement
+
+Available API/signatures:
+[org.jsoup.nodes.FormElement | java]
+package org.jsoup.nodes;
+public class FormElement extends Element {
+private final Elements elements = new Elements();
+public FormElement(Tag tag, String baseUri, Attributes attributes) {
+public Elements elements() {
+public FormElement addElement(Element element) {
+public Connection submit() {
+public List<Connection.KeyVal> formData() {
+final String val = el.val().length() > 0 ? el.val() : "on";
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+import org.jsoup.Connection;
+import org.jsoup.parser.Tag;
+import org.junit.Test;
+
+import java.util.List;
+
+import static org.junit.Assert.*;
+
+public class FormElementBugTest {
+
+ private FormElement createForm() {
+     return new FormElement(Tag.valueOf("form"), "http://example.com", new Attributes());
+ }
+
+ private Element createInput(String name, String value) {
+     Attributes attrs = new Attributes();
+     attrs.put("name", name);
+     attrs.put("value", value);
+     return new Element(Tag.valueOf("input"), "http://example.com", attrs);
+ }
+
+ @Test
+ public void testRemoveElementDecrementsSize() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     form.addElement(e1);
+     form.addElement(e2);
+     assertEquals(2, form.elements().size());
+     e1.remove();
+     assertEquals(1, form.elements().size());
+ }
+
+ @Test
+ public void testRemoveFirstChildDecrementsSize() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     Element e3 = createInput("c", "3");
+     form.addElement(e1);
+     form.addElement(e2);
+     form.addElement(e3);
+     e1.remove();
+     assertEquals(2, form.elements().size());
+     assertFalse(form.elements().contains(e1));
+     assertTrue(form.elements().contains(e2));
+     assertTrue(form.elements().contains(e3));
+ }
+
+ @Test
+ public void testRemoveLastChildDecrementsSize() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     form.addElement(e1);
+     form.addElement(e2);
+     e2.remove();
+     assertEquals(1, form.elements().size());
+ }
+
+ @Test
+ public void testRemoveMiddleChildDecrementsSize() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     Element e3 = createInput("c", "3");
+     form.addElement(e1);
+     form.addElement(e2);
+     form.addElement(e3);
+     e2.remove();
+     assertEquals(2, form.elements().size());
+ }
+
+ @Test
+ public void testRemoveAllChildrenEmptyElements() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     form.addElement(e1);
+     form.addElement(e2);
+     e1.remove();
+     e2.remove();
+     assertEquals(0, form.elements().size());
+ }
+
+ @Test
+ public void testRemoveChildNotInElementsDoesNotAffectSize() {
+     FormElement form = createForm();
+     Element input = createInput("a", "1");
+     Element div = new Element(Tag.valueOf("div"), "http://example.com");
+     form.addElement(input);
+     form.appendChild(div);
+     assertEquals(1, form.elements().size());
+     div.remove();
+     assertEquals(1, form.elements().size());
+ }
+
+ @Test
+ public void testRemoveViaParentRemoveChild() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     form.addElement(e1);
+     form.removeChild(e1);
+     assertEquals(0, form.elements().size());
+ }
+
+ @Test
+ public void testFormDataAfterRemoval() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     form.addElement(e1);
+     form.addElement(e2);
+     assertEquals(2, form.formData().size());
+     e1.remove();
+     List<Connection.KeyVal> data = form.formData();
+     assertEquals(1, data.size());
+     boolean foundRemoved = false;
+     for (Connection.KeyVal kv : data) {
+         if ("a".equals(kv.key())) {
+             foundRemoved = true;
+             break;
+         }
+     }
+     assertFalse(foundRemoved);
+ }
+
+ @Test
+ public void testFormDataAlRemoved() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     form.addElement(e1);
+     e1.remove();
+     assertEquals(0, form.formData().size());
+ }
+
+ @Test
+ public void testElementsSizeAfterMltipleAddRemove() {
+     FormElement form = createForm();
+     Element e1 = createInput("a", "1");
+     Element e2 = createInput("b", "2");
+     form.addElement(e1);
+     form.addElement(e2);
+     e1.remove();
+     assertEquals(1, form.elements().size());
+     Element e3 = createInput("c", "3");
+     form.addElement(e3);
+     assertEquals(2, form.elements().size());
+     e2.remove();
+     assertEquals(1, form.elements().size());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 9
+ - org.jsoup.nodes.FormElementBugTest::testRemoveAllChildrenEmptyElements
+ - org.jsoup.nodes.FormElementBugTest::testRemoveViaParentRemoveChild
+ - org.jsoup.nodes.FormElementBugTest::testRemoveMiddleChildDecrementsSize
+Failing generated tests: org.jsoup.nodes.FormElementBugTest::testElementsSizeAfterMltipleAddRemove, org.jsoup.nodes.FormElementBugTest::testFormDataAfterRemoval, org.jsoup.nodes.FormElementBugTest::testFormDataAlRemoved, org.jsoup.nodes.FormElementBugTest::testRemoveAllChildrenEmptyElements, org.jsoup.nodes.FormElementBugTest::testRemoveElementDecrementsSize, org.jsoup.nodes.FormElementBugTest::testRemoveFirstChildDecrementsSize, org.jsoup.nodes.FormElementBugTest::testRemoveLastChildDecrementsSize, org.jsoup.nodes.FormElementBugTest::testRemoveMiddleChildDecrementsSize, org.jsoup.nodes.FormElementBugTest::testRemoveViaParentRemoveChild

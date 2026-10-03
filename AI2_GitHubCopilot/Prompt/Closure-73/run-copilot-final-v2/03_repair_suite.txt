@@ -1,0 +1,142 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 73  Version: Closure-73b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 416
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testUnicode
+ --> junit.framework.ComparisonFailure: expected:<var x="[\u007f]"> but was:<var x="[]">
+Modified: com.google.javascript.jscomp.CodeGenerator
+
+Available API/signatures:
+[com.google.javascript.jscomp.CodeGenerator | java]
+package com.google.javascript.jscomp;
+class CodeGenerator {
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+static String jsString(String s, CharsetEncoder outputCharsetEncoder) {
+static String regexpEscape(String s, CharsetEncoder outputCharsetEncoder) {
+static String escapeToDoubleQuotedJsString(String s) {
+static String regexpEscape(String s) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+private Context clearContextForNoInOperator(Context context) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import junit.framework.TestCase;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+
+/**
+
+ - Tests for CodeGenerator string escaping, focusing on control characters
+ - and line terminators that must be escaped per ECMAScript, regardless of
+ - the output charset encoding.
+ -
+ - @see <a href="http://code.google.com/p/closure-compiler/issues/detail?id=416">Bug 416</a>
+  */
+ public class CodeGeneratorUnicodeTest extends TestCase {
+  /**
+  - Helper to obtain a UTF-8 CharsetEncoder; the bug manifests when the
+  - encoder considers a control character encodable.
+    */
+   private static CharsetEncoder utf8Encoder() {
+   return Charset.forName("UTF-8").newEncoder();
+   }
+  // ----------------------------------------------------------------
+  //  Basic safe characters
+  // ----------------------------------------------------------------
+  public void testJsStringWithNormalChar() {
+      String input = "A";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Unexecaped control char", result.contains("\u007f"));
+      assertTrue(result.contains("A"));
+  }
+  // ----------------------------------------------------------------
+  //  Control characters that MUST be escaped per JS spec
+  // ----------------------------------------------------------------
+  public void testEscapeDEL_U007f() {
+      String input = "\u007f";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw DEL char present", result.contains("\u007f"));
+      assertTrue("Missing \u007f escape", result.contains("\u007f"));
+  }
+  public void testEscapeDEL_U007fWithEncoder() {
+      String input = "\u007f";
+      String result = CodeGenerator.jsString(input, utf8Encoder());
+      assertFalse("Raw DEL char with encoder", result.contains("\u007f"));
+      assertTrue("Missing \u007f escape with encoder", result.contains("\u007f"));
+  }
+  public void testEscapeControlChar_U0001() {
+      String input = "\u0001";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw U+0001 present", result.contains("\u0001"));
+      assertTrue("Missing \u0001 escape", result.contains("\u0001"));
+  }
+  public void testEscapeControlChar_U001f() {
+      String input = "\u001f";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw U+001F present", result.contains("\u001f"));
+      assertTrue("Missing \u001f escape", result.contains("\u001f"));
+  }
+  public void testEscapeControlChar_U0080() {
+      String input = "\u0080";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw U+0080 present", result.contains("\u0080"));
+      assertTrue("Missing \u0080 escape", result.contains("\u0080"));
+  }
+  public void testEscapeControlChar_U009f() {
+      String input = "\u009f";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw U+009F present", result.contains("\u009f"));
+      assertTrue("Missing \u009f escape", result.contains("\u009f"));
+  }
+  // ----------------------------------------------------------------
+  //  Line terminators (U+2028 LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR)
+  // ----------------------------------------------------------------
+  public void testEscapeLineSep_U2028() {
+      String input = "\u2028";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw U+2028 present", result.contains("\u2028"));
+      assertTrue("Missing \u2028 escape", result.contains("\u2028"));
+  }
+  public void testEscapeLineSep_U2029() {
+      String input = "\u2029";
+      String result = CodeGenerator.jsString(input, null);
+      assertFalse("Raw U+2029 present", result.contains("\u2029"));
+      assertTrue("Missing \u2029 escape", result.contains("\u2029"));
+  }
+  // ----------------------------------------------------------------
+  //  Escape-to-double-quoted wrapper
+  // ----------------------------------------------------------------
+  public void testEscapeToDoubleQuotedJsStringRespectsEscaping() {
+      String input = "\u007f";
+      String result = CodeGenerator.escapeToDoubleQuotedJsString(input);
+      assertFalse("Raw DEL in double‑quoted result", result.contains("\u007f"));
+      assertTrue("Missing escape in double‑quoted result", result.contains("\u007f"));
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 9
+ - com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U0001
+ - com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U001f
+ - com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U0080
+Failing generated tests: com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U0001, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U001f, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U0080, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeControlChar_U009f, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeDEL_U007f, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeDEL_U007fWithEncoder, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeLineSep_U2028, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeLineSep_U2029, com.google.javascript.jscomp.CodeGeneratorUnicodeTest::testEscapeToDoubleQuotedJsStringRespectsEscaping

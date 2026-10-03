@@ -1,0 +1,242 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 3  Version: Collections-3b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Ant
+Bug/specification summary:
+Bug report: COLLECTIONS-219
+Trigger failures:
+- org.apache.commons.collections.TestCollectionUtils::testRemoveAll
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<2>
+Modified: org.apache.commons.collections.CollectionUtils
+
+Available API/signatures:
+[org.apache.commons.collections.CollectionUtils | java]
+package org.apache.commons.collections;
+public class CollectionUtils {
+private static Integer INTEGER_ONE = new Integer(1);
+public static final Collection EMPTY_COLLECTION = UnmodifiableCollection.decorate(new ArrayList());
+public CollectionUtils() {
+public static Collection union(final Collection a, final Collection b) {
+public static Collection intersection(final Collection a, final Collection b) {
+public static Collection disjunction(final Collection a, final Collection b) {
+public static Collection subtract(final Collection a, final Collection b) {
+public static boolean containsAny(final Collection coll1, final Collection coll2) {
+public static Map getCardinalityMap(final Collection coll) {
+public static boolean isSubCollection(final Collection a, final Collection b) {
+public static boolean isProperSubCollection(final Collection a, final Collection b) {
+public static boolean isEqualCollection(final Collection a, final Collection b) {
+public static int cardinality(Object obj, final Collection coll) {
+public static Object find(Collection collection, Predicate predicate) {
+public static void forAllDo(Collection collection, Closure closure) {
+public static void filter(Collection collection, Predicate predicate) {
+public static void transform(Collection collection, Transformer transformer) {
+public static int countMatches(Collection inputCollection, Predicate predicate) {
+public static boolean exists(Collection collection, Predicate predicate) {
+public static Collection select(Collection inputCollection, Predicate predicate) {
+public static void select(Collection inputCollection, Pred
+...[truncated deterministically]...
+lic static boolean isNotEmpty(Collection coll) {
+public static void reverseArray(Object[] array) {
+private static final int getFreq(final Object obj, final Map freqMap) {
+public static boolean isFull(Collection coll) {
+public static int maxSize(Collection coll) {
+public static Collection retainAll(Collection collection, Collection retain) {
+public static Collection removeAll(Collection collection, Collection remove) {
+public static Collection synchronizedCollection(Collection collection) {
+public static Collection unmodifiableCollection(Collection collection) {
+public static Collection predicatedCollection(Collection collection, Predicate predicate) {
+public static Collection typedCollection(Collection collection, Class type) {
+public static Collection transformedCollection(Collection collection, Transformer transformer) {
+
+Generated JUnit Test:
+package org.apache.commons.collections;
+
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.List;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for CollectionUtils.removeAll with cardinality-aware removal semantics.
+  * Bug COLLECTIONS-219: removeAll incorrectly delegates to ListUtils.retainAll
+  * instead of performing cardinality-based subtraction.
+  */
+ public class TestCollectionUtilsRemoveAll {
+
+     // --- removeAll cardinality tests ---
+
+     @Test
+     public void testRemoveAllWithDuplicatesInSourceOnly() {
+         // Source has duplicates of "A", remove has only one "A".
+         // Expected: one "A" remains after cardinality subtraction (2 - 1 = 1).
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "A", "B"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("A"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertEquals("Should retain one A and one B", 2, result.size());
+         assertEquals("Cardinality of A should be 1", 1,
+                 CollectionUtils.cardinality("A", result));
+         assertEquals("Cardinality of B should be 1", 1,
+                 CollectionUtils.cardinality("B", result));
+     }
+
+     @Test
+     public void testRemoveAllWithRemoveHasExtraCopies() {
+         // Remove has more copies than source; source should be fully depleted of that element.
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "B"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("A", "A", "A"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertEquals("Only B should remain", 1, result.size());
+         assertTrue("Result should contain B", result.contains("B"));
+         assertFalse("Result should not contain A", result.contains("A"));
+     }
+
+     @Test
+     public void testRemoveAllDisjointCollections() {
+         // No elements in common.
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "B"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("C", "D"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertEquals("All source elements should remain", 2, result.size());
+         assertTrue(result.contains("A"));
+         assertTrue(result.contains("B"));
+     }
+
+     @Test
+     public void testRemoveAllIdenticalCollections() {
+         // Removing the exact same multiset.
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "B", "A"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("A", "B", "A"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertTrue("Result should be empty when remove matches source exactly",
+                 result.isEmpty());
+     }
+
+     @Test
+     public void testRemoveAllRemoveSupersetOfElements() {
+         // Remove contains all distinct elements from source, each with high cardinality.
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "A", "B"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("A", "A", "A", "B", "B"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertTrue("Result should be empty when remove covers all source multiplicities",
+                 result.isEmpty());
+     }
+
+     @Test
+     public void testRemoveAllEmptySource() {
+         List<String> source = new ArrayList<String>();
+         List<String> remove = new ArrayList<String>(Arrays.asList("A", "B"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertTrue("Removing from empty source should yield empty collection",
+                 result.isEmpty());
+     }
+
+     @Test
+     public void testRemoveAllEmptyRemove() {
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "B", "C"));
+         List<String> remove = new ArrayList<String>();
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertEquals("Source should be unchanged when remove is empty", 3, result.size());
+         assertTrue(result.contains("A"));
+         assertTrue(result.contains("B"));
+         assertTrue(result.contains("C"));
+     }
+
+     @Test
+     public void testRemoveAllBothEmpty() {
+         List<String> source = new ArrayList<String>();
+         List<String> remove = new ArrayList<String>();
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertTrue("Removing empty from empty should yield empty", result.isEmpty());
+     }
+
+     @Test
+     public void testRemoveAllWithNullElementsInSource() {
+         List<String> source = new ArrayList<String>();
+         source.add(null);
+         source.add(null);
+         source.add("A");
+         List<String> remove = new ArrayList<String>();
+         remove.add(null);
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         assertEquals("One null and one A should remain", 2, result.size());
+         assertEquals("Cardinality of null should be 1", 1,
+                 CollectionUtils.cardinality(null, result));
+         assertEquals("Cardinality of A should be 1", 1,
+                 CollectionUtils.cardinality("A", result));
+     }
+
+     @Test
+     public void testRemoveAllSourceUnchanged() {
+         // removeAll returns a new collection; the source collection should not be modified.
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "B", "A"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("A"));
+         int originalSize = source.size();
+
+         CollectionUtils.removeAll(source, remove);
+
+         assertEquals("Source collection should remain unchanged", originalSize, source.size());
+         assertEquals("Source should still have cardinality 2 for A", 2,
+                 CollectionUtils.cardinality("A", source));
+     }
+
+     @Test
+     public void testRemoveAllResultIsIndependent() {
+         // Mutating the returned collection should not affect the original source.
+         List<String> source = new ArrayList<String>(Arrays.asList("A", "B"));
+         List<String> remove = new ArrayList<String>(Arrays.asList("A"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+         result.clear();
+
+         assertEquals("Clearing result should not affect source", 2, source.size());
+     }
+
+     @Test
+     public void testRemoveAllCardinalityAcrossMultipleElements() {
+         // Comprehensive test: multiple elements with varying cardinalities.
+         List<String> source = new ArrayList<String>(Arrays.asList(
+                 "A", "A", "A", "B", "B", "C"));
+         List<String> remove = new ArrayList<String>(Arrays.asList(
+                 "A", "A", "B", "C", "C"));
+
+         Collection result = CollectionUtils.removeAll(source, remove);
+
+         // Expected: A: 3-2=1, B: 2-1=1, C: 1-1=0, extra C in remove ignored
+         assertEquals("Total size should be 2", 2, result.size());
+         assertEquals("Cardinality of A", 1, CollectionUtils.cardinality("A", result));
+         assertEquals("Cardinality of B", 1, CollectionUtils.cardinality("B", result));
+         assertEquals("Cardinality of C", 0, CollectionUtils.cardinality("C", result));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - org.apache.commons.collections.TestCollectionUtilsRemoveAll::testRemoveAllWithDuplicatesInSourceOnly
+ - org.apache.commons.collections.TestCollectionUtilsRemoveAll::testRemoveAllWithNullElementsInSource
+ - org.apache.commons.collections.TestCollectionUtilsRemoveAll::testRemoveAllCardinalityAcrossMultipleElements
+Failing generated tests: org.apache.commons.collections.TestCollectionUtilsRemoveAll::testRemoveAllCardinalityAcrossMultipleElements, org.apache.commons.collections.TestCollectionUtilsRemoveAll::testRemoveAllWithDuplicatesInSourceOnly, org.apache.commons.collections.TestCollectionUtilsRemoveAll::testRemoveAllWithNullElementsInSource

@@ -1,0 +1,363 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Time  Bug: 26  Version: Time-26b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.joda.time.chrono.ZonedChronology, org.joda.time.DateTimeZone, org.joda.time.field.LenientDateTimeField
+Modified: org.joda.time.chrono.ZonedChronology, org.joda.time.DateTimeZone, org.joda.time.field.LenientDateTimeField
+Triggers: org.joda.time.TestDateTimeZoneCutover::testWithSecondOfMinuteInDstChange, org.joda.time.TestDateTimeZoneCutover::testWithMinuteOfHourInDstChange, org.joda.time.TestDateTimeZoneCutover::testWithMinuteOfHourInDstChange_mockZone, org.joda.time.TestDateTimeZoneCutover::testBug2182444_usCentral, org.joda.time.TestDateTimeZoneCutover::testWithMillisOfSecondInDstChange_Paris_summer, org.joda.time.TestDateTimeZoneCutover::testWithHourOfDayInDstChange, org.joda.time.TestDateTimeZoneCutover::testWithMillisOfSecondInDstChange_NewYork_winter, org.joda.time.TestDateTimeZoneCutover::testBug2182444_ausNSW
+
+Bug/specification summary:
+Bug report: 60
+Trigger failures:
+- org.joda.time.TestDateTimeZoneCutover::testWithSecondOfMinuteInDstChange
+ --> junit.framework.ComparisonFailure: expected:<...10-31T02:30:00.123+0[2]:00> but was:<...10-31T02:30:00.123+0[1]:00>
+ - org.joda.time.TestDateTimeZoneCutover::testWithMinuteOfHourInDstChange
+ --> junit.framework.ComparisonFailure: expected:<...10-31T02:00:10.123+0[2]:00> but was:<...10-31T02:00:10.123+0[1]:00>
+ - org.joda.time.TestDateTimeZoneCutover::testWithMinuteOfHourInDstChange_mockZone
+ --> junit.framework.ComparisonFailure: expected:<...10-31T01:30:00.000+0[1:0]0> but was:<...10-31T01:30:00.000+0[0:3]0>
+ - org.joda.time.TestDateTimeZoneCutover::testBug2182444_usCentral
+ --> junit.framework.AssertionFailedError: expected:<2008-11-02T01:00:00.000-06:00> but was:<2008-11-02T01:00:00.000-05:00>
+ - org.joda.time.TestDateTimeZoneCutover::testWithMillisOfSecondInDstChange_Pari
+...[truncated deterministically]...
+as:<...10-31T02:30:10.123+0[1]:00>
+ - org.joda.time.TestDateTimeZoneCutover::testWithMillisOfSecondInDstChange_NewYork_winter
+ --> junit.framework.ComparisonFailure: expected:<...11-04T01:30:00.000-0[5]:00> but was:<...11-04T01:30:00.000-0[4]:00>
+ - org.joda.time.TestDateTimeZoneCutover::testBug2182444_ausNSW
+ --> junit.framework.AssertionFailedError: expected:<2008-04-06T02:00:00.000+11:00> but was:<2008-04-06T02:00:00.000+10:00>
+Modified: org.joda.time.chrono.ZonedChronology, org.joda.time.DateTimeZone, org.joda.time.field.LenientDateTimeField
+
+Prompt-01 test plan:
+TARGETS: ZonedChronology.localToUTC, convertField, LenientDateTimeField.set,
+DateTimeZone.convertLocalToUTC, getOffsetFromLocal
+
+ORACLES: Expected offsets from IANA tz rules (e.g., Paris fall-back 2010-10-31 +02:00→+01:00); Joda
+DateTime.with* retains original offset in DST overlap
+
+CASES: Normal: set fields far from DST → offset unchanged. Boundary: set at DST start (gap) & end
+(overlap). Error: spring-forward skip → lenient adjustment. fall-back: preserve original offset.
+Mock zone transitions withBug2182444
+
+RISKS: LenientDateTimeField.set may convert via UTC ignoring original offset hint; tests sensitive
+to zone + DST transition instant selection; must match internal lenient rounding
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.joda.time.chrono.ZonedChronology (java) =====
+/* API SIGNATURES */
+package org.joda.time.chrono;
+public final class ZonedChronology extends AssembledChronology {
+public static ZonedChronology getInstance(Chronology base, DateTimeZone zone) {
+static boolean useTimeArithmetic(DurationField field) {
+private ZonedChronology(Chronology base, DateTimeZone zone) {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+private long localToUTC(long instant) {
+protected void assemble(Fields fields) {
+private DurationField convertField(DurationField field, HashMap<Object, Object> converted) {
+private DateTimeField convertField(DateTimeField field, HashMap<Object, Object> converted) {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+static class ZonedDurationField extends BaseDurationField {
+public boolean isPrecise() {
+public long getUnitMillis() {
+public int g
+...[truncated deterministically]...
+mumValue(long instant) {
+public int getMinimumValue(ReadablePartial instant) {
+public int getMinimumValue(ReadablePartial instant, int[] values) {
+public int getMaximumValue() {
+public int getMaximumValue(long instant) {
+public int getMaximumValue(ReadablePartial instant) {
+public int getMaximumValue(ReadablePartial instant, int[] values) {
+public int getMaximumTextLength(Locale locale) {
+public int getMaximumShortTextLength(Locale locale) {
+
+/* HEADER */
+package org.joda.time.chrono;
+import java.util.HashMap;
+import java.util.Locale;
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeConstants;
+import org.joda.time.DateTimeField;
+import org.joda.time.DateTimeZone;
+import org.joda.time.DurationField;
+import org.joda.time.IllegalFieldValueException;
+import org.joda.time.Instant;
+import org.joda.time.ReadablePartial;
+import org.joda.time.field.BaseDateTimeField;
+import org.joda.time.field.BaseDurationField;
+import org.joda.time.format.DateTimeFormat;
+
+/* METHOD ZonedChronology */
+private ZonedChronology(Chronology base, DateTimeZone zone) {
+ super(base, zone);
+ }
+
+/* METHOD getInstance */
+public static ZonedChronology getInstance(Chronology base, DateTimeZone zone) {
+ if (base == null) {
+ throw new IllegalArgumentException("Must supply a chronology");
+ }
+ base = base.withUTC();
+ if (base == null) {
+ throw new IllegalArgumentException("UTC chronology must not be null");
+ }
+ if (zone == null) {
+ throw new IllegalArgumentException("DateTimeZone must not be null");
+ }
+ return new ZonedChronology(base, zone);
+ }
+
+/* METHOD withZone */
+public Chronology withZone(DateTimeZone zone) {
+ if (zone == null) {
+ zone = DateTimeZone.getDefault();
+ }
+ if (zone == getParam()) {
+ return this;
+ }
+ if (zone == DateTimeZone.UTC) {
+ return getBase();
+ }
+ return new ZonedChronology(getBase(), zone);
+ }
+
+/* METHOD getZone */
+public DateTimeZone getZone() {
+ return (DateTimeZone)getParam();
+ }
+
+/* METHOD getDateTimeMillis */
+public long getDateTimeMillis(int year, int monthOfYear, int dayOfMonth,
+ int millisOfDay)
+ throws IllegalArgumentException
+ {
+ return localToUTC(getBase().getDateTimeMillis
+ (year, monthOfYear, dayOfMonth, millisOfDay));
+ }
+
+/* METHOD getDateTimeMillis */
+public long getDateTimeMillis(int year, int monthOfYear, int dayOfMonth,
+ int hourOfDay, int minuteOfHour,
+ int secondOfMinute, int millisOfSecond)
+ throws IllegalArgumentException
+ {
+ return localToUTC(getBase().getDateTimeMillis
+ (year, monthOfYear, dayOfMonth, 
+ hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond));
+ }
+
+/* METHOD getDateTimeMillis */
+public long getDateTimeMillis(long instant,
+ int hourOfDay, int minuteOfHour,
+ int secondOfMinute, int millisOfSecond)
+ throws IllegalArgumentException
+ {
+ return localToUTC(getBase().getDateTimeMillis
+ (instant + getZone().getOffset(instant),
+ hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond));
+ }
+
+===== org.joda.time.DateTimeZone (java) =====
+/* API SIGNATURES */
+package org.joda.time;
+public abstract class DateTimeZone implements Serializable {
+public static final DateTimeZone UTC = new FixedDateTimeZone("UTC", "UTC", 0, 0);
+public static DateTimeZone getDefault() {
+synchronized(DateTimeZone.class) {
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+@FromString
+public static DateTimeZone forID(String id) {
+public static DateTimeZone forOffsetHours(int hoursOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetMillis(int millisOffset) {
+public static DateTimeZone forTimeZone(TimeZone zone) {
+final String id = zone.getID();
+private static synchronized DateTimeZone fixedOffsetZone(String id, int offset) {
+public static Set<String> getAvailableIDs() {
+public static Provid
+...[truncated deterministically]...
+(long instant);
+public java.util.TimeZone toTimeZone() {
+public abstract boolean equals(Object object);
+public int hashCode() {
+protected Object writeReplace() throws ObjectStreamException {
+private static final class Stub implements Serializable {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException {
+private Object readResolve() throws ObjectStreamException {
+
+/* HEADER */
+package org.joda.time;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectStreamException;
+import java.io.Serializable;
+import java.lang.ref.Reference;
+import java.lang.ref.SoftReference;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import org.joda.convert.FromString;
+import org.joda.convert.ToString;
+import org.joda.time.chrono.BaseChronology;
+import org.joda.time.field.FieldUtils;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.DateTimeFormatterBuilder;
+import org.joda.time.format.FormatUtils;
+import org.joda.time.tz.DefaultNameProvider;
+import org.joda.time.tz.FixedDateTimeZone;
+import org.joda.time.tz.NameProvider;
+import org.joda.time.tz.Provider;
+import org.joda.time.tz.UTCProvider;
+import org.joda.time.tz.ZoneInfoProvider;
+
+/* METHOD DateTimeZone */
+protected DateTimeZone(String id) {
+ if (id == null) {
+ throw new IllegalArgumentException("Id must not be null");
+ }
+ iID = id;
+ }
+
+/* METHOD parseOffset */
+private static int parseOffset(String str) {
+ // Can't use a real chronology if called during class
+ // initialization.
+...[truncated deterministically]...
+public DateTimeZone getZone() {
+ return null;
+ }
+ public Chronology withUTC() {
+ return this;
+ }
+ public Chronology withZone(DateTimeZone zone) {
+ return this;
+ }
+ public String toString() {
+ return getClass().getName();
+ }
+ };
+ return -(int) offsetFormatter().withChronology(chrono).parseMillis(str);
+ }
+
+/* METHOD setDefault */
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+ SecurityManager sm = System.getSecurityManager();
+ if (sm != null) {
+ sm.checkPermission(new JodaTimePermission("DateTimeZone.setDefault"));
+ }
+ if (zone == null) {
+ throw new IllegalArgumentException("The datetime zone must not be null");
+ }
+ synchronized(DateTimeZone.class) {
+ cDefault = zone;
+ }
+ }
+
+/* METHOD forOffsetHoursMinutes */
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+ if (hoursOffset == 0 && minutesOffset == 0) {
+ return DateTimeZone.UTC;
+ }
+ if (minutesOffset < 0 || minutesOffset > 59) {
+ throw new IllegalArgumentException("Minutes out of range: " + minutesOffset);
+ }
+ int offset = 0;
+ try {
+ int hoursInMinut
+...[truncated deterministically]...
+utesOffset, DateTimeConstants.MILLIS_PER_MINUTE);
+ } catch (ArithmeticException ex) {
+ throw new IllegalArgumentException("Offset is too large");
+ }
+ return forOffsetMillis(offset);
+ }
+
+===== org.joda.time.field.LenientDateTimeField (java) =====
+/*
+ * Copyright 2001-2007 Stephen Colebourne
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.joda.time.field;
+
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeField;
+
+/**
+ * Converts a strict DateTimeField into a lenient one. By being lenient, the
+ * set method accepts out of bounds values, performing an addition instead.
+ * <p>
+ * LenientDateTimeField is thread-safe and immutable.
+ *
+ * @author Brian S O'Neill
+ * @see org.joda.time.chrono.LenientChronology
+ * @see StrictDateTimeField
+ * @since 1.0
+ */
+public class LenientDateTimeField extends DelegatedDateTimeField {
+
+ private static final long serialVersionUID = 8714085824173290599L;
+
+ private final Chronology iBase;
+
+ /**
+ * Returns a lenient version of the given field. If it is already lenient,
+ * then it is returned as-is. Otherwise, a new LenientDateTimeField is
+ * returned.
+ */
+ public static DateTimeField getInstance(DateTimeField field, Chronology base) {
+ if (field == null) {
+ return null;
+ }
+ if (field instanceof StrictDateTimeField) {
+ field = ((StrictDateTimeField)field).getWrappedField();
+ }
+ if (field.isLenient()) {
+ return field;
+ }
+ return new LenientDateTimeField(field, base);
+ }
+
+ protected LenientDateTimeField(DateTimeField field, Chronology base) {
+ super(field);
+ iBase = base;
+ }
+
+ public final boolean isLenient() {
+ return true;
+ }
+
+ /**
+ * Set values which may be out of bounds by adding the difference between
+ * the new value and the current value.
+ */
+ public long set(long instant, int value) {
+ // lenient needs to handle time zone chronologies
+ // so we do the calculation using local milliseconds
+ long localInstant = iBase.getZone().convertUTCToLocal(instant);
+ long difference = FieldUtils.safeSubtract(value, get(instant));
+ localInstant = getType().getField(iBase.withUTC()).add(localInstant, difference);
+ return iBase.getZone().convertLocalToUTC(localInstant, false);
+ }
+}

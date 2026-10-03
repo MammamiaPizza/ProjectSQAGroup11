@@ -1,0 +1,235 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 33  Version: Math-33b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-781
+Trigger failures:
+- org.apache.commons.math3.optimization.linear.SimplexSolverTest::testMath781
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math3.optimization.linear.SimplexTableau
+
+Available API/signatures:
+[org.apache.commons.math3.optimization.linear.SimplexTableau | java]
+package org.apache.commons.math3.optimization.linear;
+class SimplexTableau implements Serializable {
+private final List<String> columnLabels = new ArrayList<String>();
+protected void initializeColumnLabels() {
+protected RealMatrix createTableau(final boolean maximize) {
+public List<LinearConstraint> normalizeConstraints(Collection<LinearConstraint> originalConstraints) {
+private LinearConstraint normalize(final LinearConstraint constraint) {
+protected final int getNumObjectiveFunctions() {
+private int getConstraintTypeCounts(final Relationship relationship) {
+for (final LinearConstraint constraint : constraints) {
+protected static double getInvertedCoefficientSum(final RealVector coefficients) {
+protected Integer getBasicRow(final int col) {
+final double entry = getEntry(i, col);
+protected void dropPhase1Objective() {
+final double entry = tableau.getEntry(0, i);
+private void copyArray(final double[] src, final double[] dest) {
+protected PointValuePair getSolution() {
+protected void divideRow(final int dividendRow, final double divisor) {
+protected final int getWidth() {
+protected final int getHeight() {
+protected final double getEntry(final int row, final int column) {
+protected final int getSlackVariableOffset() {
+protected final int getArtificialVariableOffset() {
+protected final int getRhsOffset() {
+protected final int getNumDecisionVariables() {
+protected final int getOriginalNumDecisionVariables() {
+protected final int getNumSlackVariables() {
+protected final int getNumArtificialVariables() {
+protected final double[][] getData() {
+@Override
+public boolean equals(Object other) {
+public int hashCode() {
+private void writeObject(ObjectOutputStream oos)
+private void readObject(ObjectInputStream ois)
+
+Generated JUnit Test:
+package org.apache.commons.math3.optimization.linear;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Arrays;
+import java.util.List;
+
+import org.apache.commons.math3.optimization.GoalType;
+import org.apache.commons.math3.optimization.PointValuePair;
+import org.junit.Test;
+
+public class SimplexTableauTest {
+
+    private static final double EPS = 1e-9;
+
+    @Test
+    public void testNormalizesNegativeRightHandSideAndReversesRelationship() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 1.0, 2.0 }, 0.0);
+        LinearConstraint original =
+                new LinearConstraint(new double[] { 3.0, -4.0 }, Relationship.LEQ, -5.0);
+
+        SimplexTableau tableau = new SimplexTableau(
+                objective, Arrays.asList(original), GoalType.MAXIMIZE, true, EPS);
+
+        List<LinearConstraint> normalized = tableau.normalizeConstraints(Arrays.asList(original));
+        assertEquals(1, normalized.size());
+        assertEquals(Relationship.GEQ, normalized.get(0).getRelationship());
+        assertEquals(5.0, normalized.get(0).getValue(), EPS);
+        assertArrayEquals(new double[] { -3.0, 4.0 },
+                          normalized.get(0).getCoefficients().toArray(), EPS);
+    }
+
+    @Test
+    public void testMaximizationTableauContainsObjectiveSlackAndRhs() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 3.0 }, 2.0);
+        LinearConstraint constraint =
+                new LinearConstraint(new double[] { 4.0 }, Relationship.LEQ, 7.0);
+
+        SimplexTableau tableau = new SimplexTableau(
+                objective, Arrays.asList(constraint), GoalType.MAXIMIZE, true, EPS);
+
+        assertEquals(2, tableau.getHeight());
+        assertEquals(4, tableau.getWidth());
+        assertEquals(1, tableau.getNumObjectiveFunctions());
+        assertEquals(1, tableau.getNumDecisionVariables());
+        assertEquals(1, tableau.getNumSlackVariables());
+        assertEquals(0, tableau.getNumArtificialVariables());
+        assertEquals(3.0, tableau.getEntry(0, 0), EPS);
+        assertEquals(-3.0, tableau.getEntry(0, 1), EPS);
+        assertEquals(2.0, tableau.getEntry(0, tableau.getRhsOffset()), EPS);
+        assertEquals(4.0, tableau.getEntry(1, 1), EPS);
+        assertEquals(1.0, tableau.getEntry(1, tableau.getSlackVariableOffset()), EPS);
+        assertEquals(7.0, tableau.getEntry(1, tableau.getRhsOffset()), EPS);
+    }
+
+    @Test
+    public void testGeqConstraintCreatesPhaseOneObjectiveAndArtificialVariable() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 1.0 }, 0.0);
+        LinearConstraint constraint =
+                new LinearConstraint(new double[] { 2.0 }, Relationship.GEQ, 3.0);
+
+        SimplexTableau tableau = new SimplexTableau(
+                objective, Arrays.asList(constraint), GoalType.MINIMIZE, true, EPS);
+
+        assertEquals(2, tableau.getNumObjectiveFunctions());
+        assertEquals(1, tableau.getNumSlackVariables());
+        assertEquals(1, tableau.getNumArtificialVariables());
+        assertEquals(3, tableau.getHeight());
+        assertEquals(6, tableau.getWidth());
+        assertEquals(-1.0, tableau.getEntry(0, 0), EPS);
+        assertEquals(-1.0, tableau.getEntry(1, 1), EPS);
+        assertEquals(-1.0, tableau.getEntry(2, tableau.getSlackVariableOffset()), EPS);
+        assertEquals(1.0, tableau.getEntry(2, tableau.getArtificialVariableOffset()), EPS);
+        assertEquals(3.0, tableau.getEntry(2, tableau.getRhsOffset()), EPS);
+    }
+
+    @Test
+    public void testBasicRowRecognizesUnitColumnsOnly() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 1.0 }, 0.0);
+        LinearConstraint constraint =
+                new LinearConstraint(new double[] { 2.0 }, Relationship.LEQ, 3.0);
+
+        SimplexTableau tableau = new SimplexTableau(
+                objective, Arrays.asList(constraint), GoalType.MAXIMIZE, true, EPS);
+
+        assertEquals(Integer.valueOf(1), tableau.getBasicRow(tableau.getSlackVariableOffset()));
+        assertNull(tableau.getBasicRow(1));
+        assertNull(tableau.getBasicRow(tableau.getRhsOffset()));
+    }
+
+    @Test
+    public void testDropPhaseOneObjectiveRemovesPhaseOneRow() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 1.0 }, 0.0);
+        LinearConstraint constraint =
+                new LinearConstraint(new double[] { 1.0 }, Relationship.EQ, 2.0);
+
+        SimplexTableau tableau = new SimplexTableau(
+                objective, Arrays.asList(constraint), GoalType.MAXIMIZE, true, EPS);
+
+        assertEquals(2, tableau.getNumObjectiveFunctions());
+        tableau.dropPhase1Objective();
+
+        assertEquals(1, tableau.getNumObjectiveFunctions());
+        assertEquals(0, tableau.getNumArtificialVariables());
+        assertEquals(2, tableau.getHeight());
+        assertEquals(4, tableau.getWidth());
+    }
+
+    @Test
+    public void testSolutionExtractionDoesNotAssignSameBasicRowToTwoVariables() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 0.0, 0.0 }, 0.0);
+        LinearConstraint constraint =
+                new LinearConstraint(new double[] { 1.0, 1.0 }, Relationship.EQ, 1.0);
+
+        SimplexTableau tableau = new SimplexTableau(
+                objective, Arrays.asList(constraint), GoalType.MAXIMIZE, true, EPS);
+        tableau.dropPhase1Objective();
+
+        PointValuePair solution = tableau.getSolution();
+
+        assertArrayEquals(new double[] { 1.0, 0.0 }, solution.getPoint(), EPS);
+        assertEquals(0.0, solution.getValue(), EPS);
+        assertEquals(1.0, solution.getPoint()[0] + solution.getPoint()[1], EPS);
+    }
+
+    @Test
+    public void testSolverHandlesMixedEqualityAndInequalityConstraints() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 3.0, 2.0 }, 0.0);
+
+        PointValuePair solution = new SimplexSolver().optimize(
+                objective,
+                Arrays.asList(
+                        new LinearConstraint(new double[] { 1.0, 1.0 }, Relationship.EQ, 4.0),
+                        new LinearConstraint(new double[] { 1.0, 0.0 }, Relationship.GEQ, 1.0),
+                        new LinearConstraint(new double[] { 0.0, 1.0 }, Relationship.GEQ, 1.0)),
+                GoalType.MAXIMIZE,
+                true);
+
+        assertNotNull(solution);
+        assertArrayEquals(new double[] { 3.0, 1.0 }, solution.getPoint(), EPS);
+        assertEquals(11.0, solution.getValue(), EPS);
+    }
+
+    @Test
+    public void testSolverReturnsNegativeValueForUnrestrictedVariable() {
+        LinearObjectiveFunction objective =
+                new LinearObjectiveFunction(new double[] { 1.0 }, 0.0);
+
+        PointValuePair solution = new SimplexSolver().optimize(
+                objective,
+                Arrays.asList(
+                        new LinearConstraint(new double[] { 1.0 }, Relationship.GEQ, -2.0),
+                        new LinearConstraint(new double[] { 1.0 }, Relationship.LEQ, 5.0)),
+                GoalType.MINIMIZE,
+                false);
+
+        assertNotNull(solution);
+        assertEquals(-2.0, solution.getPoint()[0], EPS);
+        assertEquals(-2.0, solution.getValue(), EPS);
+        assertTrue(solution.getPoint()[0] >= -2.0 - EPS);
+        assertTrue(solution.getPoint()[0] <= 5.0 + EPS);
+        assertFalse(solution.getPoint()[0] >= 0.0);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.math3.optimization.linear.SimplexTableauTest::testMaximizationTableauContainsObjectiveSlackAndRhs
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.math3.optimization.linear.SimplexTableauTest::testMaximizationTableauContainsObjectiveSlackAndRhs

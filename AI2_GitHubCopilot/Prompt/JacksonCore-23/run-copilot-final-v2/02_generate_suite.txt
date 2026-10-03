@@ -1,0 +1,387 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 23  Version: JacksonCore-23b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+Modified: com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+Triggers: com.fasterxml.jackson.core.util.TestDefaultPrettyPrinter::testInvalidSubClass
+
+Bug/specification summary:
+Bug report: 502
+Trigger failures:
+- com.fasterxml.jackson.core.util.TestDefaultPrettyPrinter::testInvalidSubClass
+ --> junit.framework.AssertionFailedError: Should not pass
+Modified: com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+
+Prompt-01 test plan:
+TARGETS: createInstance() subclass validation, withArrayIndenter, withObjectIndenter,
+writeRootValueSeparator
+ORACLES: IllegalArgumentException from createInstance for subclass returning wrong class; output via
+JsonGenerator
+CASES: createInstance() returns same class (pass), returns different class (must throw); null/empty
+rootSeparator
+CASES: indenter substitution propagation to new instance; serialization output consistency after
+indent change
+RISKS: unknown exact validation logic; must infer from "Should not pass" that fix enforces class
+identity
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.util.DefaultPrettyPrinter (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.util;
+@SuppressWarnings("serial")
+public class DefaultPrettyPrinter
+public final static SerializedString DEFAULT_ROOT_VALUE_SEPARATOR = new SerializedString(" ");
+public interface Indenter
+protected Indenter _arrayIndenter = FixedSpaceIndenter.instance;
+protected Indenter _objectIndenter = DefaultIndenter.SYSTEM_LINEFEED_INSTANCE;
+protected final SerializableString _rootSeparator;
+protected boolean _spacesInObjectEntries = true;
+protected transient int _nesting;
+protected Separators _separators;
+protected String _objectFieldValueSeparatorWithSpaces;
+public DefaultPrettyPrinter() {
+public DefaultPrettyPrinter(String rootSeparator) {
+public DefaultPrettyPrinter(SerializableString rootSeparator) {
+public DefaultPrettyPrinter(DefaultPrettyPrinter base) {
+public DefaultPrettyPrinter withRootSeparator(SerializableString rootSeparator)
+public DefaultPrettyPrinter withRootSeparator(String rootSeparator) {
+public void indentArraysWith(Indenter i) {
+public void indentObjectsWith(Indenter i) {
+public DefaultPrettyPrinter withArrayIndenter(Indenter i) {
+public DefaultPrettyPrinter withObjectIndenter(Indenter i) {
+public DefaultPrettyPrinter withSpacesInObjectEntries() {
+public DefaultPrettyPrinter withoutSpacesInObjectEntries() {
+protected DefaultPrettyPrinter _withSpaces(boolean state)
+public DefaultPrettyPrinter withSeparators(Separators separators) {
+@Override
+public DefaultPrettyPrinter createInstance() {
+public void writeRootValueSeparator(JsonGenerator g) throws IOException
+public void writeStartObject(JsonGenerator g) throws IOException
+public void beforeObjectEntries(JsonGenerator g) throws IOException
+public void writeObjectFieldValueSeparator(JsonGenerator g) throws IOException
+public void writeObjectEntrySeparator(JsonGenerator g) throws IOException
+public void writeEndObject(JsonGenerator g, int nrOfEntries) throws IOException
+public void writeStartArray(JsonGenerator g) throws IOException
+public void beforeArrayValues(JsonGenerator g) throws IOException {
+public void writeArrayValueSeparator(JsonGenerator g) throws IOException
+public void writeEndArray(JsonGenerator g, int nrOfValues) throws IOException
+public static class NopIndenter
+public static final NopIndenter instance = new NopIndenter();
+public void writeIndentation(JsonGenerator g, int level) throws IOException { }
+public boolean isInline() { return true; }
+public static class FixedSpaceIndenter extends NopIndenter
+public static final FixedSpaceIndenter instance = new FixedSpaceIndenter();
+public void writeIndentation(JsonGenerator g, int level) throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.util;
+import java.io.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.io.SerializedString;
+public class DefaultPrettyPrinter
+
+/* METHOD DefaultPrettyPrinter */
+public DefaultPrettyPrinter(DefaultPrettyPrinter base) {
+ this(base, base._rootSeparator);
+ }
+
+/* METHOD DefaultPrettyPrinter */
+public DefaultPrettyPrinter(DefaultPrettyPrinter base,
+ SerializableString rootSeparator)
+ {
+ _arrayIndenter = base._arrayIndenter;
+ _objectIndenter = base._objectIndenter;
+ _spacesInObjectEntries = base._spacesInObjectEntries;
+ _nesting = base._nesting;
+
+ _separators = base._separators;
+ _objectFieldValueSeparatorWithSpaces = base._objectFieldValueSeparatorWithSpaces;
+
+ _rootSeparator = rootSeparator;
+ }
+
+/* METHOD DefaultPrettyPrinter */
+public DefaultPrettyPrinter(String rootSeparator) {
+ this((rootSeparator == null) ? null : new SerializedString(rootSeparator));
+ }
+
+/* METHOD DefaultPrettyPrinter */
+public DefaultPrettyPrinter(SerializableString rootSeparator) {
+ _rootSeparator = rootSeparator;
+ withSeparators(DEFAULT_SEPARATORS);
+ }
+
+/* METHOD writeIndentation */
+void writeIndentation(JsonGenerator g, int level) throws IOException;
+
+ /**
+ * @return True if indenter is considered inline (does not add linefeeds),
+ * false otherwise
+ */
+ boolean isInline();
+ }
+
+ // // // Config, indentation
+
+ /**
+ * By default, let's use only spaces to separate array values.
+ */
+ protected Indenter _arrayIndenter = FixedSpaceIndenter.instance;
+
+ /**
+ * By default, let's use linefeed-adding indenter for separate
+ * object entries. We'll further configure indenter to use
+ * system-specific linefeeds, and 2 spaces per level (as opposed to,
+ * say, single tabs)
+ */
+ protected Indenter _objectIndenter = DefaultIndenter.SYSTEM_LINEFEED_INSTANCE;
+
+ /**
+ * String printed between root-level values, if any.
+ */
+ protected final SerializableString _rootSeparator;
+
+ // // // Config, other white space configuration
+
+ /**
+ * By default we will add spaces around colons used to
+ * separate object fields and values.
+ * If disabled, will not use spaces around colon.
+ */
+ protected boolean _spacesInObjectEntries = true;
+
+ // // // State:
+
+ /**
+ * Number of open levels of nesting. Used to determine amount of
+ * indentation to use.
+ */
+ protected transient int _nesting;
+
+ /**
+ * @since 2.9
+ */
+ protected Separators _separators;
+
+ /**
+ * @since 2.9
+ */
+ protected String _objectFieldValueSeparatorWithSpaces;
+
+ /*
+ /**********************************************************
+ /* Life-cycle (construct, configure)
+ /**********************************************************
+ */
+
+ public DefaultPrettyPrinter() {
+ this(DEFAULT_ROOT_VALUE_SEPARATOR);
+ }
+
+/* METHOD withRootSeparator */
+public DefaultPrettyPrinter withRootSeparator(SerializableString rootSeparator)
+ {
+ if (_rootSeparator == rootSeparator ||
+ (rootSeparator != null && rootSeparator.equals(_rootSeparator))) {
+ return this;
+ }
+ return new DefaultPrettyPrinter(this, rootSeparator);
+ }
+
+/* METHOD withRootSeparator */
+public DefaultPrettyPrinter withRootSeparator(String rootSeparator) {
+ return withRootSeparator((rootSeparator == null) ? null : new SerializedString(rootSeparator));
+ }
+
+/* METHOD withArrayIndenter */
+public DefaultPrettyPrinter withArrayIndenter(Indenter i) {
+ if (i == null) {
+ i = NopIndenter.instance;
+ }
+ if (_arrayIndenter == i) {
+ return this;
+ }
+ DefaultPrettyPrinter pp = new DefaultPrettyPrinter(this);
+ pp._arrayIndenter = i;
+ return pp;
+ }
+
+/* METHOD withObjectIndenter */
+public DefaultPrettyPrinter withObjectIndenter(Indenter i) {
+ if (i == null) {
+ i = NopIndenter.instance;
+ }
+ if (_objectIndenter == i) {
+ return this;
+ }
+ DefaultPrettyPrinter pp = new DefaultPrettyPrinter(this);
+ pp._objectIndenter = i;
+ return pp;
+ }
+
+/* METHOD withSpacesInObjectEntries */
+public DefaultPrettyPrinter withSpacesInObjectEntries() {
+ return _withSpaces(true);
+ }
+
+/* METHOD withoutSpacesInObjectEntries */
+public DefaultPrettyPrinter withoutSpacesInObjectEntries() {
+ return _withSpaces(false);
+ }
+
+/* METHOD _withSpaces */
+protected DefaultPrettyPrinter _withSpaces(boolean state)
+ {
+ if (_spacesInObjectEntries == state) {
+ return this;
+ }
+ DefaultPrettyPrinter pp = new DefaultPrettyPrinter(this);
+ pp._spacesInObjectEntries = state;
+ return pp;
+ }
+
+/* METHOD withSeparators */
+public DefaultPrettyPrinter withSeparators(Separators separators) {
+ _separators = separators;
+ _objectFieldValueSeparatorWithSpaces = " " + separators.getObjectFieldValueSeparator() + " ";
+ return this;
+ }
+
+/* METHOD createInstance */
+@Override
+ public DefaultPrettyPrinter createInstance() {
+ return new DefaultPrettyPrinter(this);
+ }
+
+/* METHOD writeRootValueSeparator */
+@Override
+ public void writeRootValueSeparator(JsonGenerator g) throws IOException
+ {
+ if (_rootSeparator != null) {
+ g.writeRaw(_rootSeparator);
+ }
+ }
+
+/* METHOD indentArraysWith */
+public void indentArraysWith(Indenter i) {
+ _arrayIndenter = (i == null) ? NopIndenter.instance : i;
+ }
+
+/* METHOD indentObjectsWith */
+public void indentObjectsWith(Indenter i) {
+ _objectIndenter = (i == null) ? NopIndenter.instance : i;
+ }
+
+/* METHOD writeStartObject */
+@Override
+ public void writeStartObject(JsonGenerator g) throws IOException
+ {
+ g.writeRaw('{');
+ if (!_objectIndenter.isInline()) {
+ ++_nesting;
+ }
+ }
+
+/* METHOD beforeObjectEntries */
+@Override
+ public void beforeObjectEntries(JsonGenerator g) throws IOException
+ {
+ _objectIndenter.writeIndentation(g, _nesting);
+ }
+
+/* METHOD writeObjectFieldValueSeparator */
+@Override
+ public void writeObjectFieldValueSeparator(JsonGenerator g) throws IOException
+ {
+ if (_spacesInObjectEntries) {
+ g.writeRaw(_objectFieldValueSeparatorWithSpaces);
+ } else {
+ g.writeRaw(_separators.getObjectFieldValueSeparator());
+ }
+ }
+
+/* METHOD writeObjectEntrySeparator */
+@Override
+ public void writeObjectEntrySeparator(JsonGenerator g) throws IOException
+ {
+ g.writeRaw(_separators.getObjectEntrySeparator());
+ _objectIndenter.writeIndentation(g, _nesting);
+ }
+
+/* METHOD writeEndObject */
+@Override
+ public void writeEndObject(JsonGenerator g, int nrOfEntries) throws IOException
+ {
+ if (!_objectIndenter.isInline()) {
+ --_nesting;
+ }
+ if (nrOfEntries > 0) {
+ _objectIndenter.writeIndentation(g, _nesting);
+ } else {
+ g.writeRaw(' ');
+ }
+ g.writeRaw('}');
+ }
+
+/* METHOD writeStartArray */
+@Override
+ public void writeStartArray(JsonGenerator g) throws IOException
+ {
+ if (!_arrayIndenter.isInline()) {
+ ++_nesting;
+ }
+ g.writeRaw('[');
+ }
+
+/* METHOD beforeArrayValues */
+@Override
+ public void beforeArrayValues(JsonGenerator g) throws IOException {
+ _arrayIndenter.writeIndentation(g, _nesting);
+ }
+
+/* METHOD writeArrayValueSeparator */
+@Override
+ public void writeArrayValueSeparator(JsonGenerator g) throws IOException
+ {
+ g.writeRaw(_separators.getArrayValueSeparator());
+ _arrayIndenter.writeIndentation(g, _nesting);
+ }
+
+/* METHOD writeEndArray */
+@Override
+ public void writeEndArray(JsonGenerator g, int nrOfValues) throws IOException
+ {
+ if (!_arrayIndenter.isInline()) {
+ --_nesting;
+ }
+ if (nrOfValues > 0) {
+ _arrayIndenter.writeIndentation(g, _nesting);
+ } else {
+ g.writeRaw(' ');
+ }
+ g.writeRaw(']');
+ }
+
+/* METHOD writeIndentation */
+@Override
+ public void writeIndentation(JsonGenerator g, int level) throws IOException { }
+
+/* METHOD isInline */
+@Override
+ public boolean isInline() { return true; }
+
+/* METHOD writeIndentation */
+@Override
+ public void writeIndentation(JsonGenerator g, int level) throws IOException
+ {
+ g.writeRaw(' ');
+ }
+
+/* METHOD isInline */
+@Override
+ public boolean isInline() { return true; }

@@ -1,0 +1,207 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 149  Version: Closure-149b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 205
+Trigger failures:
+- com.google.javascript.jscomp.CommandLineRunnerTest::testCharSetExpansion
+ --> junit.framework.AssertionFailedError: expected:<US-ASCII> but was:<null>
+Modified: com.google.javascript.jscomp.AbstractCommandLineRunner, com.google.javascript.jscomp.CommandLineRunner, com.google.javascript.jscomp.Compiler, com.google.javascript.jscomp.CompilerOptions
+
+Available API/signatures:
+[com.google.javascript.jscomp.AbstractCommandLineRunner | java]
+package com.google.javascript.jscomp;
+abstract class AbstractCommandLineRunner<A extends Compiler,
+private final RunTimeStats runTimeStats = new RunTimeStats();
+protected CommandLineConfig getCommandLineConfig() {
+protected abstract A createCompiler();
+protected abstract B createOptions();
+protected DiagnosticGroups getDiagnosticGroups() {
+@Deprecated
+protected void initOptionsFromFlags(CompilerOptions options) {}
+final protected void setRunOptions(CompilerOptions options)
+final protected A getCompiler() {
+final public void run() {
+protected PrintStream getErrorPrintStream() {
+protected static class FlagUsageException extends Exception {
+private static List<JSSourceFile> createSourceInputs(List<String> files)
+private static List<JSSourceFile> createExternInputs(List<String> files)
+static J
+...[truncated deterministically]...
+wArrayList();
+private CodingConvention codingConvention = new DefaultCodingConvention();
+private final List<String> moduleWrapper = Lists.newArrayList();
+private final List<String> jscompError = Lists.newArrayList();
+private final List<String> jscompWarning = Lists.newArrayList();
+private final List<String> jscompOff = Lists.newArrayList();
+private final List<String> define = Lists.newArrayList();
+
+[com.google.javascript.jscomp.CommandLineRunner | java]
+package com.google.javascript.jscomp;
+public class CommandLineRunner extends
+private static class Flags {
+@Option(name = "--help",
+@Option(name = "--print_tree",
+handler = BooleanOptionHandler.class,
+@Option(name = "--compute_phase_ordering",
+@Option(name = "--print_ast",
+@Option(name = "--print_pass_graph
+...[truncated deterministically]...
+allowLegacyJsMessages;
+public boolean strictMessageReplacement;
+public boolean checkSuspiciousCode;
+public boolean checkControlStructures;
+public CheckLevel checkUndefinedProperties;
+public boolean checkUnusedPropertiesEarly;
+public boolean checkTypes;
+public boolean tightenTypes;
+public boolean inferTypesInGlobalScope;
+public boolean checkTypedPropertyCalls;
+public CheckLevel reportMissingOver
+...[truncated deterministically]...
+odingConvention() {
+public void setManageClosureDependencies(boolean newVal) {
+public void setSummaryDetailLevel(int summaryDetailLevel) {
+public void enableExternExports(boolean enable) {
+public boolean isExternExportsEnabled() {
+public void setLooseTypes(boolean looseTypes) {
+@Override
+public Object clone() throws CloneNotSupportedException {
+static enum DevMode {
+public static enum TracerMode {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import junit.framework.TestCase;
+
+ import java.io.IOException;
+ import java.io.PrintStream;
+
+ /**
+  * Tests that the --charset flag is properly propagated from
+  * AbstractCommandLineRunner.setRunOptions to CompilerOptions.
+  *
+  * The reported bug (issue 205) was that {@code getOutputCharset()} returned
+  * {@code null} after specifying {@code --charset US-ASCII} because the
+  * setter was never called.
+  */
+ public class CharsetPropagationTest extends TestCase {
+
+     /**
+      * Helper that exposes setRunOptions after flag processing so we can
+      * intercept the CompilerOptions without actually running the compiler.
+      */
+     private static class TestRunner extends CommandLineRunner {
+         TestRunner(String[] args) {
+             super(args, new PrintStream(System.out), new PrintStream(System.err));
+         }
+
+         CompilerOptions getOptionsAfterSetRunOptions()
+                 throws AbstractCommandLineRunner.FlagUsageException, IOException {
+             CompilerOptions options = createOptions();
+             setRunOptions(options);
+             return options;
+         }
+     }
+
+     // ---------------------------------------------------------------
+     // Positive propagation cases
+     // ---------------------------------------------------------------
+
+     public void testCharsetPropagationUSASCII() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {"--charset", "US-ASCII"});
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         assertNotNull("Output charset should not be null", options.getOutputCharset());
+         assertEquals("US-ASCII", options.getOutputCharset());
+     }
+
+     public void testCharsetPropagationUTF8() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {"--charset", "UTF-8"});
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         assertEquals("UTF-8", options.getOutputCharset());
+     }
+
+     public void testCharsetPropagationISO8859_1() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {"--charset", "ISO-8859-1"});
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         assertEquals("ISO-8859-1", options.getOutputCharset());
+     }
+
+     // ---------------------------------------------------------------
+     // Default / missing flag
+     // ---------------------------------------------------------------
+
+     public void testNoCharsetFlagYieldsNull() throws Exception {
+         TestRunner runner = new TestRunner(new String[0]);
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         assertNull("Output charset must be null when no --charset flag is given",
+                 options.getOutputCharset());
+     }
+
+     // ---------------------------------------------------------------
+     // Boundary / invalid input cases
+     // ---------------------------------------------------------------
+
+     public void testCharsetPropagationInvalidCharset() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {"--charset", "INVALID-CHARSET"});
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         // The exact value must be passed through; validation happens later.
+         assertEquals("INVALID-CHARSET", options.getOutputCharset());
+     }
+
+     public void testCharsetPropagationEmptyString() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {"--charset", ""});
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         assertEquals("", options.getOutputCharset());
+     }
+
+     // ---------------------------------------------------------------
+     // Interaction with other flags
+     // ---------------------------------------------------------------
+
+     public void testCharsetPropagationWithOtherFlags() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {
+                 "--charset", "US-ASCII",
+                 "--debug"
+         });
+         CompilerOptions options = runner.getOptionsAfterSetRunOptions();
+         assertEquals("US-ASCII", options.getOutputCharset());
+     }
+
+     // ---------------------------------------------------------------
+     // Ensure the right method is responsible
+     // ---------------------------------------------------------------
+
+     public void testCreateOptionsAloneDoesNotSetCharset() throws Exception {
+         TestRunner runner = new TestRunner(new String[] {"--charset", "US-ASCII"});
+         // Call createOptions without the subsequent setRunOptions.
+         CompilerOptions options = runner.createOptions();
+         assertNull("createOptions() must not set output charset (this is setRunOptions job)",
+                 options.getOutputCharset());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-149f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-149f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-149f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-149f-copilot/.test_suite/com/google/javascript/jscomp/CharsetPropagationTest.java:42: error: cannot find symbol
+ [javac] assertNotNull("Output charset should not be null", options.getOutputCharset());
+ [javac] ^
+ [javac] symbol: method getOutputCharset()
+ [javac] location: variable options of type CompilerOptions
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

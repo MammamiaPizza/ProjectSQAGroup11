@@ -1,0 +1,415 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 133  Version: Closure-133b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.parsing.JsDocInfoParser
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+Triggers: com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testTextExtents
+
+Bug/specification summary:
+Bug report: 919
+Trigger failures:
+- com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testTextExtents
+ --> java.lang.IllegalStateException: Recorded bad position information
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+
+Prompt-01 test plan:
+TARGETS: parseTypeString, parseAndRecordTypeNode, parseInlineTypeDoc, Node position getters
+ORACLES: node start/end (lineno/charno) match source offsets; testTextExtents checks parsed extents
+CASES: union with >2 alternates; nested fn types with '=>'; whitespace before/after type; trailing
+comma; @param/@return with type
+RISKS: bug in private helpers unknown; may be extractBlockComment/trimEnd altering position; no
+exact fix reference
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.parsing.JsDocInfoParser (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.parsing;
+public final class JsDocInfoParser {
+private final ErrorReporterParser parser = new ErrorReporterParser();
+private class ErrorReporterParser {
+private enum State {
+private String getSourceName() {
+public JSDocInfo parseInlineTypeDoc() {
+public static Node parseTypeString(String typeString) {
+@SuppressWarnings("incomplete-switch")
+parser.addTypeWarning("msg.jsdoc.interface.constructor",
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+private JsDocToken parseSuppressTag(JsDocToken token) {
+private JsDocToken parseModifiesTag(JsDocToken token) {
+private Node parseAndRecordTypeNode(JsDocToken token, boolean matchingLC) {
+private Node parseAndRecordParamTypeNode(JsDocToken token) {
+private String toString(JsDocToken token) {
+private static class ExtractionInfo {
+public ExtractionInfo(String string, JsDocToken token) {
+private static class ExtendedTypeInfo {
+public ExtendedTypeInfo(JSTypeExpression type, int lineno, int charno) {
+private ExtractionInfo extractSingleLineBlock() {
+private ExtractionInfo extractMultilineTextualBlock(JsDocToken token) {
+private enum WhitespaceOption {
+@SuppressWarnings("fallthrough")
+private ExtractionInfo extractBlockComment(JsDocToken token) {
+private static String trimEnd(String s) {
+private Node parseTypeExpressionAnnotation(JsDocToken token) {
+private Node parseParamTypeExpressionAnnotation(JsDocToken token) {
+private Node parseTypeNameAnnotation(JsDocToken token) {
+private Node parseTopLevelTypeExpression(JsDocToken token) {
+private Node parseTypeExpressionList(JsDocToken token) {
+private Node parseTypeExpression(JsDocToken token) {
+private Node parseBasicTypeExpression(JsDocToken token) {
+private Node parseTypeName(JsDocToken token) {
+private Node parseFunctionType(JsDocToken token) {
+private Node parseParametersType(JsDocToken token) {
+private Node parseResultType(JsDocToken token) {
+private Node parseUnionType(JsDocToken token) {
+private Node parseUnionTypeWithAlternate(JsDocToken token, Node alternate) {
+private Node parseArrayType(JsDocToken token) {
+private Node parseRecordType(JsDocToken token) {
+private Node parseFieldTypeList(JsDocToken token) {
+private Node parseFieldType(JsDocToken token) {
+private Node parseFieldName(JsDocToken token) {
+private Node wrapNode(int type, Node n) {
+private Node newNode(int type) {
+private Node newStringNode(String s) {
+private Node newStringNode(String s, int lineno, int charno) {
+private Node createTemplateNode() {
+private Node reportTypeSyntaxWarning(String warning) {
+private Node reportGenericTypeSyntaxWarning() {
+private JsDocToken eatTokensUntilEOL() {
+private JsDocToken eatTokensUntilEOL(JsDocToken token) {
+private void restoreLookAhead(JsDocToken token) {
+private boolean match(JsDocToken token) {
+private boolean match(JsDocToken token1, JsDocToken token2) {
+private JsDocToken next() {
+private JsDocToken current() {
+private void skipEOLs() {
+private String getRemainingJSDocLine() {
+private boolean hasParsedFileOverviewDocInfo() {
+private boolean lookAheadForTypeAnnotation() {
+
+/* HEADER */
+package com.google.javascript.jscomp.parsing;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.JSDocInfo.Visibility;
+import com.google.javascript.rhino.JSDocInfoBuilder;
+import com.google.javascript.rhino.JSTypeExpression;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.ScriptRuntime;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.head.ErrorReporter;
+import com.google.javascript.rhino.head.ast.Comment;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/* METHOD JsDocInfoParser */
+JsDocInfoParser(JsDocTokenStream stream,
+ Comment commentNode,
+ Node associatedNode,
+ Config config,
+ ErrorReporter errorReporter) {
+ this.stream = stream;
+ this.associatedNode = associatedNode;
+
+ // Sometimes this will be null in tests.
+ this.sourceFile = associatedNode == null
+ ? null : associatedNode.getStaticSourceFile();
+
+ this.jsdocBuilder = new JSDocInfoBuilder(config.parseJsDocDocumentation);
+ if (commentNode != null) {
+ this.jsdocBuilder.recordOriginalCommentString(commentNode.getValue());
+ }
+ this.annotationNames = config.annotationNames;
+ this.suppressionNames = config.suppressionNames;
+
+ this.errorReporter = errorReporter;
+ this.templateNode = this.createTemplateNode();
+ }
+
+/* METHOD parseTypeString */
+public static Node parseTypeString(String typeString) {
+ Config config = new Config(
+ Sets.<String>newHashSet(),
+ Sets.<String>newHashSet(),
+ false,
+ LanguageMode.ECMASCRIPT3,
+ false);
+ JsDocInfoParser parser = new JsDocInfoParser(
+ new JsDocTokenStream(typeString),
+ null,
+ null,
+ config,
+ NullErrorReporter.forNewRhino());
+
+ return parser.parseTopLevelTypeExpression(parser.next());
+ }
+
+/* METHOD parseInlineTypeDoc */
+public JSDocInfo parseInlineTypeDoc() {
+ Node typeAst = parseAndRecordTypeNode(next());
+ JSTypeExpression expr = createJSTypeExpression(typeAst);
+ if (expr != null) {
+ jsdocBuilder.recordType(expr);
+ return retrieveAndResetParsedJSDocInfo();
+ }
+ return null;
+ }
+
+/* METHOD checkExtendedTypes */
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+ for (ExtendedTypeInfo typeInfo : extendedTypes) {
+ // If interface, record the multiple extended interfaces
+ if (jsdocBuilder.isInterfaceRecorded()) {
+ if (!jsdocBuilder.recordExtendedInterface(typeInfo.type)) {
+ parser.addParserWarning("msg.jsdoc.extends.duplicate",
+ typeInfo.lineno, typeInfo.charno);
+ }
+ } else {
+ if (!jsdocBuilder.recordBaseType(typeInfo.type)) {
+ parser.addTypeWarning("msg.jsdoc.incompat.type",
+ typeInfo.lineno, typeInfo.charno);
+ }
+ }
+ }
+ }
+
+/* METHOD addTypeWarning */
+void addTypeWarning(String messageId, String messageArg, int lineno,
+ int charno) {
+ errorReporter.warning(
+ "Bad type annotation. " +
+ ScriptRuntime.getMessage1(messageId, messageArg),
+ getSourceName(), lineno, null, charno);
+ }
+
+/* METHOD addTypeWarning */
+void addTypeWarning(String messageId, int lineno, int charno) {
+ errorReporter.warning(
+ "Bad type annotation. " +
+ ScriptRuntime.getMessage0(messageId),
+ getSourceName(), lineno, null, charno);
+ }
+
+/* METHOD parse */
+@SuppressWarnings("incomplete-switch")
+ boolean parse() {
+ int lineno;
+ int charno;
+
+ // JSTypes are represented as Rhino AST nodes, and then resolved later.
+ JSTypeExpression type;
+
+ state = State.SEARCHING_ANNOTATION;
+ skipEOLs();
+
+ JsDocToken token = next();
+
+ List<ExtendedTypeInfo> extendedTypes = Lists.newArrayList();
+
+ // Always record that we have a comment.
+ if (jsdocBuilder.shouldParseDocumentation()) {
+ ExtractionInfo blockInfo = extractBlockComment(token);
+ token = blockInfo.token;
+ if (!blockInfo.string.isEmpty()) {
+ jsdocBuilder.recordBlockDescription(blockInfo.string);
+ }
+ } else {
+ if (token != JsDocToken.ANNOTATION &&
+ token != JsDocToken.EOC) {
+ // Mark that there was a description, but don't bother marking
+ // what it was.
+ jsdocBuilder.recordBlockDescription("");
+ }
+ }
+
+ // Parse the actual JsDoc.
+ retry: for (;;) {
+ switch (token) {
+ case ANNOTATION:
+ if (state == State.SEARCHING_ANNOTATION) {
+ state = State.SEARCHING_NEWLINE;
+ lineno = stream.getLineno();
+ charno = stream.getCharno();
+
+ String annotationName = stream.getString();
+ Annotation annotation = annotationNames.get(annotationName);
+ if (annotation == null) {
+ parser.addParserWarning("msg.bad.jsdoc.tag", annotationName,
+ stream.getLineno(), stream.getCharno());
+ } else {
+ // Mark the beginning of the annotation.
+ jsdocBuilder.markAnnotation(annotationName, lineno, charno);
+
+ switch (annotation) {
+ case NG_INJECT:
+ if (jsdocBuilder.isNgInjectRecorded()) {
+ parser.addParserWarning("msg.jsdoc.nginject.extra",
+ stream.getLineno(), stream.getCharno());
+ } else {
+ jsdocBuilder.recordNgInject(true);
+ }
+ token = eatTokensUntilEOL();
+ continue retry;
+
+ case AUTHOR:
+ if (jsdocBuilder.shouldParseDocumentation()) {
+ ExtractionInfo authorInfo = extractSingleLineBlock();
+ String author = authorInfo.string;
+
+ if (author.length() == 0) {
+ parser.addParserWarning("msg.jsdoc.authormissing",
+ stream.getLineno(), stream.getCharno());
+ } else {
+ jsdocBuilder.addAuthor(author);
+ }
+ token = authorInfo.token;
+ } else {
+ token = eatTokensUntilEOL(token);
+ }
+ continue retry;
+
+ case CONSISTENTIDGENERATOR:
+ if (!jsdocBuilder.recordConsistentIdGenerator()) {
+ parser.addParserWarning("msg.jsdoc.consistidgen",
+ stream.getLineno(), stream.getCharno());
+ }
+ token = eatTokensUntilEOL();
+ continue retry;
+
+ case STRUCT:
+ if (!jsdocBuilder.recordStruct()) {
+ parser.addTypeWarning("msg.jsdoc.incompat.type",
+ stream.getLineno(),
+ stream.getCharno());
+ }
+ token = eatTokensUntilEOL();
+ continue retry;
+
+ case DICT:
+ if (!jsdocBuilder.recordDict()) {
+ parser.addTypeWarning("msg.jsdoc.incompat.type",
+ stream.getLineno(),
+ stream.getCharno());
+ }
+ token = eatTokensUntilEOL();
+ continue retry;
+
+ case CONSTRUCTOR:
+ if (!jsdocBuilder.recordConstructor()) {
+ if (jsdocBuilder.isInterfaceRecorded()) {
+ parser.addTypeWarning("msg.jsdoc.interface.constructor",
+ stream.getLineno(), stream.getCharno());
+ } else {
+ parser.addTypeWarning("msg.jsdoc.incompat.type",
+ stream.getLineno(), stream.getCharno());
+ }
+ }
+ token = eatTokensUntilEOL();
+ continue retry;
+
+ case DEPRECATED:
+ if (!jsdocBuilder.recordDeprecated()) {
+ parser.addParserWarning("msg.jsdoc.deprecated",
+ stream.getLineno(), stream.getCharno());
+ }
+
+ // Find the reason/description, if any.
+ ExtractionInfo reasonInfo =
+ extractMultilineTextualBlock(token);
+
+ String reason = reasonInfo.string
+...[truncated deterministically]...
+parser.addParserWarning("msg.jsdoc.const",
+ stream.getLineno(), stream.getCharno());
+ }
+ break;
+
+ case DEFINE:
+ if (!jsdocBuilder.recordDefineType(type)) {
+ parser.addParserWarning("msg.jsdoc.define",
+ lineno, charno);
+ }
+ break;
+
+ case PRIVATE:
+ if (!jsdocBuilder.recordVisibility(Visibility.PRIVATE)) {
+ parser.addParserWarning(
+ "msg.jsdoc.visibility.private",
+ lineno, charno);
+ }
+ break;
+
+ case PROTECTED:
+ if (!jsdocBuilder.recordVisibility(Visibility.PROTECTED)) {
+ parser.addParserWarning(
+ "msg.jsdoc.visibility.protected",
+ lineno, charno);
+ }
+ break;
+
+ case PUBLIC:
+ if (!jsdocBuilder.recordVisibility(Visibility.PUBLIC)) {
+ parser.addParserWarning(
+ "msg.jsdoc.visibility.public",
+ lineno, charno);
+ }
+ break;
+
+ case RETURN:
+ if (type == null) {
+ type = createJSTypeExpression(newNode(Token.QMARK));
+ }
+
+ if (!jsdocBuilder.recordReturnType(type)) {
+ parser.addTypeWarning(
+ "msg.jsdoc.incompat.type", lineno, charno);
+ break;
+ }
+
+ // Find the return's description (if applicable).
+ if (jsdocBuilder.shouldParseDocumentation()) {
+ ExtractionInfo returnDescriptionInfo =
+ extractMultilineTextualBlock(token);
+
+ String returnDescription =
+ returnDescriptionInfo.string;
+
+ if (returnDescription.length() > 0) {
+ jsdocBuilder.recordReturnDescription(
+ returnDescription);
+ }
+
+ token = returnDescriptionInfo.token;
+ } else {
+ token = eatTokensUntilEOL(token);
+ }
+ continue retry;
+
+ case THIS:
+ if (!jsdocBuilder.recordThisType(type)) {
+ parser.addTypeWarning(
+ "msg.jsdoc.incompat.type", lineno, charno);
+ }
+ break;
+
+ case TYPEDEF:
+ if (!jsdocBuilder.recordTypedef(type)) {
+ parser.addTypeWarning(
+ "msg.jsdoc.incompat.type", lineno, charno);
+ }
+ break;
+ }
+ }

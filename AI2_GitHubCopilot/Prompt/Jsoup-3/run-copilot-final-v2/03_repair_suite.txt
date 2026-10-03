@@ -1,0 +1,258 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 3  Version: Jsoup-3b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 21
+Trigger failures:
+- org.jsoup.nodes.ElementTest::testAppendRowToTable
+ --> junit.framework.AssertionFailedError: expected:<...tr><td>1</td></tr><t[r><td>2</td></tr]></table>> but was:<...tr><td>1</td></tr><t[able><tr><td>2</td></tr></table]></table>>
+ - org.jsoup.nodes.ElementTest::testPrependRowToTable
+ --> junit.framework.AssertionFailedError: expected:<<table><t[r><td>2</td></tr]><tr><td>1</td></tr>...> but was:<<table><t[able><tr><td>2</td></tr></table]><tr><td>1</td></tr>...>
+ - org.jsoup.parser.ParserTest::handlesNestedImplicitTable
+ --> junit.framework.AssertionFailedError: expected:<...> <tr><td> <table><t[r><td>3</td> <td>4</td></tr></table> </td></tr><tr><td>5]</td></tr></table>> but was:<...> <tr><td> <table><t[d>3</td> <td>4</td></table> <tr><td>5</td></tr>]</td></tr></table>>
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.Parser, org.jsoup.parser.Tag
+
+Available API/signatures:
+[org.jsoup.nodes.Element | java]
+package org.jsoup.nodes;
+public class Element extends Node {
+public Element(Tag tag, String baseUri, Attributes attributes) {
+public Element(Tag tag, String baseUri) {
+@Override
+public String nodeName() {
+public String tagName() {
+public Tag tag() {
+public boolean isBlock() {
+public String id() {
+public Element attr(String attributeKey, String attributeValue) {
+public Element parent() {
+public Elements parents() {
+private static void accumulateParents(Element el, Elements parents) {
+public Element child(int index) {
+public Elements children() {
+public Elements select(String query) {
+public Element appendChild(Node child) {
+public Element prependChild(Node child) {
+public Element appendElement(String tagName) {
+public Element prependElement(String tagName) {
+public Element appendText(String
+...[truncated deterministically]...
+lement's {@code class} attribute: if present, remove it; otherwise add it.
+@param className class name to toggle
+public Element toggleClass(String className) {
+public String val() {
+public Element val(String value) {
+public String html() {
+private void html(StringBuilder accum) {
+public Element html(String html) {
+public String toString() {
+public boolean equals(Object o) {
+public int hashCode() {
+
+[org.jsoup.parser.Parser | java]
+package org.jsoup.parser;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Parser {
+private static final Tag htmlTag = Tag.valueOf("html");
+private static final Tag headTag = Tag.valueOf("head");
+private static final Tag bodyTag = Tag.valueOf("body");
+private static final Tag titleTag = Tag.valueOf("title");
+private static final Tag textareaTag =
+...[truncated deterministically]...
+d potential child tag.
+@return true if this can contain child.
+@return if block tag
+public boolean isBlock() {
+@return if tag can contain block tags
+public boolean canContainBlock() {
+@return if this tag is an inline tag.
+public boolean isInline() {
+@return if this tag is a data only tag
+public boolean isData() {
+@return if this is an emtpy tag
+public boolean isEmpty() {
+@return if preserve whi
+...[truncated deterministically]...
+ic int hashCode() {
+public String toString() {
+private static Tag createBlock(String tagName) {
+private static Tag createInline(String tagName) {
+private static Tag register(Tag tag) {
+private Tag setContainInlineOnly() {
+private Tag setContainDataOnly() {
+private Tag setEmpty() {
+private Tag setOptionalClosing() {
+private Tag setPreserveWhitespace() {
+private Tag setAncestor(String... tagNames) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import static org.junit.Assert.*;
+
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.Element;
+ import org.jsoup.parser.Parser;
+ import org.jsoup.parser.Tag;
+ import org.jsoup.select.Elements;
+ import org.junit.Test;
+
+ /**
+  * Tests for the table row append/prepend bug where extra {@code <table>}
+  * elements were incorrectly created.
+  */
+ public class ElementTableBugTest {
+
+     private static final String BASE_URI = "http://example.com";
+
+     // -- append and prepend of a single row -------------------------------------
+
+     @Test
+     public void testAppendSingleRowToNonEmptyTable() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tr><td>1</td></tr>");
+         table.append("<tr><td>2</td></tr>");
+
+         assertEquals(2, table.select("tr").size());
+         assertEquals(0, table.select("table").size());   // no spurious <table>
+     }
+
+     @Test
+     public void testPrependSingleRowToNonEmptyTable() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tr><td>1</td></tr>");
+         table.prepend("<tr><td>0</td></tr>");
+
+         assertEquals(2, table.select("tr").size());
+         assertEquals(0, table.select("table").size());
+         assertEquals("0", table.select("> tr").first().text());
+     }
+
+     // -- append and prepend to an empty table -----------------------------------
+
+     @Test
+     public void testAppendRowToEmptyTable() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.append("<tr><td>first</td></tr>");
+
+         assertEquals(1, table.select("tr").size());
+         assertEquals(0, table.select("table").size());
+     }
+
+     @Test
+     public void testPrependRowToEmptyTable() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.prepend("<tr><td>first</td></tr>");
+
+         assertEquals(1, table.select("tr").size());
+         assertEquals(0, table.select("table").size());
+     }
+
+     // -- multiple rows in a single call -----------------------------------------
+
+     @Test
+     public void testAppendMultipleRowsAtOnce() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tr><td>a</td></tr>");
+         table.append("<tr><td>b</td></tr><tr><td>c</td></tr>");
+
+         assertEquals(3, table.select("tr").size());
+         assertEquals(0, table.select("table").size());
+     }
+
+     @Test
+     public void testPrependMultipleRowsAtOnce() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tr><td>a</td></tr>");
+         table.prepend("<tr><td>b</td></tr><tr><td>c</td></tr>");
+
+         assertEquals(3, table.select("tr").size());
+         assertEquals(0, table.select("table").size());
+         assertEquals("b", table.select("> tr").first().text());
+     }
+
+     // -- table containing an explicit tbody -------------------------------------
+
+     @Test
+     public void testAppendRowToTableWithExistingTbody() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tbody><tr><td>1</td></tr></tbody>");
+         table.append("<tr><td>2</td></tr>");
+
+         assertEquals(0, table.select("table").size()); // no extra <table>
+         assertEquals(2, table.select("tr").size());      // both rows exist
+     }
+
+     @Test
+     public void testPrependRowToTableWithExistingTbody() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tbody><tr><td>1</td></tr></tbody>");
+         table.prepend("<tr><td>0</td></tr>");
+
+         assertEquals(0, table.select("table").size());
+         assertEquals(2, table.select("tr").size());
+         // the newly prepended row should appear first
+         Element firstRow = table.select("> tr").first();
+         assertNotNull(firstRow);
+         assertEquals("0", firstRow.text());
+     }
+
+     // -- nested tables ----------------------------------------------------------
+
+     @Test
+     public void testNestedTableInTd() {
+         String html = "<table><tr><td><table><tr><td>inner</td></tr></table></td></tr>"
+                     + "<tr><td>outer</td></tr></table>";
+         Document doc = Parser.parseBodyFragment(html, BASE_URI);
+         Element outerTable = doc.body().select("table").first();
+         assertNotNull(outerTable);
+
+         // exactly one nested <table> present, and it resides inside a <td>
+         assertEquals(1, outerTable.select("table").size());
+         Elements innerTrs = outerTable.select("table > tr");
+         assertEquals(1, innerTrs.size());
+         assertEquals("inner", innerTrs.first().text());
+
+         // the outer table still has two rows of its own
+         assertEquals(2, outerTable.select("> tr").size());
+     }
+
+     // -- appending something other than a row (sanity) --------------------------
+
+     @Test
+     public void testAppendNonTableContentToDiv() {
+         Element div = new Element(Tag.valueOf("div"), BASE_URI);
+         div.html("<p>para</p>");
+         div.append("<tr><td>cell</td></tr>");  // invalid in a div, but must not crash
+         assertNotNull(div.html());
+     }
+
+     // -- empty input ------------------------------------------------------------
+
+     @Test
+     public void testAppendEmptyString() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tr><td>1</td></tr>");
+         table.append("");
+         assertEquals(1, table.select("tr").size());
+     }
+
+     @Test
+     public void testPrependEmptyString() {
+         Element table = new Element(Tag.valueOf("table"), BASE_URI);
+         table.html("<tr><td>1</td></tr>");
+         table.prepend("");
+         assertEquals(1, table.select("tr").size());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 9
+ - org.jsoup.nodes.ElementTableBugTest::testPrependMultipleRowsAtOnce
+ - org.jsoup.nodes.ElementTableBugTest::testPrependSingleRowToNonEmptyTable
+ - org.jsoup.nodes.ElementTableBugTest::testAppendSingleRowToNonEmptyTable
+Failing generated tests: org.jsoup.nodes.ElementTableBugTest::testAppendMultipleRowsAtOnce, org.jsoup.nodes.ElementTableBugTest::testAppendRowToEmptyTable, org.jsoup.nodes.ElementTableBugTest::testAppendRowToTableWithExistingTbody, org.jsoup.nodes.ElementTableBugTest::testAppendSingleRowToNonEmptyTable, org.jsoup.nodes.ElementTableBugTest::testNestedTableInTd, org.jsoup.nodes.ElementTableBugTest::testPrependMultipleRowsAtOnce, org.jsoup.nodes.ElementTableBugTest::testPrependRowToEmptyTable, org.jsoup.nodes.ElementTableBugTest::testPrependRowToTableWithExistingTbody, org.jsoup.nodes.ElementTableBugTest::testPrependSingleRowToNonEmptyTable

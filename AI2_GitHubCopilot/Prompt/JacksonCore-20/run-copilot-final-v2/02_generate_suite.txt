@@ -1,0 +1,374 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 20  Version: JacksonCore-20b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.JsonGenerator
+Modified: com.fasterxml.jackson.core.JsonGenerator
+Triggers: com.fasterxml.jackson.core.base64.Base64GenerationTest::testBinaryAsEmbeddedObject, com.fasterxml.jackson.core.main.TestGeneratorMisc::testAsEmbedded
+
+Bug/specification summary:
+Bug report: 318
+Trigger failures:
+- com.fasterxml.jackson.core.base64.Base64GenerationTest::testBinaryAsEmbeddedObject
+ --> com.fasterxml.jackson.core.JsonGenerationException: No native support for writing embedded objects
+ - com.fasterxml.jackson.core.main.TestGeneratorMisc::testAsEmbedded
+ --> com.fasterxml.jackson.core.JsonGenerationException: No native support for writing embedded objects
+Modified: com.fasterxml.jackson.core.JsonGenerator
+
+Prompt-01 test plan:
+TARGETS: JsonGenerator.writeEmbeddedObject, canWriteBinaryNatively, writeBinary
+ORACLES: Tests expect no JsonGenerationException; output is valid base64 string
+CASES: Normal binary, empty, single-byte, large, offset/length boundaries, null
+RISKS: Fallback to base64 encoding may need to respect generator context (startObject/endObject)
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.JsonGenerator (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core;
+public abstract class JsonGenerator
+public enum Feature {
+public static int collectDefaults()
+private Feature(boolean defaultState) {
+public boolean enabledByDefault() { return _defaultState; }
+public boolean enabledIn(int flags) { return (flags & _mask) != 0; }
+public int getMask() { return _mask; }
+protected PrettyPrinter _cfgPrettyPrinter;
+protected JsonGenerator() { }
+public abstract JsonGenerator setCodec(ObjectCodec oc);
+public abstract ObjectCodec getCodec();
+@Override
+public abstract Version version();
+public abstract JsonGenerator enable(Feature f);
+public abstract JsonGenerator disable(Feature f);
+public final JsonGenerator configure(Feature f, boolean state) {
+public abstract boolean isEnabled(Feature f);
+public abstract int getFeatureMask();
+@Deprecated
+public abstract JsonGenerator setFeatureMask(int values);
+public JsonGenerator overrideStdFeatures(int values, int mask) {
+public int getFormatFeatures() {
+public JsonGenerator overrideFormatFeatures(int values, int mask) {
+public void setSchema(FormatSchema schema) {
+public FormatSchema getSchema() { return null; }
+public JsonGenerator setPrettyPrinter(PrettyPrinter pp) {
+public PrettyPrinter getPrettyPrinter() {
+public abstract JsonGenerator useDefaultPrettyPrinter();
+public JsonGenerator setHighestNonEscapedChar(int charCode) { return this; }
+public int getHighestEscapedChar() { return 0; }
+public CharacterEscapes getCharacterEscapes() { return null; }
+public JsonGenerator setCharacterEscapes(CharacterEscapes esc) { return this; }
+public JsonGenerator setRootValueSeparator(SerializableString sep) {
+public Object getOutputTarget() {
+public int getOutputBuffered() {
+public Object getCurrentValue() {
+public void setCurrentValue(Object v) {
+public boolean canUseSchema(FormatSchema schema) { return false; }
+public boolean canWriteObjectId() { return false; }
+public boolean canWriteTypeId() { return false; }
+public boolean canWriteBinaryNatively() { return false; }
+public boolean canOmitFields() { return true; }
+public boolean canWriteFormattedNumbers() { return false; }
+public abstract void writeStartArray() throws IOException;
+public void writeStartArray(int size) throws IOException {
+public abstract void writeEndArray() throws IOException;
+public abstract void writeStartObject() throws IOException;
+public void writeStartObject(Object forValue) throws IOException
+public abstract void writeEndObject() throws IOException;
+public abstract void writeFieldName(String name) throws IOException;
+public abstract void writeFieldName(SerializableString name) throws IOException;
+public void writeFieldId(long id) throws IOException {
+pu
+...[truncated deterministically]...
+IOException {
+public final void writeNumberField(String fieldName, double value) throws IOException {
+public final void writeNumberField(String fieldName, float value) throws IOException {
+public final void writeNumberField(String fieldName, BigDecimal value) throws IOException {
+public final void writeBinaryField(String fieldName, byte[] data) throws IOException {
+public final void writeArrayFieldStart(String fieldName) throws IOException {
+public final void writeObjectFieldStart(String fieldName) throws IOException {
+public final void writeObjectField(String fieldName, Object pojo) throws IOException {
+public void writeOmittedField(String fieldName) throws IOException { }
+public void copyCurrentEvent(JsonParser p) throws IOException
+public void copyCurrentStructure(JsonParser p) throws IOException
+public abstract JsonStreamContext getOutputContext();
+public abstract void flush() throws IOException;
+public abstract boolean isClosed();
+public abstract void close() throws IOException;
+protected void _reportError(String msg) throws JsonGenerationException {
+protected final void _throwInternal() { VersionUtil.throwInternal(); }
+protected void _reportUnsupportedOperation() {
+protected final void _verifyOffsets(int arrayLength, int offset, int length)
+protected void _writeSimpleObject(Object value) throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core;
+import static com.fasterxml.jackson.core.JsonTokenId.*;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import com.fasterxml.jackson.core.JsonParser.NumberType;
+import com.fasterxml.jackson.core.io.CharacterEscapes;
+import com.fasterxml.jackson.core.util.VersionUtil;
+
+/* METHOD JsonGenerator */
+protected JsonGenerator() { }
+
+/* METHOD writeBinary */
+public abstract int writeBinary(Base64Variant bv,
+ InputStream data, int dataLength) throws IOException;
+
+ /*
+ /**********************************************************
+ /* Public API, write methods, numeric
+ /**********************************************************
+ */
+
+ /**
+ * Method for outputting given value as JSON number.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ *
+ * @param v Number value to write
+ *
+ * @since 2.2
+ */
+ public void writeNumber(short v) throws IOException { writeNumber((int) v); }
+
+/* METHOD writeObjectId */
+public void writeObjectId(Object id) throws IOException {
+ throw new JsonGenerationException("No native support for writing Object Ids", this);
+ }
+
+/* METHOD writeObjectRef */
+public void writeObjectRef(Object id) throws IOException {
+ throw new JsonGenerationException("No native support for writing Object Ids", this);
+ }
+
+/* METHOD writeTypeId */
+public void writeTypeId(Object id) throws IOException {
+ throw new JsonGenerationException("No native support for writing Type Ids", this);
+ }
+
+/* METHOD setRootValueSeparator */
+public JsonGenerator setRootValueSeparator(SerializableString sep) {
+ throw new UnsupportedOperationException();
+ }
+
+/* METHOD writeNumber */
+public abstract void writeNumber(String encodedValue) throws IOException;
+
+ /*
+ /**********************************************************
+ /* Public API, write methods, other value types
+ /**********************************************************
+ */
+ 
+ /**
+ * Method for outputting literal JSON boolean value (one of
+ * Strings 'true' and 'false').
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ */
+ public abstract void writeBoolean(boolean state) throws IOException;
+
+ /**
+ * Method for outputting literal JSON null value.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ */
+ public abstract void writeNull() throws IOException;
+
+ /**
+ * Method that can be called on backends that support passing opaque datatypes of
+ * non-JSON formats
+ *
+ * @since 2.8
+ */
+ public void writeEmbeddedObject(Object object) throws IOException {
+ // 01-Sep-2016, tatu: As per [core#318], handle small number of cases
+ throw new JsonGenerationException("No native support for writing embedded objects",
+ this);
+ }
+
+/* METHOD copyCurrentEvent */
+public void copyCurrentEvent(JsonParser p) throws IOException
+ {
+ JsonToken t = p.currentToken();
+ // sanity check; what to do?
+ if (t == null) {
+ _reportError("No current event to copy");
+ }
+ switch (t.id()) {
+ case ID_NOT_AVAILABLE:
+ _reportError("No current event to copy");
+ break; // never gets here
+ case ID_START_OBJECT:
+ writeStartObject();
+ break;
+ case ID_END_OBJECT:
+ writeEndObject();
+ break;
+ case ID_START_ARRAY:
+ writeStartArray();
+ break;
+ case ID_END_ARRAY:
+ writeEndArray();
+ break;
+ case ID_FIELD_NAME:
+ writeFieldName(p.getCurrentName());
+ break;
+ case ID_STRING:
+ i
+...[truncated deterministically]...
+se ID_NUMBER_INT:
+ {
+ NumberType n = p.getNumberType();
+ if (n == NumberType.INT) {
+ writeNumber(p.getIntValue());
+ } else if (n == NumberType.BIG_INTEGER) {
+ writeNumber(p.getBigIntegerValue());
+ } else {
+ writeNumber(p.getLongValue());
+ }
+ break;
+ }
+ case ID_NUMBER_FLOAT:
+ {
+ NumberType n = p.getNumberType();
+ if (n == NumberType.BIG_DECIMAL) {
+ writeNumber(p.getDecimalValue());
+ } else if (n == NumberType.FLOAT) {
+ writeNumber(p.getFloatValue());
+ } else {
+ writeNumber(p.getDoubleValue());
+ }
+ break;
+ }
+ case ID_TRUE:
+ writeBoolean(true);
+ break;
+ case ID_FALSE:
+ writeBoolean(false);
+ break;
+ case ID_NULL:
+ writeNull();
+ break;
+ case ID_EMBEDDED_OBJECT:
+ writeObject(p.getEmbeddedObject());
+ break;
+ default:
+ _throwInternal();
+ }
+ }
+
+/* METHOD _reportError */
+protected void _reportError(String msg) throws JsonGenerationException {
+ throw new JsonGenerationException(msg, this);
+ }
+
+/* METHOD _reportUnsupportedOperation */
+protected void _reportUnsupportedOperation() {
+ throw new UnsupportedOperationException("Operation not supported by generator of type "+getClass().getName());
+ }
+
+/* METHOD writeBinary */
+public abstract void writeBinary(Base64Variant bv,
+ byte[] data, int offset, int len) throws IOException;
+
+ /**
+ * Similar to {@link #writeBinary(Base64Variant,byte[],int,int)}
+
+/* METHOD writeBinary */
+public void writeBinary(byte[] data, int offset, int len) throws IOException {
+ writeBinary(Base64Variants.getDefaultVariant(), data, offset, len);
+ }
+
+/* METHOD writeBinary */
+public void writeBinary(byte[] data) throws IOException {
+ writeBinary(Base64Variants.getDefaultVariant(), data, 0, data.length);
+ }
+
+/* METHOD writeBinary */
+public int writeBinary(InputStream data, int dataLength)
+ throws IOException {
+ return writeBinary(Base64Variants.getDefaultVariant(), data, dataLength);
+ }
+
+/* METHOD writeNumber */
+public abstract void writeNumber(int v) throws IOException;
+
+ /**
+ * Method for outputting given value as JSON number.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ *
+ * @param v Number value to write
+ */
+ public abstract void writeNumber(long v) throws IOException;
+
+ /**
+ * Method for outputting given value as JSON number.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ *
+ * @param v Number value to write
+ */
+ public abstract void writeNumber(BigInteger v) throws IOException;
+
+ /**
+ * Method for outputting indicate JSON numeric value.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ *
+ * @param v Number value to write
+ */
+ public abstract void writeNumber(double v) throws IOException;
+
+ /**
+ * Method for outputting indicate JSON numeric value.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-
+...[truncated deterministically]...
+bled.
+ *
+ * @param v Number value to write
+ */
+ public abstract void writeNumber(float v) throws IOException;
+
+ /**
+ * Method for outputting indicate JSON numeric value.
+ * Can be called in any context where a value is expected
+ * (Array value, Object field value, root-level value).
+ * Additional white space may be added around the value
+ * if pretty-printing is enabled.
+ *
+ * @param v Number value to write
+ */
+ public abstract void writeNumber(BigDecimal v) throws IOException;
+
+ /**
+ * Write method that can be used for custom numeric types that can
+ * not be (easily?) converted to "standard" Java number types.
+ * Because numbers are not surrounded by double quotes, regular
+ * {@link #writeString}

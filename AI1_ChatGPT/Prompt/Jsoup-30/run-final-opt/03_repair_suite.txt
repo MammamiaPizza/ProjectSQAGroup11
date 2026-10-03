@@ -1,0 +1,115 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 30  Version: Jsoup-30b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 246
+Trigger failures:
+- org.jsoup.safety.CleanerTest::testIsValid
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.safety.Cleaner
+
+Available API/signatures:
+[org.jsoup.safety.Cleaner | java]
+package org.jsoup.safety;
+public class Cleaner {
+@param whitelist white-list to clean with
+public Cleaner(Whitelist whitelist) {
+@param dirtyDocument Untrusted base document to clean.
+@return cleaned document.
+public Document clean(Document dirtyDocument) {
+@param dirtyDocument document to test
+@return true if no tags or attributes need to be removed; false if they do
+public boolean isValid(Document dirtyDocument) {
+private int copySafeNodes(Element root, Element destination) {
+private ElementMeta createSafeElement(Element sourceEl) {
+private static class ElementMeta {
+
+Generated JUnit Test:
+package org.jsoup.safety;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class CleanerGeneratedTest {
+
+    @Test
+    public void isValidAcceptsAllowedTagsAndAttributes() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document document = Jsoup.parse("<p><a href='http://example.com/' title='Example'>Link</a></p>");
+
+        assertTrue(cleaner.isValid(document));
+    }
+
+    @Test
+    public void isValidRejectsDisallowedTag() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document document = Jsoup.parse("<p>Text<script>alert(1)</script></p>");
+
+        assertFalse(cleaner.isValid(document));
+    }
+
+    @Test
+    public void isValidRejectsDisallowedAttribute() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document document = Jsoup.parse("<p><a href='http://example.com/' onclick='alert(1)'>Link</a></p>");
+
+        assertFalse(cleaner.isValid(document));
+    }
+
+    @Test
+    public void isValidRejectsCommentThatCleaningRemoves() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document document = Jsoup.parse("<p>Hello<!-- hidden content --><a href='http://example.com/'>Link</a></p>");
+
+        assertFalse(cleaner.isValid(document));
+    }
+
+    @Test
+    public void cleanedDocumentBecomesValidAfterUnsafeContentIsRemoved() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<p><script>alert(1)</script><a href='javascript:alert(2)' onclick='x()'>Link</a></p>");
+
+        assertFalse(cleaner.isValid(dirty));
+
+        Document clean = cleaner.clean(dirty);
+
+        assertTrue(cleaner.isValid(clean));
+        assertFalse(clean.body().html().contains("script"));
+        assertFalse(clean.body().html().contains("onclick"));
+        assertFalse(clean.body().html().contains("javascript:"));
+    }
+
+    @Test
+    public void cleanDoesNotModifyOriginalDocument() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<p><a href='http://example.com/' onclick='alert(1)'>Link</a></p>");
+
+        Document clean = cleaner.clean(dirty);
+
+        assertTrue(dirty.body().html().contains("onclick"));
+        assertFalse(clean.body().html().contains("onclick"));
+    }
+
+    @Test
+    public void emptyDocumentIsValid() {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document document = Jsoup.parse("");
+
+        assertTrue(cleaner.isValid(document));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.safety.CleanerGeneratedTest::cleanedDocumentBecomesValidAfterUnsafeContentIsRemoved
+ - org.jsoup.safety.CleanerGeneratedTest::isValidAcceptsAllowedTagsAndAttributes
+
+Failing generated tests: org.jsoup.safety.CleanerGeneratedTest::cleanedDocumentBecomesValidAfterUnsafeContentIsRemoved, org.jsoup.safety.CleanerGeneratedTest::isValidAcceptsAllowedTagsAndAttributes

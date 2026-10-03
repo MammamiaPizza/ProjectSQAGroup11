@@ -1,0 +1,224 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 82  Version: Math-82b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.optimization.linear.SimplexSolver
+Modified: org.apache.commons.math.optimization.linear.SimplexSolver
+Triggers: org.apache.commons.math.optimization.linear.SimplexSolverTest::testMath288
+
+Bug/specification summary:
+Bug report: MATH-288
+Trigger failures:
+- org.apache.commons.math.optimization.linear.SimplexSolverTest::testMath288
+ --> junit.framework.AssertionFailedError: expected:<10.0> but was:<11.5>
+Modified: org.apache.commons.math.optimization.linear.SimplexSolver
+
+Prompt-01 test plan:
+TARGETS: SimplexSolver.doOptimize, solvePhase1, doIteration, getPivotColumn/getPivotRow, isOptimal. 
+ORACLES: Existing trigger SimplexSolverTest::testMath288 expects objective value 10.0, not 11.5. 
+CASES: Reproduce MATH-288 linear program and assert optimized value/result through public optimizer API. 
+CASES: Cover pivot selection when multiple eligible rows/columns exist, including tie handling. 
+CASES: Cover phase-1 feasibility completion before phase-2 optimization. 
+RISKS: Key pivot helpers are private/protected; test observable optimization results rather than internals. 
+RISKS: Context omits MATH-288 constraint data and public doOptimize inputs; derive only from existing test/source.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.optimization.linear.SimplexSolver (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.optimization.linear;
+
+import org.apache.commons.math.optimization.OptimizationException;
+import org.apache.commons.math.optimization.RealPointValuePair;
+import org.apache.commons.math.util.MathUtils;
+
+/**
+ * Solves a linear problem using the Two-Phase Simplex Method.
+ * @version $Revision$ $Date$
+ * @since 2.0
+ */
+public class SimplexSolver extends AbstractLinearOptimizer {
+
+ /** Default amount of error to accept in floating point comparisons. */ 
+ private static final double DEFAULT_EPSILON = 1.0e-6;
+
+ /** Amount of error to accept in floating point comparisons. */ 
+ protected final double epsilon; 
+
+ /**
+ * Build a simplex solver with default settings.
+ */
+ public SimplexSolver() {
+ this(DEFAULT_EPSILON);
+ }
+
+ /**
+ * Build a simplex solver with a specified accepted amount of error
+ * @param epsilon the amount of error to accept in floating point comparisons
+ */
+ public SimplexSolver(final double epsilon) {
+ this.epsilon = epsilon;
+ }
+
+ /**
+ * Returns the column with the most negative coefficient in the objective function row.
+ * @param tableau simple tableau for the problem
+ * @return column with the most negative coefficient
+ */
+ private Integer getPivotColumn(SimplexTableau tableau) {
+ double minValue = 0;
+ Integer minPos = null;
+ for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getWidth() - 1; i++) {
+ if (MathUtils.compareTo(tableau.getEntry(0, i), minValue, epsilon) < 0) {
+ minValue = tableau.getEntry(0, i);
+ minPos = i;
+ }
+ }
+ return minPos;
+ }
+
+ /**
+ * Returns the row with the minimum ratio as given by the minimum ratio test (MRT).
+ * @param tableau simple tableau for the problem
+ * @param col the column to test the ratio of. See {@link #getPivotColumn(SimplexTableau)}
+ * @return row with the minimum ratio
+ */
+ private Integer getPivotRow(final int col, final SimplexTableau tableau) {
+ double minRatio = Double.MAX_VALUE;
+ Integer minRatioPos = null;
+ for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getHeight(); i++) {
+ final double rhs = tableau.getEntry(i, tableau.getWidth() - 1);
+ final double entry = tableau.getEntry(i, col);
+ if (MathUtils.compareTo(entry, 0, epsilon) >= 0) {
+ final double ratio = rhs / entry;
+ if (ratio < minRatio) {
+ minRatio = ratio;
+ minRatioPos = i; 
+ }
+ }
+ }
+ return minRatioPos;
+ }
+
+ /**
+ * Runs one iteration of the Simplex method on the given model.
+ * @param tableau simple tableau for the problem
+ * @throws OptimizationException if the maximal iteration count has been
+ * exceeded or if the model is found not to have a bounded solution
+ */
+ protected void doIteration(final SimplexTableau tableau)
+ throws OptimizationException {
+
+ incrementIterationsCounter();
+
+ Integer pivotCol = getPivotColumn(tableau);
+ Integer pivotRow = getPivotRow(pivotCol, tableau);
+ if (pivotRow == null) {
+ throw new UnboundedSolutionException();
+ }
+
+ // set the pivot element to 1
+ double pivotVal = tableau.getEntry(pivotRow, pivotCol);
+ tableau.divideRow(pivotRow, pivotVal);
+
+ // set the rest of the pivot column to 0
+ for (int i = 0; i < tableau.getHeight(); i++) {
+ if (i != pivotRow) {
+ double multiplier = tableau.getEntry(i, pivotCol);
+ tableau.subtractRow(i, pivotRow, multiplier);
+ }
+ }
+ }
+
+ /**
+ * Checks whether Phase 1 is solved.
+ * @param tableau simple tableau for the problem
+ * @return whether Phase 1 is solved
+ */
+ private boolean isPhase1Solved(final SimplexTableau tableau) {
+ if (tableau.getNumArtificialVariables() == 0) {
+ return true;
+ }
+ for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getWidth() - 1; i++) {
+ if (MathUtils.compareTo(tableau.getEntry(0, i), 0, epsilon) < 0) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+ /**
+ * Returns whether the problem is at an optimal state.
+ * @param tableau simple tableau for the problem
+ * @return whether the model has been solved
+ */
+ public boolean isOptimal(final SimplexTableau tableau) {
+ if (tableau.getNumArtificialVariables() > 0) {
+ return false;
+ }
+ for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getWidth() - 1; i++) {
+ if (MathUtils.compareTo(tableau.getEntry(0, i), 0, epsilon) < 0) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+ /**
+ * Solves Phase 1 of the Simplex method.
+ * @param tableau simple tableau for the problem
+ * @exception OptimizationException if the maximal number of iterations is
+ * exceeded, or if the problem is found not to have a bounded solution, or
+ * if there is no feasible solution
+ */
+ protected void solvePhase1(final SimplexTableau tableau)
+ throws OptimizationException {
+ // make sure we're in Phase 1
+ if (tableau.getNumArtificialVariables() == 0) {
+ return;
+ }
+
+ while (!isPhase1Solved(tableau)) {
+ doIteration(tableau);
+ }
+
+ // if W is not zero then we have no feasible solution
+ if (!MathUtils.equals(tableau.getEntry(0, tableau.getRhsOffset()), 0, epsilon)) {
+ throw new NoFeasibleSolutionException();
+ }
+ }
+
+ /** {@inheritDoc} */
+ @Override
+ public RealPointValuePair doOptimize()
+ throws OptimizationException {
+ final SimplexTableau tableau =
+ new SimplexTableau(f, constraints, goalType, restrictToNonNegative, epsilon);
+ solvePhase1(tableau);
+ tableau.discardArtificialVariables();
+ while (!isOptimal(tableau)) {
+ doIteration(tableau);
+ }
+ return tableau.getSolution();
+ }
+
+}

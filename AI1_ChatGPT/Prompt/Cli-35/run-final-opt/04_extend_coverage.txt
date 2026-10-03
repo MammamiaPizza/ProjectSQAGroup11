@@ -1,0 +1,208 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: Cli  Bug: 35  Version: Cli-35b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.cli.Options
+Bug/specification summary:
+Bug report: CLI-252
+Trigger failures:
+- org.apache.commons.cli.bug.BugCLI252Test::testExactOptionNameMatch
+ --> org.apache.commons.cli.AmbiguousOptionException: Ambiguous option: '--prefix' (could be: 'prefix', 'prefixplusplus')
+Modified: org.apache.commons.cli.Options
+
+Available API/signatures:
+[org.apache.commons.cli.Options | java]
+package org.apache.commons.cli;
+public class Options implements Serializable
+private final Map<String, Option> shortOpts = new LinkedHashMap<String, Option>();
+private final Map<String, Option> longOpts = new LinkedHashMap<String, Option>();
+private final List<Object> requiredOpts = new ArrayList<Object>();
+private final Map<String, OptionGroup> optionGroups = new HashMap<String, OptionGroup>();
+public Options addOptionGroup(OptionGroup group)
+public Options addOption(String opt, String description)
+public Options addOption(String opt, boolean hasArg, String description)
+public Options addOption(String opt, String longOpt, boolean hasArg, String description)
+public Options addOption(Option opt)
+public Collection<Option> getOptions()
+public List getRequiredOptions()
+public Option getOption(String opt)
+public List<String> getMatchingOptions(String opt)
+public boolean hasOption(String opt)
+public boolean hasLongOption(String opt)
+public boolean hasShortOption(String opt)
+public OptionGroup getOptionGroup(Option opt)
+@Override
+public String toString()
+
+Existing test summary (method names/assertions only):
+Test methods: exactLongOptionMatchTakesPrecedenceOverLongerPrefixMatch, uniquePartialLongOptionMatchReturnsOnlyMatchingOption, sharedNonExactPrefixReturnsAllMatchingLongOptions, absentPrefixReturnsNoMatches, exactLongAndShortLookupsRemainDistinctAndAcceptLeadingHyphens
+Representative assertions:
+assertEquals(Collections.singletonList("prefix"),
+assertEquals(Collections.singletonList("prefixplusplus"),
+assertEquals(2, matches.size());
+assertTrue(matches.containsAll(Arrays.asList("prefix", "prefixplusplus")));
+assertTrue(options.getMatchingOptions("unknown").isEmpty());
+assertNotNull(options.getOption("--prefix"));
+assertEquals("prefix", options.getOption("--prefix").getLongOpt());
+assertTrue(options.hasOption("-p"));
+assertTrue(options.hasOption("--prefix"));
+assertTrue(options.hasLongOption("--prefix"));
+assertFalse(options.hasLongOption("-p"));
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+59,29,22,12
+
+Line/branch gaps:
+Class: org.apache.commons.cli.Options
+Uncovered lines: 111, 112, 126, 127, 165, 167, 169, 71, 73, 76, 81, 82, 84, 85, 87, 220, 305, 97, 184, 204, 291, 293, 194, 316, 318, 319, 320, 321, 322, 324 ... (+30 more)
+Partially covered branch lines: 157 (50% (1/2)), 163 (50% (1/2)), 218 (50% (1/2)), 265 (75% (3/4)), 157 (50% (1/2)), 163 (50% (1/2)), 218 (50% (1/2)), 265 (75% (3/4))
+
+Relevant buggy-source snippets around reported gaps:
+[org.apache.commons.cli.Options]
+109: public Options addOption(String opt, String description)
+110: {
+111: addOption(opt, null, false, description);
+112: return this;
+113: }
+---
+110: {
+111: addOption(opt, null, false, description);
+112: return this;
+113: }
+114: 
+---
+124: public Options addOption(String opt, boolean hasArg, String description)
+125: {
+126: addOption(opt, null, hasArg, description);
+127: return this;
+128: }
+---
+125: {
+126: addOption(opt, null, hasArg, description);
+127: return this;
+128: }
+129: 
+---
+163: if (opt.isRequired())
+164: {
+165: if (requiredOpts.contains(key))
+166: {
+167: requiredOpts.remove(requiredOpts.indexOf(key));
+---
+165: if (requiredOpts.contains(key))
+166: {
+167: requiredOpts.remove(requiredOpts.indexOf(key));
+168: }
+169: requiredOpts.add(key);
+---
+167: requiredOpts.remove(requiredOpts.indexOf(key));
+168: }
+169: requiredOpts.add(key);
+170: }
+171: 
+---
+69: public Options addOptionGroup(OptionGroup group)
+70: {
+71: if (group.isRequired())
+72: {
+73: requiredOpts.add(group);
+---
+71: if (group.isRequired())
+72: {
+73: requiredOpts.add(group);
+74: }
+75: 
+---
+74: }
+75: 
+76: for (Option option : group.getOptions())
+77: {
+78: // an Option cannot be required if it is in an
+---
+79: // OptionGroup, either the group is required or
+80: // nothing is required
+81: option.setRequired(false);
+82: addOption(option);
+83: 
+---
+80: // nothing is required
+81: option.setRequired(false);
+82: addOption(option);
+83: 
+84: optionGroups.put(option.getKey(), group);
+---
+82: addOption(option);
+83: 
+84: optionGroups.put(option.getKey(), group);
+85: }
+86: 
+---
+83: 
+84: optionGroups.put(option.getKey(), group);
+85: }
+86: 
+87: return this;
+---
+85: }
+86: 
+87: return this;
+88: }
+89: 
+---
+218: if (shortOpts.containsKey(opt))
+219: {
+220: return shortOpts.get(opt);
+221: }
+222: 
+---
+303: }
+304: 
+305: /**
+306: * Dump state, suitable for debugging.
+307: *
+---
+95: Collection<OptionGroup> getOptionGroups()
+96: {
+97: return new HashSet<OptionGroup>(optionGroups.values());
+98: }
+99: 
+---
+182: public Collection<Option> getOptions()
+183: {
+184: return Collections.unmodifiableCollection(helpOptions());
+185: }
+186: 
+---
+202: public List getRequiredOptions()
+203: {
+204: return Collections.unmodifiableList(requiredOpts);
+205: }
+206: 
+---
+289: 
+290: return shortOpts.containsKey(opt);
+291: }
+292: 
+293: /**
+---
+291: }
+292: 
+293: /**
+294: * Returns the OptionGroup the <code>opt</code> belongs to.
+295: * @param opt the option whose OptionGroup is being queried.
+---
+192: List<Option> helpOptions()
+193: {
+194: return new ArrayList<Option>(shortOpts.values());
+195: }
+196: 
+---
+314: 
+315: buf.append("[ Options: [ short ");
+316: buf.append(shortOpts.toString());
+317: buf.append(" ] [ long ");
+318: buf.append(longOpts);

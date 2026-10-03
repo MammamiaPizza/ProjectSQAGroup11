@@ -1,0 +1,380 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 17  Version: JacksonCore-17b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.json.UTF8JsonGenerator
+Modified: com.fasterxml.jackson.core.json.UTF8JsonGenerator
+Triggers: com.fasterxml.jackson.core.json.RawValueWithSurrogatesTest::testRawWithSurrogatesString
+
+Bug/specification summary:
+Bug report: 307
+Trigger failures:
+- com.fasterxml.jackson.core.json.RawValueWithSurrogatesTest::testRawWithSurrogatesString
+ --> com.fasterxml.jackson.core.JsonGenerationException: Split surrogate on writeRaw() input (last character)
+Modified: com.fasterxml.jackson.core.json.UTF8JsonGenerator
+
+Prompt-01 test plan:
+TARGETS: UTF8JsonGenerator.writeRaw(String,int,int); writeRaw(String); writeRaw(char[],int,int)
+ORACLES: no split surrogate at raw-input end; preserve high/low surrogate pairing across writeRaw
+boundaries
+CASES: lone high surrogate as last char; valid pair spanning buffer/segment boundary; lone low
+surrogate; empty raw
+RISKS: bug in surrogate handling at input end; private helpers _outputSurrogates/_writeUTF8Segments
+not directly testable
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.json.UTF8JsonGenerator (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json;
+public class UTF8JsonGenerator
+private final static byte BYTE_u = (byte) 'u';
+private final static byte BYTE_0 = (byte) '0';
+private final static byte BYTE_LBRACKET = (byte) '[';
+private final static byte BYTE_RBRACKET = (byte) ']';
+private final static byte BYTE_LCURLY = (byte) '{';
+private final static byte BYTE_RCURLY = (byte) '}';
+private final static byte BYTE_BACKSLASH = (byte) '\\';
+private final static byte BYTE_COMMA = (byte) ',';
+private final static byte BYTE_COLON = (byte) ':';
+private final static byte BYTE_QUOTE = (byte) '"';
+private final static byte[] HEX_CHARS = CharTypes.copyHexBytes();
+final protected OutputStream _outputStream;
+protected byte[] _outputBuffer;
+protected int _outputTail;
+protected final int _outputEnd;
+protected final int _outputMaxContiguous;
+protected char[] _charBuffer;
+protected final int _charBufferLength;
+protected byte[] _entityBuffer;
+protected boolean _bufferRecyclable;
+@Override
+public Object getOutputTarget() {
+public int getOutputBuffered() {
+public void writeFieldName(String name) throws IOException
+final int status = _writeContext.writeFieldName(name);
+final int len = name.length();
+public void writeFieldName(SerializableString name) throws IOException
+final int status = _writeContext.writeFieldName(name.getValue());
+private final void _writeUnq(SerializableString name) throws IOException {
+public final void writeStartArray() throws IOException
+public final void writeEndArray() throws IOException
+public final void writeStartObject() throws IOException
+public final void writeEndObject() throws IOException
+protected final void _writePPFieldName(String name) throws IOException
+protected final void _writePPFieldName(SerializableString name) throws IOException
+public void writeString(String text) throws IOException
+final int len = text.length();
+public void writeString(char[] text, int offset, int len) throws IOException
+public final void writeString(SerializableString text) throws IOException
+public void writeRawUTF8String(byte[] text, int offset, int length) throws IOException
+public void writeUTF8String(byte[] text, int offset, int len) throws IOException
+public void writeRaw(String text) throws IOException {
+public void writeRaw(String text, int offset, int len) throws IOException
+public void writeRaw(SerializableString text) throws IOException
+public void writeRawValue(SerializableString text) throws IOException {
+public final void writeRaw(char[] cbuf, int offset, int len) throws IOException
+public void writeRaw(char ch) throws IOException
+private final void _writeSegmentedRaw(char[] cbuf, int offset, int len) throws IOException
+...[truncated deterministically]...
+on
+private final void _writeStringSegmentASCII2(final char[] cbuf, int offset, final int end) throws IOException
+private final void _writeStringSegmentASCII2(final String text, int offset, final int end) throws IOException
+private final void _writeCustomStringSegment2(final char[] cbuf, int offset, final int end) throws IOException
+final int maxUnescaped = (_maximumNonEscapedChar <= 0) ? 0xFFFF : _maximumNonEscapedChar;
+private final void _writeCustomStringSegment2(final String text, int offset, final int end) throws IOException
+private final int _writeCustomEscape(byte[] outputBuffer, int outputPtr, SerializableString esc, int remainingChars)
+private final void _writeUTF8Segments(byte[] utf8, int offset, int totalLen)
+private final void _writeUTF8Segment(byte[] utf8, final int offset, final int len)
+private final void _writeUTF8Segment2(final byte[] utf8, int offset, int len)
+private final int _outputRawMultiByteChar(int ch, char[] cbuf, int inputOffset, int inputEnd)
+protected final void _outputSurrogates(int surr1, int surr2) throws IOException
+private final int _outputMultiByteChar(int ch, int outputPtr) throws IOException
+private final void _writeNull() throws IOException
+private int _writeGenericEscape(int charToEscape, int outputPtr) throws IOException
+protected final void _flushBuffer() throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.json;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.io.*;
+public class UTF8JsonGenerator
+
+/* METHOD writeRaw */
+@Override
+ public void writeRaw(String text, int offset, int len) throws IOException
+ {
+ final char[] buf = _charBuffer;
+
+ // minor optimization: see if we can just get and copy
+
+ // If not, need segmented approach. For speed, let's also use input buffer
+ // size that is guaranteed to fit in output buffer; each char can expand to
+ // at most 3 bytes, so at most 1/3 of buffer size.
+
+ while (len > 0) {
+ int len2 = Math.min(buf.length, len);
+ text.getChars(offset, offset+len2, buf, 0);
+ writeRaw(buf, 0, len2);
+ // If this is NOT the last segment and if the last character looks like
+ // split surrogate second half, drop it
+ offset += len2;
+ len -= len2;
+ }
+ }
+
+ @Override
+ public void writeRaw(SerializableString text) throws IOException
+ {
+ byte[] raw = text.asUnquotedUTF8();
+ if (raw.length > 0) {
+ _writeBytes(raw);
+ }
+ }
+
+ // since 2.5
+ @Override
+ public void writeRawValue(SerializableString text) throws IOException {
+ _verifyValueWrite(WRITE_RAW);
+ byte[] raw = text.asUnquotedUTF8();
+ if (raw.length > 0) {
+ _writeBytes(raw);
+ }
+ }
+
+ // @TODO: rewrite for speed...
+ @Override
+ public final void writeRaw(char[] cbuf, int offset, int len) throws IOException
+ {
+ // First: if we have 3 x charCount spaces, we know it'll fit just fine
+ {
+ int len3 = len+len+len;
+ if ((_outputTail + len3) > _outputEnd) {
+ // maybe we could flush?
+ if (_outputEnd < len3) { // wouldn't be enough...
+ _writeSegmentedRaw(cbuf, offset, len);
+ return;
+ }
+ // yes, flushing brings enough space
+ _flushBuffer();
+ }
+ }
+ len += offset; // now marks the end
+
+ // Note: here we know there is enough room, hence no output boundary checks
+ main_loop:
+ while (offset < len) {
+ inner_loop:
+ while (true) {
+ int ch = (int) cbuf[offset];
+ if (ch > 0x7F) {
+ break inner_loop;
+ }
+ _outputBuffer[_outputTail++] = (byte) ch;
+ if (++offset >= len) {
+ break main_loop;
+ }
+ }
+ char ch = cbuf[offset++];
+ if (ch < 0x800) { // 2-byte?
+ _outputBuffer[_outputTail++] = (byte) (0xc0 | (ch >> 6));
+ _outputBuffer[_outputTail++] = (byte) (0x80 | (ch & 0x3f));
+ } else {
+ offset = _outputRawMultiByteChar(ch, cbuf, offset, len);
+ }
+ }
+ }
+
+ @Override
+ public void writeRaw(char ch) throws IOException
+ {
+ if ((_outputTail + 3) >= _outputEnd) {
+ _flushBuffer();
+ }
+ final byte[] bbuf = _outputBuffer;
+ if (ch <= 0x7F) {
+ bbuf[_outputTail++] = (byte) ch;
+ } else if (ch < 0x800) { // 2-byte?
+ bbuf[_outputTail++] = (byte) (0xc0 | (ch >> 6));
+ bbuf[_outputTail++] = (byte) (0x80 | (ch & 0x3f));
+ } else {
+ /*offset =*/ _outputRawMultiByteChar(ch, null, 0, 0);
+ }
+ }
+
+ /**
+ * Helper method called when it is possible that output of raw section
+ * to output may cross buffer boundary
+ */
+ private final void _writeSegmentedRaw(char[] cbuf, int offset, int len) throws IOException
+ {
+ final int end = _outputEnd;
+ final byte[] bbuf = _outputBuffer;
+ final int inputEnd = offset + len;
+ 
+ main_loop:
+ while (offset < inputEnd) {
+ inner_loop:
+ while (true) {
+ int ch = (int) cbuf[offset];
+ if (ch >= 0x80) {
+ break inner_loop;
+ }
+ // !!! TODO: fast(er) writes (roll input, output checks in one)
+ if (_outputTail >= end) {
+ _flushBuffer();
+ }
+ bbuf[_outputTail++] = (byte) ch;
+ if (++offset >= inputEnd) {
+ break main_loop;
+ }
+ }
+ if ((_outputTail + 3) >= _outputEnd) {
+ _flushBuffer();
+ }
+ char ch = cbuf[offset++];
+ if (ch < 0x800) { // 2-byte?
+ bbuf[_outputTail++] = (byte) (0xc
+...[truncated deterministically]...
+**************
+ /* Internal methods, low-level writing, base64 encoded
+ /**********************************************************
+ */
+ 
+ protected final void _writeBinary(Base64Variant b64variant,
+ byte[] input, int inputPtr, final int inputEnd)
+ throws IOException, JsonGenerationException
+ {
+ // Encoding is by chunks of 3 input, 4 output chars, so:
+ int safeInputEnd = inputEnd - 3;
+ // Let's also reserve room for possible (and quoted) lf char each round
+ int safeOutputEnd = _outputEnd - 6;
+ int chunksBeforeLF = b64variant.getMaxLineLength() >> 2;
+
+ // Ok, first we loop through all full triplets of data:
+ while (inputPtr <= safeInputEnd) {
+ if (_outputTail > safeOutputEnd) { // need to flush
+ _flushBuffer();
+ }
+ // First, mash 3 bytes into lsb of 32-bit int
+ int b24 = ((int) input[inputPtr++]) << 8;
+ b24 |= ((int) input[inputPtr++]) & 0xFF;
+ b24 = (b24 << 8) | (((int) input[inputPtr++]) & 0xFF);
+ _outputTail = b64variant.encodeBase64Chunk(b24, _outputBuffer, _outputTail);
+ if (--chunksBeforeLF <= 0) {
+ // note: must quote in JSON value
+ _outputBuffer[_outputTail++] = '\\';
+ _outputBuffer[_outputTail++] = 'n';
+ chunksBeforeLF = b64variant.getMaxLineLength() >> 2;
+ }
+ }
+
+ // And then we may have 1 or 2 leftover bytes to encode
+ int inputLeft = inputEnd - inputPtr; // 0, 1 or 2
+ if (inputLeft > 0) { // yes, but do we have room for output?
+ if (_outputTail > safeOutputEnd) { // don't really need 6 bytes but...
+ _flushBuffer();
+ }
+ int b24 = ((int) input[inputPtr++]) << 16;
+ if (inputLeft == 2) {
+ b24 |= (((int) input[inputPtr++]) & 0xFF) << 8;
+ }
+ _outputTail = b64variant.encodeBase64Partial(b24, inputLeft, _outputBuffer, _outputTail);
+ }
+ }
+
+/* METHOD UTF8JsonGenerator */
+public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
+ OutputStream out)
+ {
+ super(ctxt, features, codec);
+ _outputStream = out;
+ _bufferRecyclable = true;
+ _outputBuffer = ctxt.allocWriteEncodingBuffer();
+ _outputEnd = _outputBuffer.length;
+
+ /* To be exact, each char can take up to 6 bytes when escaped (Unicode
+ * escape with backslash, 'u' and 4 hex digits); but to avoid fluctuation,
+ * we will actually round down to only do up to 1/8 number of chars
+ */
+ _outputMaxContiguous = _outputEnd >> 3;
+ _charBuffer = ctxt.allocConcatBuffer();
+ _charBufferLength = _charBuffer.length;
+
+ // By default we use this feature to determine additional quoting
+ if (isEnabled(Feature.ESCAPE_NON_ASCII)) {
+ setHighestNonEscapedChar(127);
+ }
+ }
+
+/* METHOD UTF8JsonGenerator */
+public UTF8JsonGenerator(IOContext ctxt, int features, ObjectCodec codec,
+ OutputStream out,
+ byte[] outputBuffer, int outputOffset, boolean bufferRecyclable)
+ {
+ 
+ super(ctxt, features, codec);
+ _outputStream = out;
+ _bufferRecyclable = bufferRecyclable;
+ _outputTail = outputOffset;
+ _outputBuffer = outputBuffer;
+ _outputEnd = _outputBuffer.length;
+ // up to 6 bytes per char (see above), rounded up to 1/8
+ _outputMaxContiguous = (_outputEnd >> 3);
+ _charBuffer = ctxt.allocConcatBuffer();
+ _charBufferLength = _charBuffer.length;
+ }
+
+/* METHOD writeRaw */
+@Override
+ public void writeRaw(String text) throws IOException {
+ writeRaw(text, 0, text.length());
+ }
+
+/* METHOD writeRaw */
+@Override
+ public void writeRaw(SerializableString text) throws IOException
+ {
+ byte[] raw = text.asUnquotedUTF8();
+ if (raw.length > 0) {
+ _writeBytes(raw);
+ }
+ }
+
+/* METHOD writeRaw */
+@Override
+ public final void writeRaw(char[] cbuf, int offset, int len) throws IOException
+ {
+ // First: if we have 3 x charCount spaces, we know it'll fit just fine
+ {
+ int len3 = len+len+len;
+ if ((_outputTail + len3) > _outputEnd) {
+ // maybe we could flush?
+ if (_outputEnd < len3) { // wouldn't be enough...
+ _writeSegmentedRaw(cbuf, offset, len);
+ return;
+ }
+
+/* METHOD writeRaw */
+@Override
+ public void writeRaw(char ch) throws IOException
+ {
+ if ((_outputTail + 3) >= _outputEnd) {
+ _flushBuffer();
+ }
+ final byte[] bbuf = _outputBuffer;
+ if (ch <= 0x7F) {
+ bbuf[_outputTail++] = (byte) ch;
+ } else if (ch < 0x800) { // 2-byte?
+ bbuf[_outputTail++] = (byte) (0xc0 | (ch >> 6));
+ bbuf[_outputTail++] = (byte) (0x80 | (ch & 0x3f));
+ } else {
+ /*offset =*/ _outputRawMultiByteChar(ch, null, 0, 0);
+ }
+ }

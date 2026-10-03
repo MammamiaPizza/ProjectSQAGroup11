@@ -1,0 +1,212 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 14  Version: JacksonCore-14b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 255
+Trigger failures:
+- com.fasterxml.jackson.core.io.TestIOContext::testAllocations
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([smaller than original]): got one with message "Trying to release buffer not owned by the context"
+Modified: com.fasterxml.jackson.core.io.IOContext
+
+Available API/signatures:
+[com.fasterxml.jackson.core.io.IOContext | java]
+package com.fasterxml.jackson.core.io;
+public class IOContext
+protected final Object _sourceRef;
+protected JsonEncoding _encoding;
+protected final boolean _managedResource;
+protected final BufferRecycler _bufferRecycler;
+protected byte[] _readIOBuffer;
+protected byte[] _writeEncodingBuffer;
+protected byte[] _base64Buffer;
+protected char[] _tokenCBuffer;
+protected char[] _concatCBuffer;
+protected char[] _nameCopyBuffer;
+public IOContext(BufferRecycler br, Object sourceRef, boolean managedResource)
+public void setEncoding(JsonEncoding enc) {
+public IOContext withEncoding(JsonEncoding enc) {
+public Object getSourceReference() { return _sourceRef; }
+public JsonEncoding getEncoding() { return _encoding; }
+public boolean isResourceManaged() { return _managedResource; }
+public TextBuffer constructTextBuffer() {
+public byte[] allocReadIOBuffer() {
+public byte[] allocReadIOBuffer(int minSize) {
+public byte[] allocWriteEncodingBuffer() {
+public byte[] allocWriteEncodingBuffer(int minSize) {
+public byte[] allocBase64Buffer() {
+public char[] allocTokenBuffer() {
+public char[] allocTokenBuffer(int minSize) {
+public char[] allocConcatBuffer() {
+public char[] allocNameCopyBuffer(int minSize) {
+public void releaseReadIOBuffer(byte[] buf) {
+public void releaseWriteEncodingBuffer(byte[] buf) {
+public void releaseBase64Buffer(byte[] buf) {
+public void releaseTokenBuffer(char[] buf) {
+public void releaseConcatBuffer(char[] buf) {
+public void releaseNameCopyBuffer(char[] buf) {
+protected final void _verifyAlloc(Object buffer) {
+protected final void _verifyRelease(byte[] toRelease, byte[] src) {
+protected final void _verifyRelease(char[] toRelease, char[] src) {
+private IllegalArgumentException wrongBuf() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.io;
+
+ import static org.junit.Assert.*;
+ import org.junit.Rule;
+ import org.junit.Test;
+ import org.junit.rules.ExpectedException;
+
+ import com.fasterxml.jackson.core.util.BufferRecycler;
+
+ /**
+  * Tests for {@link IOContext} focusing on buffer allocation and release,
+  * covering the faulty error message when releasing a smaller buffer.
+  */
+ public class TestIOContext {
+
+     @Rule
+     public ExpectedException thrown = ExpectedException.none();
+
+     // ---------- helpers ----------
+
+     private IOContext createContext() {
+         return new IOContext(new BufferRecycler(), "dummySource", false);
+     }
+
+     // ---------- normal release: exact allocated buffer ----------
+
+     @Test
+     public void testReleaseExactReadIOBuffer() {
+         IOContext ctxt = createContext();
+         byte[] buf = ctxt.allocReadIOBuffer();
+         // must not throw
+         ctxt.releaseReadIOBuffer(buf);
+     }
+
+     @Test
+     public void testReleaseExactTokenBuffer() {
+         IOContext ctxt = createContext();
+         char[] buf = ctxt.allocTokenBuffer();
+         ctxt.releaseTokenBuffer(buf);
+     }
+
+     // ---------- release smaller array ----------
+
+     @Test
+     public void testReleaseShorterReadIOBuffer() {
+         IOContext ctxt = createContext();
+         byte[] original = ctxt.allocReadIOBuffer();
+         byte[] shorter = new byte[original.length - 1];
+
+         thrown.expect(IllegalArgumentException.class);
+         thrown.expectMessage("smaller than original");
+         ctxt.releaseReadIOBuffer(shorter);
+     }
+
+     @Test
+     public void testReleaseShorterTokenBuffer() {
+         IOContext ctxt = createContext();
+         char[] original = ctxt.allocTokenBuffer();
+         char[] shorter = new char[original.length - 1];
+
+         thrown.expect(IllegalArgumentException.class);
+         thrown.expectMessage("smaller than original");
+         ctxt.releaseTokenBuffer(shorter);
+     }
+
+     // ---------- release same-length but different array ----------
+
+     @Test
+     public void testReleaseSameLengthDifferentReadIOBuffer() {
+         IOContext ctxt = createContext();
+         byte[] original = ctxt.allocReadIOBuffer();
+         byte[] different = new byte[original.length];
+
+         thrown.expect(IllegalArgumentException.class);
+         thrown.expectMessage("smaller than original");
+         ctxt.releaseReadIOBuffer(different);
+     }
+
+     @Test
+     public void testReleaseSameLengthDifferentTokenBuffer() {
+         IOContext ctxt = createContext();
+         char[] original = ctxt.allocTokenBuffer();
+         char[] different = new char[original.length];
+
+         thrown.expect(IllegalArgumentException.class);
+         thrown.expectMessage("smaller than original");
+         ctxt.releaseTokenBuffer(different);
+     }
+
+     // ---------- release larger array (should be accepted) ----------
+
+     @Test
+     public void testReleaseLargerReadIOBufferAllowed() {
+         IOContext ctxt = createContext();
+         byte[] original = ctxt.allocReadIOBuffer();
+         byte[] larger = new byte[original.length + 1];
+         // upgrading to larger buffer should not throw
+         ctxt.releaseReadIOBuffer(larger);
+     }
+
+     // ---------- release null ----------
+
+     @Test
+     public void testReleaseReadIOBufferNull() {
+         IOContext ctxt = createContext();
+         // allocate then release null is a no-op; must not throw
+         ctxt.allocReadIOBuffer();
+         ctxt.releaseReadIOBuffer(null);
+     }
+
+     @Test
+     public void testReleaseTokenBufferNull() {
+         IOContext ctxt = createContext();
+         ctxt.allocTokenBuffer();
+         ctxt.releaseTokenBuffer(null);
+     }
+
+     // ---------- allocation with explicit minSize ----------
+
+     @Test
+     public void testAllocReadIOBufferMinSize0() {
+         IOContext ctxt = createContext();
+         byte[] buf = ctxt.allocReadIOBuffer(0);
+         assertNotNull("buffer allocated with minSize 0 must not be null", buf);
+         ctxt.releaseReadIOBuffer(buf);
+     }
+
+     @Test
+     public void testAllocTokenBufferMinSize1() {
+         IOContext ctxt = createContext();
+         char[] buf = ctxt.allocTokenBuffer(1);
+         assertNotNull("buffer allocated with minSize 1 must not be null", buf);
+         ctxt.releaseTokenBuffer(buf);
+     }
+
+     // ---------- double allocation prohibition ----------
+
+     @Test
+     public void testDoubleAllocReadIOBufferThrows() {
+         IOContext ctxt = createContext();
+         ctxt.allocReadIOBuffer();
+         try {
+             ctxt.allocReadIOBuffer();
+             fail("Second allocReadIOBuffer() should throw IllegalStateException");
+         } catch (IllegalStateException e) {
+             assertNotNull(e.getMessage());
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.core.io.TestIOContext::testReleaseSameLengthDifferentTokenBuffer
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.core.io.TestIOContext::testReleaseSameLengthDifferentReadIOBuffer, com.fasterxml.jackson.core.io.TestIOContext::testReleaseSameLengthDifferentTokenBuffer

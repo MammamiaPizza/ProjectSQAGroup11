@@ -1,0 +1,165 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 25  Version: Jsoup-25b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 167
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::preservesSpaceInTextArea
+ --> junit.framework.AssertionFailedError: expected:<One[
+Modified: org.jsoup.parser.Tag
+
+Available API/signatures:
+[org.jsoup.parser.Tag | java]
+package org.jsoup.parser;
+public class Tag {
+private static final Map<String, Tag> tags = new HashMap<String, Tag>(); // map of known tags
+private boolean selfClosing = false; // can self close (<foo />). used for unknown tags that self close, without forcing them as empty.
+private Tag(String tagName) {
+public String getName() {
+public static Tag valueOf(String tagName) {
+synchronized (tags) {
+public boolean isBlock() {
+public boolean formatAsBlock() {
+public boolean canContainBlock() {
+public boolean isInline() {
+public boolean isData() {
+public boolean isEmpty() {
+public boolean isSelfClosing() {
+public boolean isKnownTag() {
+public static boolean isKnownTag(String tagName) {
+public boolean preserveWhitespace() {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+public String toString() {
+private static Tag register(Tag tag) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+ import static org.junit.Assert.*;
+
+ import org.junit.Test;
+
+ /**
+  * Unit tests for {@link Tag}, focusing on whitespace preservation and tag registration,
+  * validating the bug that textarea does not preserve whitespace.
+  */
+ public class TagTest {
+
+     @Test
+     public void testWhitespacePreservingTags() {
+         // Tags that should preserve whitespace
+         assertTrue("pre must preserve whitespace", Tag.valueOf("pre").preserveWhitespace());
+         assertTrue("textarea must preserve whitespace",
+Tag.valueOf("textarea").preserveWhitespace());
+         assertTrue("plaintext must preserve whitespace",
+Tag.valueOf("plaintext").preserveWhitespace());
+         assertTrue("title must preserve whitespace", Tag.valueOf("title").preserveWhitespace());
+     }
+
+     @Test
+     public void testDivDoesNotPreserveWhitespace() {
+         assertFalse("div must not preserve whitespace", Tag.valueOf("div").preserveWhitespace());
+     }
+
+     @Test
+     public void testUnknownTagDoesNotPreserveWhitespace() {
+         assertFalse("unknown tag must not preserve whitespace",
+Tag.valueOf("foo").preserveWhitespace());
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testValueOfNullThrowsException() {
+         Tag.valueOf(null);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testValueOfEmptyThrowsException() {
+         Tag.valueOf("");
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testValueOfBlankThrowsException() {
+         Tag.valueOf("   ");
+     }
+
+     @Test
+     public void testIsKnownTag() {
+         assertTrue("div must be known", Tag.isKnownTag("div"));
+         assertFalse("foo must not be known", Tag.isKnownTag("foo"));
+         assertTrue("tag object itself must be known", Tag.valueOf("div").isKnownTag());
+         assertFalse("unknown tag object must not be known", Tag.valueOf("baz").isKnownTag());
+     }
+
+     @Test
+     public void testValueOfCaseInsensitive() {
+         assertSame("valueOf must return identical instance for known tag ignoring case",
+                 Tag.valueOf("textarea"), Tag.valueOf("TEXTAREA"));
+     }
+
+     @Test
+     public void testBlockAndInlineProperties() {
+         Tag div = Tag.valueOf("div");
+         assertTrue("div must be block", div.isBlock());
+         assertFalse("div must not be inline", div.isInline());
+
+         Tag span = Tag.valueOf("span");
+         assertFalse("span must not be block", span.isBlock());
+         assertTrue("span must be inline", span.isInline());
+     }
+
+     @Test
+     public void testEmptyTagProperties() {
+         Tag br = Tag.valueOf("br");
+         assertTrue("br must be empty", br.isEmpty());
+         assertTrue("br must be self closing", br.isSelfClosing());
+         assertFalse("br must not preserve whitespace", br.preserveWhitespace());
+         // br is inline as defined by the inlineTags array
+         assertFalse("br must not be block", br.isBlock());
+         assertTrue("br must be inline", br.isInline());
+     }
+
+     @Test
+     public void testPreTagProperties() {
+         Tag pre = Tag.valueOf("pre");
+         assertTrue("pre must preserve whitespace", pre.preserveWhitespace());
+         assertTrue("pre must be block", pre.isBlock());
+         assertFalse("pre must be formatted as block", pre.formatAsBlock()); // from
+formatAsInlineTags
+     }
+
+     @Test
+     public void testSelfClosingBehavior() {
+         Tag meta = Tag.valueOf("meta");
+         // meta is empty, thus self closing
+         assertTrue("meta must be self closing", meta.isSelfClosing());
+
+         Tag foo = Tag.valueOf("custom");
+         assertFalse("unknown generic tag must not be self closing by default",
+foo.isSelfClosing());
+         foo.setSelfClosing();
+         assertTrue("after setSelfClosing()", foo.isSelfClosing());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-25f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-25f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-25f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-25f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-25f-copilot/.test_suite/org/jsoup/parser/TagTest.java:92: error: not a statement
+ [javac] formatAsInlineTags
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

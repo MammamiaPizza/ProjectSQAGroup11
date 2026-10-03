@@ -1,0 +1,225 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 23  Version: JacksonCore-23b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 502
+Trigger failures:
+- com.fasterxml.jackson.core.util.TestDefaultPrettyPrinter::testInvalidSubClass
+ --> junit.framework.AssertionFailedError: Should not pass
+Modified: com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+
+Available API/signatures:
+[com.fasterxml.jackson.core.util.DefaultPrettyPrinter | java]
+package com.fasterxml.jackson.core.util;
+@SuppressWarnings("serial")
+public class DefaultPrettyPrinter
+public final static SerializedString DEFAULT_ROOT_VALUE_SEPARATOR = new SerializedString(" ");
+public interface Indenter
+protected Indenter _arrayIndenter = FixedSpaceIndenter.instance;
+protected Indenter _objectIndenter = DefaultIndenter.SYSTEM_LINEFEED_INSTANCE;
+protected final SerializableString _rootSeparator;
+protected boolean _spacesInObjectEntries = true;
+protected transient int _nesting;
+protected Separators _separators;
+protected String _objectFieldValueSeparatorWithSpaces;
+public DefaultPrettyPrinter() {
+public DefaultPrettyPrinter(String rootSeparator) {
+public DefaultPrettyPrinter(SerializableString rootSeparator) {
+public DefaultPrettyPrinter(DefaultPrettyPrinter base) {
+public DefaultPrettyPrinter withRootSeparator(SerializableString rootSeparator)
+public DefaultPrettyPrinter withRootSeparator(String rootSeparator) {
+public void indentArraysWith(Indenter i) {
+public void indentObjectsWith(Indenter i) {
+public DefaultPrettyPrinter withArrayIndenter(Indenter i) {
+public DefaultPrettyPrinter withObjectIndenter(Indenter i) {
+public DefaultPrettyPrinter withSpacesInObjectEntries() {
+public DefaultPrettyPrinter withoutSpacesInObjectEntries() {
+protected DefaultPrettyPrinter _withSpaces(boolean state)
+public DefaultPrettyPrinter withSeparators(Separators separators) {
+@Override
+public DefaultPrettyPrinter createInstance() {
+public void writeRootValueSeparator(JsonGenerator g) throws IOException
+public void writeStartObject(JsonGenerator g) throws IOException
+public void
+...[truncated deterministically]...
+parator(JsonGenerator g) throws IOException
+public void writeEndObject(JsonGenerator g, int nrOfEntries) throws IOException
+public void writeStartArray(JsonGenerator g) throws IOException
+public void beforeArrayValues(JsonGenerator g) throws IOException {
+public void writeArrayValueSeparator(JsonGenerator g) throws IOException
+public void writeEndArray(JsonGenerator g, int nrOfValues) throws IOException
+public static class NopIndenter
+public static final NopIndenter instance = new NopIndenter();
+public void writeIndentation(JsonGenerator g, int level) throws IOException { }
+public boolean isInline() { return true; }
+public static class FixedSpaceIndenter extends NopIndenter
+public static final FixedSpaceIndenter instance = new FixedSpaceIndenter();
+public void writeIndentation(JsonGenerator g, int level) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.util;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.io.StringWriter;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.util.DefaultIndenter;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter.Indenter;
+import com.fasterxml.jackson.core.util.Separators;
+
+public class TestDefaultPrettyPrinterBug23 {
+
+ private JsonGenerator createGenerator(StringWriter sw) throws IOException {
+     JsonFactory f = new JsonFactory();
+     return f.createGenerator(sw);
+ }
+
+ @Test(expected = IllegalArgumentException.class)
+ public void testInvalidSubClassThrows() {
+     // Subclass that returns wrong type
+
+ DefaultPrettyPrinter bad = new DefaultPrettyPrinter() {
+            @Override
+            public DefaultPrettyPrinter createInstance() {
+                return new DefaultPrettyPrinter(); // not same class
+            }
+        };
+        bad.createInstance();
+    }
+
+ @Test
+ public void testValidSubClassDoesNotThrow() {
+     class GoodSub extends DefaultPrettyPrinter {
+         @Override
+         public DefaultPrettyPrinter createInstance() {
+             return new GoodSub(); // same class
+         }
+     }
+     GoodSub p = new GoodSub();
+     DefaultPrettyPrinter result = p.createInstance();
+     assertNotNull(result);
+     assertTrue(result instanceof GoodSub);
+ }
+
+ @Test
+ public void testCreateInstanceReturnsPlainType() {
+     DefaultPrettyPrinter p = new DefaultPrettyPrinter();
+     DefaultPrettyPrinter p2 = p.createInstance();
+     assertNotNull(p2);
+     assertTrue(p2.getClass() == DefaultPrettyPrinter.class);
+ }
+
+ @Test
+ public void testRootSeparatorNullWritesNothing() throws IOException {
+     DefaultPrettyPrinter pp = new DefaultPrettyPrinter((String) null);
+     StringWriter sw = new StringWriter();
+     JsonGenerator gen = createGenerator(sw);
+     pp.writeRootValueSeparator(gen);
+     gen.close();
+     assertTrue(sw.toString(). isEmpty() );
+ }
+
+ @Test
+ public void testRootSeparatorWritesContent() throws IOException {
+     DefaultPrettyPrinter pp = new DefaultPrettyPrinter("~");
+     StringWriter sw = new StringWriter();
+     JsonGenerator gen = createGenerator(sw);
+     pp.writeRootValueSeparator(gen);
+     gen.close();
+     assertEquals("~", sw.toString());
+ }
+
+ @Test
+ public void testArrayIndenterPropagatedToNewInstance() throws IOException {
+     DefaultPrettyPrinter base = new DefaultPrettyPrinter();
+     Indenter mark = new DefaultPrettyPrinter.NopIndenter() {
+         @Override
+         public void writeIndentation(JsonGenerator g, int level) throws IOException {
+             g.writeRaw("#");
+         }
+         @Override
+         public boolean isInline() { return false; }
+     };
+     DefaultPrettyPrinter configured = base.withArrayIndenter(mark);
+     DefaultPrettyPrinter copy = configured.createInstance();
+     StringWriter sw = new StringWriter();
+     JsonGenerator gen = createGenerator(sw);
+     gen.setPrettyPrinter(copy);
+     gen.writeStartArray();
+     gen.writeNumber(1);
+     gen.writeEndArray();
+     gen.close();
+     assertTrue(sw.toString(). contains("#"));
+ }
+
+ @Test
+ public void testObjectIndenterPropagatedToNewInstance() throws IOException {
+     DefaultPrettyPrinter base = new DefaultPrettyPrinter();
+     Indenter star = new DefaultPrettyPrinter.NopIndenter() {
+         @Override
+         public void writeIndentation(JsonGenerator g, int level) throws IOException {
+             g.writeRaw("*");
+         }
+         @Override
+         public boolean isInline() { return false; }
+     };
+     DefaultPrettyPrinter configured = base.withObjectIndenter(star);
+     DefaultPrettyPrinter copy = configured.createInstance();
+     StringWriter sw = new StringWriter();
+     JsonGenerator gen = createGenerator(sw);
+     gen.setPrettyPrinter(copy);
+     gen.writeStartObject();
+     gen.writeNumberField("a", 1);
+     gen.writeEndObject();
+     gen.close();
+     assertTrue(sw.toString().contains("*"));
+ }
+
+ @Test
+ public void testIndentArraysMutatesOriginal() throws IOException {
+     DefaultPrettyPrinter pp = new DefaultPrettyPrinter();
+     // use the system linefeed indenter (mult-line)
+     pp.indentArraysWith(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE);
+     StringWriter sw = new StringWriter();
+     JsonGenerator gen = createGenerator(sw);
+     gen.setPrettyPrinter(pp);
+     gen.writeStartArray();
+     gen.writeNumber(1);
+     gen.writeEndArray();
+     gen.close();
+     assertTrue(sw.toString().contains("\n"));
+ }
+
+ @Test
+ public void testIndentObjectsMutatesOriginal() throws IOException {
+     DefaultPrettyPrinter pp = new DefaultPrettyPrinter();
+     pp.indentObjectsWith(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE);
+     StringWriter sw = new StringWriter();
+     JsonGenerator gen = createGenerator(sw);
+     gen.setPrettyPrinter(pp);
+     gen.writeStartObject();
+     gen.writeNumberField("a", 1);
+     gen.writeEndObject();
+     gen.close();
+     assertTrue(sw.toString().contains("\n"));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.core.util.TestDefaultPrettyPrinterBug23::testInvalidSubClassThrows
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.core.util.TestDefaultPrettyPrinterBug23::testInvalidSubClassThrows

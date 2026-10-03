@@ -1,0 +1,308 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 48  Version: JacksonDatabind-48b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.DeserializationConfig, com.fasterxml.jackson.databind.SerializationConfig
+Modified: com.fasterxml.jackson.databind.DeserializationConfig, com.fasterxml.jackson.databind.SerializationConfig
+Triggers: com.fasterxml.jackson.databind.ser.TestFeatures::testVisibilityFeatures
+
+Bug/specification summary:
+Bug report: 1223
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.TestFeatures::testVisibilityFeatures
+ --> junit.framework.AssertionFailedError: Should find 1 property, not 2; properties = [[Property 'name'; ctors: null, field(s): null, getter(s): null, setter(s): [method com.fasterxml.jackson.databind.ser.TestFeatures$TCls#setName(1 params)][visible=true,ignore=false,explicitName=false]], [Property 'groupname'; ctors: null, field(s): [field com.fasterxml.jackson.databind.ser.TestFeatures$TCls#groupname][visible=true,ignore=false,explicitName=true], getter(s): null, setter(s): null]]
+Modified: com.fasterxml.jackson.databind.DeserializationConfig, com.fasterxml.jackson.databind.SerializationConfig
+
+Prompt-01 test plan:
+TARGETS: DeserializationConfig.with/without(MapperFeature...) for visibility features;
+SerializationConfig same; config copy constructors preserving mapper feature flags.
+ORACLES: TestFeatures.testVisibilityFeatures expects 1 property with AUTO_DETECT_SETTERS disabled;
+property count from introspected bean matches expected visibility exclusions.
+CASES: Default all-auto-detect yields multiple properties; disable AUTO_DETECT_SETTERS → only field
+property remains; disable AUTO_DETECT_FIELDS → only setter property.
+CASES: Chained with/without toggling feature multiple times; combining with other with-methods
+(e.g., withRootName) must not lose visibility settings.
+CASES: Full exclusion (all auto-detection off) yields zero properties; test boundary where bean has
+only setter, only field, or both.
+RISKS: Limited to visible APIs; introspection outcome depends on MapperFeature enum not shown; risk
+that fix crossed SerializationConfig.copy propagation.
+RISKS: Cannot see TCls definition; test relies on specific visibility of setter and field; behavior
+may differ for getter-only or constructor properties.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.DeserializationConfig (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public final class DeserializationConfig
+protected final LinkedNode<DeserializationProblemHandler> _problemHandlers;
+protected final JsonNodeFactory _nodeFactory;
+protected final int _deserFeatures;
+protected final int _parserFeatures;
+protected final int _parserFeaturesToChange;
+protected final int _formatReadFeatures;
+protected final int _formatReadFeaturesToChange;
+_deserFeatures = collectFeatureDefaults(DeserializationFeature.class);
+private DeserializationConfig(DeserializationConfig src, SubtypeResolver str)
+private DeserializationConfig(DeserializationConfig src, BaseSettings base)
+private DeserializationConfig(DeserializationConfig src, JsonNodeFactory f)
+private DeserializationConfig(DeserializationConfig src, PropertyName rootName)
+private DeserializationConfig(DeserializationConfig src, Class<?> view)
+protected DeserializationConfig(DeserializationConfig src, ContextAttributes attrs)
+protected DeserializationConfig(DeserializationConfig src, SimpleMixInResolver mixins)
+protected BaseSettings getBaseSettings() { return _base; }
+@Override
+public DeserializationConfig with(MapperFeature... features)
+public DeserializationConfig without(MapperFeature... features)
+public DeserializationConfig with(MapperFeature feature, boolean state)
+public DeserializationConfig wit
+...[truncated deterministically]...
+boolean isEnabled(JsonParser.Feature f, JsonFactory factory) {
+public final boolean hasDeserializationFeatures(int featureMask) {
+public final boolean hasSomeOfFeatures(int featureMask) {
+public final int getDeserializationFeatures() {
+public LinkedNode<DeserializationProblemHandler> getProblemHandlers() {
+public final JsonNodeFactory getNodeFactory() {
+@SuppressWarnings("unchecked")
+public <T extends BeanDescription> T introspect(JavaType type) {
+public <T extends BeanDescription> T introspectForCreation(JavaType type) {
+public <T extends BeanDescription> T introspectForBuilder(JavaType type) {
+public TypeDeserializer findTypeDeserializer(JavaType baseType)
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.text.DateFormat;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.cfg.*;
+import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.*;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.LinkedNode;
+import com.fasterxml.jackson.databind.util.RootNameLookup;
+
+/* METHOD DeserializationConfig */
+public DeserializationConfig(BaseSettings base,
+ SubtypeResolver str, SimpleMixInResolver mixins,
+ RootNameLookup rootNames)
+ {
+ super(base, str, mixins, rootNames);
+ _deserFeatures = collectFeatureDefaults(DeserializationFeature.class);
+ _nodeFactory = JsonNodeFactory.instance;
+ _problemHandlers = null;
+ _parserFeatures = 0;
+ _parserFeaturesToChange = 0;
+ _formatReadFeatures = 0;
+ _formatReadFeaturesToChange = 0;
+ }
+
+/* METHOD DeserializationConfig */
+protected DeserializationConfig(DeserializationConfig src, SimpleMixInResolver mixins,
+ RootNameLookup rootNames)
+ {
+ super(src, mixins, rootNames);
+ _deserFeatures = src._deserFeatures;
+ _problemHandlers = src._problemHandlers;
+ _nodeFactory = src._nodeFactory;
+ _parserFeatures = src._parserFeatures;
+ _parserFeaturesToChange = src._parserFeaturesToChange;
+ _formatReadFeatures = src._formatReadFeatures;
+ _formatReadFeaturesToChange = src._formatReadFeaturesToChange;
+ }
+
+/* METHOD DeserializationConfig */
+protected DeserializationConfig(DeserializationConfig src, ContextAttributes attrs)
+ {
+ super(src, attrs);
+ _deserFeatures = src._deserFeatures;
+ _problemHandlers = src._problemHandlers;
+ _nodeFactory = src._nodeFactory;
+ _parserFeatures = src._parserFeatures;
+ _parserFeaturesToChange = src._parserFeaturesToChange;
+ _formatReadFeatures = src._formatReadFeatures;
+ _formatReadFeaturesToChange = src._formatReadFeaturesToChange;
+ }
+
+/* METHOD DeserializationConfig */
+protected DeserializationConfig(DeserializationConfig src, SimpleMixInResolver mixins)
+ {
+ super(src, mixins);
+ _deserFeatures = src._deserFeatures;
+ _problemHandlers = src._problemHandlers;
+ _nodeFactory = src._nodeFactory;
+ _parserFeatures = src._parserFeatures;
+ _parserFeaturesToChange = src._parserFeaturesToChange;
+ _formatReadFeatures = src._formatReadFeatures;
+ _formatReadFeaturesToChange = src._formatReadFeaturesToChange;
+ }
+
+/* METHOD DeserializationConfig */
+private DeserializationConfig(DeserializationConfig src, PropertyName rootName)
+ {
+ super(src, rootName);
+ _deserFeatures = src._deserFeatures;
+ _problemHandlers = src._problemHandlers;
+ _nodeFactory = src._nodeFactory;
+ _parserFeatures = src._parserFeatures;
+ _parserFeaturesToChange = src._parserFeaturesToChange;
+ _formatReadFeatures = src._formatReadFeatures;
+ _formatReadFeaturesToChange = src._formatReadFeaturesToChange;
+ }
+
+/* METHOD DeserializationConfig */
+private DeserializationConfig(DeserializationConfig src, BaseSettings base)
+ {
+ super(src, base);
+ _deserFeatures = src._deserFeatures;
+ _nodeFactory = src._nodeFactory;
+ _problemHandlers = src._problemHandlers;
+ _parserFeatures = src._parserFeatures;
+ _parserFeaturesToChange = src._parserFeaturesToChange;
+ _formatReadFeatures = src._formatReadFeatures;
+ _formatReadFeaturesToChange = src._formatReadFeaturesToChange;
+ }
+
+===== com.fasterxml.jackson.databind.SerializationConfig (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public final class SerializationConfig
+protected final static PrettyPrinter DEFAULT_PRETTY_PRINTER = new DefaultPrettyPrinter();
+protected final static JsonInclude.Value DEFAULT_INCLUSION = JsonInclude.Value.empty();
+protected final FilterProvider _filterProvider;
+protected final PrettyPrinter _defaultPrettyPrinter;
+protected final int _serFeatures;
+protected final int _generatorFeatures;
+protected final int _generatorFeaturesToChange;
+protected final int _formatWriteFeatures;
+protected final int _formatWriteFeaturesToChange;
+protected final JsonInclude.Value _serializationInclusion;
+_serFeatures = collectFeatureDefaults(SerializationFeature.class);
+private SerializationConfig(SerializationConfig src, SubtypeResolver str)
+private SerializationConfig(SerializationConfig src, BaseSettings base)
+private SerializationConfig(SerializationConfig src, FilterProvider filters)
+private SerializationConfig(SerializationConfig src, Class<?> view)
+private SerializationConfig(SerializationConfig src, JsonInclude.Value incl)
+private SerializationConfig(SerializationConfig src, PropertyName rootName)
+protected SerializationConfig(SerializationConfig src, ContextAttributes attrs)
+protected SerializationConfig(SerializationConfig src, SimpleMixInResolver mixins)
+protected SerializationConfi
+...[truncated deterministically]...
+efaultPropertyInclusion() {
+public JsonInclude.Value getDefaultPropertyInclusion(Class<?> baseType) {
+public JsonFormat.Value getDefaultPropertyFormat(Class<?> baseType) {
+public boolean useRootWrapping()
+public final boolean isEnabled(SerializationFeature f) {
+public final boolean isEnabled(JsonGenerator.Feature f, JsonFactory factory) {
+public final boolean hasSerializationFeatures(int featureMask) {
+public final int getSerializationFeatures() {
+public FilterProvider getFilterProvider() {
+public PrettyPrinter getDefaultPrettyPrinter() {
+@SuppressWarnings("unchecked")
+public <T extends BeanDescription> T introspect(JavaType type) {
+public String toString() {
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.text.DateFormat;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.core.util.Instantiatable;
+import com.fasterxml.jackson.databind.cfg.*;
+import com.fasterxml.jackson.databind.introspect.ClassIntrospector;
+import com.fasterxml.jackson.databind.introspect.SimpleMixInResolver;
+import com.fasterxml.jackson.databind.introspect.VisibilityChecker;
+import com.fasterxml.jackson.databind.jsontype.SubtypeResolver;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import com.fasterxml.jackson.databind.ser.FilterProvider;
+import com.fasterxml.jackson.databind.ser.SerializerFactory;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.RootNameLookup;
+
+/* METHOD SerializationConfig */
+public SerializationConfig(BaseSettings base,
+ SubtypeResolver str, SimpleMixInResolver mixins,
+ RootNameLookup rootNames)
+ {
+ super(base, str, mixins, rootNames);
+ _serFeatures = collectFeatureDefaults(SerializationFeature.class);
+ _filterProvider = null;
+ _defaultPrettyPrinter = DEFAULT_PRETTY_PRINTER;
+ _generatorFeatures = 0;
+ _generatorFeaturesToChange = 0;
+ _formatWriteFeatures = 0;
+ _formatWriteFeaturesToChange = 0;
+ _serializationInclusion = DEFAULT_INCLUSION;
+ }
+
+/* METHOD SerializationConfig */
+protected SerializationConfig(SerializationConfig src, SimpleMixInResolver mixins,
+ RootNameLookup rootNames)
+ {
+ super(src, mixins, rootNames);
+ _serFeatures = src._serFeatures;
+ _serializationInclusion = src._serializationInclusion;
+ _filterProvider = src._filterProvider;
+ _defaultPrettyPrinter = src._defaultPrettyPrinter;
+ _generatorFeatures = src._generatorFeatures;
+ _generatorFeaturesToChange = src._generatorFeaturesToChange;
+ _formatWriteFeatures = src._formatWriteFeatures;
+ _formatWriteFeaturesToChange = src._formatWriteFeaturesToChange;
+ }
+
+/* METHOD SerializationConfig */
+protected SerializationConfig(SerializationConfig src, ContextAttributes attrs)
+ {
+ super(src, attrs);
+ _serFeatures = src._serFeatures;
+ _serializationInclusion = src._serializationInclusion;
+ _filterProvider = src._filterProvider;
+ _defaultPrettyPrinter = src._defaultPrettyPrinter;
+ _generatorFeatures = src._generatorFeatures;
+ _generatorFeaturesToChange = src._generatorFeaturesToChange;
+ _formatWriteFeatures = src._formatWriteFeatures;
+ _formatWriteFeaturesToChange = src._formatWriteFeaturesToChange;
+ }
+
+/* METHOD SerializationConfig */
+protected SerializationConfig(SerializationConfig src, SimpleMixInResolver mixins)
+ {
+ super(src, mixins);
+ _serFeatures = src._serFeatures;
+ _serializationInclusion = src._serializationInclusion;
+ _filterProvider = src._filterProvider;
+ _defaultPrettyPrinter = src._defaultPrettyPrinter;
+ _generatorFeatures = src._generatorFeatures;
+ _generatorFeaturesToChange = src._generatorFeaturesToChange;
+ _formatWriteFeatures = src._formatWriteFeatures;
+ _formatWriteFeaturesToChange = src._formatWriteFeaturesToChange;
+ }
+
+/* METHOD SerializationConfig */
+protected SerializationConfig(SerializationConfig src, PrettyPrinter defaultPP)
+ {
+ super(src);
+ _serFeatures = src._serFeatures;
+ _serializationInclusion = src._serializationInclusion;
+ _filterProvider = src._filterProvider;
+ _defaultPrettyPrinter = defaultPP;
+ _generatorFeatures = src._generatorFeatures;
+ _generatorFeaturesToChange = src._generatorFeaturesToChange;
+ _formatWriteFeatures = src._formatWriteFeatures;
+ _formatWriteFeaturesToChange = src._formatWriteFeaturesToChange;
+ }

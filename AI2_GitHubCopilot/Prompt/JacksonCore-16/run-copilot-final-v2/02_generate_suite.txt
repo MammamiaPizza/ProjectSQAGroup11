@@ -1,0 +1,191 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 16  Version: JacksonCore-16b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.util.JsonParserSequence
+Modified: com.fasterxml.jackson.core.util.JsonParserSequence
+Triggers: com.fasterxml.jackson.core.json.ParserSequenceTest::testInitialized
+
+Bug/specification summary:
+Bug report: 296
+Trigger failures:
+- com.fasterxml.jackson.core.json.ParserSequenceTest::testInitialized
+ --> junit.framework.AssertionFailedError: expected:<2> but was:<3>
+Modified: com.fasterxml.jackson.core.util.JsonParserSequence
+
+Prompt-01 test plan:
+TARGETS: JsonParserSequence.createFlattened(first, second) must flatten nested sequences into
+one-level leaf parsers.
+TARGETS: addFlattenedActiveParsers(List) must contribute leaf parsers, not a nested
+JsonParserSequence wrapper.
+TARGETS: containedParsersCount() must match flattened leaf count; bug shows 3 instead of expected 2.
+TARGETS: JsonParserSequence(JsonParser[]) / _nextParser index and switchToNext() must advance
+correctly over flattened parsers.
+ORACLES: ParserSequenceTest.testInitialized asserts containedParsersCount()==2 for a two-parser
+sequence (JUnit4 failure expected:<2> but was:<3>).
+ORACLES: nextToken() token order and null at exhaustion follow each leaf parser in flattened order.
+CASES: flat parser1+parser2; nested sequence as first arg; sequence plus plain parser; repeated
+nested arguments.
+CASES: boundary: empty/closed parser, single-parser flatten, end-of-input nextToken returning null,
+count lower/upper bounds.
+RISKS: cannot inspect exact test fixtures/parser tokens; only bug summary and signatures supplied,
+not another version.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.util.JsonParserSequence (java) =====
+package com.fasterxml.jackson.core.util;
+
+import java.io.IOException;
+import java.util.*;
+
+import com.fasterxml.jackson.core.*;
+
+/**
+ * Helper class that can be used to sequence multiple physical
+ * {@link JsonParser}s to create a single logical sequence of
+ * tokens, as a single {@link JsonParser}.
+ *<p>
+ * Fairly simple use of {@link JsonParserDelegate}: only need
+ * to override {@link #nextToken} to handle transition
+ */
+public class JsonParserSequence extends JsonParserDelegate
+{
+ /**
+ * Parsers other than the first one (which is initially assigned
+ * as delegate)
+ */
+ protected final JsonParser[] _parsers;
+ 
+ /**
+ * Index of the next parser in {@link #_parsers}.
+ */
+ protected int _nextParser;
+
+ /**
+ * Flag used to indicate that `JsonParser.nextToken()` should not be called,
+ * due to parser already pointing to a token.
+ *
+ * @since 2.8
+ */
+ 
+ /*
+ *******************************************************
+ * Construction
+ *******************************************************
+ */
+
+ protected JsonParserSequence(JsonParser[] parsers)
+ {
+ super(parsers[0]);
+ _parsers = parsers;
+ _nextParser = 1;
+ }
+
+ /**
+ * Method that will construct a parser (possibly a sequence) that
+ * contains all given sub-parsers.
+ * All parsers given are checked to see if they are sequences: and
+ * if so, they will be "flattened", that is, contained parsers are
+ * directly added in a new sequence instead of adding sequences
+ * within sequences. This is done to minimize delegation depth,
+ * ideally only having just a single level of delegation.
+ */
+ public static JsonParserSequence createFlattened(JsonParser first, JsonParser second)
+ {
+ if (!(first instanceof JsonParserSequence || second instanceof JsonParserSequence)) {
+ // simple:
+ return new JsonParserSequence(new JsonParser[] { first, second });
+ }
+ ArrayList<JsonParser> p = new ArrayList<JsonParser>();
+ if (first instanceof JsonParserSequence) {
+ ((JsonParserSequence) first).addFlattenedActiveParsers(p);
+ } else {
+ p.add(first);
+ }
+ if (second instanceof JsonParserSequence) {
+ ((JsonParserSequence) second).addFlattenedActiveParsers(p);
+ } else {
+ p.add(second);
+ }
+ return new JsonParserSequence(p.toArray(new JsonParser[p.size()]));
+ }
+
+ @SuppressWarnings("resource")
+ protected void addFlattenedActiveParsers(List<JsonParser> result)
+ {
+ for (int i = _nextParser-1, len = _parsers.length; i < len; ++i) {
+ JsonParser p = _parsers[i];
+ if (p instanceof JsonParserSequence) {
+ ((JsonParserSequence) p).addFlattenedActiveParsers(result);
+ } else {
+ result.add(p);
+ }
+ }
+ }
+ 
+ /*
+ *******************************************************
+ * Overridden methods, needed: cases where default
+ * delegation does not work
+ *******************************************************
+ */
+ 
+ @Override
+ public void close() throws IOException {
+ do { delegate.close(); } while (switchToNext());
+ }
+
+ @Override
+ public JsonToken nextToken() throws IOException, JsonParseException
+ {
+ JsonToken t = delegate.nextToken();
+ if (t != null) return t;
+ while (switchToNext()) {
+ t = delegate.nextToken();
+ if (t != null) return t;
+ }
+ return null;
+ }
+
+ /*
+ /*******************************************************
+ /* Additional extended API
+ /*******************************************************
+ */
+
+ /**
+ * Method that is most useful for debugging or testing;
+ * returns actual number of underlying parsers sequence
+ * was constructed with (nor just ones remaining active)
+ */
+ public int containedParsersCount() {
+ return _parsers.length;
+ }
+ 
+ /*
+ /*******************************************************
+ /* Helper methods
+ /*******************************************************
+ */
+
+ /**
+ * Method that will switch active parser from the current one
+ * to next parser in sequence, if there is another parser left,
+ * making this the new delegate. Old delegate is returned if
+ * switch succeeds.
+ * 
+ * @return True if switch succeeded; false otherwise
+ */
+ protected boolean switchToNext()
+ {
+ if (_nextParser >= _parsers.length) {
+ return false;
+ }
+ delegate = _parsers[_nextParser++];
+ return true;
+ }
+}

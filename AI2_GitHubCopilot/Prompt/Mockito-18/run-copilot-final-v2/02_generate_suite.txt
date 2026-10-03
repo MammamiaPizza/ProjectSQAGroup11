@@ -1,0 +1,153 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 18  Version: Mockito-18b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValues
+Modified: org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValues
+Triggers: org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValuesTest::should_return_empty_iterable
+
+Bug/specification summary:
+Bug report: 210
+Trigger failures:
+- org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValuesTest::should_return_empty_iterable
+ --> java.lang.NullPointerException
+Modified: org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValues
+
+Prompt-01 test plan:
+TARGETS: ReturnsEmptyValues.answer() — add handling for Iterable (and unchecked subtypes like Queue)
+to return a non-null empty object.
+ORACLES: Existing test should_return_empty_iterable expects no NullPointerException; passes when
+Iterable returns empty iterable.
+CASES: Mock method return type is Iterable → returns empty iterable (e.g., empty ArrayList).
+CASES: Unhandled Iterable subtypes (Queue, Deque, etc.) may still trigger NPE; must cover them
+similarly.
+CASES: Return type already handled (Collection, List, Set,…) remain unaffected; only Iterable branch
+added.
+RISKS: The fix may not cover all missing collection subtypes; limited source context provided.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValues (java) =====
+/*
+ * Copyright (c) 2007 Mockito contributors
+ * This program is made available under the terms of the MIT License.
+ */
+
+package org.mockito.internal.stubbing.defaultanswers;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import org.mockito.internal.util.MockUtil;
+import org.mockito.internal.util.ObjectMethodsGuru;
+import org.mockito.internal.util.Primitives;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.mock.MockName;
+import org.mockito.stubbing.Answer;
+
+/**
+ * Default answer of every Mockito mock.
+ * <ul>
+ * <li>
+ * Returns appropriate primitive for primitive-returning methods
+ * </li>
+ * <li>
+ * Returns consistent values for primitive wrapper classes (e.g. int-returning method returns 0 <b>and</b> Integer-returning method returns 0, too)
+ * </li>
+ * <li>
+ * Returns empty collection for collection-returning methods (works for most commonly used collection types)
+ * </li>
+ * <li>
+ * Returns description of mock for toString() method
+ * </li>
+ * <li>
+ * Returns zero if references are equals otherwise non-zero for Comparable#compareTo(T other) method (see issue 184)
+ * </li>
+ * <li>
+ * Returns null for everything else
+ * </li>
+ * </ul>
+ */
+public class ReturnsEmptyValues implements Answer<Object>, Serializable {
+ 
+ private static final long serialVersionUID = 1998191268711234347L;
+ ObjectMethodsGuru methodsGuru = new ObjectMethodsGuru();
+ MockUtil mockUtil = new MockUtil();
+
+ /* (non-Javadoc)
+ * @see org.mockito.stubbing.Answer#answer(org.mockito.invocation.InvocationOnMock)
+ */
+ public Object answer(InvocationOnMock invocation) {
+ if (methodsGuru.isToString(invocation.getMethod())) {
+ Object mock = invocation.getMock();
+ MockName name = mockUtil.getMockName(mock);
+ if (name.isDefault()) {
+ return "Mock for " + mockUtil.getMockSettings(mock).getTypeToMock().getSimpleName() + ", hashCode: " + mock.hashCode();
+ } else {
+ return name.toString();
+ }
+ } else if (methodsGuru.isCompareToMethod(invocation.getMethod())) {
+ //see issue 184.
+ //mocks by default should return 0 if references are the same, otherwise some other value because they are not the same. Hence we return 1 (anything but 0 is good).
+ //Only for compareTo() method by the Comparable interface
+ return invocation.getMock() == invocation.getArguments()[0] ? 0 : 1;
+ }
+ 
+ Class<?> returnType = invocation.getMethod().getReturnType();
+ return returnValueFor(returnType);
+ }
+ 
+ Object returnValueFor(Class<?> type) {
+ if (Primitives.isPrimitiveOrWrapper(type)) {
+ return Primitives.defaultValueForPrimitiveOrWrapper(type);
+ //new instances are used instead of Collections.emptyList(), etc.
+ //to avoid UnsupportedOperationException if code under test modifies returned collection
+ } else if (type == Collection.class) {
+ return new LinkedList<Object>();
+ } else if (type == Set.class) {
+ return new HashSet<Object>();
+ } else if (type == HashSet.class) {
+ return new HashSet<Object>();
+ } else if (type == SortedSet.class) {
+ return new TreeSet<Object>();
+ } else if (type == TreeSet.class) {
+ return new TreeSet<Object>();
+ } else if (type == LinkedHashSet.class) {
+ return new LinkedHashSet<Object>();
+ } else if (type == List.class) {
+ return new LinkedList<Object>();
+ } else if (type == LinkedList.class) {
+ return new LinkedList<Object>();
+ } else if (type == ArrayList.class) {
+ return new ArrayList<Object>();
+ } else if (type == Map.class) {
+ return new HashMap<Object, Object>();
+ } else if (type == HashMap.class) {
+ return new HashMap<Object, Object>();
+ } else if (type == SortedMap.class) {
+ return new TreeMap<Object, Object>();
+ } else if (type == TreeMap.class) {
+ return new TreeMap<Object, Object>();
+ } else if (type == LinkedHashMap.class) {
+ return new LinkedHashMap<Object, Object>();
+ }
+ //Let's not care about the rest of collections.
+ return null;
+ }
+
+}

@@ -1,0 +1,167 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 60  Version: Jsoup-60b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 803
+Trigger failures:
+- org.jsoup.select.QueryParserTest::testParsesSingleQuoteInContains
+ --> junit.framework.AssertionFailedError: Expected exception: org.jsoup.select.Selector$SelectorParseException
+ - org.jsoup.select.QueryParserTest::exceptionOnUncloseAttribute
+ --> java.lang.Exception: Unexpected exception, expected<org.jsoup.select.Selector$SelectorParseException> but was<java.lang.IllegalArgumentException>
+Modified: org.jsoup.parser.TokenQueue, org.jsoup.select.QueryParser
+
+Available API/signatures:
+[org.jsoup.parser.TokenQueue | java]
+package org.jsoup.parser;
+public class TokenQueue {
+@param data string of data to back queue.
+public TokenQueue(String data) {
+public boolean isEmpty() {
+private int remainingLength() {
+public char peek() {
+@param c character to add
+public void addFirst(Character c) {
+@param seq string to add.
+public void addFirst(String seq) {
+public boolean matches(String seq) {
+public boolean matchesCS(String seq) {
+@param seq list of strings to case insensitively check for
+@return true of any matched, false if none did
+public boolean matchesAny(String... seq) {
+public boolean matchesAny(char... seq) {
+public boolean matchesStartTag() {
+public boolean matchChomp(String seq) {
+@return if starts with whitespace
+public boolean matchesWhitespace() {
+@return if matches a word character
+public boolean matchesWord() {
+public void advance() {
+...[truncated deterministically]...
+ic String consumeTagName() {
+public String consumeElementSelector() {
+Consume a CSS identifier (ID or class) off the queue (letter, digit, -, _)
+@return identifier
+public String consumeCssIdentifier() {
+@return attribute key
+public String consumeAttributeKey() {
+@return remained of queue.
+public String remainder() {
+final String remainder = queue.substring(pos, queue.length());
+@Override
+public String toString() {
+
+[org.jsoup.select.QueryParser | java]
+package org.jsoup.select;
+public class QueryParser {
+private List<Evaluator> evals = new ArrayList<Evaluator>();
+private QueryParser(String query) {
+public static Evaluator parse(String query) {
+} else { // E.class, E#id, E[attr] etc. AND
+private void combinator(char combinator) {
+private String consumeSubQuery() {
+private void findElements() {
+private void byId() {
+private void byClass() {
+private void byTag() {
+private void byAttribute() {
+private void allElements() {
+private void indexLessThan() {
+private void indexGreaterThan() {
+private void indexEquals() {
+private static final Pattern NTH_AB = Pattern.compile("((\\+|-)?(\\d+)?)n(\\s*(\\+|-)?\\s*\\d+)?", Pattern.CASE_INSENSITIVE);
+private static final Pattern NTH_B = Pattern.compile("(\\+|-)?(\\d+)");
+private void cssNthChild(boolean backwards, boolean ofType) {
+private int consumeIndex() {
+private void has() {
+private void contains(boolean own) {
+private void containsData() {
+private void matches(boolean own) {
+private void not() {
+
+Generated JUnit Test:
+package org.jsoup.select;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.jsoup.select.Selector;
+import org.jsoup.select.Selector.SelectorParseException;
+
+public class QueryParserTest {
+
+ @Test
+ public void testParsesSingleQuoteInContains() {
+     try {
+         QueryParser.parse(":contains(')");
+         fail("Expected SelectorParseException");
+     } catch (SelectorParseException expected) {
+         // expected
+     }
+ }
+
+ @Test(expected = SelectorParseException.class)
+ public void exceptionOnUncloseAttribute() {
+     QueryParser.parse("[attr=value");
+ }
+
+ @Test
+ public void testContainsTextNormal() {
+     assertNotNull(QueryParser.parse(":contains(foo)"));
+ }
+
+ @Test
+ public void testAttributeKeyOnly() {
+     assertNotNull(QueryParser.parse("[attr]"));
+ }
+
+ @Test
+ public void testAttributeEqualsValue() {
+     assertNotNull(QueryParser.parse("[attr=val]"));
+ }
+
+ @Test
+ public void testAttributeSingleQuotedValue() {
+     assertNotNull(QueryParser.parse("[attr='val']"));
+ }
+
+ @Test
+ public void testAttributeDoubleQuotedValue() {
+     assertNotNull(QueryParser.parse("[attr=\"val\"]"));
+ }
+
+ @Test
+ public void testAttributeEmptyValue() {
+     assertNotNull(QueryParser.parse("[attr='']"));
+ }
+
+ @Test(expected = SelectorParseException.class)
+ public void testContainsUnclosedQuote() {
+     QueryParser.parse(":contains('text)");
+ }
+
+ @Test(expected = SelectorParseException.class)
+ public void testContainsWithSingleQuoteInside() {
+     QueryParser.parse(":contains('text')");
+ }
+
+ @Test
+ public void testContainsEmpty() {
+     assertNotNull(QueryParser.parse(":contains()"));
+ }
+
+ @Test(expected = SelectorParseException.class)
+ public void testEmptyAttributeBrackets() {
+     QueryParser.parse("[]");
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.select.QueryParserTest::testContainsWithSingleQuoteInside
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.select.QueryParserTest::testContainsEmpty, org.jsoup.select.QueryParserTest::testContainsWithSingleQuoteInside

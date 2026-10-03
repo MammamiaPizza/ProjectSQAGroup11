@@ -1,0 +1,448 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Cli  Bug: 16  Version: Cli-16b
+JUnit: junit-3.8.1.jar  Build: Maven
+Target: org.apache.commons.cli2.Option, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.GroupImpl, org.apache.commons.cli2.option.OptionImpl
+Modified: org.apache.commons.cli2.Option, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.GroupImpl, org.apache.commons.cli2.option.OptionImpl
+Triggers: org.apache.commons.cli2.bug.BugCLI123Test::testMultipleChildOptions, org.apache.commons.cli2.bug.BugCLI123Test::testParentOptionAndChildOption, org.apache.commons.cli2.bug.BugCLI123Test::testSingleChildOption, org.apache.commons.cli2.commandline.DefaultingCommandLineTest::testGetOptions_Order, org.apache.commons.cli2.commandline.PreferencesCommandLineTest::testGetOptions_Order, org.apache.commons.cli2.commandline.PropertiesCommandLineTest::testGetOptions_Order, org.apache.commons.cli2.commandline.WriteableCommandLineImplTest::testGetOptions_Order
+
+Bug/specification summary:
+Bug report: CLI-123
+Trigger failures:
+- org.apache.commons.cli2.bug.BugCLI123Test::testMultipleChildOptions
+ --> org.apache.commons.cli2.OptionException: Missing option parentOptions
+ - org.apache.commons.cli2.bug.BugCLI123Test::testParentOptionAndChildOption
+ --> junit.framework.AssertionFailedError: Maximum restriction for parent not verified!
+ - org.apache.commons.cli2.bug.BugCLI123Test::testSingleChildOption
+ --> org.apache.commons.cli2.OptionException: Missing option parentOptions
+ - org.apache.commons.cli2.commandline.DefaultingCommandLineTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>] [<target1> [<target2> ...]]> was not:<[--help (-?,-h)]>
+ - org.apache.commons.cli2.commandline.PreferencesCommandLineTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>
+...[truncated deterministically]...
+.PropertiesCommandLineTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>] [<target1> [<target2> ...]]> was not:<[--help (-?,-h)]>
+ - org.apache.commons.cli2.commandline.WriteableCommandLineImplTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>] [<target1> [<target2> ...]]> was not:<[--help (-?,-h)]>
+Modified: org.apache.commons.cli2.Option, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.GroupImpl, org.apache.commons.cli2.option.OptionImpl
+
+Prompt-01 test plan:
+TARGETS: WriteableCommandLineImpl.getOptions() output ordering and inclusion of group options
+TARGETS: GroupImpl.getOptions()/getTriggers() enumeration of child options with parent display
+TARGETS: OptionImpl.validate() checking required parent when child exists; findOption for nested
+triggers
+ORACLES: TestGetOptions_Order expected order: [--help (-?,-h)|login <username>] [<target1>
+[<target2> …]]
+ORACLES: Missing option exception message "Missing option parentOptions" when required parent absent
+ORACLES: Maximum restriction failure for parent group when too many children provided
+CASES: Normal: single child, multiple children, parent+child combos with various counts
+CASES: Boundary: empty group, all options absent, exactly max, over max, missing required parent
+CASES: Error: OptionException for missing parent; assertion for max violation; duplicate triggers
+RISKS: Inferred behavior from bug symptoms only; no post-fix implementation details available; may
+miss edge cases like nested groups
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.cli2.Option (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli2;
+public interface Option {
+void defaults(final WriteableCommandLine commandLine);
+boolean canProcess(final WriteableCommandLine commandLine, final String argument);
+boolean canProcess(final WriteableCommandLine commandLine, final ListIterator arguments);
+void validate(final WriteableCommandLine commandLine)
+Option findOption(final String trigger);
+
+/* HEADER */
+package org.apache.commons.cli2;
+import java.util.Comparator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Set;
+
+/* METHOD process */
+void process(
+ final WriteableCommandLine commandLine,
+ final ListIterator args)
+ throws OptionException;
+
+ /**
+ * Adds defaults to a CommandLine.
+ *
+ * Any defaults for this option are applied as well as the defaults for
+ * any contained options
+ *
+ * @param commandLine
+ * The CommandLine object to store defaults in
+ */
+ void defaults(final WriteableCommandLine commandLine);
+
+ /**
+ * Indicates whether this Option will be able to process the particular
+ * argument.
+ *
+ * @param argument
+ * The argument to be tested
+ * @return true if the argument can be processed by this Option
+ */
+ boolean canProcess(final WriteableCommandLine commandLine, final String argument);
+
+ /**
+ * Indicates whether this Option will be able to process the particular
+ * argument. The ListIterator must be restored to the initial state before
+ * returning the boolean.
+ *
+ * @see #canProcess(WriteableCommandLine,String)
+ * @param arguments
+ * the ListIterator over String arguments
+ * @return true if the argument can be processed by this Option
+ */
+ boolean canProcess(final WriteableCommandLine commandLine, final ListIterator arguments);
+
+ /**
+ * Identifies the argument prefixes that should trigger this option. This
+ * is used to decide which of many Options should be tried when processing
+ * a given argument string.
+ *
+ * The returned Set must not be null.
+ *
+ * @return The set of triggers for this Option
+ */
+ Set getTriggers();
+...[truncated deterministically]...
+dered options. This
+ * is used to identify whether a given string looks like an option or an
+ * argument value. Typically an option would return th
+...[truncated deterministically]...
+t of display settings @see DisplaySetting
+ * @param comp a comparator used to sort the Options
+ */
+ void appendUsage(
+ final StringBuffer buffer,
+ final Set helpSettings,
+ final Comparator comp);
+
+ /**
+ * The preferred name of an option is used for generating help and usage
+ * information.
+ *
+ * @return The preferred name of the option
+ */
+ String getPreferredName();
+
+ /**
+ * Returns a description of the option. This string is used to build help
+ * messages as in the HelpFormatter.
+ *
+ * @see org.apache.commons.cli2.util.HelpFormatter
+ * @return a description of the option.
+ */
+ String getDescription();
+
+ /**
+ * Returns the id of the option. This can be used in a loop and switch
+ * construct:
+ *
+ * <code>
+ * for(Option o : cmd.getOptions()){
+ * switch(o.getId()){
+ * case POTENTIAL_OPTION:
+ * ...
+ * }
+ * }
+
+===== org.apache.commons.cli2.commandline.WriteableCommandLineImpl (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli2.commandline;
+public class WriteableCommandLineImpl
+private final Map optionToProperties = new HashMap();
+private final List options = new ArrayList();
+private final Map nameToOption = new HashMap();
+private final Map values = new HashMap();
+private final Map switches = new HashMap();
+private final Map defaultValues = new HashMap();
+private final Map defaultSwitches = new HashMap();
+public void addOption(Option option) {
+public boolean hasOption(final Option option) {
+final boolean present = options.contains(option);
+public Option getOption(final String trigger) {
+public List getUndefaultedValues(Option option) {
+public String
+...[truncated deterministically]...
+iterator(); i.hasNext();) {
+final String prefix = (String) i.next();
+public String toString() {
+final StringBuffer buffer = new StringBuffer();
+for (final Iterator i = normalised.iterator(); i.hasNext();) {
+final String arg = (String) i.next();
+public List getOptions() {
+public Set getOptionTriggers() {
+public List getNormalised() {
+
+/* HEADER */
+package org.apache.commons.cli2.commandline;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import org.apache.commons.cli2.Argument;
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.WriteableCommandLine;
+import org.apache.commons.cli2.option.PropertyOption;
+import org.apache.commons.cli2.resource.ResourceConstants;
+import org.apache.commons.cli2.resource.ResourceHelper;
+public class WriteableCommandLineImpl
+
+/* METHOD WriteableCommandLineImpl */
+public WriteableCommandLineImpl(final Option rootOption,
+ final List arguments) {
+ this.prefixes = rootOption.getPrefixes();
+ this.normalised = arguments;
+ }
+
+/* METHOD addOption */
+public void addOption(Option option) {
+ options.add(option);
+ nameToOption.put(option.getPreferredName(), option);
+
+ for (Iterator i = option.getTriggers().iterator(); i.hasNext();) {
+ nameToOption.put(i.next(), option);
+ }
+
+ // ensure that all parent options are also added
+ }
+
+/* METHOD addValue */
+public void addValue(final Option option,
+ final Object value) {
+ if (option instanceof Argument) {
+ addOption(option);
+ }
+
+ List valueList = (List) values.get(option);
+
+ if (valueList == null) {
+ valueList = new ArrayList();
+ values.put(option, valueList);
+ }
+
+ valueList.add(value);
+ }
+
+/* METHOD addSwitch */
+public void addSwitch(final Option option,
+ final boolean value) {
+ addOption(option);
+
+ if (switches.containsKey(option)) {
+ throw new IllegalStateException(ResourceHelper.getResourceHelper().getMessage(ResourceConstants.SWITCH_ALREADY_SET));
+ } else {
+ switches.put(option, value ? Boolean.TRUE : Boolean.FALSE);
+ }
+ }
+
+===== org.apache.commons.cli2.option.GroupImpl (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli2.option;
+public class GroupImpl
+final List newAnonymous = new ArrayList();
+final SortedMap newOptionMap = new TreeMap(ReverseStringComparator.getInstance());
+final Set newPrefixes = new HashSet();
+for (final Iterator i = options.iterator(); i.hasNext();) {
+final Option option = (Option) i.next();
+final Set triggers = option.getTriggers();
+final Map tailMap = optionMap.tailMap(arg);
+for (final Iterator iter = tailMap.values().iterator(); iter.hasNext();) {
+final Option option = (Option) iter.next();
+public Set getPrefixes() {
+public Set getTriggers() {
+final String arg = (String) arguments.next();
+final Option opt = (Option) opt
+...[truncated deterministically]...
+ublic void defaults(final WriteableCommandLine commandLine) {
+class ReverseStringComparator implements Comparator {
+private static final Comparator instance = new ReverseStringComparator();
+private ReverseStringComparator() {
+public static final Comparator getInstance() {
+final String s1 = (String) o1;
+final String s2 = (String) o2;
+
+/* HEADER */
+package org.apache.commons.cli2.option;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import org.apache.commons.cli2.Argument;
+import org.apache.commons.cli2.DisplaySetting;
+import org.apache.commons.cli2.Group;
+import org.apache.commons.cli2.HelpLine;
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.OptionException;
+import org.apache.commons.cli2.WriteableCommandLine;
+import org.apache.commons.cli2.resource.ResourceConstants;
+public class GroupImpl
+
+/* METHOD GroupImpl */
+public GroupImpl(final List options,
+ final String name,
+ final String description,
+ final int minimum,
+...[truncated deterministically]...
+.na
+...[truncated deterministically]...
+imum;
+ this.maximum = maximum;
+
+ // store a copy of the options to be used by the
+ // help methods
+ this.options = Collections.unmodifiableList(options);
+
+ // anonymous Argument temporary storage
+ final List newAnonymous = new ArrayList();
+
+ // map (key=trigger & value=Option) temporary storage
+ final SortedMap newOptionMap = new TreeMap(ReverseStringComparator.getInstance());
+
+ // prefixes temporary storage
+ final Set newPrefixes = new HashSet();
+
+ // process the options
+ for (final Iterator i = options.iterator(); i.hasNext();) {
+ final Option option = (Option)
+...[truncated deterministically]...
+triggers = option.getTriggers();
+
+ for (Iterator j = triggers.iterator(); j.hasNext();) {
+ newOptionMap.put(j.next(), option);
+ }
+
+ // store the prefixes
+ newPrefixes.addAll(option.getPrefixes());
+ }
+ }
+
+ this.anonymous = Collections.unmodifiableList(newAnonymous);
+ this.optionMap = Collections.unmodifiableSortedMap(newOptionMap);
+ this.prefixes = Collections.unmodifiableSet(newPrefixes);
+ }
+
+===== org.apache.commons.cli2.option.OptionImpl (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli2.option;
+public abstract class OptionImpl implements Option {
+final String argument = (String) arguments.next();
+public String toString() {
+final StringBuffer buffer = new StringBuffer();
+public int getId() {
+public boolean equals(final Object thatObj) {
+final OptionImpl that = (OptionImpl) thatObj;
+public int hashCode() {
+public Option findOption(String trigger) {
+public boolean isRequired() {
+public void defaults(final WriteableCommandLine commandLine) {
+protected void checkPrefixes(final Set prefixes) {
+for (final Iterator i = getTriggers().iterator(); i.hasNext();) {
+for (final Iterator i = prefixes.iterator(); i.hasNext();) {
+final ResourceHelper helper = ResourceHelper.getResourceHelper();
+
+/* HEADER */
+package org.apache.commons.cli2.option;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.Set;
+import org.apache.commons.cli2.DisplaySetting;
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.WriteableCommandLine;
+import org.apache.commons.cli2.resource.ResourceConstants;
+import org.apache.commons.cli2.resource.ResourceHelper;
+
+/* METHOD OptionImpl */
+public OptionImpl(final int id,
+ final boolean required) {
+ this.id = id;
+ this.required = required;
+ }
+
+/* METHOD equals */
+public boolean equals(final Object thatObj) {
+ if (thatObj instanceof OptionImpl) {
+ final OptionImpl that = (OptionImpl) thatObj;
+
+ return (getId() == that.getId()) &&
+ equals(getPreferredName(), that.getPreferredName()) &&
+ equals(getDescription(), that.getDescription()) &&
+ equals(getPrefixes(), that.getPrefixes()) &&
+ equals(getTriggers(), that.getTriggers());
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD canProcess */
+public boolean canProcess(final WriteableCommandLine commandLine,
+ final ListIterator arguments) {
+ if (arguments.hasNext()) {
+ final String argument = (String) arguments.next();
+ arguments.previous();
+
+ return canProcess(commandLine, argument);
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD defaults */
+public void defaults(final WriteableCommandLine commandLine) {
+ // nothing to do normally
+ }
+
+/* METHOD checkPrefixes */
+protected void checkPrefixes(final Set prefixes) {
+ // nothing to do if empty prefix list
+ if (prefixes.isEmpty()) {
+ return;
+ }
+
+ // check preferred name
+ checkPrefix(prefixes, getPreferredName());
+
+ // check triggers
+ this.getTriggers();
+
+ for (final Iterator i = getTriggers().iterator(); i.hasNext();) {
+ checkPrefix(prefixes, (String) i.next());
+ }
+ }
+
+/* METHOD hashCode */
+public int hashCode() {
+ int hashCode = getId();
+ if (getPreferredName() != null) {
+ hashCode = (hashCode * 37) + getPreferredName().hashCode();
+ }
+
+ if (getDescription() != null) {
+ hashCode = (hashCode * 37) + getDescription().hashCode();
+ }
+
+ hashCode = (hashCode * 37) + getPrefixes().hashCode();
+ hashCode = (hashCode * 37) + getTriggers().hashCode();
+
+ return hashCode;
+ }

@@ -1,0 +1,141 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 87  Version: Jsoup-87b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1149
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::preservedCaseLinksCantNest
+ --> junit.framework.AssertionFailedError: expected:<<A> ONE <[/A> <A> Two] </A>> but was:<<A> ONE <[A> Two </A>] </A>>
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState, org.jsoup.parser.Tag
+
+Available API/signatures:
+[org.jsoup.nodes.Element | java]
+package org.jsoup.nodes;
+public class Element extends Node {
+private static final List<Node> EMPTY_NODES = Collections.emptyList();
+private static final Pattern classSplit = Pattern.compile("\\s+");
+public Element(String tag) {
+public Element(Tag tag, String baseUri, Attributes attributes) {
+public Element(Tag tag, String baseUri) {
+protected List<Node> ensureChildNodes() {
+@Override
+protected boolean hasAttributes() {
+public Attributes attributes() {
+public String baseUri() {
+protected void doSetBaseUri(String baseUri) {
+public int childNodeSize() {
+public String nodeName() {
+public String tagName() {
+public Element tagName(String tagName) {
+public Tag tag() {
+public boolean isBlock() {
+public String id() {
+public Element attr(String attributeKey, String attributeValue) {
+public Element a
+...[truncated deterministically]...
+ndable accum, int depth, final Document.OutputSettings out) throws IOException {
+public String html() {
+public <T extends Appendable> T html(T appendable) {
+public Element html(String html) {
+public Element clone() {
+public Element shallowClone() {
+protected Element doClone(Node parent) {
+private static final class NodeList extends ChangeNotifyingArrayList<Node> {
+public void onContentsChanged() {
+
+[org.jsoup.parser.HtmlTreeBuilder | java]
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+public static final int MaxScopeSearchDepth = 100; // prevents the parser bogging down in exceptionally broken pages
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, Par
+...[truncated deterministically]...
+rivate boolean selfClosing = false; // can self close (<foo />). used for unknown tags that self close, without forcing them as empty.
+private Tag(String tagName) {
+public String getName() {
+public static Tag valueOf(String tagName, ParseSettings settings) {
+public static Tag valueOf(String tagName) {
+public boolean isBlock() {
+public boolean formatAsBlock() {
+public boolean canContainBlock() {
+public boolean isInline() {
+public boolean isData() {
+public boolean isEmpty() {
+public boolean isSelfClosing() {
+public boolean isKnownTag() {
+public static boolean isKnownTag(String tagName) {
+public boolean preserveWhitespace() {
+public boolean isFormListed() {
+public boolean isFormSubmittable() {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+public String toString() {
+private static void register(Tag tag) {
+
+Generated JUnit Test:
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.parser.ParseSettings;
+import org.jsoup.parser.Parser;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class PreservedCaseLinksTest {
+    private Document parsePreservingCase(String html) {
+        return Jsoup.parse(html, "", Parser.htmlParser().settings(ParseSettings.preserveCase));
+    }
+
+    @Test
+    public void preservedCaseUppercaseLinksCannotNest() {
+        Document document = parsePreservingCase("<A> ONE <A> Two </A> </A>");
+
+        assertEquals("<A> ONE </A> <A> Two </A>", document.body().html());
+    }
+
+    @Test
+    public void preservedCaseMixedCaseLinksCannotNest() {
+        Document document = parsePreservingCase("<A> One <a> Two </a> </A>");
+
+        assertEquals(2, document.body().children().size());
+        assertEquals("A", document.body().child(0).tagName());
+        assertEquals("One", document.body().child(0).text());
+        assertEquals("a", document.body().child(1).tagName());
+        assertEquals("Two", document.body().child(1).text());
+    }
+
+    @Test
+    public void preservedCaseLowercaseOuterLinkClosesBeforeUppercaseInnerLink() {
+        Document document = parsePreservingCase("<a> One <A> Two </A> </a>");
+
+        assertEquals(2, document.body().children().size());
+        assertEquals("a", document.body().child(0).tagName());
+        assertEquals("One", document.body().child(0).text());
+        assertEquals("A", document.body().child(1).tagName());
+        assertEquals("Two", document.body().child(1).text());
+    }
+
+    @Test
+    public void preservedCaseLinkEndTagMatchesRegardlessOfEndTagCase() {
+        Document document = parsePreservingCase("<A> One </a>");
+
+        assertEquals(1, document.body().children().size());
+        Element link = document.body().child(0);
+        assertEquals("A", link.tagName());
+        assertEquals("One", link.text());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - PreservedCaseLinksTest::preservedCaseUppercaseLinksCannotNest
+
+Extract test suite......................................................... OK
+Failing generated tests: PreservedCaseLinksTest::preservedCaseUppercaseLinksCannotNest

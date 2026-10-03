@@ -1,0 +1,222 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 27  Version: JacksonDatabind-27b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 928
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestExternalId::testInverseExternalId928
+ --> java.lang.IllegalStateException: No fallback setter/field defined: can not use creator property for com.fasterxml.jackson.databind.deser.CreatorProperty
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializer | java]
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializer
+protected BeanDeserializer(BeanDeserializerBase src) {
+protected BeanDeserializer(BeanDeserializerBase src, boolean ignoreAllUnknown) {
+protected BeanDeserializer(BeanDeserializerBase src, NameTransformer unwrapper) {
+public BeanDeserializer(BeanDeserializerBase src, ObjectIdReader oir) {
+public BeanDeserializer(BeanDeserializerBase src, HashSet<String> ignorableProps) {
+@Override
+public JsonDeserializer<Object> unwrappingDeserializer(NameTransformer unwrapper)
+if (getClass() != BeanDeserializer.class) {
+public BeanDeserializer withObjectIdReader(ObjectIdReader oir) {
+public BeanDeserializer withIgnorableProperties(HashSet<String> ignorableProps) {
+protected BeanDeserializerBase asArrayDeserializer() {
+public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+protected Object _missingToken(JsonParser p, DeserializationContext ctxt) throws IOException {
+public Object deserialize(JsonParser p, DeserializationContext ctxt, Object bean) throws IOException
+final Object bean = _valueInstantiator.createUsingDefault(ctxt);
+public Object deserializeFromObject(JsonParser p, DeserializationContext ctxt) throws IOException
+@SuppressWarnings("resource")
+protected Object _deserializeUsingPropertyBased(final JsonParser p, final DeserializationContext ctxt)
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt, Object bean)
+protected Object deserializeUsingPropertyBasedWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+protected Object deserializeWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+protected Object deserializeUsingPropertyBasedWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+ import com.fasterxml.jackson.annotation.*;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.exc.*;
+ import com.fasterxml.jackson.core.*;
+
+ /**
+  * Tests for {@link BeanDeserializer} with external type id and property-based creator.
+  * Covers bug #928 where CreatorProperty without fallback setter caused IllegalStateException.
+  */
+ public class TestBeanDeserializerCreatorExternalId {
+
+     // ---------- polymorphic base types ---------
+     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property
+= "type")
+     interface Animal {}
+
+     static class Dog implements Animal {
+         public String name;
+     }
+
+     static class Cat implements Animal {
+         public int lives;
+     }
+
+     // ---------- bean with creator that also has the type id property ---------
+     static class BeanWithTypeIdInCreator {
+         private final String type;
+         private final Animal animal;
+
+         @JsonCreator
+         public BeanWithTypeIdInCreator(@JsonProperty("type") String type,
+                                        @JsonProperty("animal") Animal animal) {
+             this.type = type;
+             this.animal = animal;
+         }
+
+         public String getType() { return type; }
+         public Animal getAnimal() { return animal; }
+     }
+
+     // ---------- bean where the polymorphic value is a creator property but type id is NOT
+---------
+     static class BeanWithValueInCreator {
+         private final Animal animal;
+         private String type; // regular setter
+
+         @JsonCreator
+         public BeanWithValueInCreator(@JsonProperty("animal") Animal animal) {
+             this.animal = animal;
+         }
+
+         public Animal getAnimal() { return animal; }
+
+         public void setType(String type) { this.type = type; }
+         public String getType() { return type; }
+     }
+
+     private ObjectMapper mapper() {
+         ObjectMapper m = new ObjectMapper();
+         m.registerSubtypes(Dog.class, Cat.class);
+         return m;
+     }
+
+     // 1) normal: external type id + property-based creator, type id property is part of creator
+     // This is the scenario that triggers bug #928.
+     @Test
+     public void testExternalIdWithCreatorTypeId() throws Exception {
+         ObjectMapper mapper = mapper();
+         String json = "{\"type\":\"Dog\",\"animal\":{\"name\":\"Fido\"}}";
+         BeanWithTypeIdInCreator bean = mapper.readValue(json, BeanWithTypeIdInCreator.class);
+         assertNotNull(bean);
+         assertEquals("Dog", bean.getType());
+         assertTrue("Expected Dog instance", bean.getAnimal() instanceof Dog);
+         assertEquals("Fido", ((Dog) bean.getAnimal()).name);
+     }
+
+     // 2) external type id with property-based creator where value is creator param, type id is
+setter
+     @Test
+     public void testExternalIdWithCreatorValue() throws Exception {
+         ObjectMapper mapper = mapper();
+         String json = "{\"type\":\"Cat\",\"animal\":{\"lives\":9}}";
+         BeanWithValueInCreator bean = mapper.readValue(json, BeanWithValueInCreator.class);
+         assertNotNull(bean);
+         assertEquals("Cat", bean.getType());
+         assertTrue(bean.getAnimal() instanceof Cat);
+         assertEquals(9, ((Cat) bean.getAnimal()).lives);
+     }
+
+     // 3) order: type id appears AFTER the external value property
+     @Test
+     public void testExternalIdTypeAfterValue() throws Exception {
+         ObjectMapper mapper = mapper();
+         String json = "{\"animal\":{\"name\":\"Rex\"},\"type\":\"Dog\"}";
+         BeanWithTypeIdInCreator bean = mapper.readValue(json, BeanWithTypeIdInCreator.class);
+         assertNotNull(bean);
+         assertEquals("Dog", bean.getType());
+         assertTrue(bean.getAnimal() instanceof Dog);
+         assertEquals("Rex", ((Dog) bean.getAnimal()).name);
+     }
+
+     // 4) missing type id property should fail
+     @Test(expected = JsonMappingException.class)
+     public void testExternalIdMissingType() throws Exception {
+         ObjectMapper mapper = mapper();
+         String json = "{\"animal\":{\"name\":\"Fido\"}}";
+         mapper.readValue(json, BeanWithTypeIdInCreator.class);
+     }
+
+     // 5) all creator arguments provided, including external-type-id handled property
+     @Test
+     public void testAllCreatorPropsProvided() throws Exception {
+         ObjectMapper mapper = mapper();
+         String json = "{\"type\":\"Dog\",\"animal\":{\"name\":\"Bolt\"}}";
+         BeanWithTypeIdInCreator bean = mapper.readValue(json, BeanWithTypeIdInCreator.class);
+         assertEquals("Dog", bean.getType());
+         assertEquals("Bolt", ((Dog) bean.getAnimal()).name);
+     }
+
+     // 6) type id property is a creator property but there is also a regular setter for it
+(fallback exists)
+     // (This should work even without the fix, but validates no regression.)
+     @Test
+     public void testExternalIdCreatorWithFallbackSetter() throws Exception {
+         ObjectMapper mapper = mapper();
+         // use a variant of BeanWithTypeIdInCreator but with setter? We'll add inner class below
+     }
+
+     // Helper: bean with creator AND setter (fallback) for type
+     static class BeanWithFallback {
+         private String type;
+         private final Animal animal;
+
+         @JsonCreator
+         public BeanWithFallback(@JsonProperty("type") String type,
+                                 @JsonProperty("animal") Animal animal) {
+             this.type = type;
+             this.animal = animal;
+         }
+
+         public void setType(String type) { this.type = type; }
+         public String getType() { return type; }
+         public Animal getAnimal() { return animal; }
+     }
+
+     @Test
+     public void testExternalIdCreatorWithFallbackSetter() throws Exception {
+         ObjectMapper mapper = mapper();
+         String json = "{\"type\":\"Cat\",\"animal\":{\"lives\":5}}";
+         BeanWithFallback bean = mapper.readValue(json, BeanWithFallback.class);
+         assertNotNull(bean);
+         assertEquals("Cat", bean.getType());
+         assertTrue(bean.getAnimal() instanceof Cat);
+         assertEquals(5, ((Cat) bean.getAnimal()).lives);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-27f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-27f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-27f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-27f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-27f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/TestBeanDeserializerCreatorExternalId.java:46: error: illegal start of type
+ [javac] ---------
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 24 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,196 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 29  Version: Jsoup-29b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 168
+Trigger failures:
+- org.jsoup.nodes.DocumentTest::testTitles
+ --> junit.framework.AssertionFailedError: expected:<Hello[ there] now> but was:<Hello[
+Modified: org.jsoup.nodes.Document
+
+Available API/signatures:
+[org.jsoup.nodes.Document | java]
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Document extends Element {
+private OutputSettings outputSettings = new OutputSettings();
+@param baseUri base URI of document
+@see org.jsoup.Jsoup#parse
+@see #createShell
+public Document(String baseUri) {
+@param baseUri baseUri of document
+@return document with html, head, and body elements.
+static public Document createShell(String baseUri) {
+@return {@code head}
+public Element head() {
+@return {@code body}
+public Element body() {
+@return Trimmed title, or empty string if none set.
+public String title() {
+@param title string to set as title
+public void title(String title) {
+@param tagName element tag name (e.g. {@code a})
+@return new element
+public Element createElement(String tagName) {
+@return this document after normalisation
+public Document normalise() {
+private void normaliseTextNodes(Element element) {
+private void normaliseStructure(String tag, Element htmlEl) {
+private Element findFirstElementByTagName(String tag, Node node) {
+@Override
+public String outerHtml() {
+@param text unencoded text
+@return this document
+public Element text(String text) {
+public String nodeName() {
+public Document clone() {
+public static class OutputSettings implements Cloneable {
+private Charset charset = Charset.forName("UTF-8");
+private CharsetEncoder charsetEncoder = charset.newEncoder();
+public OutputSettings() {}
+public Entities.EscapeMode escapeMode() {
+public OutputSettings escapeMode(Entities.EscapeMode escapeMode) {
+public Charset charset() {
+public OutputSettings charset(Charset charset) {
+public OutputSettings charset(String charset) {
+public boolean prettyPrint() {
+public OutputSettings prettyPrint(boolean pretty) {
+public int indentAmount() {
+public OutputSettings indentAmount(int indentAmount) {
+public OutputSettings clone() {
+public OutputSettings outputSettings() {
+public Document outputSettings(OutputSettings outputSettings) {
+public enum QuirksMode {
+public QuirksMode quirksMode() {
+public Document quirksMode(QuirksMode quirksMode) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import static org.junit.Assert.*;
+
+ import org.jsoup.Jsoup;
+ import org.junit.Test;
+
+ public class DocumentTest {
+
+     @Test
+     public void testTitleOnEmptyDocument() {
+         Document doc = Document.createShell("");
+         // No title element present
+         assertEquals("", doc.title());
+     }
+
+     @Test
+     public void testTitleNormalizesWhitespaceFromTextNodes() {
+         // Simulate a title element whose text is split across text nodes with a newline,
+         // which is the trigger condition for the reported bug.
+         Document doc = Document.createShell("");
+         Element titleEl = doc.head().appendElement("title");
+         titleEl.appendChild(new TextNode("Hello", ""));
+         titleEl.appendChild(new TextNode("\n there now", ""));
+         // Expect whitespace to be collapsed into a single space and the result trimmed.
+         assertEquals("Hello there now", doc.title());
+     }
+
+     @Test
+     public void testTitleTrimsLeadingTrailingWhitespace() {
+         Document doc = Document.createShell("");
+         doc.title("   spaced title \t\n  ");
+         assertEquals("spaced title", doc.title());
+     }
+
+     @Test
+     public void testTitleWithOnlyWhitespaceReturnsEmpty() {
+         Document doc = Document.createShell("");
+         doc.title("   \t \n  ");
+         assertEquals("", doc.title());
+     }
+
+     @Test
+     public void testTitleSetterCreatesTitleInHead() {
+         Document doc = Document.createShell("");
+         // No title element initially
+         doc.title("New title");
+         assertEquals("New title", doc.title());
+         // Verify that a <title> element was added inside <head>
+         assertEquals("title", doc.head().children().first().tagName());
+     }
+
+     @Test
+     public void testTitleSetterUpdatesExistingTitle() {
+         Document doc = Document.createShell("");
+         doc.title("First");
+         assertEquals("First", doc.title());
+         doc.title("Second");
+         assertEquals("Second", doc.title());
+     }
+
+     @Test
+     public void testTitleNormalizesMultipleSpaces() {
+         Document doc = Document.createShell("");
+         doc.head().appendElement("title").text("Hello    world");
+         assertEquals("Hello world", doc.title());
+     }
+
+     @Test
+     public void testHeadAndBodyAfterCreateShell() {
+         Document doc = Document.createShell("");
+         assertNotNull(doc.head());
+         assertNotNull(doc.body());
+         assertEquals("head", doc.head().tagName());
+         assertEquals("body", doc.body().tagName());
+     }
+
+     @Test
+     public void testNormaliseCreatesMissingHeadAndBody() {
+         Document doc = new Document("");
+         // Initially no <html>, <head>, or <body>
+         doc.normalise();
+         assertNotNull(doc.head());
+         assertNotNull(doc.body());
+     }
+
+     @Test
+     public void testNormaliseMovesStrayTextNodesToBody() {
+         Document doc = Document.createShell("");
+         // Put a non-blank text node directly under <head> (stray text)
+         doc.head().appendChild(new TextNode("Stray text", ""));
+         doc.normalise();
+         // After normalise the stray text should have been moved to <body>
+         assertTrue(doc.body().text().contains("Stray text"));
+         assertFalse(doc.head().text().contains("Stray text"));
+     }
+
+     @Test
+     public void testNormaliseMovesTextFromHtmlElementToBody() {
+         Document doc = Document.createShell("");
+         // Text directly under <html> should be moved to body as well
+         Element htmlEl = doc.child(0); // the <html> element
+         htmlEl.appendChild(new TextNode("Outside head", ""));
+         doc.normalise();
+         assertTrue(doc.body().text().contains("Outside head"));
+         assertFalse("html element should not retain text after normalise",
+                 htmlEl.text().contains("Outside head"));
+     }
+
+     @Test
+     public void testTitleDoesNotAlterBody() {
+         Document doc = Document.createShell("");
+         doc.body().appendElement("p").text("Body paragraph");
+         String bodyBefore = doc.body().html();
+         doc.title("A title");
+         assertEquals(bodyBefore, doc.body().html());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.DocumentTest::testNormaliseMovesTextFromHtmlElementToBody
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.DocumentTest::testNormaliseMovesTextFromHtmlElementToBody

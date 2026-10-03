@@ -1,0 +1,310 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 22  Version: JacksonDatabind-22b
+JUnit: junit-4.11.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.BasicSerializerFactory, com.fasterxml.jackson.databind.ser.BeanSerializerFactory
+Modified: com.fasterxml.jackson.databind.ser.BasicSerializerFactory, com.fasterxml.jackson.databind.ser.BeanSerializerFactory
+Triggers: com.fasterxml.jackson.databind.ser.TestJsonValue::testJsonValueWithCustomOverride
+
+Bug/specification summary:
+Bug report: 848
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.TestJsonValue::testJsonValueWithCustomOverride
+ --> junit.framework.ComparisonFailure: expected:<[42]> but was:<["value"]>
+Modified: com.fasterxml.jackson.databind.ser.BasicSerializerFactory, com.fasterxml.jackson.databind.ser.BeanSerializerFactory
+
+Prompt-01 test plan:
+TARGETS: BasicSerializerFactory serializer selection; BeanSerializerFactory.findBeanSerializer bean serializer construction 
+ORACLES: Trigger asserts JSON numeric 42, not JSON string "value" 
+CASES: @JsonValue type with a custom serializer override producing numeric output 
+CASES: Verify custom override wins over default @JsonValue accessor serialization 
+RISKS: Factory interaction may select cached/default scalar serializer instead of custom serializer 
+RISKS: Context exposes only one failing custom-override scenario; no additional expected behaviors given
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ser.BasicSerializerFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser;
+@SuppressWarnings("serial")
+public abstract class BasicSerializerFactory
+_concrete.put(String.class.getName(), new StringSerializer());
+_concrete.put(StringBuffer.class.getName(), sls);
+_concrete.put(StringBuilder.class.getName(), sls);
+_concrete.put(Character.class.getName(), sls);
+_concrete.put(Boolean.class.getName(), new BooleanSerializer(false));
+_concrete.put(BigInteger.class.getName(), new NumberSerializer(BigInteger.class));
+_concrete.put(BigDecimal.class.getName(),new NumberSerializer(BigDecimal.class));
+_concrete.put(Calendar.class.getName(), CalendarSerializer.instance);
+_concrete.put(java.util.Date.class.getName(), dateSer);
+_concrete.put(java.sql.Timestamp.class.getName(), dateSer);
+_concreteLazy.put(java.sql.Date.class.getName(), SqlDateSerializer.class);
+_concreteLazy.put(java.sql.Time.class.getName(), SqlTimeSerializer.class);
+@SuppressWarnings("unchecked")
+_concreteLazy.put(TokenBuffer.class.getName(), TokenBufferSerializer.class);
+protected final SerializerFactoryConfig _factoryConfig;
+protected BasicSerializerFactory(SerializerFactoryConfig config) {
+public SerializerFactoryConfig getFactoryConfig() {
+public abstract SerializerFactory withConfig(SerializerFactoryConfig config);
+@Override
+public final SerializerFactory withAdditionalSerializers(Serial
+...[truncated deterministically]...
+?> cls)
+return RandomAccess.class.isAssignableFrom(cls);
+public JsonSerializer<?> buildEnumSetSerializer(JavaType enumType) {
+if (EnumMap.class.isAssignableFrom(type.getRawClass())
+if (keyType.isEnumType()) { // non-enum if we got it as type erased class (from instance)
+if (String[].class == raw) {
+@Deprecated // since 2.5
+JavaType[] params = config.getTypeFactory().findTypeParameters(type, Iterator.class);
+JavaType[] params = config.getTypeFactory().findTypeParameters(type, Iterable.class);
+protected Object findFilterId(SerializationConfig config, BeanDescription beanDesc) {
+protected Class<?> _verifyAsClass(Object src, String methodName, Class<?> noneClass)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.cfg.SerializerFactoryConfig;
+import com.fasterxml.jackson.databind.ext.OptionalHandlerFactory;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.NamedType;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.ser.impl.*;
+import com.fasterxml.jackson.databind.ser.std.*;
+import com.fasterxml.jackson.databind.type.*;
+import com.fasterxml.jackson.databind.util.*;
+
+/* METHOD BasicSerializerFactory */
+protected BasicSerializerFactory(SerializerFactoryConfig config) {
+ _factoryConfig = (config == null) ? new SerializerFactoryConfig() : config;
+ }
+
+/* METHOD buildContainerSerializer */
+protected JsonSerializer<?> buildContainerSerializer(SerializerProvider prov,
+ JavaType type, BeanDescription beanDesc, boolean staticTyping)
+ throws JsonMappingException
+ {
+ final SerializationConfig config = prov.getConfig();
+
+ /* [databind#23], 15-Mar-2013, tatu: must force static handling of root value type,
+ * with just one important exception: if value type is "untyped", let's
+ * leave it as is; no clean way to make it work.
+ */
+ if (!staticTyping && type.useStaticType()) {
+ if (!type.isContainerType() || type.getContentType().getRawClass() != Object.class) {
+ staticTyping = true;
+ }
+ }
+ 
+ // Let's see what we can le
+...[truncated deterministically]...
+Type = type.getContentType();
+ TypeSerializer elementTypeSerializer = createTypeSerializer(config,
+ elementType);
+
+ // if elements have type serializer, can not force static typing:
+ if (elementTypeSerializer != null) {
+ staticTyping = false;
+ }
+ JsonSerializer<Object> elementValueSerializer = _findContentSerializer(prov,
+ beanDesc.getClassInfo());
+ if (type.isMapLikeType()) { // implements java.util.Map
+ MapLikeType mlt = (MapLikeType) type;
+ /* 29-Sep-2012, tatu: This is actually too early to (try to) find
+ * key serializer from property annotations, and can lead to caching
+ * issues (see [databind#75]). Instead, must be done from 'createContextual()' call.
+ * But we do need to check class annotations.
+ */
+ JsonSerializer<Object> keySerializer = _findKeySerializer(prov, beanDesc.getClassInfo());
+ if (mlt.isTrueMapType()) {
+ return buildMapSerializer(config, (MapType) mlt, beanDesc, staticTyping,
+ keySerializer, elementTypeSerializer, elementValueSerializer);
+ }
+ // With Map-like, just 2 options: (1) Custom, (2) Annotations
+ JsonSerializer<?> ser = null;
+...[truncated deterministically]...
+Serializer(config, (CollectionType) clt, beanDesc, staticTyping,
+ elementTypeSerializer, elementValueSerializer);
+ }
+ // With Map-like, just 2 options: (1) Custom, (2) Annotations
+ JsonSerializer<?> ser = null;
+ CollectionLikeType clType = (CollectionLikeType) type;
+ for (Serializers serializers : customSerializers()) { // (1) Custom
+ ser = serializers.findCollectionLikeSerializer(config,
+ clType, beanDesc, elementTypeSerializer, elementValueSerializer);
+ if (ser != null) {
+ if (_factoryConfig.hasSerializerModifiers()) {
+ for (BeanSerializerModifier mod : _factoryConfig.serializerModifiers()) {
+ ser = mod.modifyCollectionLikeSerializer(config, clType, beanDesc, ser);
+ }
+ }
+ return ser;
+ }
+ }
+ return null;
+ }
+ if (type.isArrayType()) {
+ return buildArraySerializer(config, (ArrayType) type, beanDesc, staticTyping,
+ elementTypeSerializer, elementValueSerializer);
+ }
+ return null;
+ }
+
+===== com.fasterxml.jackson.databind.ser.BeanSerializerFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser;
+public class BeanSerializerFactory
+public final static BeanSerializerFactory instance = new BeanSerializerFactory(null);
+protected BeanSerializerFactory(SerializerFactoryConfig config)
+@Override
+public SerializerFactory withConfig(SerializerFactoryConfig config)
+if (getClass() != BeanSerializerFactory.class) {
+protected Iterable<Serializers> customSerializers() {
+@SuppressWarnings("unchecked")
+final SerializationConfig config = prov.getConfig();
+if (type == origType) { // no changes, won't force static typing
+} else { // changes; assume static typing; plus, need to re-introspect if class differs
+if (t != null && !t.hasRawClass(Object.class)) {
+public JsonSerializer<Object> findBeanSerializer(SerializerProvider prov, JavaType type, BeanDescription beanDesc)
+if (beanDesc.getBeanClass() == Object.class) {
+return prov.getUnknownTypeSerializer(Object.class);
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+JavaType idType = prov.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+protected BeanSerializerBuilder constructBeanSerializerBuilder(BeanDescription beanDesc) {
+protected boolean isPotentialBeanType(Class<?> type)
+final AnnotatedMember accessor = property.getAccessor();
+protected void processViews(SerializationConfig config, BeanSerializerBuilder builder)
+final int propCount = props.size();
+final PropertyName name = propDef.getFullName();
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser;
+import java.util.*;
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
+import com.fasterxml.jackson.databind.*;
+import com.fas
+...[truncated deterministically]...
+;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.ser.impl.FilteredBeanPropertyWriter;
+import com.fasterxml.jackson.databind.ser.impl.ObjectIdWriter;
+import com.fasterxml.jackson.databind.ser.impl.PropertyBasedObjectIdGenerator;
+import com.fasterxml.jackson.databind.ser.std.MapSerializer;
+import com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer;
+import com.fasterxml.jackson.databind.type.*;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.Converter;
+public class BeanSerializerFactory
+
+/* METHOD BeanSerializerFactory */
+protected BeanSerializerFactory(SerializerFactoryConfig config)
+ {
+ super(config);
+ }
+
+/* METHOD findBeanProperties */
+protected List<BeanPropertyWriter> findBeanProperties(SerializerProvider prov,
+ BeanDescription beanDesc, BeanSerializerBuilder builder)
+ throws JsonMappingException
+ {
+ List<BeanPropertyDefinition> properties = beanDesc.findProperties();
+ final SerializationConfig config = prov.getConfig();
+
+ // [JACKSON-429]: ignore specified types
+ removeIgnorableTypes(config, beanDesc, properties);
+ 
+ // and possibly remove ones without matching mutator...
+ if (config.isEnabled(MapperFeature.REQUIRE_SETTERS_FOR_GETTERS)) {
+ removeSetterlessGetters(config, beanDesc, properties);
+ }
+ 
+ // nothing? can't proceed (caller may or may not throw an exception)
+ if (properties.isEmpty()) {
+ return null;
+ }
+ // null is for value type serializer, which we don't have access to from here (ditto for bean prop)
+ boolean staticTyping = usesStaticTyping(config, beanDesc, null);
+ PropertyBuilder pb = constructPropertyBuilder(config, beanDesc);
+ 
+ ArrayList<BeanPropertyWriter> result = new ArrayList<BeanPropertyWriter>(properties.size());
+ TypeBindings typeBind = beanDesc.bindingsForBeanType();
+ for (BeanPropertyDefinition property : properties) {
+ final Annotat
+...[truncated deterministically]...
+pecial handling:
+ if (property.isTypeId()) {
+ if (accessor != null) { // only add if we can access... but otherwise?
+ if (config.canOverrideAccessModifiers()) {
+ accessor.fixAccess();
+ }
+ builder.setTypeId(accessor);
+ }
+ continue;
+ }
+ // [JACKSON-235]: suppress writing of back references
+ AnnotationIntrospector.ReferenceProperty refType = property.findReferenceType();
+ if (refType != null && refType.isBackReference()) {
+ continue;
+ }
+ if (accessor instanceof AnnotatedMethod) {
+ result.add(_constructWriter(prov, property, typeBind, pb, staticTyping, (AnnotatedMethod) accessor));
+ } else {
+ result.add(_constructWriter(prov, property, typeBind, pb, staticTyping, (AnnotatedField) accessor));
+ }
+ }
+ return result;
+ }
+
+/* METHOD constructBeanSerializer */
+@SuppressWarnings("unchecked")
+ protected JsonSerializer<Object> constructBeanSerializer(SerializerProvider prov,
+ BeanDescription beanDesc)
+ throws JsonMappingException
+ {
+ // 13-Oct-2010, tatu: quick sanity check: never try to create bean serializer for plain Object
+ // 05-Jul-2012, tatu: ... but we should be able to just return "unknown type" serializer, right?
+ if (beanDesc.getBeanClass() == Object.class) {
+ return prov.getUnknownTypeSerializer(Object.class);
+// throw new IllegalArgumentException("Can not create bean serializer for Object.class");
+ }
+ final SerializationConfig config = prov.getConfig();
+ BeanSerializerBuilder builder = constructBeanSerializerBuilder(beanDesc);
+ builder.setConfig(config);
+
+ // First: any detectable (auto-detect, annotations) properties to serialize?
+ List
+...[truncated deterministically]...
+("Invalid Object Id definition for "+beanDesc.getBeanClass().getName()
+ +": can not find property with name '"+propName+"'");
+ }
+ BeanPropertyWriter prop = props.get(i);
+ if (propName.equals(prop.getName())) {
+ idProp = prop;
+ /* Let's force it to be the first property to output
+ * (although it may still get rearranged etc)
+ */
+ if (i > 0) {
+ props.remove(i);
+ props.add(0, idProp);
+ }
+ break;
+ }
+ }

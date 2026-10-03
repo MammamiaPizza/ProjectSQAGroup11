@@ -1,0 +1,242 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 165  Version: Closure-165b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 725
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue725
+ --> junit.framework.AssertionFailedError: expected a warning
+Modified: com.google.javascript.rhino.jstype.JSTypeRegistry, com.google.javascript.rhino.jstype.ObjectType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.RecordTypeBuilder
+
+Available API/signatures:
+[com.google.javascript.rhino.jstype.JSTypeRegistry | java]
+package com.google.javascript.rhino.jstype;
+public class JSTypeRegistry implements Serializable {
+private final Set<String> namespaces = new HashSet<String>();
+private final Set<String> nonNullableTypeNames = new HashSet<String>();
+private final Set<String> forwardDeclaredTypes = new HashSet<String>();
+public static enum ResolveMode {
+public JSTypeRegistry(ErrorReporter reporter) {
+public void setResolveMode(ResolveMode mode) {
+public ErrorReporter getErrorReporter() {
+public boolean shouldTolerateUndefinedValues() {
+public void resetForTypeCheck() {
+private void initializeBuiltInTypes() {
+@Override public FunctionType getConstructor() {
+private void initializeRegistry() {
+private void register(JSType type) {
+private void register(JSType type, String name) {
+private void registerNativeType
+...[truncated deterministically]...
+RecordType(Map<String, RecordProperty> properties) {
+public ObjectType createAnonymousObjectType() {
+public FunctionType createInterfaceType(String name, Node source) {
+@VisibleForTesting
+public void identifyNonNullableName(String name) {
+private boolean hasTypeName(Node n) {
+"Duplicate record field " + fieldName,
+public void setTemplateTypeName(String name) {
+public void clearTemplateTypeName() {
+
+[com.google.javascript.rhino.jstype.ObjectType | java]
+package com.google.javascript.rhino.jstype;
+public abstract class ObjectType extends JSType implements StaticScope<JSType> {
+@Override
+public Node getRootNode() { return null; }
+public ObjectType getParentScope() {
+public abstract Property getSlot(String name);
+public Property getOwnSlot(String name) {
+public Ob
+...[truncated deterministically]...
+{
+public void setNode(Node n) {
+
+[com.google.javascript.rhino.jstype.RecordType | java]
+package com.google.javascript.rhino.jstype;
+class RecordType extends PrototypeObjectType {
+private final SortedMap<String, JSType> properties = Maps.newTreeMap();
+@Override
+public boolean isEquivalentTo(JSType other) {
+public ObjectType getImplicitPrototype() {
+public boolean isSubtype(JSType that) {
+static boolean isSubtype(ObjectType typeA, RecordType typeB) {
+
+[com.google.javascript.rhino.jstype.RecordTypeBuilder | java]
+package com.google.javascript.rhino.jstype;
+public class RecordTypeBuilder {
+private final HashMap<String, RecordProperty> properties = Maps.newHashMap();
+public RecordTypeBuilder(JSTypeRegistry registry) {
+public JSType build() {
+static class RecordProperty {
+public JSType getType() {
+public Node getPropertyNode() {
+
+Generated JUnit Test:
+package com.google.javascript.rhino.jstype;
+
+ import com.google.javascript.rhino.ErrorReporter;
+ import com.google.javascript.rhino.jstype.JSType;
+ import com.google.javascript.rhino.jstype.JSTypeNative;
+ import com.google.javascript.rhino.jstype.JSTypeRegistry;
+ import com.google.javascript.rhino.jstype.ObjectType;
+ import com.google.javascript.rhino.jstype.RecordTypeBuilder;
+
+ import junit.framework.TestCase;
+
+ public class RecordTypeBug725Test extends TestCase {
+
+   private JSTypeRegistry registry;
+   private JSType numberType;
+   private JSType stringType;
+   private JSType nullType;
+
+   @Override
+   protected void setUp() throws Exception {
+     ErrorReporter reporter = new ErrorReporter() {
+       @Override
+       public void error(String message, String sourceName, int line, int lineOffset) {
+       }
+       @Override
+       public void warning(String message, String sourceName, int line, int lineOffset) {
+       }
+     };
+     registry = new JSTypeRegistry(reporter);
+     numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+     stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+     nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+   }
+
+   public void testEmptyRecord() {
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     JSType type = builder.build();
+     assertTrue("empty record must be an object", type.isObjectType());
+     assertEquals("empty record is OBJECT_TYPE",
+         registry.getNativeObjectType(JSTypeNative.OBJECT_TYPE), type);
+   }
+
+   public void testDuplicateProperty() {
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("x", numberType, null);
+     RecordTypeBuilder result = builder.addProperty("x", stringType, null);
+     assertNull("duplicate property addition returns null", result);
+     JSType built = builder.build();
+     assertTrue("duplicate property still yields a record", built.isRecordType());
+     ObjectType obj = (ObjectType) built;
+     JSType propType = obj.getOwnSlot("x").getType();
+     assertTrue("duplicate field keeps first type",
+         propType.isEquivalentTo(numberType));
+   }
+
+   public void testRecordSubtypeWidth() {
+     RecordTypeBuilder b1 = new RecordTypeBuilder(registry);
+     b1.addProperty("a", numberType, null);
+     JSType r1 = b1.build();
+     RecordTypeBuilder b2 = new RecordTypeBuilder(registry);
+     b2.addProperty("a", numberType, null);
+     b2.addProperty("b", stringType, null);
+     JSType r2 = b2.build();
+     assertTrue("wider record is subtype of narrower", r2.isSubtype(r1));
+     assertFalse("narrower is not subtype of wider", r1.isSubtype(r2));
+   }
+
+   public void testRecordSubtypeObject() {
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     JSType objType = registry.getNativeObjectType(JSTypeNative.OBJECT_TYPE);
+     assertTrue("every record is a subtype of OBJECT_TYPE", record.isSubtype(objType));
+   }
+
+   public void testAnonymousObjectMatchesRecord() {
+     ObjectType anon = (ObjectType) registry.createAnonymousObjectType();
+     anon.defineDeclaredProperty("a", numberType, null);
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertTrue("anonymous with same properties is subtype of record",
+         anon.isSubtype(record));
+   }
+
+   public void testAnonymousObjectMissingProperty() {
+     ObjectType anon = (ObjectType) registry.createAnonymousObjectType();
+     // intentionally missing required property
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertFalse("anonymous missing required property is NOT subtype of record",
+         anon.isSubtype(record));
+   }
+
+   public void testAnonymousObjectPropertyTypeMismatch() {
+     ObjectType anon = (ObjectType) registry.createAnonymousObjectType();
+     anon.defineDeclaredProperty("a", stringType, null);
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertFalse("anonymous with wrong property type is NOT subtype of record",
+         anon.isSubtype(record));
+   }
+
+   public void testRecordNotSubtypeNull() {
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertFalse("record is not a subtype of NULL", record.isSubtype(nullType));
+   }
+
+   public void testEmptyRecordNotSubtypeNonEmpty() {
+     JSType empty = new RecordTypeBuilder(registry).build();
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertFalse("empty record is not subtype of non-empty record",
+         empty.isSubtype(record));
+   }
+
+   public void testRecordIsSubtypeSelf() {
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertTrue("record is subtype of itself", record.isSubtype(record));
+   }
+
+   public void testRecordTypeRecognition() {
+     RecordTypeBuilder builder = new RecordTypeBuilder(registry);
+     builder.addProperty("a", numberType, null);
+     JSType record = builder.build();
+     assertTrue("must be recognized as record type", record.isRecordType());
+     assertTrue("must be recognized as object type", record.isObjectType());
+   }
+
+   public void testGetOwnSlotOnAnonymousObject() {
+     ObjectType anon = (ObjectType) registry.createAnonymousObjectType();
+     anon.defineDeclaredProperty("prop", stringType, null);
+     ObjectType.Property slot = anon.getOwnSlot("prop");
+     assertNotNull("slot must exist", slot);
+     assertEquals("slot type must match", stringType, slot.getType());
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-165f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-165f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-165f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-165f-copilot/.test_suite/com/google/javascript/rhino/jstype/RecordTypeBug725Test.java:38: error: cannot find symbol
+ [javac] assertTrue("empty record must be an object", type.isObjectType());
+ [javac] ^
+ [javac] symbol: method isObjectType()
+ [javac] location: variable type of type JSType
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 10 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,185 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 2  Version: Collections-2b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Ant
+Bug/specification summary:
+Bug report: COLLECTIONS-214
+Trigger failures:
+- org.apache.commons.collections.TestExtendedProperties::testInclude
+ --> junit.framework.ComparisonFailure: expected:<i[nclude]> but was:<i[mport]>
+Modified: org.apache.commons.collections.ExtendedProperties
+
+Available API/signatures:
+[org.apache.commons.collections.ExtendedProperties | java]
+package org.apache.commons.collections;
+public class ExtendedProperties extends Hashtable {
+protected String file;
+protected String basePath;
+protected String fileSeparator = System.getProperty("file.separator");
+protected boolean isInitialized = false;
+protected static String include = "include";
+protected ArrayList keysAsListed = new ArrayList();
+protected final static String START_TOKEN="${";
+protected final static String END_TOKEN="}";
+protected String interpolate(String base) {
+protected String interpolateHelper(String base, List priorVariables) {
+private static String escape(String s) {
+private static String unescape(String s) {
+private static int countPreceding(String line, int index, char ch) {
+private static boolean endsWithSlash(String line) {
+static class PropertiesReader extends LineNumberReader {
+public PropertiesReader(Reader reader) {
+public String readProperty() throws IOException {
+static class PropertiesTokenizer extends StringTokenizer {
+public PropertiesTokenizer(String string) {
+public boolean hasMoreTokens() {
+public String nextToken() {
+public ExtendedProperties() {
+public ExtendedProperties(String file) throws IOException {
+public ExtendedProperties(String file, String defaultFile) throws IOException {
+public boolean isInitialized() {
+public String getInclude() {
+public void setInclude(String inc) {
+public void load(InputStream input) throws IOException {
+public synchronized void load(InputStream input, String enc) throws IOException {
+public Object getProperty(String key) {
+public void addProperty(String key, Object value) {
+private void addPropertyDirect(
+...[truncated deterministically]...
+rt(String key, short defaultValue) {
+public Short getShort(String key, Short defaultValue) {
+public int getInt(String name) {
+public int getInt(String name, int def) {
+public int getInteger(String key) {
+public int getInteger(String key, int defaultValue) {
+public Integer getInteger(String key, Integer defaultValue) {
+public long getLong(String key) {
+public long getLong(String key, long defaultValue) {
+public Long getLong(String key, Long defaultValue) {
+public float getFloat(String key) {
+public float getFloat(String key, float defaultValue) {
+public Float getFloat(String key, Float defaultValue) {
+public double getDouble(String key) {
+public double getDouble(String key, double defaultValue) {
+public Double getDouble(String key, Double defaultValue) {
+public static ExtendedProperties convertProperties(Properties props) {
+
+Generated JUnit Test:
+package org.apache.commons.collections;
+
+import java.io.File;
+import java.io.FileOutputStream;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+public class ExtendedPropertiesIncludeTest {
+
+    @Test
+    public void defaultIncludeDirectiveIsInclude() {
+        ExtendedProperties properties = new ExtendedProperties();
+
+        assertEquals("include", properties.getInclude());
+    }
+
+    @Test
+    public void setIncludeChangesDirectiveNameReportedByGetter() {
+        ExtendedProperties properties = new ExtendedProperties();
+        String previous = properties.getInclude();
+
+        try {
+            properties.setInclude("loadFrom");
+
+            assertEquals("loadFrom", properties.getInclude());
+        } finally {
+            properties.setInclude(previous);
+        }
+    }
+
+    @Test
+    public void loadRecognizesDefaultIncludeDirectiveAndLoadsRelativeFile() throws Exception {
+        File directory = createTemporaryDirectory();
+        File included = new File(directory, "included.properties");
+        File root = new File(directory, "root.properties");
+
+        try {
+            write(included, "child.value=loaded-from-child\n");
+            write(root, "root.value=loaded-from-root\ninclude=included.properties\n");
+
+            ExtendedProperties properties = new ExtendedProperties(root.getAbsolutePath());
+
+            assertEquals("loaded-from-root", properties.getString("root.value"));
+            assertEquals("loaded-from-child", properties.getString("child.value"));
+            assertNull(properties.getProperty("include"));
+        } finally {
+            deleteRecursively(directory);
+        }
+    }
+
+    @Test
+    public void loadUsesCustomIncludeDirectiveAfterItIsConfigured() throws Exception {
+        ExtendedProperties configuration = new ExtendedProperties();
+        String previous = configuration.getInclude();
+        File directory = createTemporaryDirectory();
+        File included = new File(directory, "custom.properties");
+        File root = new File(directory, "root.properties");
+
+        try {
+            write(included, "custom.child=yes\n");
+            write(root, "loadFrom=custom.properties\n");
+
+            configuration.setInclude("loadFrom");
+            ExtendedProperties loaded = new ExtendedProperties(root.getAbsolutePath());
+
+            assertEquals("yes", loaded.getString("custom.child"));
+            assertNull(loaded.getProperty("loadFrom"));
+        } finally {
+            configuration.setInclude(previous);
+            deleteRecursively(directory);
+        }
+    }
+
+    private static File createTemporaryDirectory() throws Exception {
+        File directory = File.createTempFile("extended-properties-", "");
+        if (!directory.delete() || !directory.mkdir()) {
+            throw new IllegalStateException("Unable to create temporary directory");
+        }
+        return directory;
+    }
+
+    private static void write(File file, String content) throws Exception {
+        FileOutputStream output = new FileOutputStream(file);
+        try {
+            output.write(content.getBytes("ISO-8859-1"));
+        } finally {
+            output.close();
+        }
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (int i = 0; i < children.length; i++) {
+                    deleteRecursively(children[i]);
+                }
+            }
+        }
+        file.delete();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.collections.ExtendedPropertiesIncludeTest::loadUsesCustomIncludeDirectiveAfterItIsConfigured
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.collections.ExtendedPropertiesIncludeTest::loadUsesCustomIncludeDirectiveAfterItIsConfigured

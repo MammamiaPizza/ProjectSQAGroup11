@@ -1,0 +1,146 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 35  Version: Math-35b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math3.genetics.ElitisticListPopulation
+Modified: org.apache.commons.math3.genetics.ElitisticListPopulation
+Triggers: org.apache.commons.math3.genetics.ElitisticListPopulationTest::testChromosomeListConstructorTooLow, org.apache.commons.math3.genetics.ElitisticListPopulationTest::testConstructorTooHigh, org.apache.commons.math3.genetics.ElitisticListPopulationTest::testConstructorTooLow, org.apache.commons.math3.genetics.ElitisticListPopulationTest::testChromosomeListConstructorTooHigh
+
+Bug/specification summary:
+Bug report: MATH-776
+Trigger failures:
+- org.apache.commons.math3.genetics.ElitisticListPopulationTest::testChromosomeListConstructorTooLow
+ --> junit.framework.AssertionFailedError: Expected exception: org.apache.commons.math3.exception.OutOfRangeException
+ - org.apache.commons.math3.genetics.ElitisticListPopulationTest::testConstructorTooHigh
+ --> junit.framework.AssertionFailedError: Expected exception: org.apache.commons.math3.exception.OutOfRangeException
+ - org.apache.commons.math3.genetics.ElitisticListPopulationTest::testConstructorTooLow
+ --> junit.framework.AssertionFailedError: Expected exception: org.apache.commons.math3.exception.OutOfRangeException
+ - org.apache.commons.math3.genetics.ElitisticListPopulationTest::testChromosomeListConstructorTooHigh
+ --> junit.framework.AssertionFailedError: Expected exception: org.apache.commons.math3.exception.OutOfRangeException
+Modified: org.apache.commons.math3.genetics.ElitisticListPopulation
+
+Prompt-01 test plan:
+TARGETS: ElitisticListPopulation(int,double) and setElitismRate(double) for elitismRate validation
+ORACLES: OutOfRangeException expected for elitismRate outside [0,1]; no exception for in-range
+CASES: elitismRate: -0.5, 0.0, 0.5, 1.0, 1.5; populationLimit: 0, 1, 10; setElitismRate with -0.1,
+0.3, 1.2
+RISKS: Only constructors and setElitismRate relevant; nextGeneration not directly testable
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math3.genetics.ElitisticListPopulation (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.math3.genetics;
+
+import java.util.Collections;
+import java.util.List;
+
+import org.apache.commons.math3.exception.OutOfRangeException;
+import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.util.FastMath;
+
+/**
+ * Population of chromosomes which uses elitism (certain percentage of the best
+ * chromosomes is directly copied to the next generation).
+ *
+ * @version $Id$
+ * @since 2.0
+ */
+public class ElitisticListPopulation extends ListPopulation {
+
+ /** percentage of chromosomes copied to the next generation */
+ private double elitismRate = 0.9;
+
+ /**
+ * Creates a new ElitisticListPopulation instance.
+ *
+ * @param chromosomes list of chromosomes in the population
+ * @param populationLimit maximal size of the population
+ * @param elitismRate how many best chromosomes will be directly transferred to the
+ * next generation [in %]
+ * @throws OutOfRangeException if the elitism rate is outside the [0, 1] range
+ */
+ public ElitisticListPopulation(final List<Chromosome> chromosomes,
+ final int populationLimit,
+ final double elitismRate) {
+ super(chromosomes, populationLimit);
+ this.elitismRate = elitismRate;
+ }
+
+ /**
+ * Creates a new ListPopulation instance and initializes its inner
+ * chromosome list.
+ *
+ * @param populationLimit maximal size of the population
+ * @param elitismRate how many best chromosomes will be directly transferred to the
+ * next generation [in %]
+ * @throws OutOfRangeException if the elitism rate is outside the [0, 1] range
+ */
+ public ElitisticListPopulation(final int populationLimit, final double elitismRate) {
+ super(populationLimit);
+ this.elitismRate = elitismRate;
+ }
+
+ /**
+ * Start the population for the next generation. The <code>{@link #elitismRate}</code>
+ * percents of the best chromosomes are directly copied to the next generation.
+ *
+ * @return the beginnings of the next generation.
+ */
+ public Population nextGeneration() {
+ // initialize a new generation with the same parameters
+ ElitisticListPopulation nextGeneration = new ElitisticListPopulation(this.getPopulationLimit(), this.getElitismRate());
+
+ List<Chromosome> oldChromosomes = this.getChromosomes();
+ Collections.sort(oldChromosomes);
+
+ // index of the last "not good enough" chromosome
+ int boundIndex = (int) FastMath.ceil((1.0 - this.getElitismRate()) * oldChromosomes.size());
+ for (int i=boundIndex; i<oldChromosomes.size(); i++) {
+ nextGeneration.addChromosome(oldChromosomes.get(i));
+ }
+ return nextGeneration;
+ }
+
+ /**
+ * Sets the elitism rate, i.e. how many best chromosomes will be directly
+ * transferred to the next generation [in %].
+ *
+ * @param elitismRate how many best chromosomes will be directly transferred to the
+ * next generation [in %]
+ * @throws OutOfRangeException if the elitism rate is outside the [0, 1] range
+ */
+ public void setElitismRate(final double elitismRate) {
+ if (elitismRate < 0 || elitismRate > 1) {
+ throw new OutOfRangeException(LocalizedFormats.ELITISM_RATE, elitismRate, 0, 1);
+ }
+ this.elitismRate = elitismRate;
+ }
+
+ /**
+ * Access the elitism rate.
+ * @return the elitism rate
+ */
+ public double getElitismRate() {
+ return this.elitismRate;
+ }
+
+}

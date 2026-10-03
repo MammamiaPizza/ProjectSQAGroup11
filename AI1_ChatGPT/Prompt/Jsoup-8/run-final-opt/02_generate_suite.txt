@@ -1,0 +1,398 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 8  Version: Jsoup-8b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.Node
+Modified: org.jsoup.nodes.Node
+Triggers: org.jsoup.nodes.ElementTest::parentlessToString
+
+Bug/specification summary:
+Bug report: 45
+Trigger failures:
+- org.jsoup.nodes.ElementTest::parentlessToString
+ --> java.lang.NullPointerException
+Modified: org.jsoup.nodes.Node
+
+Prompt-01 test plan:
+TARGETS: Node.toString(), outerHtml(), ownerDocument() for parentless nodes
+ORACLES: Node API: parent() may be null; outerHtml()/toString() return HTML
+CASES: Parentless Element.toString() completes without NullPointerException
+CASES: Parentless Element.outerHtml() completes and matches its HTML serialization
+CASES: Attached node serialization retains document output-settings behavior
+RISKS: Context lacks triggering test assertions and exact expected serialized HTML
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Node (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public abstract class Node {
+@param baseUri base URI
+@param attributes attributes (not null, but may be empty)
+protected Node(String baseUri, Attributes attributes) {
+protected Node(String baseUri) {
+protected Node() {
+@return node name
+public abstract String nodeName();
+public String attr(String attributeKey) {
+public Attributes attributes() {
+public Node attr(String attributeKey, String attributeValue) {
+public boolean hasAttr(String attributeKey) {
+public Node removeAttr(String attributeKey) {
+@return base URI
+public String baseUri() {
+@param baseUri base URI to set
+public void setBaseUri(String baseUri) {
+public String absUrl(String attributeKey) {
+@param index index of child node
+@return the child node at this index.
+public Node childNode(int index) {
+@return list of children. If no children, returns an empty list.
+public List<Node> childNodes() {
+protected Node[] childNodesAsArray() {
+@return parent node; or null if no parent.
+public Node parent() {
+public Document ownerDocument() {
+public void remove() {
+public void replaceWith(Node in) {
+protected void setParentNode(Node parentNode) {
+protected void replaceChild(Node out, Node in) {
+protected void removeChild(Node out) {
+protected void addChildren(Node... children) {
+protected void addChildren(int index, Node... children) {
+private void reparentChild(Node child) {
+private void reindexChildren() {
+@return node siblings, including this node
+public List<Node> siblingNodes() {
+@return next sibling, or null if this is the last sibling
+public Node nextSibling() {
+@return the previous sibling, or null if this is the first sibling
+public Node previousSibling() {
+public Integer siblingIndex() {
+protected void setSiblingIndex(int siblingIndex) {
+@return HTML
+public String outerHtml() {
+protected void outerHtml(StringBuilder accum) {
+@param accum accumulator to place HTML into
+abstract void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out);
+abstract void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out);
+public String toString() {
+protected void indent(StringBuilder accum, int depth, Document.OutputSettings out) {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+private static class OuterHtmlVisitor implements NodeVisitor {
+public void head(Node node, int depth) {
+public void tail(Node node, int depth) {
+
+/* HEADER */
+package org.jsoup.nodes;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.select.NodeTraversor;
+import org.jsoup.select.NodeVisitor;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/* METHOD Node */
+protected Node(String baseUri, Attributes attributes) {
+ Validate.notNull(baseUri);
+ Validate.notNull(attributes);
+ 
+ childNodes = new ArrayList<Node>(4);
+ this.baseUri = baseUri.trim();
+ this.attributes = attributes;
+ }
+
+/* METHOD Node */
+protected Node() {
+ childNodes = Collections.EMPTY_LIST;
+ attributes = null;
+ }
+
+/* METHOD Node */
+protected Node(String baseUri) {
+ this(baseUri, new Attributes());
+ }
+
+/* METHOD nextSibling */
+public Node nextSibling() {
+ if (parentNode == null)
+ return null; // root
+ 
+ List<Node> siblings = parentNode.childNodes;
+ Integer index = siblingIndex();
+ Validate.notNull(index);
+ if (siblings.size() > index+1)
+ return siblings.get(index+1);
+ else
+ return null;
+ }
+
+/* METHOD previousSibling */
+public Node previousSibling() {
+ List<Node> siblings = parentNode.childNodes;
+ Integer index = siblingIndex();
+ Validate.notNull(index);
+ if (index > 0)
+ return siblings.get(index-1);
+ else
+ return null;
+ }
+
+/* METHOD absUrl */
+public String absUrl(String attributeKey) {
+ Validate.notEmpty(attributeKey);
+
+ String relUrl = attr(attributeKey);
+ if (!hasAttr(attributeKey)) {
+ return ""; // nothing to make absolute with
+ } else {
+ URL base;
+ try {
+ try {
+ base = new URL(baseUri);
+ } catch (MalformedURLException e) {
+ // the base is unsuitable, but the attribute may be abs on its own, so try that
+ URL abs = new URL(relUrl);
+ return abs.toExternalForm();
+ }
+ URL abs = new URL(base, relUrl);
+ return abs.toExternalForm();
+ } catch (MalformedURLException e) {
+ return "";
+ }
+ }
+ }
+
+/* METHOD childNodes */
+public List<Node> childNodes() {
+ return Collections.unmodifiableList(childNodes);
+ }
+
+/* METHOD replaceChild */
+protected void replaceChild(Node out, Node in) {
+ Validate.isTrue(out.parentNode == this);
+ Validate.notNull(in);
+ if (in.parentNode != null)
+ in.parentNode.removeChild(in);
+ 
+ Integer index = out.siblingIndex();
+ childNodes.set(index, in);
+ in.parentNode = this;
+ in.setSiblingIndex(index);
+ out.parentNode = null;
+ }
+
+/* METHOD removeChild */
+protected void removeChild(Node out) {
+ Validate.isTrue(out.parentNode == this);
+ int index = out.siblingIndex();
+ childNodes.remove(index);
+ reindexChildren();
+ out.parentNode = null;
+ }
+
+/* METHOD addChildren */
+protected void addChildren(int index, Node... children) {
+ Validate.noNullElements(children);
+ for (int i = children.length - 1; i >= 0; i--) {
+ Node in = children[i];
+ reparentChild(in);
+ childNodes.add(index, in);
+ }
+ reindexChildren();
+ }
+
+/* METHOD siblingNodes */
+public List<Node> siblingNodes() {
+ return parent().childNodes(); // TODO: should this strip out this node? i.e. not a sibling of self?
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object o) {
+ if (this == o) return true;
+ // todo: have nodes hold a child index, compare against that and parent (not children)
+ return false;
+ }
+
+/* METHOD attr */
+public String attr(String attributeKey) {
+ Validate.notNull(attributeKey);
+
+ if (hasAttr(attributeKey))
+ return attributes.get(attributeKey);
+ else if (attributeKey.toLowerCase().startsWith("abs:"))
+ return absUrl(attributeKey.substring("abs:".length()));
+ else return "";
+ }
+
+/* METHOD removeAttr */
+public Node removeAttr(String attributeKey) {
+ Validate.notNull(attributeKey);
+ attributes.remove(attributeKey);
+ return this;
+ }
+
+/* METHOD setBaseUri */
+public void setBaseUri(String baseUri) {
+ Validate.notNull(baseUri);
+ this.baseUri = baseUri;
+ }
+
+/* METHOD childNode */
+public Node childNode(int index) {
+ return childNodes.get(index);
+ }
+
+/* METHOD childNodesAsArray */
+protected Node[] childNodesAsArray() {
+ return childNodes.toArray(new Node[childNodes().size()]);
+ }
+
+/* METHOD remove */
+public void remove() {
+ Validate.notNull(parentNode);
+ parentNode.removeChild(this);
+ }
+
+/* METHOD replaceWith */
+public void replaceWith(Node in) {
+ Validate.notNull(in);
+ Validate.notNull(parentNode);
+ parentNode.replaceChild(this, in);
+ }
+
+/* METHOD addChildren */
+protected void addChildren(Node... children) {
+ //most used. short circuit addChildren(int), which hits reindex children and array copy
+ for (Node child: children) {
+ reparentChild(child);
+ childNodes.add(child);
+ child.setSiblingIndex(childNodes.size()-1);
+ }
+ }
+
+/* METHOD outerHtml */
+protected void outerHtml(StringBuilder accum) {
+ new NodeTraversor(new OuterHtmlVisitor(accum, ownerDocument().outputSettings())).traverse(this);
+ }
+
+/* METHOD attr */
+public Node attr(String attributeKey, String attributeValue) {
+ attributes.put(attributeKey, attributeValue);
+ return this;
+ }
+
+/* METHOD hasAttr */
+public boolean hasAttr(String attributeKey) {
+ Validate.notNull(attributeKey);
+ return attributes.hasKey(attributeKey);
+ }
+
+/* METHOD baseUri */
+public String baseUri() {
+ return baseUri;
+ }
+
+/* METHOD parent */
+public Node parent() {
+ return parentNode;
+ }
+
+/* METHOD ownerDocument */
+public Document ownerDocument() {
+ if (this instanceof Document)
+ return (Document) this;
+ else if (parentNode == null)
+ return null;
+ else
+ return parentNode.ownerDocument();
+ }
+
+/* METHOD setParentNode */
+protected void setParentNode(Node parentNode) {
+ if (this.parentNode != null)
+ this.parentNode.removeChild(this);
+ this.parentNode = parentNode;
+ }
+
+/* METHOD outerHtml */
+public String outerHtml() {
+ StringBuilder accum = new StringBuilder(32*1024);
+ outerHtml(accum);
+ return accum.toString();
+ }
+
+/* METHOD indent */
+protected void indent(StringBuilder accum, int depth, Document.OutputSettings out) {
+ accum.append("\n").append(StringUtil.padding(depth * out.indentAmount()));
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ int result = parentNode != null ? parentNode.hashCode() : 0;
+ // not children, or will block stack as they go back up to parent)
+ result = 31 * result + (attributes != null ? attributes.hashCode() : 0);
+ return result;
+ }
+
+/* METHOD head */
+public void head(Node node, int depth) {
+ node.outerHtmlHead(accum, depth, out);
+ }
+
+/* METHOD tail */
+public void tail(Node node, int depth) {
+ if (!node.nodeName().equals("#text")) // saves a void hit.
+ node.outerHtmlTail(accum, depth, out);
+ }
+
+/* METHOD attributes */
+public Attributes attributes() {
+ return attributes;
+ }
+
+/* METHOD siblingIndex */
+public Integer siblingIndex() {
+ return siblingIndex;
+ }
+
+/* METHOD setSiblingIndex */
+protected void setSiblingIndex(int siblingIndex) {
+ this.siblingIndex = siblingIndex;
+ }
+
+/* METHOD toString */
+public String toString() {
+ return outerHtml();
+ }
+
+/* METHOD reindexChildren */
+private void reindexChildren() {
+ for (int i = 0; i < childNodes.size(); i++) {
+ childNodes.get(i).setSiblingIndex(i);
+ }
+ }
+
+/* METHOD reparentChild */
+private void reparentChild(Node child) {
+ if (child.parentNode != null)
+ child.parentNode.removeChild(child);
+ child.setParentNode(this);
+ }
+
+/* METHOD OuterHtmlVisitor */
+OuterHtmlVisitor(StringBuilder accum, Document.OutputSettings out) {
+ this.accum = accum;
+ this.out = out;
+ }

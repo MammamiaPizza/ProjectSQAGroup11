@@ -1,0 +1,418 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 68  Version: Jsoup-68b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.parser.HtmlTreeBuilder
+Modified: org.jsoup.parser.HtmlTreeBuilder
+Triggers: org.jsoup.parser.HtmlParserTest::testHandlesDeepSpans
+
+Bug/specification summary:
+Bug report: 966
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::testHandlesDeepSpans
+ --> java.lang.StackOverflowError
+Modified: org.jsoup.parser.HtmlTreeBuilder
+
+Prompt-01 test plan:
+TARGETS: HtmlTreeBuilder.process(Token); formatting-element and stack handling during deeply nested span parsing 
+ORACLES: Trigger test expects deep spans to parse without StackOverflowError 
+CASES: Parse deeply nested `<span>` elements; verify parsing completes without stack overflow 
+CASES: Exercise nesting near and beyond MaxScopeSearchDepth (100) for non-recursive/bounded handling 
+RISKS: Private helpers and formattingElements require behavior-level testing through parser entry points 
+RISKS: No expected DOM structure or exact nesting depth is provided in the context
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.HtmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+public static final int MaxScopeSearchDepth = 100; // prevents the parser bogging down in exceptionally broken pages
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(ArrayList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(ArrayList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+final String elName = stack.get(pos).nodeName();
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import static org.jsoup.helper.StringUtil.inSorted;
+public class HtmlTreeBuilder extends TreeBuilder {
+
+/* METHOD HtmlTreeBuilder */
+HtmlTreeBuilder() {}
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+ super.initialiseParse(input, baseUri, errors, settings);
+
+ // this is a bit mucky. todo - probably just create new parser objects to ensure all reset.
+ state = HtmlTreeBuilderState.Initial;
+ originalState = null;
+ baseUriSetFromDoc = false;
+ headElement = null;
+ formElement = null;
+ contextElement = null;
+ formattingElements = new ArrayList<>();
+ pendingTableCharacters = new ArrayList<>();
+ emptyEnd = new Token.EndTag();
+ framesetOk = true;
+ fosterInserts = false;
+ fragmentParsing = false;
+ }
+
+/* METHOD parseFragment */
+List<Node> parseFragment(String inputFragment, Element context, String baseUri, ParseErrorList errors, ParseSettings settings) {
+ // context may be null
+ state = HtmlTreeBuilderState.Initial;
+ initialiseParse(new StringReader(inputFragment), baseUri, errors, settings);
+ contextElement = context;
+ fragmentParsing = true;
+ Element root = null;
+
+ if (context != null) {
+ if (context.ownerDocument() != null) // quirks setup:
+ doc.quirksMode(context.ownerDocument().quirksMode());
+
+ // initialise the tokeniser state:
+ String contextTag = context.tagName();
+ if (StringUtil.in(contextTag, "title", "textarea"))
+ tokeniser.transition(TokeniserState.Rcdata);
+ else if (StringUtil.in(contextTag, "iframe", "noembed", "noframes", "style", "xmp"))
+ tokeniser.transition(TokeniserState.Rawtext);
+ else if (contextTag.equals("script"))
+ tokeniser.transition(TokeniserState.ScriptData);
+ else if (contextTag.equals(("noscript")))
+ tokeniser.transition(TokeniserState.Data); // if scripting enabled, rawtext
+ else if (contextTag.equals("plaintext"))
+ tokeniser.transition(TokeniserState.Data);
+ else
+ tokeniser.transition(TokeniserState.Data); // default
+
+ root = new Element(Tag.valueOf("html", settings), baseUri);
+ doc.appendChild(root);
+ stack.add(root);
+ resetInsertionMode();
+
+ // setup form element to nearest form on context (up ancestor chain). ensures form controls are associated
+ // with form correctly
+ Elements contextChain = context.parents();
+ contextChain.add(0, context);
+ for (Element parent: contextChain) {
+ if (parent instanceof FormElement) {
+ formElement = (FormElement) parent;
+ break;
+ }
+ }
+ }
+
+ runParser();
+ if (context != null)
+ return root.childNodes();
+ else
+ return doc.childNodes();
+ }
+
+/* METHOD inSpecificScope */
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+ // https://html.spec.whatwg.org/multipage/parsing.html#has-an-element-in-the-specific-scope
+ int bottom = stack.size() -1;
+ if (bottom > MaxScopeSearchDepth) {
+ bottom = MaxScopeSearchDepth;
+ }
+ final int top = bottom > MaxScopeSearchDepth ? bottom - MaxScopeSearchDepth : 0;
+ // don't walk too far up the tree
+
+ for (int pos = bottom; pos >= top; pos--) {
+ final String elName = stack.get(pos).nodeName();
+ if (inSorted(elName, targetNames))
+ return true;
+ if (inSorted(elName, baseTypes))
+ return false;
+ if (extraTypes != null && inSorted(elName, extraTypes))
+ return false;
+ }
+ //Validate.fail("Should not be reachable"); // would end up false because hitting 'html' at root (basetypes)
+ return false;
+ }
+
+ boolean inScope(String[] targetNames) {
+ return inSpecificScope(targetNames, TagsSearchInScope, null);
+ }
+
+ boolean inScope(String targetName) {
+ return inScope(targetName, null);
+ }
+
+ boolean inScope(String targetName, String[] extras) {
+ return inSpecificScope(targetName, TagsSearchInScope, extras);
+ // todo: in mathml namespace: mi, mo, mn, ms, mtext annotation-xml
+ // todo: in svg namespace: forignOjbect, desc, title
+ }
+
+ boolean inListItemScope(String targetName) {
+ return inScope(targetName, TagSearchList);
+ }
+
+ boolean inButtonScope(String targetName) {
+ return inScope(targetName, TagSearchButton);
+ }
+
+ boolean inTableScope(String targetName) {
+ return inSpecificScope(targetName, TagSearchTableScope, null);
+ }
+
+ boolean inSelectScope(String targetName) {
+ for (int pos = stack.size() -1; pos >= 0; pos--) {
+ Element el = stack.get(pos);
+ String elName = el.nodeName();
+ if (elName.equals(targetName))
+ return true;
+ if (!inSorted(elName, TagSearchSelectScope)) // all elements except
+ return false;
+ }
+ Validate.fail("Should not be reachable");
+ return false;
+ }
+
+ void setHeadElement(Element headElement) {
+ this.headElement = headElement;
+ }
+
+ Element getHeadElement() {
+ return headElement;
+ }
+
+ boolean isFosterInserts() {
+ return fosterInserts;
+ }
+
+ void setFosterInserts(boolean fosterInserts) {
+ this.fosterInserts = fosterInserts;
+ }
+
+ FormElement getFormElement() {
+ return formElement;
+ }
+
+ void setFormElement(FormElement formElement) {
+ this.formElement = formElement;
+ }
+
+ void newPendingTableCharacters() {
+ pendingTableCharacters = new ArrayList<>();
+ }
+
+ List<String> getPendingTableCharacters() {
+ return pendingTableCharacters;
+ }
+
+ void setPendingTableCharacters(List<String> pendingTableCharacters) {
+ this.pendingTableCharacters = pendingTableCharacters;
+ }
+
+ /**
+ 11.2.5.2 Closing elements that have implied end tags<p/>
+ When the steps below require the UA to generate implied end tags, then, while the current node is a dd element, a
+ dt element, an li element, an option element, an optgroup element, a p element, an rp element, or an rt element,
+ the UA must pop the current node off the stack of open elements.
+
+ @param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+ process, then the UA must perform the above steps as if that element was not in the above list.
+ */
+ void generateImpliedEndTags(String excludeTag) {
+ while ((excludeTag != null && !currentElement().nodeName().equals(excludeTag)) &&
+ inSorted(currentEl
+...[truncated deterministically]...
+tsToLastMarker() {
+ while (!formattingElements.isEmpty()) {
+ Element el = removeLastFormattingElement();
+ if (el == null)
+ break;
+ }
+ }
+
+ void removeFromActiveFormattingElements(Element el) {
+ for (int pos = formattingElements.size() -1; pos >= 0; pos--) {
+ Element next = formattingElements.get(pos);
+ if (next == el) {
+ formattingElements.remove(pos);
+ break;
+ }
+ }
+ }
+
+ boo
+...[truncated deterministically]...
+ingElement(String nodeName) {
+ for (int pos = formattingElements.size() -1; pos >= 0; pos--) {
+ Element next = formattingElements.get(pos);
+ if (next == null) // scope marker
+ break;
+ else if (next.nodeName().equals(nodeName))
+ return next;
+ }
+ return null;
+ }
+
+ void replaceActiveFormattingElement(Element out, Element in) {
+ replaceInQueue(formattingElements, out, in);
+ }
+
+ void insertMarkerToFormattingElements() {
+ formattingElements.add(null);
+ }
+
+ void insertInFosterParent(Node in) {
+ Element fosterParent;
+ Element lastTable = getFromStack("table");
+ boolean isLastTableParent = false;
+ if (lastTable != null) {
+ if (lastTable.parent() != null) {
+ fosterParent = lastTable.parent();
+ isLastTableParent = true;
+ } else
+ fosterParent = aboveOnStack(lastTable);
+ } else { // no table == frag
+ fosterParent = stack.get(0);
+ }
+
+ if (isLastTableParent) {
+ Validate.notNull(lastTable); // last table cannot be null by this point.
+ lastTable.before(in);
+ }
+ else
+ fosterParent.appendChild(in);
+ }
+
+ @Override
+ public String toString() {
+ return "TreeBuilder{" +
+ "currentToken=" + currentToken +
+ ", state=" + state +
+ ", currentElement=" + currentElement() +
+ '}
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "TreeBuilder{" +
+ "currentToken=" + currentToken +
+ ", state=" + state +
+ ", currentElement=" + currentElement() +
+ '}';
+ }
+
+/* METHOD process */
+@Override
+ protected boolean process(Token token) {
+ currentToken = token;
+ return this.state.process(token, this);
+ }
+
+/* METHOD maybeSetBaseUri */
+void maybeSetBaseUri(Element base) {
+ if (baseUriSetFromDoc) // only listen to the first <base href> in parse
+ return;
+
+ String href = base.absUrl("href");
+ if (href.length() != 0) { // ignore <base target> etc
+ baseUri = href;
+ baseUriSetFromDoc = true;
+ doc.setBaseUri(href); // set on the doc so doc.createElement(Tag) will get updated base, and to update all descendants
+ }
+ }
+
+/* METHOD insert */
+Element insert(Token.StartTag startTag) {
+ // handle empty unknown tags
+ // when the spec expects an empty tag, will directly hit insertEmpty, so won't generate this fake end tag.
+ if (startTag.isSelfClosing()) {
+ Element el = insertEmpty(startTag);
+ stack.add(el);
+ tokeniser.transition(TokeniserState.Data); // handles <script />, otherwise needs breakout steps from script data
+ tokeniser.emit(emptyEnd.reset().name(el.tagName())); // ensure we get out of whatever state we are in. emitted for yielded processing
+ return el;
+ }
+ 
+ Element el = new Element(Tag.valueOf(startTag.name(), settings), baseUri, settings.normalizeAttributes(startTag.attributes));
+ insert(el);
+ return el;
+ }
+
+ Element insertStartTag(String startTagName) {
+ Element el = new Element(Tag.valueOf(startTagName, settings), baseUri);
+ insert(el);
+ return el;
+ }
+
+ void insert(Element el) {
+ insertNode(el);
+ stack.add(el);
+ }
+
+ Element insertEmpty(Token.StartTag startTag) {
+ Tag tag = Tag.valueOf(startTag.name(), settings);
+ Element el = new Element(tag, baseUri, startTag.attributes);
+ insertNode(el);
+ if (startTag.isSelfClosing()) {
+ if (tag.isKnownTag()) {
+ if (!tag.isEmpty())
+ tokeniser.error("Tag cannot be self closing; not a void tag");
+ }
+ else // unknown tag, remember this is self closing for output
+ tag.setSelfClosing();
+ }
+ return el;
+ }
+
+ FormElement insertForm
+...[truncated deterministically]...
+(characterToken.getData());
+ else
+ node = new TextNode(characterToken.getData());
+ currentElement().appendChild(node); // doesn't use insertNode, because we don't foster these; and will always have a stack.
+ }
+
+ private void insertNode(Node node) {
+ // if the stack hasn't been set up yet, elements (doctype, comments) go into the doc
+ if (stack.size() == 0)
+ doc.appendChild(node);
+ else if (isFosterInserts())
+ insertInFosterParent(node);
+ else
+ currentElement().appendChild(node);
+
+ // connect form controls to their form element
+ if (node instanceof Element && ((Element) node).tag().isFormListed()) {
+ if (formElement != null)
+ formElement.addElement((Element) node);
+ }
+ }

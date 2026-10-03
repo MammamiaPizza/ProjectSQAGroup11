@@ -1,0 +1,139 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 139  Version: Closure-139b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 33
+Trigger failures:
+- com.google.javascript.jscomp.NormalizeTest::testNormalizeFunctionDeclarations
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.NormalizeTest::testRemoveDuplicateVarDeclarations3
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_VAR_MULTIPLY_DECLARED_ERROR. Variable f first declared in testcode at testcode line 1 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.NormalizeTest::testMoveFunctions2
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.Normalize
+
+Available API/signatures:
+[com.google.javascript.jscomp.Normalize | java]
+package com.google.javascript.jscomp;
+class Normalize implements CompilerPass {
+private void reportCodeChange(String changeDescription) {
+@Override
+public void process(Node externs, Node root) {
+public static class PropogateConstantAnnotations
+public void visit(NodeTraversal t, Node n, Node parent) {
+static class VerifyConstants extends AbstractPostOrderCallback
+private Map<String,Boolean> constantMap = Maps.newHashMap();
+static class NormalizeStatements implements Callback {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+private void normalizeLabels(Node n) {
+private void splitVarDeclarations(Node n) {
+private void moveNamedFunctions(Node functionBody) {
+private Node addToFront(Node parent, Node newChild, Node after) {
+private void removeDuplicateDeclarations(Node root) {
+private final class DuplicateDeclarationHandler implements
+private void replaceVarWithAssignment(Node n, Node parent, Node gramps) {
+private final class ScopeTicklingCallback
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+
+public class NormalizeRegressionTest extends CompilerTestCase {
+
+  @Override
+  protected CompilerPass getProcessor(Compiler compiler) {
+    return new Normalize(compiler, false);
+  }
+
+  @Override
+  protected int getNumRepetitions() {
+    return 1;
+  }
+
+  @Test
+  public void testMovesNamedFunctionDeclarationsBeforeStatements() {
+    test(
+        "function outer(){a();function first(){}b();function second(){}}",
+        "function outer(){function first(){}function second(){}a();b();}");
+  }
+
+  @Test
+  public void testMovesNamedFunctionsInsideNestedFunctionBodies() {
+    test(
+        "function outer(){function inner(){x();function late(){}}y();}",
+        "function outer(){function inner(){function late(){}x();}y();}");
+  }
+
+  @Test
+  public void testFunctionDeclarationAndUninitializedVarDoNotConflict() {
+    test(
+        "function outer(){var f;function f(){return 1;}}",
+        "function outer(){function f(){return 1;}}");
+  }
+
+  @Test
+  public void testFunctionDeclarationAndInitializedVarBecomeAssignment() {
+    test(
+        "function outer(){var f=0;function f(){return 1;}}",
+        "function outer(){function f(){return 1;}f=0;}");
+  }
+
+  @Test
+  public void testSplitsMultipleVarDeclarations() {
+    test(
+        "function f(){var a=1,b=2,c;}",
+        "function f(){var a=1;var b=2;var c;}");
+  }
+
+  @Test
+  public void testDuplicateInitializedVarIsReplacedWithAssignment() {
+    test(
+        "function f(){var a;var a=1;}",
+        "function f(){var a;a=1;}");
+  }
+
+  @Test
+  public void testDuplicateUninitializedVarIsRemoved() {
+    test(
+        "function f(){var a;var a;}",
+        "function f(){var a;}");
+  }
+
+  @Test
+  public void testNormalizesLabelBodyToBlock() {
+    test("label: work();", "label:{work();}");
+  }
+
+  @Test
+  public void testExtractsForVarInitializer() {
+    test(
+        "function f(){for(var i=0;i<2;i++){work(i);}}",
+        "function f(){var i=0;for(;i<2;i++){work(i);}}");
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-139f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-139f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-139f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-139f-ai/.test_suite/com/google/javascript/jscomp/NormalizeRegressionTest.java:5: error: cannot find symbol
+ [javac] public class NormalizeRegressionTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

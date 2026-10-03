@@ -1,0 +1,480 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JxPath  Bug: 5  Version: JxPath-5b
+JUnit: junit-3.8.1.jar  Build: Ant
+Target: org.apache.commons.jxpath.ri.model.NodePointer
+Modified: org.apache.commons.jxpath.ri.model.NodePointer
+Triggers: org.apache.commons.jxpath.ri.compiler.VariableTest::testUnionOfVariableAndNode
+
+Bug/specification summary:
+Bug report: JXPATH-89
+Trigger failures:
+- org.apache.commons.jxpath.ri.compiler.VariableTest::testUnionOfVariableAndNode
+ --> org.apache.commons.jxpath.JXPathException: Cannot compare pointers that do not belong to the same tree: '' and '$var'
+Modified: org.apache.commons.jxpath.ri.model.NodePointer
+
+Prompt-01 test plan:
+TARGETS: NodePointer.compareTo(Object) – comparison that throws when trees differ.
+TARGETS: NodePointer.asPath(), getRootNode() – used to determine tree membership.
+ORACLES: JXPATH-89 description: union of variable and node pointers must not throw.
+ORACLES: Trigger test testUnionOfVariableAndNode expects normal completion, no exception.
+CASES: compareTo on pointers from same tree (parent, child, sibling) returns correct order.
+CASES: compareTo on pointers from different trees – must not throw; returns consistent ordering.
+CASES: compareTo with self (same pointer) returns 0.
+CASES: compareTo with null argument – verify behavior (expect NullPointerException or graceful).
+CASES: compareTo with one pointer having empty path vs another with non-empty path (different
+trees).
+RISKS: Only buggy version; abstract NodePointer needs concrete impl for instantiation; expected
+fixed behavior not fully specified.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.jxpath.ri.model.NodePointer (java) =====
+/* API SIGNATURES */
+package org.apache.commons.jxpath.ri.model;
+public abstract class NodePointer implements Pointer {
+public static final int WHOLE_COLLECTION = Integer.MIN_VALUE;
+protected int index = WHOLE_COLLECTION;
+public static final String UNKNOWN_NAMESPACE = "<<unknown namespace>>";
+protected NodePointer parent;
+protected Locale locale;
+protected NodePointer(NodePointer parent) {
+protected NodePointer(NodePointer parent, Locale locale) {
+public NamespaceResolver getNamespaceResolver() {
+public void setNamespaceResolver(NamespaceResolver namespaceResolver) {
+public NodePointer getParent() {
+public NodePointer getImmediateParentPointer() {
+public void setAttribute(boolean attribute) {
+public boolean isAttribute() {
+public boolean isRoot() {
+public abstract boolean isLeaf();
+public boolean isNode() {
+public boolean isContainer() {
+public int getIndex() {
+public void setIndex(int index) {
+public abstract boolean isCollection();
+public abstract int getLength();
+public Object getValue() {
+public NodePointer getValuePointer() {
+public NodePointer getImmediateValuePointer() {
+public boolean isActual() {
+public abstract QName getName();
+public abstract Object getBaseValue();
+public Object getNodeValue() {
+public Object getNode() {
+public Object getRootNode() {
+public abstract Object getImmediateNode();
+public abstract void setValue(Object value);
+public boolean testNode(NodeTest test) {
+private static boolean equalStrings(String s1, String s2) {
+public NodePointer createPath(JXPathContext context, Object value) {
+public void remove() {
+public NodePointer createPath(JXPathContext context) {
+public NodePointer createChild(JXPathContext context, QName name, int index)
+public NodePointer createAttribute(JXPathContext context, QName name) {
+public Locale getLocale() {
+public boolean isLanguage(String lang) {
+public NodeIterator attributeIterator(QName qname) {
+public NodeIterator namespaceIterator() {
+public NodePointer namespacePointer(String namespace) {
+public String getNamespaceURI(String prefix) {
+public String getNamespaceURI() {
+protected boolean isDefaultNamespace(String prefix) {
+protected String getDefaultNamespaceURI() {
+public Pointer getPointerByID(JXPathContext context, String id) {
+public String asPath() {
+public Object clone() {
+public String toString() {
+public int compareTo(Object object) {
+public void printPointerChain() {
+private static void printDeep(NodePointer pointer, String indent) {
+
+/* HEADER */
+package org.apache.commons.jxpath.ri.model;
+import java.util.Locale;
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.JXPathException;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.Compiler;
+import org.apache.commons.jxpath.ri.JXPathContextReferenceImpl;
+import org.apache.commons.jxpath.ri.NamespaceResolver;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.compiler.NodeNameTest;
+import org.apache.commons.jxpath.ri.compiler.NodeTest;
+import org.apache.commons.jxpath.ri.compiler.NodeTypeTest;
+import org.apache.commons.jxpath.ri.model.beans.NullPointer;
+
+/* METHOD NodePointer */
+protected NodePointer(NodePointer parent) {
+ this.parent = parent;
+ }
+
+/* METHOD NodePointer */
+protected NodePointer(NodePointer parent, Locale locale) {
+ this.parent = parent;
+ this.locale = locale;
+ }
+
+/* METHOD compareNodePointers */
+private int compareNodePointers(
+ NodePointer p1,
+ int depth1,
+ NodePointer p2,
+ int depth2) 
+ {
+ if (depth1 < depth2) {
+ int r = compareNodePointers(p1, depth1, p2.parent, depth2 - 1);
+ return r == 0 ? -1 : r;
+ }
+ if (depth1 > depth2) {
+ int r = compareNodePointers(p1.parent, depth1 - 1, p2, depth2);
+ return r == 0 ? 1 : r;
+ }
+ if (p1 == null && p2 == null) {
+ return 0;
+ }
+
+ if (p1 != null && p1.equals(p2)) {
+ return 0;
+ }
+
+ if (depth1 == 1) {
+ throw new JXPathException(
+ "Cannot compare pointers that do not belong to the same tree: '"
+ + p1 + "' and '" + p2 + "'");
+ }
+ int r = compareNodePointers(p1.parent, depth1 - 1, p2.parent, depth2 - 1);
+ if (r != 0) {
+ return r;
+ }
+
+ return p1.parent.compareChildNodePointers(p1, p2);
+ }
+
+/* METHOD createChild */
+public NodePointer createChild(
+ JXPathContext context,
+ QName name,
+ int index,
+ Object value) 
+ {
+ throw new JXPathException("Cannot create an object for path "
+ + asPath() + "/" + name + "[" + (index + 1) + "]"
+ + ", operation is not allowed for this type of node");
+ }
+
+/* METHOD createChild */
+public NodePointer createChild(JXPathContext context, QName name, int index)
+ {
+ throw new JXPathException("Cannot create an object for path "
+ + asPath() + "/" + name + "[" + (index + 1) + "]"
+ + ", operation is not allowed for this type of node");
+ }
+
+/* METHOD createAttribute */
+public NodePointer createAttribute(JXPathContext context, QName name) {
+ throw new JXPathException("Cannot create an attribute for path "
+ + asPath() + "/@" + name
+ + ", operation is not allowed for this type of node");
+ }
+
+/* METHOD newNodePointer */
+public static NodePointer newNodePointer(
+ QName name,
+ Object bean,
+ Locale locale) 
+ {
+ NodePointer pointer = null;
+ if (bean == null) {
+ pointer = new NullPointer(name, locale);
+ return pointer;
+ }
+ 
+ NodePointerFactory[] factories =
+ JXPathContextReferenceImpl.getNodePointerFactories();
+ for (int i = 0; i < factories.length; i++) {
+ pointer = factories[i].createNodePointer(name, bean, locale);
+ if (pointer != null) {
+ return pointer;
+ }
+ }
+ throw new JXPathException(
+ "Could not allocate a NodePointer for object of "
+ + bean.getClass());
+ }
+
+/* METHOD newChildNodePointer */
+public static NodePointer newChildNodePointer(
+ NodePointer parent,
+ QName name,
+ Object bean) 
+ {
+ NodePointerFactory[] factories =
+ JXPathContextReferenceImpl.getNodePointerFactories();
+ for (int i = 0; i < factories.length; i++) {
+ NodePointer pointer =
+ factories[i].createNodePointer(parent, name, bean);
+ if (pointer != null) {
+ return pointer;
+ }
+ }
+ throw new JXPathException(
+ "Could not allocate a NodePointer for object of "
+ + bean.getClass());
+ }
+
+/* METHOD compareTo */
+public int compareTo(Object object) {
+ // Let it throw a ClassCastException
+ NodePointer pointer = (NodePointer) object;
+ if (parent == pointer.parent) {
+ return parent == null ? 0 : parent.compareChildNodePointers(this, pointer);
+ }
+
+ // Task 1: find the common parent
+ int depth1 = 0;
+ NodePointer p1 = this;
+ while (p1 != null) {
+ depth1++;
+ p1 = p1.parent;
+ }
+ int depth2 = 0;
+ NodePointer p2 = pointer;
+ while (p2 != null) {
+ depth2++;
+ p2 = p2.parent;
+ }
+ return compareNodePointers(this, depth1, pointer, depth2);
+ }
+
+/* METHOD getValue */
+public Object getValue() {
+ NodePointer valuePointer = getValuePointer();
+ if (valuePointer != this) {
+ return valuePointer.getValue();
+ }
+ // Default behavior is to return the same as getNode() 
+ return getNode();
+ }
+
+/* METHOD createPath */
+public NodePointer createPath(JXPathContext context, Object value) {
+ setValue(value);
+ return this;
+ }
+
+/* METHOD createPath */
+public NodePointer createPath(JXPathContext context) {
+ return this;
+ }
+
+/* METHOD clone */
+public Object clone() {
+ try {
+ NodePointer ptr = (NodePointer) super.clone();
+ if (parent != null) {
+ ptr.parent = (NodePointer) parent.clone();
+ }
+ return ptr;
+ }
+ catch (CloneNotSupportedException ex) {
+ // Of course it is supported
+ ex.printStackTrace();
+ }
+ return null;
+ }
+
+/* METHOD getParent */
+public NodePointer getParent() {
+ NodePointer pointer = parent;
+ while (pointer != null && pointer.isContainer()) {
+ pointer = pointer.getImmediateParentPointer();
+ }
+ return pointer;
+ }
+
+/* METHOD getImmediateParentPointer */
+public NodePointer getImmediateParentPointer() {
+ return parent;
+ }
+
+/* METHOD isRoot */
+public boolean isRoot() {
+ return parent == null;
+ }
+
+/* METHOD getValuePointer */
+public NodePointer getValuePointer() {
+ NodePointer ivp = getImmediateValuePointer();
+ return ivp == this ? this : ivp.getValuePointer();
+ }
+
+/* METHOD getImmediateValuePointer */
+public NodePointer getImmediateValuePointer() {
+ return this;
+ }
+
+/* METHOD getRootNode */
+public Object getRootNode() {
+ if (rootNode == null) {
+ rootNode = parent == null ? getImmediateNode() : parent.getRootNode();
+ }
+ return rootNode;
+ }
+
+/* METHOD testNode */
+public boolean testNode(NodeTest test) {
+ if (test == null) {
+ return true;
+ }
+ if (test instanceof NodeNameTest) {
+ if (isContainer()) {
+ return false;
+ }
+ NodeNameTest nodeNameTest = (NodeNameTest) test;
+ QName testName = nodeNameTest.getNodeName();
+ QName nodeName = getName();
+ if (nodeName == null) {
+ return false;
+ }
+ 
+ String testPrefix = testName.getPrefix();
+ String nodePrefix = nodeName.getPrefix();
+ if (!equalStrings(testPrefix, nodePrefix)) {
+ String testNS = getNamespaceURI(testPrefix);
+ String nodeNS = getNamespaceURI(nodePrefix);
+ if (!equalStrings(testNS, nodeNS)) {
+ return false;
+ }
+ }
+ if (nodeNameTest.isWildcard()) {
+ return true;
+ }
+ return testName.getName().equals(nodeName.getName());
+ }
+ return test instanceof NodeTypeTest
+ && ((NodeTypeTest) test).getNodeType() == Compiler.NODE_TYPE_NODE && isNode();
+ }
+
+/* METHOD childIterator */
+public NodeIterator childIterator(
+ NodeTest test,
+ boolean reverse,
+ NodePointer startWith) 
+ {
+ NodePointer valuePointer = getValuePointer();
+ return valuePointer == null || valuePointer == this ? null
+ : valuePointer.childIterator(test, reverse, startWith);
+ }
+
+/* METHOD attributeIterator */
+public NodeIterator attributeIterator(QName qname) {
+ NodePointer valuePointer = getValuePointer();
+ return valuePointer == null || valuePointer == this ? null
+ : valuePointer.attributeIterator(qname);
+ }
+
+/* METHOD namespacePointer */
+public NodePointer namespacePointer(String namespace) {
+ return null;
+ }
+
+/* METHOD getPointerByID */
+public Pointer getPointerByID(JXPathContext context, String id) {
+ return context.getPointerByID(id);
+ }
+
+/* METHOD getPointerByKey */
+public Pointer getPointerByKey(
+ JXPathContext context,
+ String key,
+ String value) 
+ {
+ return context.getPointerByKey(key, value);
+ }
+
+/* METHOD getNamespaceResolver */
+public NamespaceResolver getNamespaceResolver() {
+ if (namespaceResolver == null && parent != null) {
+ namespaceResolver = parent.getNamespaceResolver();
+ }
+ return namespaceResolver;
+ }
+
+/* METHOD setNamespaceResolver */
+public void setNamespaceResolver(NamespaceResolver namespaceResolver) {
+ this.namespaceResolver = namespaceResolver;
+ }
+
+/* METHOD setAttribute */
+public void setAttribute(boolean attribute) {
+ this.attribute = attribute;
+ }
+
+/* METHOD isAttribute */
+public boolean isAttribute() {
+ return attribute;
+ }
+
+/* METHOD isNode */
+public boolean isNode() {
+ return !isContainer();
+ }
+
+/* METHOD isContainer */
+public boolean isContainer() {
+ return false;
+ }
+
+/* METHOD getIndex */
+public int getIndex() {
+ return index;
+ }
+
+/* METHOD setIndex */
+public void setIndex(int index) {
+ this.index = index;
+ }
+
+/* METHOD isActual */
+public boolean isActual() {
+ return index == WHOLE_COLLECTION || index >= 0 && index < getLength();
+ }
+
+/* METHOD getNodeValue */
+public Object getNodeValue() {
+ return getNode();
+ }
+
+/* METHOD getNode */
+public Object getNode() {
+ return getValuePointer().getImmediateNode();
+ }
+
+/* METHOD remove */
+public void remove() {
+ // It is a no-op
+
+// System.err.println("REMOVING: " + asPath() + " " + getClass());
+// printPointerChain();
+ }
+
+/* METHOD getLocale */
+public Locale getLocale() {
+ if (locale == null) {
+ if (parent != null) {
+ locale = parent.getLocale();
+ }
+ }
+ return locale;
+ }
+
+/* METHOD isLanguage */
+public boolean isLanguage(String lang) {
+ Locale loc = getLocale();
+ String name = loc.toString().replace('_', '-');
+ return name.toUpperCase().startsWith(lang.toUpperCase());
+ }

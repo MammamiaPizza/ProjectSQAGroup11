@@ -1,0 +1,368 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 7  Version: Math-7b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-950
+Trigger failures:
+- org.apache.commons.math3.ode.nonstiff.DormandPrince853IntegratorTest::testEventsScheduling
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.math3.ode.AbstractIntegrator
+
+Available API/signatures:
+[org.apache.commons.math3.ode.AbstractIntegrator | java]
+package org.apache.commons.math3.ode;
+public abstract class AbstractIntegrator implements FirstOrderIntegrator {
+protected Collection<StepHandler> stepHandlers;
+protected double stepStart;
+protected double stepSize;
+protected boolean isLastStep;
+protected boolean resetOccurred;
+public AbstractIntegrator(final String name) {
+protected AbstractIntegrator() {
+public String getName() {
+public void addStepHandler(final StepHandler handler) {
+public Collection<StepHandler> getStepHandlers() {
+public void clearStepHandlers() {
+public Collection<EventHandler> getEventHandlers() {
+final List<EventHandler> list = new ArrayList<EventHandler>();
+public void clearEventHandlers() {
+public double getCurrentStepStart() {
+public double getCurrentSignedStepsize() {
+public void setMaxEvaluations(int maxEvaluations) {
+public int getMaxEvaluations() {
+public int getEvaluations() {
+protected void initIntegration(final double t0, final double[] y0, final double t) {
+for (final EventState state : eventsStates) {
+protected void setEquations(final ExpandableStatefulODE equations) {
+final ExpandableStatefulODE expandableODE = new ExpandableStatefulODE(equations);
+public abstract void integrate(ExpandableStatefulODE equations, double t)
+public void computeDerivatives(final double t, final double[] y, final double[] yDot)
+protected void setStateInitialized(final boolean stateInitialized) {
+final double currentT = interpolator.getGlobalCurrentTime();
+final int orderingSign = interpolator.isForward() ? +1 : -1;
+public int compare(EventState es0, EventState es1) {
+final Iterator<EventState> iterator = occuringEvents.iterator();
+final EventState currentEvent = iterator.next();
+final double eventT = currentEvent.getEventTime();
+final double[] eventY = interpolator.getInterpolatedState().clone();
+for (final StepHandler handler : stepHandlers) {
+for (final EventState remaining : occuringEvents) {
+final double[] currentY = interpolator.getInterpolatedState();
+protected void sanityChecks(final ExpandableStatefulODE equations, final double t)
+final double threshold = 1000 * FastMath.ulp(FastMath.max(FastMath.abs(equations.getTime()),
+final double dt = FastMath.abs(equations.getTime() - t);
+
+Generated JUnit Test:
+package org.apache.commons.math3.ode;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+
+ import java.util.ArrayList;
+ import java.util.List;
+
+ import org.apache.commons.math3.ode.events.EventHandler;
+ import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+ import org.junit.Test;
+
+ /**
+  * Tests for event handling in AbstractIntegrator, focusing on the bug
+  * where a non-transitive comparator in the TreeSet could drop events
+  * that occur at identical times.
+  */
+ public class AbstractIntegratorEventTest {
+
+     /** Simple linear ODE for testing: dy/dt = 1, solution y = t. */
+     private static class LinearODE implements FirstOrderDifferentialEquations {
+         public int getDimension() { return 1; }
+         public void computeDerivatives(double t, double[] y, double[] yDot) {
+             yDot[0] = 1.0;
+         }
+     }
+
+     /** An event handler that triggers at a specific time and records the trigger. */
+     private static class RecordingEventHandler implements EventHandler {
+         private final double triggerTime;
+         private final List<Double> eventTimes;
+         private final Action action;
+
+         RecordingEventHandler(double triggerTime, List<Double> eventTimes, Action action) {
+             this.triggerTime = triggerTime;
+             this.eventTimes = eventTimes;
+             this.action = action;
+         }
+
+         public void init(double t0, double[] y0, double t) {}
+
+         public double g(double t, double[] y) {
+             // Root when t == triggerTime
+             return t - triggerTime;
+         }
+
+         public Action eventOccurred(double t, double[] y, boolean increasing) {
+             eventTimes.add(t);
+             return action;
+         }
+
+         public void resetState(double t, double[] y) {}
+     }
+
+     // --- Tests ---------------------------------------------------------------
+
+     @Test
+     public void testNoEvents() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         // no event handlers added
+         double[] y = new double[] { 0.0 };
+         double t = integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals(10.0, t, 1e-6);
+         assertTrue("No events expected", eventTimes.isEmpty());
+     }
+
+     @Test
+     public void testSingleEvent() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         integrator.addEventHandler(new RecordingEventHandler(5.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("Single event should be triggered", 1, eventTimes.size());
+         assertEquals(5.0, eventTimes.get(0), 1e-3);
+     }
+
+     @Test
+     public void testTwoEventsDistinctTimes() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         integrator.addEventHandler(new RecordingEventHandler(3.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         integrator.addEventHandler(new RecordingEventHandler(7.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("Two events expected", 2, eventTimes.size());
+         // Verify chronological order
+         assertTrue("First event at t=3", eventTimes.get(0) <= eventTimes.get(1));
+         assertEquals(3.0, eventTimes.get(0), 1e-3);
+         assertEquals(7.0, eventTimes.get(1), 1e-3);
+     }
+
+     @Test
+     public void testTwoEventsSameTime() {
+         // This directly tests the bug: TreeSet comparator returning 0 for different objects
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         // Two handlers that both trigger at t=5.0
+         integrator.addEventHandler(new RecordingEventHandler(5.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         integrator.addEventHandler(new RecordingEventHandler(5.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("Two events at same time should both fire", 2, eventTimes.size());
+     }
+
+     @Test
+     public void testEventAtIntegrationStart() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         integrator.addEventHandler(new RecordingEventHandler(0.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("Event at start should trigger", 1, eventTimes.size());
+         assertEquals(0.0, eventTimes.get(0), 1e-3);
+     }
+
+     @Test
+     public void testEventAtIntegrationEnd() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         integrator.addEventHandler(new RecordingEventHandler(10.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("Event at end should trigger", 1, eventTimes.size());
+         assertEquals(10.0, eventTimes.get(0), 1e-3);
+     }
+
+     @Test
+     public void testManyEventsMonotonicOrder() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         int[] n = {0};
+         StepHandler stepRecorder = new StepHandler() {
+             public void init(double t0, double[] y0, double t) {}
+             public void handleStep(StepInterpolator interpolator, boolean isLast) {
+                 // record only at step end to avoid double counting; but we rely on event times
+list
+             }
+         };
+         integrator.addStepHandler(stepRecorder);
+         // Add many events at 0.1, 0.2, ..., 0.9
+         for (double trigger = 0.1; trigger <= 0.9; trigger += 0.1) {
+             integrator.addEventHandler(new RecordingEventHandler(trigger, eventTimes,
+EventHandler.Action.CONTINUE),
+                                       1e-6, 1e-10, 100);
+         }
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 1.0, y);
+         assertEquals("All 9 events should fire", 9, eventTimes.size());
+         double previous = Double.NEGATIVE_INFINITY;
+         for (double t : eventTimes) {
+             assertTrue("Event times must be monotonic increasing", t >= previous);
+             previous = t;
+         }
+     }
+
+     @Test
+     public void testEventStopAction() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         // Event at t=5 stops integration
+         integrator.addEventHandler(new RecordingEventHandler(5.0, eventTimes,
+EventHandler.Action.STOP),
+                                   1e-6, 1e-10, 100);
+         // Another event after stop point should not be reached
+         integrator.addEventHandler(new RecordingEventHandler(7.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         double tEnd = integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertTrue("Integration stopped before or at stop event time", tEnd <= 5.0 + 1e-3);
+         assertEquals("Only stop event should fire", 1, eventTimes.size());
+         assertEquals(5.0, eventTimes.get(0), 1e-3);
+     }
+
+     @Test
+     public void testEventResetAction() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         // Event at t=5 resets state (just record, no actual state change needed)
+         EventHandler resetHandler = new EventHandler() {
+             public void init(double t0, double[] y0, double t) {}
+             public double g(double t, double[] y) { return t - 5.0; }
+             public Action eventOccurred(double t, double[] y, boolean increasing) {
+                 eventTimes.add(t);
+                 return Action.RESET_STATE;
+             }
+             public void resetState(double t, double[] y) {
+                 // do nothing, just exercise the path
+             }
+         };
+         integrator.addEventHandler(resetHandler, 1e-6, 1e-10, 100);
+         // Another event at t=7 should still fire after reset
+         integrator.addEventHandler(new RecordingEventHandler(7.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("Both events should fire even after reset", 2, eventTimes.size());
+         assertEquals(5.0, eventTimes.get(0), 1e-3);
+         assertEquals(7.0, eventTimes.get(1), 1e-3);
+     }
+
+     @Test
+     public void testComparatorConsistencyManyIdenticalTimes() {
+         // Stress-test: many event handlers with identical g roots.
+         // The TreeSet comparator must not drop distinct objects even if compare returns 0.
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> eventTimes = new ArrayList<Double>();
+         int handlerCount = 5;
+         for (int i = 0; i < handlerCount; i++) {
+             integrator.addEventHandler(new RecordingEventHandler(5.0, eventTimes,
+EventHandler.Action.CONTINUE),
+                                       1e-6, 1e-10, 100);
+         }
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         assertEquals("All handlers at same time must fire", handlerCount, eventTimes.size());
+     }
+
+     @Test
+     public void testStepHandlerCalledAtEventsAndFinal() {
+         DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 1.0, 1e-6,
+1e-6);
+         List<Double> stepTimes = new ArrayList<Double>();
+         StepHandler stepRecorder = new StepHandler() {
+             public void init(double t0, double[] y0, double t) {}
+             public void handleStep(StepInterpolator interpolator, boolean isLast) {
+                 stepTimes.add(interpolator.getGlobalCurrentTime());
+             }
+         };
+         integrator.addStepHandler(stepRecorder);
+         // Add an event at t=5.0 that will split the step
+         integrator.addEventHandler(new RecordingEventHandler(5.0, new ArrayList<Double>(),
+EventHandler.Action.CONTINUE),
+                                   1e-6, 1e-10, 100);
+         double[] y = new double[] { 0.0 };
+         integrator.integrate(new LinearODE(), 0.0, y, 10.0, y);
+         // At least 2 step handlings: one at event time, one at final time
+         assertTrue("Step handler called at least at event and final time", stepTimes.size() >= 2);
+         // Check that event time is present
+         boolean foundEvent = false;
+         for (double t : stepTimes) {
+             if (Math.abs(t - 5.0) < 1e-3) {
+                 foundEvent = true;
+                 break;
+             }
+         }
+         assertTrue("Event time should appear in step handler calls", foundEvent);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-7f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-7f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-7f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 3.1-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-7f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-7f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-7f-copilot/target/test-classes
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/optimization/linear/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/exception/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/analysis/integration/gauss/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/stat/descriptive/moment/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/geometry/partitioning/utilities/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/exception/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/optim/nonlinear/vector/jacobian/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/complex/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-7f-copilot/target/classes/org/apache/commons/math3/random/package-info.class
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-7f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-7f-copilot/.test_suite/org/apache/commons/math3/ode/AbstractIntegratorEventTest.java:159: error: not a statement
+ [javac] list
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 14 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

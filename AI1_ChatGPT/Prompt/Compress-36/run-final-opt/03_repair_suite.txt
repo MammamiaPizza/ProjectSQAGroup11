@@ -1,0 +1,174 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 36  Version: Compress-36b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-348
+Trigger failures:
+- org.apache.commons.compress.archivers.sevenz.SevenZFileTest::readEntriesOfSize0
+ --> java.lang.IllegalStateException: No current 7z entry (call getNextEntry() first).
+Modified: org.apache.commons.compress.archivers.sevenz.SevenZFile
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.sevenz.SevenZFile | java]
+package org.apache.commons.compress.archivers.sevenz;
+public class SevenZFile implements Closeable {
+private final ArrayList<InputStream> deferredBlockStreams = new ArrayList<InputStream>();
+public SevenZFile(final File filename, final byte[] password) throws IOException {
+public SevenZFile(final File filename) throws IOException {
+@Override
+public void close() throws IOException {
+public SevenZArchiveEntry getNextEntry() throws IOException {
+public Iterable<SevenZArchiveEntry> getEntries() {
+private Archive readHeaders(final byte[] password) throws IOException {
+final byte archiveVersionMajor = file.readByte();
+final byte archiveVersionMinor = file.readByte();
+final long startHeaderCrc = 0xffffFFFFL & Integer.reverseBytes(file.readInt());
+final StartHeader startHeader = readStartHeader(startHeaderCrc);
+final int nextHeaderSizeInt = (int) startHeader.nextHeaderSize;
+final CRC32 crc = new CRC32();
+final ByteArrayInputStream byteStream = new ByteArrayInputStream(nextHeader);
+private StartHeader readStartHeader(final long startHeaderCrc) throws IOException {
+final StartHeader startHeader = new StartHeader();
+private void readHeader(final DataInput header, final Archive archive) throws IOException {
+private void readArchiveProperties(final DataInput input) throws IOException {
+final long propertySize = readUint64(input);
+final byte[] property = new byte[(int)propertySize];
+for (final Coder coder : folder.getOrderedCoders()) {
+final byte[] nextHeader = new byte[(int)folder.getUnpackSize()];
+final DataInputStream nextHeaderInputStream = new DataInputStream(inputStreamStack);
+priva
+...[truncated deterministically]...
+thod = SevenZMethod.byId(coder.decompressionMethodId);
+public int read() throws IOException {
+private InputStream getCurrentStream() throws IOException {
+final InputStream stream = deferredBlockStreams.remove(0);
+public int read(final byte[] b) throws IOException {
+public int read(final byte[] b, final int off, final int len) throws IOException {
+private static long readUint64(final DataInput in) throws IOException {
+final long firstByte = in.readUnsignedByte();
+final long nextByte = in.readUnsignedByte();
+public static boolean matches(final byte[] signature, final int length) {
+private static long skipBytesFully(final DataInput input, long bytesToSkip) throws IOException {
+final long skippedNow = skipBytesFully(input, Integer.MAX_VALUE);
+final int skippedNow = input.skipBytes((int) bytesToSkip);
+public String toString() {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.sevenz;
+
+import java.io.File;
+import java.io.IOException;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class SevenZFileEmptyEntryReadTest {
+
+    @Test
+    public void readSingleByteFromEmptyEntryReturnsEndOfFile() throws Exception {
+        final File archive = createArchiveContainingEmptyEntry();
+        SevenZFile sevenZ = null;
+        try {
+            sevenZ = new SevenZFile(archive);
+            final SevenZArchiveEntry entry = sevenZ.getNextEntry();
+
+            assertNotNull(entry);
+            assertEquals(0L, entry.getSize());
+            assertEquals(-1, sevenZ.read());
+        } finally {
+            closeAndDelete(sevenZ, archive);
+        }
+    }
+
+    @Test
+    public void readByteArrayFromEmptyEntryReturnsEndOfFileWithoutChangingBuffer() throws Exception {
+        final File archive = createArchiveContainingEmptyEntry();
+        SevenZFile sevenZ = null;
+        try {
+            sevenZ = new SevenZFile(archive);
+            assertNotNull(sevenZ.getNextEntry());
+
+            final byte[] buffer = new byte[] { 11, 22, 33 };
+            assertEquals(-1, sevenZ.read(buffer));
+            assertEquals(11, buffer[0]);
+            assertEquals(22, buffer[1]);
+            assertEquals(33, buffer[2]);
+        } finally {
+            closeAndDelete(sevenZ, archive);
+        }
+    }
+
+    @Test
+    public void readByteArrayRangeFromEmptyEntryReturnsEndOfFileWithoutChangingBuffer() throws Exception {
+        final File archive = createArchiveContainingEmptyEntry();
+        SevenZFile sevenZ = null;
+        try {
+            sevenZ = new SevenZFile(archive);
+            assertNotNull(sevenZ.getNextEntry());
+
+            final byte[] buffer = new byte[] { 44, 55, 66, 77 };
+            assertEquals(-1, sevenZ.read(buffer, 1, 2));
+            assertEquals(44, buffer[0]);
+            assertEquals(55, buffer[1]);
+            assertEquals(66, buffer[2]);
+            assertEquals(77, buffer[3]);
+        } finally {
+            closeAndDelete(sevenZ, archive);
+        }
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void readBeforeSelectingAnyEntryIsRejected() throws Exception {
+        final File archive = createArchiveContainingEmptyEntry();
+        SevenZFile sevenZ = null;
+        try {
+            sevenZ = new SevenZFile(archive);
+            sevenZ.read();
+        } finally {
+            closeAndDelete(sevenZ, archive);
+        }
+    }
+
+    private File createArchiveContainingEmptyEntry() throws IOException {
+        final File archive = File.createTempFile("seven-z-empty-entry", ".7z");
+        SevenZOutputFile output = null;
+        try {
+            output = new SevenZOutputFile(archive);
+            final SevenZArchiveEntry entry = new SevenZArchiveEntry();
+            entry.setName("empty");
+            entry.setSize(0);
+            output.putArchiveEntry(entry);
+            output.closeArchiveEntry();
+        } finally {
+            if (output != null) {
+                output.close();
+            }
+        }
+        return archive;
+    }
+
+    private void closeAndDelete(final SevenZFile sevenZ, final File archive) throws IOException {
+        try {
+            if (sevenZ != null) {
+                sevenZ.close();
+            }
+        } finally {
+            if (archive != null) {
+                archive.delete();
+            }
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.compress.archivers.sevenz.SevenZFileEmptyEntryReadTest::readBeforeSelectingAnyEntryIsRejected
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.compress.archivers.sevenz.SevenZFileEmptyEntryReadTest::readBeforeSelectingAnyEntryIsRejected

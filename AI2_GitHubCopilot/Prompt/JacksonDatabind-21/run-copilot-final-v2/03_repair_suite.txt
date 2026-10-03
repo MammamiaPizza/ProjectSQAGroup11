@@ -1,0 +1,230 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 21  Version: JacksonDatabind-21b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 677
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestEnumDeserialization::testEnumWithJsonPropertyRename
+ --> junit.framework.ComparisonFailure: expected:<["[b","a]"]> but was:<["[B","A]"]>
+Modified: com.fasterxml.jackson.databind.introspect.JacksonAnnotationIntrospector
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.introspect.JacksonAnnotationIntrospector | java]
+package com.fasterxml.jackson.databind.introspect;
+public class JacksonAnnotationIntrospector
+public JacksonAnnotationIntrospector() { }
+@Override
+public Version version() {
+public boolean isAnnotationBundle(Annotation ann) {
+return ann.annotationType().getAnnotation(JacksonAnnotationsInside.class) != null;
+/* General class annotations
+public PropertyName findRootName(AnnotatedClass ac)
+JsonRootName ann = _findAnnotation(ac, JsonRootName.class);
+@Deprecated // since 2.6, remove from 2.7 or later
+public String[] findPropertiesToIgnore(Annotated ac) {
+JsonIgnoreProperties ignore = _findAnnotation(ac, JsonIgnoreProperties.class);
+@Override // since 2.6
+public String[] findPropertiesToIgnore(Annotated ac, boolean forSerialization) {
+public Boolean findIgnoreUnknownProperties(AnnotatedClass ac) {
+public Boolean isIgnorableType(AnnotatedClass ac) {
+JsonIgnoreType ignore = _findAnnotation(ac, JsonIgnoreType.class);
+@Deprecated
+public Object findFilterId(AnnotatedClass ac) {
+public Object findFilterId(Annotated a) {
+protected final Object _findFilterId(Annotated a)
+JsonFilter ann = _findAnnotation(a, JsonFilter.class);
+public Object findNamingStrategy(AnnotatedClass ac)
+JsonNaming ann = _findAnnotation(ac, JsonNaming.class);
+JsonAutoDetect ann = _findAnnotation(ac, JsonAutoDetect.class);
+public String findImplicitPropertyName(AnnotatedMember param) {
+public boolean hasIgnoreMarker(AnnotatedMember m) {
+public Boolean hasRequiredMarker(AnnotatedMember m)
+JsonProperty ann = _findAnnotation(m, JsonProperty.class);
+public JsonProperty.Access findPropertyAccess(Annotated m
+...[truncated deterministically]...
+eator ann = _findAnnotation(a, JsonCreator.class);
+public JsonCreator.Mode findCreatorBinding(Annotated a) {
+protected boolean _isIgnorable(Annotated a)
+JsonIgnore ann = _findAnnotation(a, JsonIgnore.class);
+protected Class<?> _classIfExplicit(Class<?> cls) {
+protected Class<?> _classIfExplicit(Class<?> cls, Class<?> implicit) {
+protected PropertyName _propertyName(String localName, String namespace) {
+JsonTypeInfo info = _findAnnotation(ann, JsonTypeInfo.class);
+JsonTypeResolver resAnn = _findAnnotation(ann, JsonTypeResolver.class);
+JsonTypeIdResolver idResInfo = _findAnnotation(ann, JsonTypeIdResolver.class);
+if (defaultImpl != JsonTypeInfo.None.class && !defaultImpl.isAnnotation()) {
+protected StdTypeResolverBuilder _constructStdTypeResolverBuilder() {
+protected StdTypeResolverBuilder _constructNoTypeResolverBuilder() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.introspect;
+
+ import static org.junit.Assert.*;
+
+ import java.util.Arrays;
+ import java.util.List;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.annotation.JsonProperty;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.type.TypeFactory;
+
+ /**
+  * Tests for {@link JacksonAnnotationIntrospector} related to enum value resolution
+  * when {@link JsonProperty} is used on enum constants (bug 677 / defect 21).
+  */
+ public class JacksonAnnotationIntrospectorEnumTest {
+
+     // ---- Enums under test ------------------------------------------------
+     public enum RenamedEnum {
+         @JsonProperty("b") B,
+         @JsonProperty("a") A
+     }
+
+     public enum PlainEnum {
+         X, Y
+     }
+
+     public enum PartialRenamedEnum {
+         @JsonProperty("low") L,
+         M,
+         @JsonProperty("high") H
+     }
+
+     public enum EmptyJsonPropertyEnum {
+         @JsonProperty("") EMPTY,
+         @JsonProperty("regular") REGULAR
+     }
+
+     public enum DuplicateJsonPropertyEnum {
+         @JsonProperty("duplicate") FIRST,
+         @JsonProperty("duplicate") SECOND
+     }
+
+     // ---- Helper ---------------------------------------------------------
+
+     private JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+     private ObjectMapper mapper = new ObjectMapper();
+
+     private List<String> getEnumNames(Class<? extends Enum<?>> enumClass) {
+         JavaType type = TypeFactory.defaultInstance().constructType(enumClass);
+         // Use DeserializationConfig to introspect the type
+         DeserializationConfig config = mapper.getDeserializationConfig();
+         BeanDescription desc = config.introspect(type);
+         AnnotatedClass ac = desc.getClassInfo();
+         return introspector.findEnumValues(ac);
+     }
+
+     // ---- Tests -----------------------------------------------------------
+
+     @Test
+     public void testFindEnumValuesWithJsonProperty() {
+         List<String> names = getEnumNames(RenamedEnum.class);
+         assertEquals("Should return @JsonProperty values instead of constant names",
+                 Arrays.asList("b", "a"), names);
+     }
+
+     @Test
+     public void testFindEnumValuesNoAnnotation() {
+         List<String> names = getEnumNames(PlainEnum.class);
+         assertEquals("No annotations -> constant names",
+                 Arrays.asList("X", "Y"), names);
+     }
+
+     @Test
+     public void testFindEnumValuesEmptyJsonProperty() {
+         List<String> names = getEnumNames(EmptyJsonPropertyEnum.class);
+         // Empty string is a valid override
+         assertEquals(Arrays.asList("", "regular"), names);
+     }
+
+     @Test
+     public void testFindEnumValuesDuplicateJsonProperty() {
+         List<String> names = getEnumNames(DuplicateJsonPropertyEnum.class);
+         // Introspector does not de-duplicate; both entries expected
+         assertEquals(Arrays.asList("duplicate", "duplicate"), names);
+     }
+
+     @Test
+     public void testFindEnumValuesPartialRename() {
+         List<String> names = getEnumNames(PartialRenamedEnum.class);
+         assertEquals(Arrays.asList("low", "M", "high"), names);
+     }
+
+     @Test
+     public void testDeserializationSingleRenamedValue() throws Exception {
+         assertEquals(RenamedEnum.B, mapper.readValue("\"b\"", RenamedEnum.class));
+         assertEquals(RenamedEnum.A, mapper.readValue("\"a\"", RenamedEnum.class));
+     }
+
+     @Test
+     public void testDeserializationArrayOfRenamed() throws Exception {
+         RenamedEnum[] result = mapper.readValue("[\"b\",\"a\"]", RenamedEnum[].class);
+         assertArrayEquals(new RenamedEnum[]{RenamedEnum.B, RenamedEnum.A}, result);
+     }
+
+     @Test
+     public void testDeserializationDefaultNamesStillWork() throws Exception {
+         assertEquals(PlainEnum.X, mapper.readValue("\"X\"", PlainEnum.class));
+         assertEquals(PlainEnum.Y, mapper.readValue("\"Y\"", PlainEnum.class));
+     }
+
+     @Test
+     public void testDeserializationRenamedOnlyEffectiveForAnnotated() throws Exception {
+         assertEquals(PartialRenamedEnum.L, mapper.readValue("\"low\"", PartialRenamedEnum.class));
+         assertEquals(PartialRenamedEnum.M, mapper.readValue("\"M\"", PartialRenamedEnum.class));
+         assertEquals(PartialRenamedEnum.H, mapper.readValue("\"high\"", PartialRenamedEnum.class));
+     }
+
+     @Test
+     public void testDeserializationInvalidEnumValueThrows() {
+         try {
+             mapper.readValue("\"z\"", RenamedEnum.class);
+             fail("Expected JsonMappingException for unknown enum value");
+         } catch (JsonMappingException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Unexpected exception: " + e);
+         }
+     }
+
+     @Test
+     public void testDeserializationEnumWithEmptyJsonProperty() throws Exception {
+         // empty string must be quoted as JSON string
+         assertEquals(EmptyJsonPropertyEnum.EMPTY, mapper.readValue("\"\"",
+EmptyJsonPropertyEnum.class));
+     }
+
+     @Test
+     public void testSerializationRenamedEnumUsesPropertyAnnotation() throws Exception {
+         // Serialization should also output @JsonProperty value
+         String json = mapper.writeValueAsString(RenamedEnum.B);
+         assertEquals("\"b\"", json);
+         json = mapper.writeValueAsString(RenamedEnum.A);
+         assertEquals("\"a\"", json);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-21f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-21f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-21f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-21f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-21f-copilot/.test_suite/com/fasterxml/jackson/databind/introspect/JacksonAnnotationIntrospectorEnumTest.java:57: error: cannot find symbol
+ [javac] return introspector.findEnumValues(ac);
+ [javac] ^
+ [javac] symbol: method findEnumValues(AnnotatedClass)
+ [javac] location: variable introspector of type JacksonAnnotationIntrospector
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 39 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

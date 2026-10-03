@@ -1,0 +1,158 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 111  Version: Closure-111b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1114
+Trigger failures:
+- com.google.javascript.jscomp.ClosureReverseAbstractInterpreterTest::testGoogIsArray2
+ --> junit.framework.AssertionFailedError: Expected: Array
+Modified: com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreter
+
+Available API/signatures:
+[com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreter | java]
+package com.google.javascript.jscomp.type;
+public class ClosureReverseAbstractInterpreter
+@Override
+protected JSType caseTopType(JSType topType) {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseFunctionType(FunctionType type) {
+public JSType caseAllType() {
+public JSType apply(TypeRestriction p) {
+private static class TypeRestriction {
+private TypeRestriction(JSType type, boolean outcome) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static com.google.javascript.rhino.jstype.JSTypeNative.ARRAY_TYPE;
+
+import com.google.common.base.Function;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CodingConvention;
+import com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreter;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.util.Map;
+
+import junit.framework.TestCase;
+
+public class ClosureReverseAbstractInterpreterTest extends TestCase {
+
+  private Compiler compiler; private JSTypeRegistry typeRegistry; private
+ClosureReverseAbstractInterpreter interpreter; private
+Function<ClosureReverseAbstractInterpreter.TypeRestriction, JSType> isArrayRestricter; private
+Constructor<?> typeRestrictionCtor;
+
+  @Override protected void setUp() throws Exception {
+    super.setUp();
+    compiler = new Compiler();
+    typeRegistry = compiler.getTypeRegistry();
+    CodingConvention convention = compiler.getCodingConvention();
+    interpreter = new ClosureReverseAbstractInterpreter(convention, typeRegistry);
+
+ Field restrictersField = ClosureReverseAbstractInterpreter.class.getDeclaredField("restricters");
+ restrictersField.setAccessible(true);
+ @SuppressWarnings("unchecked")
+ Map<String, Function<ClosureReverseAbstractInterpreter.TypeRestriction, JSType>> restricters =
+     (Map<String, Function<ClosureReverseAbstractInterpreter.TypeRestriction, JSType>>)
+restrictersField.get(interpreter);
+ isArrayRestricter = restricters.get("isArray");
+
+ Class<?>[] innerClasses = ClosureReverseAbstractInterpreter.class.getDeclaredClasses();
+ for (Class<?> inner : innerClasses) {
+   if ("TypeRestriction".equals(inner.getSimpleName())) {
+     typeRestrictionCtor = inner.getDeclaredConstructor(JSType.class, boolean.class);
+     typeRestrictionCtor.setAccessible(true);
+     break;
+   }
+ } }
+
+  private Object createTypeRestriction(JSType type, boolean outcome) throws Exception {
+    return typeRestrictionCtor.newInstance(type, outcome); }
+
+  private JSType applyIsArray(JSType type, boolean outcome) throws Exception {
+    @SuppressWarnings("unchecked")
+    Function<Object, JSType> restricter = (Function<Object, JSType>) (Object) isArrayRestricter;
+    return restricter.apply(createTypeRestriction(type, outcome)); }
+
+  public void testIsArrayTrueNullType() throws Exception {
+    JSType result = applyIsArray(null, true);
+    assertEquals(typeRegistry.getNativeType(ARRAY_TYPE), result); }
+
+  public void testIsArrayFalseNullType() throws Exception {
+    JSType result = applyIsArray(null, false);
+    assertNull(result); }
+
+  public void testIsArrayTrueArrayType() throws Exception {
+    JSType arrayType = typeRegistry.getNativeType(ARRAY_TYPE);
+    JSType result = applyIsArray(arrayType, true);
+    assertEquals(arrayType, result); }
+
+  public void testIsArrayFalseArrayType() throws Exception {
+    JSType arrayType = typeRegistry.getNativeType(ARRAY_TYPE);
+    JSType result = applyIsArray(arrayType, false);
+    assertNull(result); }
+
+  public void testIsArrayTrueNonArrayObjectType() throws Exception {
+    ObjectType objectType = typeRegistry.getNativeObjectType(JSTypeNative.OBJECT_TYPE);
+    JSType result = applyIsArray(objectType, true);
+    assertNull(result); }
+
+  public void testIsArrayFalseNonArrayObjectType() throws Exception {
+    ObjectType objectType = typeRegistry.getNativeObjectType(JSTypeNative.OBJECT_TYPE);
+    JSType result = applyIsArray(objectType, false);
+    assertEquals(objectType, result); }
+
+  public void testIsArrayTrueArraySubtype() throws Exception {
+    ObjectType arrayType = typeRegistry.getNativeType(ARRAY_TYPE);
+    ObjectType arraySubtype = typeRegistry.createObjectType("SubArray", arrayType);
+    JSType result = applyIsArray(arraySubtype, true);
+    assertEquals(arrayType, result); }
+
+  public void testIsArrayFalseArraySubtype() throws Exception {
+    ObjectType arrayType = typeRegistry.getNativeType(ARRAY_TYPE);
+    ObjectType arraySubtype = typeRegistry.createObjectType("SubArray", arrayType);
+    JSType result = applyIsArray(arraySubtype, false);
+    assertNull(result); }
+
+  public void testIsArrayTrueUnionWithArray() throws Exception {
+    JSType arrayType = typeRegistry.getNativeType(ARRAY_TYPE);
+    JSType stringType = typeRegistry.getNativeType(JSTypeNative.STRING_TYPE);
+    JSType unionType = typeRegistry.createUnionType(arrayType, stringType);
+    JSType result = applyIsArray(unionType, true);
+    assertEquals(arrayType, result); }
+
+  public void testIsArrayFalseUnionWithArray() throws Exception {
+    JSType arrayType = typeRegistry.getNativeType(ARRAY_TYPE);
+    JSType stringType = typeRegistry.getNativeType(JSTypeNative.STRING_TYPE);
+    JSType unionType = typeRegistry.createUnionType(arrayType, stringType);
+    JSType result = applyIsArray(unionType, false);
+    assertEquals(stringType, result); }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-111f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-111f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-111f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-111f-copilot/.test_suite/com/google/javascript/jscomp/ClosureReverseAbstractInterpreterTest.java:24: error: TypeRestriction has private access in ClosureReverseAbstractInterpreter
+ [javac] Function<ClosureReverseAbstractInterpreter.TypeRestriction, JSType> isArrayRestricter; private
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 17 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.
