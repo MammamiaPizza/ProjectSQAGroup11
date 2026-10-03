@@ -1,0 +1,420 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Gson  Bug: 4  Version: Gson-4b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: com.google.gson.stream.JsonReader, com.google.gson.stream.JsonWriter
+Modified: com.google.gson.stream.JsonReader, com.google.gson.stream.JsonWriter
+Triggers: com.google.gson.stream.JsonReaderTest::testTopLevelValueTypeWithSkipValue, com.google.gson.stream.JsonReaderTest::testTopLevelValueTypes, com.google.gson.stream.JsonWriterTest::testTopLevelValueTypes
+
+Bug/specification summary:
+Bug report: 773
+Trigger failures:
+- com.google.gson.stream.JsonReaderTest::testTopLevelValueTypeWithSkipValue
+ --> com.google.gson.stream.MalformedJsonException: Use JsonReader.setLenient(true) to accept malformed JSON at line 1 column 1 path $
+ - com.google.gson.stream.JsonReaderTest::testTopLevelValueTypes
+ --> com.google.gson.stream.MalformedJsonException: Use JsonReader.setLenient(true) to accept malformed JSON at line 1 column 1 path $
+ - com.google.gson.stream.JsonWriterTest::testTopLevelValueTypes
+ --> java.lang.IllegalStateException: JSON must start with an array or an object.
+Modified: com.google.gson.stream.JsonReader, com.google.gson.stream.JsonWriter
+
+Prompt-01 test plan:
+TARGETS: JsonReader top-level scalar peek/read/skipValue behavior in strict and lenient modes.
+TARGETS: JsonWriter top-level scalar value emission and root-state validation.
+ORACLES: Trigger test names/failures specify top-level values must not be rejected at column 1.
+CASES: Reader top-level string, number, boolean, null; verify peek then matching next* result.
+CASES: Reader skipValue for each top-level scalar, then EOF/end-of-document behavior.
+CASES: Writer top-level string, number, boolean, null; verify exact serialized scalar output.
+CASES: Writer top-level array/object remain valid; incomplete/nested-state errors remain checked.
+RISKS: Strict-mode malformed-input rules are unspecified beyond reported top-level-value rejection.
+RISKS: Available context truncates JsonReader API details, including full skipValue signature/semantics.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.gson.stream.JsonReader (java) =====
+/* API SIGNATURES */
+package com.google.gson.stream;
+public class JsonReader implements Closeable {
+private static final char[] NON_EXECUTE_PREFIX = ")]}'\n".toCharArray();
+public JsonReader(Reader in) {
+public final void setLenient(boolean lenient) {
+public final boolean isLenient() {
+public void beginArray() throws IOException {
+public void endArray() throws IOException {
+public void beginObject() throws IOException {
+public void endObject() throws IOException {
+public boolean hasNext() throws IOException {
+public JsonToken peek() throws IOException {
+private int peekKeyword() throws IOException {
+private int peekNumber() throws IOException {
+private boolean isLiteral(char c) throws IOException {
+public String nextName() throws IOException {
+public String nextString() throws IOException {
+public boolean nextBoolean() throws IOException {
+public void nextNull() throws IOException {
+public double nextDouble() throws IOException {
+public long nextLong() throws IOException {
+private String nextQuotedValue(char quote) throws IOException {
+@SuppressWarnings("fallthrough")
+private String nextUnquotedValue() throws IOException {
+private void skipQuotedValue(char quote) throws IOException {
+private void skipUnquotedValue() throws IOException {
+public int nextInt() throws IOException {
+public void close() throws IOException {
+public void sk
+...[truncated deterministically]...
+IOException {
+private void push(int newTop) {
+private boolean fillBuffer(int minimum) throws IOException {
+private int nextNonWhitespace(boolean throwOnEof) throws IOException {
+private void checkLenient() throws IOException {
+private void skipToEndOfLine() throws IOException {
+private boolean skipTo(String toFind) throws IOException {
+@Override public String toString() {
+public String getPath() {
+private char readEscapeCharacter() throws IOException {
+private IOException syntaxError(String message) throws IOException {
+private void consumeNonExecutePrefix() throws IOException {
+@Override public void promoteNameToValue(JsonReader reader) throws IOException {
+
+/* HEADER */
+package com.google.gson.stream;
+import com.google.gson.internal.JsonReaderInternalAccess;
+import com.google.gson.internal.bind.JsonTreeReader;
+import java.io.Closeable;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.Reader;
+
+/* METHOD JsonReader */
+public JsonReader(Reader in) {
+ if (in == null) {
+ throw new NullPointerException("in == null");
+ }
+ this.in = in;
+ }
+
+/* METHOD setLenient */
+public final void setLenient(boolean lenient) {
+ this.lenient = lenient;
+ }
+
+/* METHOD beginArray */
+public void beginArray() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ if (p == PEEKED_BEGIN_ARRAY) {
+ push(JsonScope.EMPTY_ARRAY);
+ pathIndices[stackSize - 1] = 0;
+ peeked = PEEKED_NONE;
+ } else {
+ throw new IllegalStateException("Expected BEGIN_ARRAY but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ }
+
+/* METHOD beginObject */
+public void beginObject() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ if (p == PEEKED_BEGIN_OBJECT) {
+ push(JsonScope.EMPTY_OBJECT);
+ peeked = PEEKED_NONE;
+ } else {
+ throw new IllegalStateException("Expected BEGIN_OBJECT but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ }
+
+/* METHOD endArray */
+public void endArray() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ if (p == PEEKED_END_ARRAY) {
+ stackSize--;
+ pathIndices[stackSize - 1]++;
+ peeked = PEEKED_NONE;
+ } else {
+ throw new IllegalStateException("Expected END_ARRAY but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ }
+
+/* METHOD endObject */
+public void endObject() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ if (p == PEEKED_END_OBJECT) {
+ stackSize--;
+ pathNames[stackSize] = null; // Free the last path name so that it can be garbage collected!
+ pathIndices[stackSize - 1]++;
+ peeked = PEEKED_NONE;
+ } else {
+ throw new IllegalStateException("Expected END_OBJECT but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ }
+
+/* METHOD nextBoolean */
+public boolean nextBoolean() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ if (p == PEEKED_TRUE) {
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return true;
+ } else if (p == PEEKED_FALSE) {
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return false;
+ }
+ throw new IllegalStateException("Expected a boolean but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+
+/* METHOD peek */
+public JsonToken peek() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+
+ switch (p) {
+ case PEEKED_BEGIN_OBJECT:
+ return JsonToken.BEGIN_OBJECT;
+ case PEEKED_END_OBJECT:
+ return JsonToken.END_OBJECT;
+ case PEEKED_BEGIN_ARRAY:
+ return JsonToken.BEGIN_ARRAY;
+ case PEEKED_END_ARRAY:
+ return JsonToken.END_ARRAY;
+ case PEEKED_SINGLE_QUOTED_NAME:
+ case PEEKED_DOUBLE_QUOTED_NAME:
+ case PEEKED_UNQUOTED_NAME:
+ return JsonToken.NAME;
+ case PEEKED_TRUE:
+ case PEEKED_FALSE:
+ return JsonToken.BOOLEAN;
+ case PEEKED_NULL:
+ return JsonToken.NULL;
+ case PEEKED_SINGLE_QUOTED:
+ case PEEKED_DOUBLE_QUOTED:
+ case PEEKED_UNQUOTED:
+ case PEEKED_BUFFERED:
+ return JsonToken.STRING;
+ case PEEKED_LONG:
+ case PEEKED_NUMBER:
+ return JsonToken.NUMBER;
+ case PEEKED_EOF:
+ return JsonToken.END_DOCUMENT;
+ default:
+ throw new AssertionError();
+ }
+ }
+
+===== com.google.gson.stream.JsonWriter (java) =====
+/* API SIGNATURES */
+package com.google.gson.stream;
+public class JsonWriter implements Closeable, Flushable {
+public JsonWriter(Writer out) {
+public final void setIndent(String indent) {
+public final void setLenient(boolean lenient) {
+public boolean isLenient() {
+public final void setHtmlSafe(boolean htmlSafe) {
+public final boolean isHtmlSafe() {
+public final void setSerializeNulls(boolean serializeNulls) {
+public final boolean getSerializeNulls() {
+public JsonWriter beginArray() throws IOException {
+public JsonWriter endArray() throws IOException {
+public JsonWriter beginObject() throws IOException {
+public JsonWriter endObject() throws IOException {
+private JsonWriter open(int empty, String openBracket) throws IOException {
+private JsonWriter close(int empty, int nonempty, String closeBracket)
+private void push(int newTop) {
+private int peek() {
+private void replaceTop(int topOfStack) {
+public JsonWriter name(String name) throws IOException {
+private void writeDeferredName() throws IOException {
+public JsonWriter value(String value) throws IOException {
+public JsonWriter jsonValue(String value) throws IOException {
+public JsonWriter nullValue() throws IOException {
+public JsonWriter value(boolean value) throws IOException {
+public JsonWriter value(double value) throws IOException {
+public JsonWriter value(long value) throws IOException {
+public JsonWriter value(Number value) throws IOException {
+public void flush() throws IOException {
+public void close() throws IOException {
+private void string(String value) throws IOException {
+private void newline() throws IOException {
+private void beforeName() throws IOException {
+@SuppressWarnings("fallthrough")
+private void beforeValue(boolean root) throws IOException {
+
+/* HEADER */
+package com.google.gson.stream;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.io.Writer;
+import static com.google.gson.stream.JsonScope.DANGLING_NAME;
+import static com.google.gson.stream.JsonScope.EMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.EMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.EMPTY_OBJECT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.NONEMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_OBJECT;
+
+/* METHOD JsonWriter */
+public JsonWriter(Writer out) {
+ if (out == null) {
+ throw new NullPointerException("out == null");
+ }
+ this.out = out;
+ }
+
+/* METHOD setLenient */
+public final void setLenient(boolean lenient) {
+ this.lenient = lenient;
+ }
+
+/* METHOD value */
+public JsonWriter value(Number value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+
+ writeDeferredName();
+ String string = value.toString();
+ if (!lenient
+ && (string.equals("-Infinity") || string.equals("Infinity") || string.equals("NaN"))) {
+ throw new IllegalArgumentException("Numeric values must be finite, but was " + value);
+ }
+ beforeValue(false);
+ out.append(string);
+ return this;
+ }
+
+/* METHOD beforeValue */
+@SuppressWarnings("fallthrough")
+ private void beforeValue(boolean root) throws IOException {
+ switch (peek()) {
+ case NONEMPTY_DOCUMENT:
+ if (!lenient) {
+ throw new IllegalStateException(
+ "JSON must have only one top-level value.");
+ }
+ // fall-through
+ case EMPTY_DOCUMENT: // first in document
+ if (!lenient && !root) {
+ throw new IllegalStateException(
+ "JSON must start with an array or an object.");
+ }
+ replaceTop(NONEMPTY_DOCUMENT);
+ break;
+
+ case EMPTY_ARRAY: // first in array
+ replaceTop(NONEMPTY_ARRAY);
+ newline();
+ break;
+
+ case NONEMPTY_ARRAY: // another in array
+ out.append(',');
+ newline();
+ break;
+
+ case DANGLING_NAME: // value for name
+ out.append(separator);
+ replaceTop(NONEMPTY_OBJECT);
+ break;
+
+ default:
+ throw new IllegalStateException("Nesting problem.");
+ }
+ }
+
+/* METHOD beginArray */
+public JsonWriter beginArray() throws IOException {
+ writeDeferredName();
+ return open(EMPTY_ARRAY, "[");
+ }
+
+/* METHOD endArray */
+public JsonWriter endArray() throws IOException {
+ return close(EMPTY_ARRAY, NONEMPTY_ARRAY, "]");
+ }
+
+/* METHOD beginObject */
+public JsonWriter beginObject() throws IOException {
+ writeDeferredName();
+ return open(EMPTY_OBJECT, "{");
+ }
+
+/* METHOD endObject */
+public JsonWriter endObject() throws IOException {
+ return close(EMPTY_OBJECT, NONEMPTY_OBJECT, "}");
+ }
+
+/* METHOD name */
+public JsonWriter name(String name) throws IOException {
+ if (name == null) {
+ throw new NullPointerException("name == null");
+ }
+ if (deferredName != null) {
+ throw new IllegalStateException();
+ }
+ if (stackSize == 0) {
+ throw new IllegalStateException("JsonWriter is closed.");
+ }
+ deferredName = name;
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(boolean value) throws IOException {
+ writeDeferredName();
+ beforeValue(false);
+ out.write(value ? "true" : "false");
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(double value) throws IOException {
+ if (Double.isNaN(value) || Double.isInfinite(value)) {
+ throw new IllegalArgumentException("Numeric values must be finite, but was " + value);
+ }
+ writeDeferredName();
+ beforeValue(false);
+ out.append(Double.toString(value));
+ return this;
+ }
+
+/* METHOD flush */
+public void flush() throws IOException {
+ if (stackSize == 0) {
+ throw new IllegalStateException("JsonWriter is closed.");
+ }
+ out.flush();
+ }
+
+/* METHOD value */
+public JsonWriter value(String value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+ writeDeferredName();
+ beforeValue(false);
+ string(value);
+ return this;
+ }

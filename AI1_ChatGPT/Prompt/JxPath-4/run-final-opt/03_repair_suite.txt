@@ -1,0 +1,207 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 4  Version: JxPath-4b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: JXPATH-83
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.XMLSpaceTest::testPreserveDOM
+ --> junit.framework.AssertionFailedError: expected:<foo> but was:< foo >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedJDOM
+ --> junit.framework.AssertionFailedError: expected:<> but was:<foo;bar; baz >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedWithCommentsJDOM
+ --> junit.framework.AssertionFailedError: expected:<> but was:<foo;bar; baz >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testPreserveJDOM
+ --> junit.framework.AssertionFailedError: expected:<foo> but was:< foo >
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedDOM
+ --> junit.framework.AssertionFailedError: expected:<foo
+ - org.apache.commons.jxpath.ri.model.XMLSpaceTest::testNestedWithCommentsDOM
+ --> junit.framework.AssertionFailedError: expected:<foo
+Modified: org.apache.commons.jxpath.ri.model.dom.DOMNodePointer, org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.model.dom.DOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.dom;
+public class DOMNodePointer extends NodePointer {
+public DOMNodePointer(Node node, Locale locale) {
+public DOMNodePointer(Node node, Locale locale, String id) {
+public DOMNodePointer(NodePointer parent, Node node) {
+public boolean testNode(NodeTest test) {
+public static boolean testNode(Node node, NodeTest test) {
+private static boolean equalStrings(String s1, String s2) {
+public QName getName() {
+public String getNamespaceURI() {
+public NodeIterator attributeIterator(QName name) {
+public NodePointer namespacePointer(String prefix) {
+public NodeIterator namespaceIterator() {
+public String getNamespaceURI(String prefix) {
+public String getDefaultNamespaceURI() {
+public Object getBaseValue() {
+public Object getImmediateNode() {
+public boolean isActual() {
+public boolean isColl
+...[truncated deterministically]...
+ng target) {
+public int hashCode() {
+public boolean equals(Object object) {
+public static String getPrefix(Node node) {
+public static String getLocalName(Node node) {
+public static String getNamespaceURI(Node node) {
+public Object getValue() {
+private String stringValue(Node node) {
+public Pointer getPointerByID(JXPathContext context, String id) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+[org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.jdom;
+public class JDOMNodePointer extends NodePointer {
+public JDOMNodePointer(Object node, Locale locale) {
+public JDOMNodePointer(Object node, Locale locale, String id) {
+public JDOMNodePointer(NodePoint
+...[truncated deterministically]...
+{
+private static String getNamespaceURI(Object node) {
+public String getNamespaceURI(String prefix) {
+public Object getBaseValue() {
+public boolean isCollection() {
+public int getLength() {
+public boolean isLeaf() {
+public QName getName() {
+public Object getImmediateNode() {
+public Object getValue() {
+public void setValue(Object value) {
+String string = (String) TypeUtils.conv
+...[truncated deterministically]...
+QName name) {
+public void remove() {
+public String asPath() {
+private String escape(String string) {
+private int getRelativePositionByName() {
+private int getRelativePositionOfElement() {
+private int getRelativePositionOfTextNode() {
+private int getRelativePositionOfPI(String target) {
+public int hashCode() {
+public boolean equals(Object object) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model;
+
+import java.util.Locale;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.ri.model.dom.DOMNodePointer;
+import org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer;
+import org.jdom.Comment;
+import org.jdom.Element;
+import org.jdom.Namespace;
+import org.jdom.Text;
+import org.w3c.dom.Document;
+
+public class XMLSpacePointerRegressionTest extends TestCase {
+
+    public void testDOMPreservedWhitespaceIsTrimmedFromElementValue()
+            throws Exception {
+        org.w3c.dom.Element element = newDOMElement("value");
+        element.setAttributeNS(
+                "http://www.w3.org/XML/1998/namespace",
+                "xml:space",
+                "preserve");
+        element.appendChild(element.getOwnerDocument().createTextNode(" foo "));
+
+        DOMNodePointer pointer = new DOMNodePointer(element, Locale.US);
+
+        assertEquals("foo", pointer.getValue());
+    }
+
+    public void testDOMPreservedWhitespaceWithCommentIsTrimmedFromElementValue()
+            throws Exception {
+        org.w3c.dom.Element element = newDOMElement("value");
+        element.setAttributeNS(
+                "http://www.w3.org/XML/1998/namespace",
+                "xml:space",
+                "preserve");
+        element.appendChild(element.getOwnerDocument().createTextNode(" foo "));
+        element.appendChild(element.getOwnerDocument().createComment("boundary"));
+
+        DOMNodePointer pointer = new DOMNodePointer(element, Locale.US);
+
+        assertEquals("foo", pointer.getValue());
+    }
+
+    public void testDOMPlainTextElementRetainsItsNonWhitespaceValue()
+            throws Exception {
+        org.w3c.dom.Element element = newDOMElement("value");
+        element.appendChild(element.getOwnerDocument().createTextNode("foo"));
+
+        DOMNodePointer pointer = new DOMNodePointer(element, Locale.US);
+
+        assertEquals("foo", pointer.getValue());
+    }
+
+    public void testJDOMPreservedWhitespaceIsTrimmedFromElementValue() {
+        Element element = new Element("value");
+        element.setAttribute("space", "preserve", Namespace.XML_NAMESPACE);
+        element.addContent(new Text(" foo "));
+
+        JDOMNodePointer pointer = new JDOMNodePointer(element, Locale.US);
+
+        assertEquals("foo", pointer.getValue());
+    }
+
+    public void testJDOMPreservedWhitespaceWithCommentIsTrimmedFromElementValue() {
+        Element element = new Element("value");
+        element.setAttribute("space", "preserve", Namespace.XML_NAMESPACE);
+        element.addContent(new Text(" foo "));
+        element.addContent(new Comment("boundary"));
+
+        JDOMNodePointer pointer = new JDOMNodePointer(element, Locale.US);
+
+        assertEquals("foo", pointer.getValue());
+    }
+
+    public void testJDOMElementWithOnlyNestedElementsHasEmptyDirectValue() {
+        Element root = new Element("root");
+        root.addContent(new Element("first").setText("foo;"));
+        root.addContent(new Element("second").setText("bar;"));
+        root.addContent(new Element("third").setText(" baz "));
+
+        JDOMNodePointer pointer = new JDOMNodePointer(root, Locale.US);
+
+        assertEquals("", pointer.getValue());
+    }
+
+    public void testJDOMCommentDoesNotMakeNestedElementTextPartOfDirectValue() {
+        Element root = new Element("root");
+        root.addContent(new Element("first").setText("foo;"));
+        root.addContent(new Comment("between"));
+        root.addContent(new Element("second").setText("bar;"));
+        root.addContent(new Element("third").setText(" baz "));
+
+        JDOMNodePointer pointer = new JDOMNodePointer(root, Locale.US);
+
+        assertEquals("", pointer.getValue());
+    }
+
+    private org.w3c.dom.Element newDOMElement(String name) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        Document document = factory.newDocumentBuilder().newDocument();
+        org.w3c.dom.Element element = document.createElement(name);
+        document.appendChild(element);
+        return element;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 7
+ - org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testDOMPlainTextElementRetainsItsNonWhitespaceValue
+ - org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testDOMPreservedWhitespaceWithCommentIsTrimmedFromElementValue
+ - org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testJDOMPreservedWhitespaceWithCommentIsTrimmedFromElementValue
+Failing generated tests: org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testDOMPlainTextElementRetainsItsNonWhitespaceValue, org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testDOMPreservedWhitespaceIsTrimmedFromElementValue, org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testDOMPreservedWhitespaceWithCommentIsTrimmedFromElementValue, org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testJDOMCommentDoesNotMakeNestedElementTextPartOfDirectValue, org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testJDOMElementWithOnlyNestedElementsHasEmptyDirectValue, org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testJDOMPreservedWhitespaceIsTrimmedFromElementValue, org.apache.commons.jxpath.ri.model.XMLSpacePointerRegressionTest::testJDOMPreservedWhitespaceWithCommentIsTrimmedFromElementValue

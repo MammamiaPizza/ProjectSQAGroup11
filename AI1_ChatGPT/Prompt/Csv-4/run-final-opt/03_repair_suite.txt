@@ -1,0 +1,138 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 4  Version: Csv-4b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-100
+Trigger failures:
+- org.apache.commons.csv.CSVParserTest::testNoHeaderMap
+ --> java.lang.NullPointerException
+Modified: org.apache.commons.csv.CSVParser
+
+Available API/signatures:
+[org.apache.commons.csv.CSVParser | java]
+package org.apache.commons.csv;
+public final class CSVParser implements Iterable<CSVRecord>, Closeable {
+public static CSVParser parse(File file, final CSVFormat format) throws IOException {
+public static CSVParser parse(String string, final CSVFormat format) throws IOException {
+public static CSVParser parse(URL url, Charset charset, final CSVFormat format) throws IOException {
+/** A record buffer for getRecord(). Grows as necessary and is reused. */
+private final List<String> record = new ArrayList<String>();
+private final Token reusableToken = new Token();
+public CSVParser(final Reader reader, final CSVFormat format) throws IOException {
+private void addRecordValue() {
+final String input = this.reusableToken.content.toString();
+final String nullString = this.format.getNullString();
+this.record.add(input);
+this.record.add(input.equalsIgnoreCase(nullString) ? null : input);
+public void close() throws IOException {
+public long getCurrentLineNumber() {
+public Map<String, Integer> getHeaderMap() {
+public long getRecordNumber() {
+public List<CSVRecord> getRecords() throws IOException {
+final List<CSVRecord> records = new ArrayList<CSVRecord>();
+private Map<String, Integer> initializeHeader() throws IOException {
+final String[] formatHeader = this.format.getHeader();
+final CSVRecord record = this.nextRecord();
+if (record != null) {
+header = record.values();
+public boolean isClosed() {
+public Iterator<CSVRecord> iterator() {
+private CSVRecord getNextRecord() {
+} catch (final IOException e) {
+public boolean hasNext() {
+public CSVRecord next() {
+public void remove() {
+this.record.clear();
+if (sb == null) { // first comment for this record
+if (!this.record.isEmpty()) {
+final String comment = sb == null ? null : sb.toString();
+result = new CSVRecord(this.record.toArray(new String[this.record.size()]), this.headerMap, comment,
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Iterator;
+import java.util.Map;
+
+import org.junit.Test;
+
+public class CSVParserNoHeaderMapRegressionTest {
+
+    @Test
+    public void getHeaderMapWithoutConfiguredHeadersIsEmptyBeforeAndAfterReadingRecords() throws Exception {
+        final CSVParser parser = CSVParser.parse("a,b\nc,d\n", CSVFormat.DEFAULT);
+        try {
+            final Map<String, Integer> initialHeaderMap = parser.getHeaderMap();
+            assertNotNull(initialHeaderMap);
+            assertTrue(initialHeaderMap.isEmpty());
+
+            final Iterator<CSVRecord> iterator = parser.iterator();
+            assertTrue(iterator.hasNext());
+            final CSVRecord firstRecord = iterator.next();
+            assertEquals("a", firstRecord.get(0));
+            assertEquals("b", firstRecord.get(1));
+
+            assertTrue(iterator.hasNext());
+            final CSVRecord secondRecord = iterator.next();
+            assertEquals("c", secondRecord.get(0));
+            assertEquals("d", secondRecord.get(1));
+            assertFalse(iterator.hasNext());
+
+            final Map<String, Integer> finalHeaderMap = parser.getHeaderMap();
+            assertNotNull(finalHeaderMap);
+            assertTrue(finalHeaderMap.isEmpty());
+        } finally {
+            parser.close();
+        }
+    }
+
+    @Test
+    public void getHeaderMapWithoutConfiguredHeadersIsEmptyForEmptyInput() throws Exception {
+        final CSVParser parser = CSVParser.parse("", CSVFormat.DEFAULT);
+        try {
+            final Map<String, Integer> headerMap = parser.getHeaderMap();
+
+            assertNotNull(headerMap);
+            assertTrue(headerMap.isEmpty());
+            assertFalse(parser.iterator().hasNext());
+        } finally {
+            parser.close();
+        }
+    }
+
+    @Test
+    public void automaticallyReadHeadersAreExposedAndNotReturnedAsDataRecords() throws Exception {
+        final CSVParser parser = CSVParser.parse("name,age\nAlice,30\n", CSVFormat.DEFAULT.withHeader());
+        try {
+            final Map<String, Integer> headerMap = parser.getHeaderMap();
+            assertEquals(2, headerMap.size());
+            assertEquals(Integer.valueOf(0), headerMap.get("name"));
+            assertEquals(Integer.valueOf(1), headerMap.get("age"));
+
+            final Iterator<CSVRecord> iterator = parser.iterator();
+            assertTrue(iterator.hasNext());
+            final CSVRecord record = iterator.next();
+            assertEquals("Alice", record.get("name"));
+            assertEquals("30", record.get("age"));
+            assertFalse(iterator.hasNext());
+        } finally {
+            parser.close();
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.csv.CSVParserNoHeaderMapRegressionTest::getHeaderMapWithoutConfiguredHeadersIsEmptyForEmptyInput
+ - org.apache.commons.csv.CSVParserNoHeaderMapRegressionTest::getHeaderMapWithoutConfiguredHeadersIsEmptyBeforeAndAfterReadingRecords
+
+Failing generated tests: org.apache.commons.csv.CSVParserNoHeaderMapRegressionTest::getHeaderMapWithoutConfiguredHeadersIsEmptyBeforeAndAfterReadingRecords, org.apache.commons.csv.CSVParserNoHeaderMapRegressionTest::getHeaderMapWithoutConfiguredHeadersIsEmptyForEmptyInput

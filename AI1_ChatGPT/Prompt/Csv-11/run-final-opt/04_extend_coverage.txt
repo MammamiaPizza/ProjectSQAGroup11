@@ -1,0 +1,206 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: Csv  Bug: 11  Version: Csv-11b
+JUnit: junit-4.11.jar  Build: Maven
+Target: org.apache.commons.csv.CSVParser
+Bug/specification summary:
+Bug report: CSV-122
+Trigger failures:
+- org.apache.commons.csv.CSVParserTest::testHeaderMissingWithNull
+ --> java.lang.NullPointerException
+Modified: org.apache.commons.csv.CSVParser
+
+Available API/signatures:
+[org.apache.commons.csv.CSVParser | java]
+package org.apache.commons.csv;
+public final class CSVParser implements Iterable<CSVRecord>, Closeable {
+public static CSVParser parse(final File file, final Charset charset, final CSVFormat format) throws IOException {
+public static CSVParser parse(final String string, final CSVFormat format) throws IOException {
+public static CSVParser parse(final URL url, final Charset charset, final CSVFormat format) throws IOException {
+/** A record buffer for getRecord(). Grows as necessary and is reused. */
+private final List<String> record = new ArrayList<String>();
+private final Token reusableToken = new Token();
+public CSVParser(final Reader reader, final CSVFormat format) throws IOException {
+private void addRecordValue() {
+final String input = this.reusableToken.content.toString();
+final String nullString = this.format.getNullString();
+this.record.add(input);
+this.record.add(input.equalsIgnoreCase(nullString) ? null : input);
+public void close() throws IOException {
+public long getCurrentLineNumber() {
+public Map<String, Integer> getHeaderMap() {
+public long getRecordNumber() {
+public List<CSVRecord> getRecords() throws IOException {
+public <T extends Collection<CSVRecord>> T getRecords(final T records) throws IOException {
+private Map<String, Integer> initializeHeader() throws IOException {
+final String[] formatHeader = this.format.getHeader();
+final CSVRecord nextRecord = this.nextRecord();
+final boolean containsHeader = hdrMap.containsKey(header);
+final boolean emptyHeader = header.trim().isEmpty();
+public boolean isClosed() {
+public Iterator<CSVRecord> iterator() {
+private CSVRecord getNextRecord() {
+} catch (final IOException e) {
+public boolean hasNext() {
+public CSVRecord next() {
+public void remove() {
+this.record.clear();
+if (sb == null) { // first comment for this record
+if (!this.record.isEmpty()) {
+final String comment = sb == null ? null : sb.toString();
+result = new CSVRecord(this.record.toArray(new String[this.record.size()]), this.headerMap, comment,
+
+Existing test summary (method names/assertions only):
+Test methods: parsedNullHeaderIsMappedWithoutFailure, nullStringInHeaderDoesNotPreventReadingFollowingRecords, duplicateNullHeadersAreRejectedWhenEmptyHeadersAreNotIgnored, automaticHeaderOnEmptyInputProducesAnEmptyHeaderMap, singleEmptyHeaderIsRetainedInHeaderMap, formatWithoutHeaderConfigurationHasNoHeaderMap
+Representative assertions:
+assertNotNull(headerMap);
+assertEquals(3, headerMap.size());
+assertEquals(Integer.valueOf(0), headerMap.get("first"));
+assertTrue(headerMap.containsKey(null));
+assertEquals(Integer.valueOf(1), headerMap.get(null));
+assertEquals(Integer.valueOf(2), headerMap.get("last"));
+assertEquals(1, records.size());
+assertEquals("value", records.get(0).get(0));
+assertNull(records.get(0).get(1));
+assertEquals("last", records.get(0).get(2));
+fail("Duplicate null headers must be rejected");
+assertTrue(expected.getMessage().contains("duplicate name"));
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+106,72,62,39
+
+Line/branch gaps:
+Class: org.apache.commons.csv.CSVParser
+Uncovered lines: 286, 311, 373, 374, 376, 479, 483, 485, 486, 488, 490, 491, 492, 494, 157, 158, 160, 204, 205, 206, 208, 157, 158, 160, 204, 205, 206, 208, 286, 311 ... (+12 more)
+Partially covered branch lines: 270 (50% (1/2)), 366 (50% (1/2)), 385 (62% (5/8)), 470 (50% (3/6)), 478 (50% (1/2)), 500 (50% (1/2)), 270 (50% (1/2)), 366 (50% (1/2)), 385 (62% (5/8)), 470 (50% (3/6)), 478 (50% (1/2)), 500 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[org.apache.commons.csv.CSVParser]
+284: */
+285: public long getCurrentLineNumber() {
+286: return this.lexer.getCurrentLineNumber();
+287: }
+288: 
+---
+309: */
+310: public long getRecordNumber() {
+311: return this.recordNumber;
+312: }
+313: 
+---
+371: }
+372: } else {
+373: if (this.format.getSkipHeaderRecord()) {
+374: this.nextRecord();
+375: }
+---
+372: } else {
+373: if (this.format.getSkipHeaderRecord()) {
+374: this.nextRecord();
+375: }
+376: headerRecord = formatHeader;
+---
+374: this.nextRecord();
+375: }
+376: headerRecord = formatHeader;
+377: }
+378: 
+---
+477: case EOF:
+478: if (this.reusableToken.isReady) {
+479: this.addRecordValue();
+480: }
+481: break;
+---
+481: break;
+482: case INVALID:
+483: throw new IOException("(line " + this.getCurrentLineNumber() + ") invalid parse sequence");
+484: case COMMENT: // Ignored currently
+485: if (sb == null) { // first comment for this record
+---
+483: throw new IOException("(line " + this.getCurrentLineNumber() + ") invalid parse sequence");
+484: case COMMENT: // Ignored currently
+485: if (sb == null) { // first comment for this record
+486: sb = new StringBuilder();
+487: } else {
+---
+484: case COMMENT: // Ignored currently
+485: if (sb == null) { // first comment for this record
+486: sb = new StringBuilder();
+487: } else {
+488: sb.append(Constants.LF);
+---
+486: sb = new StringBuilder();
+487: } else {
+488: sb.append(Constants.LF);
+489: }
+490: sb.append(this.reusableToken.content);
+---
+488: sb.append(Constants.LF);
+489: }
+490: sb.append(this.reusableToken.content);
+491: this.reusableToken.type = TOKEN; // Read another token
+492: break;
+---
+489: }
+490: sb.append(this.reusableToken.content);
+491: this.reusableToken.type = TOKEN; // Read another token
+492: break;
+493: default:
+---
+490: sb.append(this.reusableToken.content);
+491: this.reusableToken.type = TOKEN; // Read another token
+492: break;
+493: default:
+494: throw new IllegalStateException("Unexpected Token type: " + this.reusableToken.type);
+---
+492: break;
+493: default:
+494: throw new IllegalStateException("Unexpected Token type: " + this.reusableToken.type);
+495: }
+496: } while (this.reusableToken.type == TOKEN);
+---
+155: */
+156: public static CSVParser parse(final File file, final Charset charset, final CSVFormat format) throws IOException {
+157: Assertions.notNull(file, "file");
+158: Assertions.notNull(format,
+...[truncated deterministically]...
+charset, final CSVFormat format) throws IOException {
+204: Assertions.notNull(url, "url");
+205: Assertions.notNull(charset, "charset");
+206: Assertions.notNull(format, "format");
+207: 
+---
+204: Assertions.notNull(url, "url");
+205: Assertions.notNull(charset, "charset");
+206: Assertions.notNull(format, "format");
+207: 
+208: return new CSVParser(new InputStreamReader(url.openStream(), charset), format);
+---
+206: Assertions.notNull(format, "format");
+207: 
+208: return new CSVParser(new InputStreamReader(url.openStream(), charset), format);
+209: }
+210: 
+---
+10: *
+11: * Unless required by applicable law or agreed to in writing, software
+12: * distributed under the License is distributed on an "AS IS" BASIS,
+13: * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+14: * See the License for the specific language governing permissions and
+---
+268: */
+269: public void close() throws IOException {
+270: if (this.lexer != null) {
+271: this.lexer.close();
+272: }
+---
+48: *
+49: * <h2>Creating instances</h2>
+50: * <p>
+51: * There are several static factory methods that can be used to create instances for various types of resources:
+52: * </p>

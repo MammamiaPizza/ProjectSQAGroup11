@@ -1,0 +1,174 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 17  Version: Gson-17b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1100
+Trigger failures:
+- com.google.gson.DefaultDateTypeAdapterTest::testUnexpectedToken
+ --> com.google.gson.JsonParseException: The date should be a string value
+ - com.google.gson.DefaultDateTypeAdapterTest::testNullValue
+ --> com.google.gson.JsonParseException: The date should be a string value
+Modified: com.google.gson.DefaultDateTypeAdapter
+
+Available API/signatures:
+[com.google.gson.DefaultDateTypeAdapter | java]
+package com.google.gson;
+final class DefaultDateTypeAdapter extends TypeAdapter<Date> {
+public DefaultDateTypeAdapter(int dateStyle, int timeStyle) {
+this(Date.class,
+public DefaultDateTypeAdapter(Class<? extends Date> dateType, int dateStyle, int timeStyle) {
+DefaultDateTypeAdapter(final Class<? extends Date> dateType, DateFormat enUsFormat, DateFormat localFormat) {
+if ( dateType != Date.class && dateType != java.sql.Date.class && dateType != Timestamp.class ) {
+throw new IllegalArgumentException("Date type must be one of " + Date.class + ", " + Timestamp.class + ", or " + java.sql.Date.class + " but was " + dateType);
+@Override
+public void write(JsonWriter out, Date value) throws IOException {
+synchronized (localFormat) {
+public Date read(JsonReader in) throws IOException {
+if (dateType == Date.class) {
+} else if (dateType == Timestamp.class) {
+} else if (dateType == java.sql.Date.class) {
+private Date deserializeToDate(String s) {
+public String toString() {
+
+Generated JUnit Test:
+package com.google.gson;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
+import org.junit.Test;
+
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonWriter;
+
+public class DefaultDateTypeAdapterBug17Test {
+
+  private static final String PATTERN = "yyyy-MM-dd HH:mm:ss";
+
+  @Test
+  public void readNullConsumesNullAndReturnsNull() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Date.class, PATTERN);
+
+    Date result = adapter.read(new JsonReader(new StringReader("null")));
+
+    assertNull(result);
+  }
+
+  @Test
+  public void readNumberRejectsUnexpectedNonStringToken() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Date.class, PATTERN);
+
+    try {
+      adapter.read(new JsonReader(new StringReader("123")));
+      fail("A numeric JSON value is not a date string");
+    } catch (JsonParseException expected) {
+      assertTrue(expected.getMessage().contains("string"));
+    }
+  }
+
+  @Test
+  public void readMalformedStringThrowsJsonSyntaxException() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Date.class, PATTERN);
+
+    try {
+      adapter.read(new JsonReader(new StringReader("\"not-a-date\"")));
+      fail("An unparsable date string should be rejected");
+    } catch (JsonSyntaxException expected) {
+      assertEquals("not-a-date", expected.getMessage());
+    }
+  }
+
+  @Test
+  public void readIso8601StringProducesExpectedDate() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Date.class, PATTERN);
+
+    Date result = adapter.read(new JsonReader(new StringReader("\"1970-01-01T00:00:00Z\"")));
+
+    assertEquals(0L, result.getTime());
+  }
+
+  @Test
+  public void readTimestampAdapterReturnsTimestampWithParsedInstant() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Timestamp.class, PATTERN);
+
+    Date result = adapter.read(new JsonReader(new StringReader("\"1970-01-01T00:00:00Z\"")));
+
+    assertTrue(result instanceof Timestamp);
+    assertEquals(0L, result.getTime());
+  }
+
+  @Test
+  public void readSqlDateAdapterReturnsSqlDateWithParsedInstant() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(java.sql.Date.class, PATTERN);
+
+    Date result = adapter.read(new JsonReader(new StringReader("\"1970-01-01T00:00:00Z\"")));
+
+    assertTrue(result instanceof java.sql.Date);
+    assertEquals(0L, result.getTime());
+  }
+
+  @Test
+  public void writeNullEmitsJsonNull() throws IOException {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Date.class, PATTERN);
+    StringWriter output = new StringWriter();
+    JsonWriter writer = new JsonWriter(output);
+
+    adapter.write(writer, null);
+    writer.close();
+
+    assertEquals("null", output.toString());
+  }
+
+  @Test
+  public void writeDateEmitsConfiguredFormatAndCanBeReadBack() throws Exception {
+    DefaultDateTypeAdapter adapter = new DefaultDateTypeAdapter(Date.class, PATTERN);
+    StringWriter output = new StringWriter();
+    JsonWriter writer = new JsonWriter(output);
+    Date epoch = new Date(0L);
+
+    adapter.write(writer, epoch);
+    writer.close();
+
+    String expectedText = new SimpleDateFormat(PATTERN, Locale.US).format(epoch);
+    assertEquals("\"" + expectedText + "\"", output.toString());
+
+    Date reread = adapter.read(new JsonReader(new StringReader(output.toString())));
+    assertEquals(epoch.getTime(), reread.getTime());
+  }
+
+  @Test
+  public void unsupportedDateSubclassIsRejectedByConstructor() {
+    try {
+      new DefaultDateTypeAdapter(UnsupportedDate.class, PATTERN);
+      fail("Only Date, Timestamp, and java.sql.Date are supported");
+    } catch (IllegalArgumentException expected) {
+      assertTrue(expected.getMessage().contains("Date type must be one of"));
+    }
+  }
+
+  private static final class UnsupportedDate extends Date {
+    private static final long serialVersionUID = 1L;
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.google.gson.DefaultDateTypeAdapterBug17Test::readNumberRejectsUnexpectedNonStringToken
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: com.google.gson.DefaultDateTypeAdapterBug17Test::readNumberRejectsUnexpectedNonStringToken

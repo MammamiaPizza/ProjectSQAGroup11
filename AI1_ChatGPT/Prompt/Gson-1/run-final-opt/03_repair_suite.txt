@@ -1,0 +1,128 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 1  Version: Gson-1b
+JUnit: junit-3.8.2.jar  Build: Defects4J project build
+Bug/specification summary:
+Bug report: 40
+Trigger failures:
+- com.google.gson.functional.TypeVariableTest::testSingle
+ --> java.lang.UnsupportedOperationException: Expecting parameterized type, got class com.google.gson.functional.TypeVariableTest$Bar.
+Modified: com.google.gson.TypeInfoFactory
+
+Available API/signatures:
+[com.google.gson.TypeInfoFactory | java]
+package com.google.gson;
+final class TypeInfoFactory {
+private TypeInfoFactory() {
+public static TypeInfoArray getTypeInfoForArray(Type type) {
+public static TypeInfo getTypeInfoForField(Field f, Type typeDefiningF) {
+private static int getIndex(TypeVariable<?>[] types, TypeVariable<?> type) {
+"How can the type variable not be present in the class declaration!");
+
+Generated JUnit Test:
+package com.google.gson;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Type;
+import java.util.List;
+
+import com.google.gson.reflect.TypeToken;
+
+import junit.framework.TestCase;
+
+public class TypeInfoFactoryTest extends TestCase {
+
+  public static class GenericValue<T> {
+    public T value;
+  }
+
+  public static class GenericArrayValue<T> {
+    public T[] values;
+  }
+
+  public static class GenericListValue<T> {
+    public List<T> values;
+  }
+
+  public void testRawGenericTypeVariableDeserializesUsingItsBound() {
+    Gson gson = new Gson();
+
+    GenericValue value = gson.fromJson("{\"value\":\"text\"}", GenericValue.class);
+
+    assertEquals("text", value.value);
+  }
+
+  public void testRawGenericArrayTypeVariableDeserializes() {
+    Gson gson = new Gson();
+
+    GenericArrayValue value =
+        gson.fromJson("{\"values\":[\"first\",\"second\"]}", GenericArrayValue.class);
+
+    assertNotNull(value.values);
+    assertEquals(2, value.values.length);
+    assertEquals("first", value.values[0]);
+    assertEquals("second", value.values[1]);
+  }
+
+  public void testRawGenericTypeVariableInsideParameterizedFieldDeserializes() {
+    Gson gson = new Gson();
+
+    GenericListValue value =
+        gson.fromJson("{\"values\":[\"one\",\"two\"]}", GenericListValue.class);
+
+    assertNotNull(value.values);
+    assertEquals(2, value.values.size());
+    assertEquals("one", value.values.get(0));
+    assertEquals("two", value.values.get(1));
+  }
+
+  public void testParameterizedGenericFieldResolvesActualTypeArgument() {
+    Gson gson = new Gson();
+
+    GenericValue<Integer> value = (GenericValue<Integer>) gson.fromJson(
+        "{\"value\":7}", new TypeToken<GenericValue<Integer>>() {}.getType());
+
+    assertNotNull(value.value);
+    assertEquals(Integer.class, value.value.getClass());
+    assertEquals(7, value.value.intValue());
+  }
+
+  public void testParameterizedGenericArrayResolvesComponentType() {
+    Gson gson = new Gson();
+
+    GenericArrayValue<Integer> value = (GenericArrayValue<Integer>) gson.fromJson(
+        "{\"values\":[1,2]}", new TypeToken<GenericArrayValue<Integer>>() {}.getType());
+
+    assertNotNull(value.values);
+    assertEquals(Integer[].class, value.values.getClass());
+    assertEquals(Integer.valueOf(1), value.values[0]);
+    assertEquals(Integer.valueOf(2), value.values[1]);
+  }
+
+  public void testTypeInfoFactoryAcceptsClassAndGenericArrayTypes() throws Exception {
+    Field field = GenericArrayValue.class.getField("values");
+    Type genericArrayType = field.getGenericType();
+
+    assertNotNull(TypeInfoFactory.getTypeInfoForArray(String[].class));
+    assertNotNull(TypeInfoFactory.getTypeInfoForArray(genericArrayType));
+  }
+
+  public void testTypeInfoFactoryRejectsNonArrayType() {
+    try {
+      TypeInfoFactory.getTypeInfoForArray(String.class);
+      fail("A non-array type must be rejected");
+    } catch (IllegalArgumentException expected) {
+      assertNotNull(expected);
+    }
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.google.gson.TypeInfoFactoryTest::testRawGenericTypeVariableInsideParameterizedFieldDeserializes
+ - com.google.gson.TypeInfoFactoryTest::testRawGenericTypeVariableDeserializesUsingItsBound
+ - com.google.gson.TypeInfoFactoryTest::testTypeInfoFactoryAcceptsClassAndGenericArrayTypes
+Failing generated tests: com.google.gson.TypeInfoFactoryTest::testRawGenericArrayTypeVariableDeserializes, com.google.gson.TypeInfoFactoryTest::testRawGenericTypeVariableDeserializesUsingItsBound, com.google.gson.TypeInfoFactoryTest::testRawGenericTypeVariableInsideParameterizedFieldDeserializes, com.google.gson.TypeInfoFactoryTest::testTypeInfoFactoryAcceptsClassAndGenericArrayTypes

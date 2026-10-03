@@ -1,0 +1,163 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 14  Version: Csv-14b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-171
+Trigger failures:
+- org.apache.commons.csv.CSVPrinterTest::testEscapeNull1
+ --> junit.framework.AssertionFailedError: expected:<[\]> but was:<["\"]>
+ - org.apache.commons.csv.CSVPrinterTest::testEscapeNull4
+ --> junit.framework.AssertionFailedError: expected:<[\\]> but was:<["\\"]>
+ - org.apache.commons.csv.CSVPrinterTest::testEscapeNull5
+ --> junit.framework.AssertionFailedError: expected:<[\\]> but was:<["\\"]>
+ - org.apache.commons.csv.CSVPrinterTest::testEscapeBackslash1
+ --> junit.framework.AssertionFailedError: expected:<[\]> but was:<['\']>
+ - org.apache.commons.csv.CSVPrinterTest::testEscapeBackslash4
+ --> junit.framework.AssertionFailedError: expected:<[\\]> but was:<['\\']>
+ - org.apache.commons.csv.CSVPrinterTest::testEscapeBackslash5
+ --> junit.framework.AssertionFailedError: expected:<[\\]> but was:<['\\']>
+Modified: org.apache.commons.csv.CSVFormat
+
+Available API/signatures:
+[org.apache.commons.csv.CSVFormat | java]
+package org.apache.commons.csv;
+public final class CSVFormat implements Serializable {
+public enum Predefined {
+Predefined(final CSVFormat format) {
+public CSVFormat getFormat() {
+public static final CSVFormat EXCEL = DEFAULT.withIgnoreEmptyLines(false).withAllowMissingColumnNames();
+public static final CSVFormat INFORMIX_UNLOAD = DEFAULT.withDelimiter(PIPE).withEscape(BACKSLASH)
+public static final CSVFormat INFORMIX_UNLOAD_CSV = DEFAULT.withDelimiter(COMMA).withQuote(DOUBLE_QUOTE_CHAR)
+public static final CSVFormat MYSQL = DEFAULT.withDelimiter(TAB).withEscape(BACKSLASH).withIgnoreEmptyLines(false)
+public static final CSVFormat RFC4180 = DEFAULT.withIgnoreEmptyLines(false);
+public static final CSVFormat TDF = DEFAULT.withDelimiter(TAB).withIgnoreSurroundingSpaces();
+private static boolean isLineBreak(final char c) {
+private static boolean isLineBreak(final Character c) {
+public static CSVFormat newFormat(final char delimiter) {
+public static CSVFormat valueOf(final String format) {
+@Override
+public boolean equals(final Object obj) {
+final CSVFormat other = (CSVFormat) obj;
+public String format(final Object... values) {
+final StringWriter out = new StringWriter();
+try (final CSVPrinter csvPrinter = new CSVPrinter(out, this)) {
+} catch (final IOException e) {
+public boolean getAllowMissingColumnNames() {
+public Character getCommentMarker() {
+public char getDelimiter() {
+public Character getEscapeCharacter() {
+public String[] getHeader() {
+public String[] getHeaderComments() {
+public boolean getIgnoreEmptyLines() {
+public boolean getIgnoreHeaderCase() {
+public boolean getIgnoreSurroundingSpaces() {
+...[truncated deterministically]...
+an ignoreHeaderCase) {
+public CSVFormat withIgnoreSurroundingSpaces() {
+public CSVFormat withIgnoreSurroundingSpaces(final boolean ignoreSurroundingSpaces) {
+public CSVFormat withNullString(final String nullString) {
+public CSVFormat withQuote(final char quoteChar) {
+public CSVFormat withQuote(final Character quoteChar) {
+public CSVFormat withQuoteMode(final QuoteMode quoteModePolicy) {
+public CSVFormat withRecordSeparator(final char recordSeparator) {
+public CSVFormat withRecordSeparator(final String recordSeparator) {
+public CSVFormat withSkipHeaderRecord() {
+public CSVFormat withSkipHeaderRecord(final boolean skipHeaderRecord) {
+public CSVFormat withTrailingDelimiter() {
+public CSVFormat withTrailingDelimiter(final boolean trailingDelimiter) {
+public CSVFormat withTrim() {
+public CSVFormat withTrim(final boolean trim) {
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.io.StringWriter;
+
+import org.junit.Test;
+
+public class CSVFormatEscapeTest {
+
+    @Test
+    public void nullEscapeDoesNotQuoteSingleBackslash() {
+        final CSVFormat format = CSVFormat.DEFAULT.withEscape((Character) null);
+
+        assertEquals("\\", format.format("\\"));
+    }
+
+    @Test
+    public void nullEscapeDoesNotQuoteRepeatedBackslashes() {
+        final CSVFormat format = CSVFormat.DEFAULT.withEscape((Character) null);
+
+        assertEquals("\\\\", format.format("\\\\"));
+    }
+
+    @Test
+    public void backslashEscapeDoesNotQuoteSingleBackslashWithSingleQuote() {
+        final CSVFormat format = CSVFormat.DEFAULT.withQuote('\'').withEscape('\\');
+
+        assertEquals("\\", format.format("\\"));
+    }
+
+    @Test
+    public void backslashEscapeDoesNotQuoteRepeatedBackslashesWithSingleQuote() {
+        final CSVFormat format = CSVFormat.DEFAULT.withQuote('\'').withEscape('\\');
+
+        assertEquals("\\\\", format.format("\\\\"));
+    }
+
+    @Test
+    public void printDoesNotAddQuotesForBackslashWhenEscapeIsNull() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withEscape((Character) null);
+        final StringWriter out = new StringWriter();
+
+        format.print("\\", out, false);
+
+        assertEquals("\\", out.toString());
+    }
+
+    @Test
+    public void printDoesNotAddQuotesForBackslashWhenBackslashIsEscape() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withQuote('\'').withEscape('\\');
+        final StringWriter out = new StringWriter();
+
+        format.print("\\\\", out, false);
+
+        assertEquals("\\\\", out.toString());
+    }
+
+    @Test
+    public void normalDelimitedRecordStillUsesDelimiterAndRecordSeparator() {
+        final CSVFormat format = CSVFormat.DEFAULT.withEscape((Character) null);
+        final StringWriter out = new StringWriter();
+
+        try (CSVPrinter printer = new CSVPrinter(out, format)) {
+            printer.printRecord("left", "right");
+        }
+
+        assertEquals("left,right\r\n", out.toString());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Csv-14f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Csv-14f-ai -Dd4j.test.dir=/root/sqa-workspaces/Csv-14f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Csv-14f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/Csv-14f-ai/.test_suite/org/apache/commons/csv/CSVFormatEscapeTest.java:65: error: unreported exception IOException; must be caught or declared to be thrown
+ [javac] try (CSVPrinter printer = new CSVPrinter(out, format)) {
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 3 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

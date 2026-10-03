@@ -1,0 +1,115 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 9  Version: JxPath-9b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: JXPATH-95
+Trigger failures:
+- org.apache.commons.jxpath.ri.compiler.CoreOperationTest::testNan
+ --> junit.framework.AssertionFailedError: Evaluating <$nan = $nan> expected:<false> but was:<true>
+Modified: org.apache.commons.jxpath.ri.compiler.CoreOperationCompare, org.apache.commons.jxpath.ri.compiler.CoreOperationEqual, org.apache.commons.jxpath.ri.compiler.CoreOperationNotEqual
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.compiler.CoreOperationCompare | java]
+package org.apache.commons.jxpath.ri.compiler;
+public abstract class CoreOperationCompare extends CoreOperation {
+public CoreOperationCompare(Expression arg1, Expression arg2) {
+protected int getPrecedence() {
+protected boolean isSymmetric() {
+protected boolean contains(Iterator it, Object value) {
+protected boolean findMatch(Iterator lit, Iterator rit) {
+protected boolean equal(Object l, Object r) {
+
+[org.apache.commons.jxpath.ri.compiler.CoreOperationEqual | java]
+package org.apache.commons.jxpath.ri.compiler;
+public class CoreOperationEqual extends CoreOperationCompare {
+public CoreOperationEqual(Expression arg1, Expression arg2) {
+public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+public String getSymbol() {
+
+[org.apache.commons.jxpath.ri.compiler.CoreOperationNotEqual | java]
+package org.apache.commons.jxpath.ri.compiler;
+public class CoreOperationNotEqual extends CoreOperationCompare {
+public CoreOperationNotEqual(Expression arg1, Expression arg2) {
+public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+public String getSymbol() {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.compiler;
+
+import java.util.Arrays;
+import java.util.Collections;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.JXPathContext;
+
+public class CoreOperationNaNTest extends TestCase {
+
+    public void testNaNEqualsItselfIsFalseInExpression() {
+        JXPathContext context = JXPathContext.newContext(null);
+        context.getVariables().declareVariable("nan", new Double(Double.NaN));
+
+        assertEquals(Boolean.FALSE, context.getValue("$nan = $nan"));
+    }
+
+    public void testNaNNotEqualsItselfIsTrueInExpression() {
+        JXPathContext context = JXPathContext.newContext(null);
+        context.getVariables().declareVariable("nan", new Double(Double.NaN));
+
+        assertEquals(Boolean.TRUE, context.getValue("$nan != $nan"));
+    }
+
+    public void testEqualDoesNotConsiderSameNaNReferenceEqual() {
+        CoreOperationEqual operation = new CoreOperationEqual(null, null);
+        Double nan = new Double(Double.NaN);
+
+        assertFalse(operation.equal(nan, nan));
+    }
+
+    public void testEqualDoesNotConsiderDistinctNaNValuesEqual() {
+        CoreOperationEqual operation = new CoreOperationEqual(null, null);
+
+        assertFalse(operation.equal(
+                new Double(Double.NaN), new Double(Double.NaN)));
+    }
+
+    public void testContainsDoesNotMatchNaN() {
+        CoreOperationEqual operation = new CoreOperationEqual(null, null);
+        Double nan = new Double(Double.NaN);
+
+        assertFalse(operation.contains(
+                Collections.singletonList(nan).iterator(), nan));
+    }
+
+    public void testFindMatchDoesNotMatchNaNAcrossIterators() {
+        CoreOperationEqual operation = new CoreOperationEqual(null, null);
+        Double nan = new Double(Double.NaN);
+
+        assertFalse(operation.findMatch(
+                Arrays.asList(new Object[] { nan }).iterator(),
+                Arrays.asList(new Object[] { nan }).iterator()));
+    }
+
+    public void testNaNDoesNotEqualOrdinaryNumber() {
+        CoreOperationEqual operation = new CoreOperationEqual(null, null);
+
+        assertFalse(operation.equal(new Double(Double.NaN), new Double(1.0)));
+    }
+
+    public void testOrdinaryEqualNumbersStillMatch() {
+        CoreOperationEqual operation = new CoreOperationEqual(null, null);
+
+        assertTrue(operation.equal(new Double(2.0), new Double(2.0)));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.jxpath.ri.compiler.CoreOperationNaNTest::testNaNNotEqualsItselfIsTrueInExpression
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.jxpath.ri.compiler.CoreOperationNaNTest::testNaNNotEqualsItselfIsTrueInExpression
