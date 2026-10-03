@@ -38,4 +38,4 @@ Prompt ที่ถูกเติมข้อมูลและส่งจร�
 
 รายละเอียด workflow และกติกาการทดลองฉบับสุดท้ายอยู่ที่
 
-`Experiment/optimized_protocol.md`
+`Experiment/protocol/ai_final_protocol.md`

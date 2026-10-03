@@ -22,9 +22,9 @@ METHODS = [
 ]
 
 OUT_DIR = ROOT / "Experiment/reports"
-OUT_CSV = OUT_DIR / "final_case_results.csv"
-OUT_JSON = OUT_DIR / "final_summary.json"
-OUT_MD = OUT_DIR / "final_summary.md"
+OUT_CSV = OUT_DIR / "ai_case_results.csv"
+OUT_JSON = OUT_DIR / "ai_summary.json"
+OUT_MD = OUT_DIR / "ai_summary.md"
 
 
 def pct(covered, total):
