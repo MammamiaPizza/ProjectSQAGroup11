@@ -1,0 +1,346 @@
+#!/usr/bin/env python3
+
+import json
+import re
+import subprocess
+import time
+from pathlib import Path
+
+ROOT = Path(".")
+LOG_DIR = ROOT / "Experiment/logs/final-opt"
+STATE_FILE = ROOT / "Experiment/runtime/pool-supervisor-state.json"
+RESULT_ROOT = ROOT / "AI1_ChatGPT/Result"
+
+RUN_CURRENT = "run-final-opt"
+RUN_OLD = "run-final"
+ALL_W = [f"W{i}" for i in range(1, 15)]
+
+
+def human_tokens(n):
+    if n is None:
+        return "-"
+    try:
+        n = int(n)
+    except Exception:
+        return "-"
+    if abs(n) >= 1_000_000:
+        return f"{n/1_000_000:.2f}M"
+    if abs(n) >= 1000:
+        return f"{n/1000:.1f}k"
+    return str(n)
+
+
+def active_workers():
+    found = {}
+
+    proc_root = Path("/proc")
+
+    for proc in proc_root.iterdir():
+        if not proc.name.isdigit():
+            continue
+
+        try:
+            raw = (proc / "cmdline").read_bytes()
+            if not raw:
+                continue
+
+            args = raw.replace(b"\x00", b" ").decode(
+                "utf-8", errors="replace"
+            )
+
+            if "Experiment/automation/ai_runner.py" not in args:
+                continue
+
+            if "--provider chatgpt" not in args:
+                continue
+
+            m = re.search(r"--worker\s+(W\d+)(?:\s|$)", args)
+            if not m:
+                continue
+
+            worker = m.group(1)
+            pid = int(proc.name)
+
+            rss_kb = 0
+            try:
+                status = (proc / "status").read_text(errors="replace")
+                m_rss = re.search(r"^VmRSS:\s+(\d+)\s+kB", status, re.M)
+                if m_rss:
+                    rss_kb = int(m_rss.group(1))
+            except Exception:
+                pass
+
+            found[worker] = {
+                "pid": pid,
+                "rss_kb": rss_kb,
+            }
+
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue
+
+    return found
+
+
+def read_state():
+    if not STATE_FILE.exists():
+        return {}
+
+    try:
+        return json.loads(STATE_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def worker_log_info(worker):
+    path = LOG_DIR / f"{worker}.log"
+
+    info = {
+        "case": "-",
+        "stage": "-",
+        "used": None,
+        "left": None,
+    }
+
+    if not path.exists():
+        return info
+
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except Exception:
+        return info
+
+    tail = lines[-300:]
+
+    # Current case
+    for line in reversed(tail):
+        m = re.search(
+            rf"\[{re.escape(worker)}\]\s+CLAIMED\s+([A-Za-z0-9_-]+)",
+            line
+        )
+        if m:
+            info["case"] = m.group(1)
+            break
+
+        m = re.search(r"\[([A-Za-z][A-Za-z0-9]*-\d+)\]", line)
+        if m:
+            info["case"] = m.group(1)
+            break
+
+    # Current stage
+    for line in reversed(tail):
+        if re.search(r"Prompt 04|P04", line):
+            info["stage"] = "P04"
+            break
+        if re.search(r"Prompt 03|P03", line):
+            info["stage"] = "P03"
+            break
+        if re.search(r"Prompt 02|P02", line):
+            info["stage"] = "P02"
+            break
+        if re.search(r"Prompt 01|P01", line):
+            info["stage"] = "P01"
+            break
+        if "acquired Defects4J slot" in line:
+            info["stage"] = "D4J"
+            break
+        if "QUOTA PAUSED" in line:
+            info["stage"] = "WAIT"
+            break
+
+    # Latest real quota JSON in log
+    for line in reversed(tail):
+        if '"daily_usage_tokens"' not in line:
+            continue
+        try:
+            d = json.loads(line)
+            info["used"] = d.get("daily_usage_tokens")
+            info["left"] = d.get("daily_remaining_tokens")
+            break
+        except Exception:
+            pass
+
+    return info
+
+
+def account_pool(active):
+    state = read_state()
+    cooldown = state.get("cooldown", {}) or {}
+    now = time.time()
+
+    active_names = sorted(active, key=lambda x: int(x[1:]))
+    standby = []
+    cool = []
+
+    for worker in ALL_W:
+        if worker in active:
+            continue
+
+        until = cooldown.get(worker, 0) or 0
+
+        try:
+            mins = int(max(0, float(until) - now) / 60)
+        except Exception:
+            mins = 0
+
+        if mins > 0:
+            cool.append((worker, mins))
+        else:
+            standby.append(worker)
+
+    return active_names, standby, cool
+
+
+def read_status(path):
+    try:
+        d = json.loads(path.read_text())
+    except Exception:
+        return None
+
+    return str(
+        d.get("status")
+        or d.get("state")
+        or d.get("result")
+        or ""
+    ).upper()
+
+
+def queue_stats():
+    current = {}
+    old = {}
+
+    if RESULT_ROOT.exists():
+        for case_dir in RESULT_ROOT.iterdir():
+            if not case_dir.is_dir():
+                continue
+
+            cur = case_dir / RUN_CURRENT / "case_status.json"
+            prev = case_dir / RUN_OLD / "case_status.json"
+
+            if cur.exists():
+                current[case_dir.name] = read_status(cur)
+
+            if prev.exists():
+                old[case_dir.name] = read_status(prev)
+
+    finished_states = {
+        "DONE",
+        "INVALID_AFTER_REPAIR",
+        "OUTPUT_INCOMPLETE",
+        "INVALID_AFTER_PROMPT04",
+    }
+
+    cur_finished = {
+        k for k, v in current.items()
+        if v in finished_states
+    }
+
+    old_finished = {
+        k for k, v in old.items()
+        if v in finished_states
+    }
+
+    finished_union = cur_finished | old_finished
+    old_only = old_finished - cur_finished
+
+    running = sum(
+        v in {"RUNNING", "IN_PROGRESS"}
+        for v in current.values()
+    )
+    error = sum(v == "ERROR" for v in current.values())
+    quota = sum(v in {"QUOTA", "QUOTA_PAUSED"} for v in current.values())
+
+    total_cases = 854
+    accounted = sum(
+        v in finished_states
+        or v in {"ERROR", "QUOTA", "RUNNING", "IN_PROGRESS"}
+        for v in current.values()
+    )
+
+    waiting = max(0, total_cases - accounted)
+
+    return {
+        "finished": len(finished_union),
+        "current": len(cur_finished),
+        "old_only": len(old_only),
+        "running": running,
+        "error": error,
+        "quota": quota,
+        "waiting": waiting,
+    }
+
+
+active = active_workers()
+active_names, standby_names, cooldown_names = account_pool(active)
+
+print("=" * 78)
+print("CHATGPT / TERRA ACCOUNT POOL")
+print("=" * 78)
+
+print(
+    f"ACTIVE   ({len(active_names):2d}) : "
+    + (" ".join(active_names) if active_names else "-")
+)
+
+print(
+    f"STANDBY  ({len(standby_names):2d}) : "
+    + (" ".join(standby_names) if standby_names else "-")
+)
+
+cool_text = " ".join(
+    f"{w}({mins}m)" for w, mins in cooldown_names
+)
+
+print(
+    f"COOLDOWN ({len(cooldown_names):2d}) : "
+    + (cool_text if cool_text else "-")
+)
+
+print()
+print("=" * 78)
+print("CHATGPT / TERRA WORKERS — CURRENT")
+print("=" * 78)
+
+print(
+    f"{'WORKER':<7}"
+    f"{'STATE':<10}"
+    f"{'CASE':<20}"
+    f"{'STAGE':<7}"
+    f"{'RAM':<8}"
+    f"{'USED':>10}"
+    f"{'LEFT':>10}"
+)
+print("-" * 78)
+
+if not active_names:
+    print("NO ACTIVE W WORKERS")
+else:
+    for worker in active_names:
+        proc = active[worker]
+        info = worker_log_info(worker)
+
+        ram = f"{max(1, round(proc['rss_kb'] / 1024))}M"
+
+        print(
+            f"{worker:<7}"
+            f"{'RUNNING':<10}"
+            f"{info['case']:<20}"
+            f"{info['stage']:<7}"
+            f"{ram:<8}"
+            f"{human_tokens(info['used']):>10}"
+            f"{human_tokens(info['left']):>10}"
+        )
+
+q = queue_stats()
+
+print()
+print("=" * 78)
+print("QUEUE - CURRENT + PREVIOUS (DISTINCT CASES)")
+print("=" * 78)
+
+print(f"Finished : {q['finished']}")
+print(f"  Current : {q['current']}")
+print(f"  Old only: {q['old_only']}")
+print(f"Running  : {q['running']}")
+print(f"Error    : {q['error']}")
+print(f"Quota    : {q['quota']}")
+print(f"Waiting  : {q['waiting']}")

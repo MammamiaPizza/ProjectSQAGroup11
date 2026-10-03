@@ -1,0 +1,315 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 134  Version: Closure-134b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.AmbiguateProperties, com.google.javascript.jscomp.TypedScopeCreator
+Modified: com.google.javascript.jscomp.AmbiguateProperties, com.google.javascript.jscomp.TypedScopeCreator
+Triggers: com.google.javascript.jscomp.AmbiguatePropertiesTest::testImplementsAndExtends, com.google.javascript.jscomp.TypeCheckTest::testIssue86
+
+Bug/specification summary:
+Bug report: 86
+Trigger failures:
+- com.google.javascript.jscomp.AmbiguatePropertiesTest::testImplementsAndExtends
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.TypeCheckTest::testIssue86
+ --> junit.framework.AssertionFailedError: expected a warning
+Modified: com.google.javascript.jscomp.AmbiguateProperties, com.google.javascript.jscomp.TypedScopeCreator
+
+Prompt-01 test plan:
+TARGETS: AmbiguateProperties.process, recordProperty, maybeMarkCandidate, computeRelatedTypes
+TARGETS: TypedScopeCreator.AbstractScopeBuilder.defineSlot, CollectProperties.visit
+ORACLES: TypeCheck expects warning for malformed @implements/@extends usage (testIssue86)
+ORACLES: AmbiguateProperties should preserve distinct property names across implements/extends
+chains
+CASES: Normal: class A implements I; interface I has prop p; class B extends A overrides p
+CASES: Boundary: multiple interfaces declare same property; property used in both extends and
+implements levels
+CASES: Error: @implements references non-interface; interface method signature mismatch; missing
+JSDoc type
+RISKS: Test oracles derived from regression test names only; exact warning text unknown
+RISKS: No access to full compilation pipeline; type inference may depend on unimplemented operations
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.AmbiguateProperties (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class AmbiguateProperties implements CompilerPass {
+AmbiguateProperties.class.getName());
+private final List<Node> stringNodesToRename = Lists.newArrayList();
+private final Map<String, Property> propertyMap = Maps.newHashMap();
+private final Set<String> externedNames = Sets.newHashSet();
+private final Set<String> quotedNames = Sets.newHashSet();
+private final Map<String, String> renamingMap = Maps.newHashMap();
+private final Map<Integer, String> colorMap = Maps.newHashMap();
+public int compare(Property p1, Property p2) {
+private BiMap<JSType, Integer> intForType = HashBiMap.create();
+private Map<JSType, JSTypeBitSet> relatedBitsets = Maps.newHashMap();
+private void addInvalidatingType(JSType type) {
+private int getIntForType(JSType type) {
+public void process(Node externs, Node root) {
+private BitSet getRelatedTypesOnNonUnion(JSType type) {
+private void computeRelatedTypes(JSType type) {
+class PropertyGraph implements AdjacencyGraph<Property, Void> {
+protected final Map<Property, PropertyGraphNode> nodes = Maps.newHashMap();
+public List<GraphNode<Property, Void>> getNodes() {
+public GraphNode<Property, Void> getNode(Property property) {
+public SubGraph<Property, Void> newSubGraph() {
+public void clearNodeAnnotations() {
+public int getWeight(Property value) {
+class PropertySu
+...[truncated deterministically]...
+a) {
+private class ProcessExterns extends AbstractPostOrderCallback {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private class ProcessProperties extends AbstractPostOrderCallback {
+private void maybeMarkCandidate(Node n, JSType type, NodeTraversal t) {
+private Property recordProperty(String name, JSType type) {
+private boolean isInvalidatingType(JSType type) {
+private Property getProperty(String name) {
+private JSType getJSType(Node n) {
+private class Property {
+private void addNonUnionType(JSType newType) {
+private class JSTypeBitSet extends BitSet {
+private JSTypeBitSet(int size) {
+private JSTypeBitSet() {
+@Override
+public String toString() {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.TypeValidator.TypeMismatch;
+import com.google.javascript.jscomp.graph.AdjacencyGraph;
+import com.google.javascript.jscomp.graph.Annotation;
+import com.google.javascript.jscomp.graph.GraphColoring;
+import com.google.javascript.jscomp.graph.GraphColoring.GreedyGraphColoring;
+import com.google.javascript.jscomp.graph.GraphNode;
+import com.google.javascript.jscomp.graph.SubGraph;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionPrototypeType;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.InstanceObjectType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.UnionType;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.logging.Logger;
+class AmbiguateProperties implements CompilerPass {
+
+/* METHOD AmbiguateProperties */
+AmbiguateProperties(AbstractCompiler compiler,
+ char[] reservedCharacters) {
+ this.compiler = compiler;
+ this.reservedCharacters = reservedCharacters;
+
+ JSTypeRegistry r = compiler.getTypeRegistry();
+ invalidatingTypes = Sets.newHashSet(
+ r.getNativeType
+...[truncated deterministically]...
+T_TYPE),
+ r.getNativeType(JSTypeNative.NO_TYPE),
+ r.getNativeType(JSTypeNative.NULL_TYPE),
+ r.getNativeType(JSTypeNative.VOID_TYPE),
+ r.getNativeType(JSTypeNative.FUNCTION_FUNCTION_TYPE),
+ r.getNativeType(JSTypeNative.FUNCTION_PROTOTYPE),
+ r.getNativeType(JSTypeNative.GLOBAL_THIS),
+ r.getNativeType(JSTypeNative.OBJECT_TYPE),
+ r.getNativeType(JSTypeNative.OBJECT_PROTOTYPE),
+ r.getNativeType(JSTypeNative.OBJECT_FUNCTION_TYPE),
+ r.getNativeType(JSTypeNative.TOP_LEVEL_PROTOTYPE),
+ r.getNativeType(JSTypeNative.UNKNOWN_TYPE));
+
+ for (TypeMismatch mis : compiler.getTypeValidator().getMismatches()) {
+ addInvalidatingType(mis.first);
+ addInvalidatingType(mis.second);
+ }
+ }
+
+/* METHOD process */
+public void process(Node externs, Node root) {
+ NodeTraversal.traverse(compiler, externs, new ProcessExterns());
+ NodeTraversal.traverse(compiler, root, new ProcessProperties());
+
+ Set<String> reservedNames =
+ new HashSet<String>(externedNames.size() + quotedNames.size());
+ reservedNames.addAll(externedNames);
+ reservedNames.addAll(quotedNames);
+
+ int numRenamedPropertyNames = 0;
+ int numSkippedPropertyNames = 0;
+ Set<Property> propsByFreq = new TreeSet<Property>(FREQUENCY_COMPARATOR);
+ for (Property p : propertyMap.values()) {
+ if (!p.skipAmbiguating) {
+ ++numRenamedPropertyNames;
+ computeRelatedTypes(p.type);
+ propsByFreq.add(p);
+ } else {
+ ++numSkippedPropertyNames;
+ reservedNames.add(p.oldName);
+ }
+ }
+
+ PropertyGraph graph = new PropertyGraph(Lists.newLinkedList(propsByFreq));
+ GraphColoring<Property, Void> coloring =
+ new GreedyG
+...[truncated deterministically]...
+= n.getString();
+ Property p = propertyMap.get(oldName);
+ if (p != null && p.newName != null) {
+ Preconditions.checkState(oldName.equals(p.oldName));
+ if (!p.newName.equals(oldName)) {
+ n.setString(p.newName);
+ compiler.reportCodeChange();
+ }
+ }
+ }
+
+ logger.info("Collapsed " + numRenamedPropertyNames + " properties into "
+ + numNewPropertyNames + " and skipped renaming "
+ + numSkippedPropertyNames + " properties.");
+ }
+
+===== com.google.javascript.jscomp.TypedScopeCreator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private Map<ObjectType, ObjectType> delegateProxyMap = Maps.newHashMap();
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static Node getPrototypePropertyOwner(Node n) {
+private abstract class AbstractScopeBuilder
+private AbstractScopeBuilder(Scope scope) {
+@Override
+public abstract void visit(NodeTraversal t, Node n, Node parent);
+private void defineName(Node name, Node var, Node parent, JSDocInfo info) {
+private void defineSlot(Node name, Node parent, JSType type) {
+private final class GlobalScopeBuilder extends AbstractScopeBuilder {
+private final List<Node> nonExternFunctions = Lists.newArrayList();
+private GlobalScopeBuilder(Scope scope) {
+@Override public void visit(NodeTraversal t, Node n, Node parent) {
+private void checkForOldStyleTypedef(NodeTraversal t, Node candidate) {
+private ObjectType getObjectSlot(String slotName) {
+private void resolveStubDeclarations() {
+private final class StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class CollectProperties
+public void visit(NodeTraversal t, Node n, Node parent) {
+private final class LocalScopeBuilder extends AbstractScopeBuilder {
+private LocalScopeBuilder(Scope scope) {
+private void handleFunctionInputs(Node fnNode) {
+private void declareArguments(Node functionNode) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import static com.google.javascript.jscomp.TypeCheck.ENUM_DUP;
+import static com.google.javascript.jscomp.TypeCheck.ENUM_NOT_CO
+...[truncated deterministically]...
+.JSTypeNative.BOOLEAN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.BOOLEAN_OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.DATE_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.EVAL_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.FUNCTION_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NUMBER_OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.RANGE_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.REFERENCE_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.REGEXP_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.STRING_OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.SYNTAX_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.TYPE_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.URI_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.VOID_TYPE;
+import com.google.common.annotations.VisibleForTesting;
+import javax.annotation.Nullable;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.
+...[truncated deterministically]...
+mp.CodingConvention.ObjectLiteralCast;
+import com.google.javascript.jscomp.CodingConvention.SubclassRelationship;
+import com.google.javascript.jscomp.CodingConvention.SubclassType;
+import com.google.javascript.jscomp.NodeTraversal.AbstractShallowCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.EnumType;
+import com.google.javascript.rhino.jstype.FunctionParamBuilder;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import java.util.List;
+import java.util.Map;
+
+/* METHOD build */
+void build() {
+ NodeTraversal.traverse(compiler, scope.getRootNode(), this);
+ }
+
+/* METHOD TypedScopeCreator */
+TypedScopeCreator(AbstractCompiler compiler) {
+ this(compiler, compiler.getCodingConvention());
+ }
+
+/* METHOD TypedScopeCreator */
+TypedScopeCreator(AbstractCompiler compiler,
+ CodingConvention codingConvention) {
+ this.compiler = compiler;
+ this.validator = compiler.getTypeValidator();
+ this.codingConvention = codingConvention;
+ this.typeRegistry = compiler.getTypeRegistry();
+ }
+
+/* METHOD createScope */
+public Scope createScope(Node root, Scope parent) {
+ // Constructing the global scope is very different than constructing
+ // inner scopes, because only global scopes can contain named classes that
+ // show up in the type registry.
+ Scope newScope = null;
+ if (parent == null) {
+ // Find all the classes in the global scope.
+ newScope = createInitialScope(root);
+
+ Globa
+...[truncated deterministically]...
+Scope, delegateProxyMap);
+ } else {
+ newScope = new Scope(parent, root);
+ (new LocalScopeBuilder(newScope)).build();
+ }
+ typeRegistry.resolveTypesInScope(newScope);
+ return newScope;
+ }

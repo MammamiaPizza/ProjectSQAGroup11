@@ -1,0 +1,428 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 159  Version: Closure-159b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.InlineFunctions
+Modified: com.google.javascript.jscomp.InlineFunctions
+Triggers: com.google.javascript.jscomp.InlineFunctionsTest::testIssue423
+
+Bug/specification summary:
+Bug report: 423
+Trigger failures:
+- com.google.javascript.jscomp.InlineFunctionsTest::testIssue423
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.InlineFunctions
+
+Prompt-01 test plan:
+TARGETS: InlineFunctions.process; candidate discovery, reference checks, conflict resolution, expression decomposition. 
+ORACLES: Existing trigger InlineFunctionsTest::testIssue423; its assertion is the only stated expected source. 
+CASES: Named functions, function variables, and function expressions considered as inline candidates. 
+CASES: Candidate usages versus non-candidate name usages; references requiring aliases or block inlining. 
+CASES: Functions referencing this, containing inner functions, or with conflicting called-function dependencies. 
+CASES: Minimum-requirement trimming and cost-based decisions for inline/remove eligibility. 
+RISKS: Bug report supplies no input JavaScript, expected transformed output, or asserted condition. 
+RISKS: Most relevant methods are private/internal; tests likely require compiler-pass integration rather than unit calls.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.InlineFunctions (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class InlineFunctions implements SpecializationAwareCompilerPass {
+private final Map<String, FunctionState> fns = Maps.newHashMap();
+private final Map<Node, String> anonFns = Maps.newHashMap();
+@Override
+public void process(Node externs, Node root) {
+private class FindCandidateFunctions implements Callback {
+public void visit(NodeTraversal t, Node n, Node parent) {
+public void findNamedFunctions(NodeTraversal t, Node n, Node parent) {
+public void findFunctionExpressions(NodeTraversal t, Node n) {
+private void maybeAddFunction(Function fn, JSModule module) {
+private boolean hasLocalNames(Node fnNode) {
+private static Node getContainingFunction(NodeTraversal t) {
+private boolean isCandidateFunction(Function fn) {
+private interface CallVisitorCallback {
+private static class CallVisitor extends AbstractPostOrderCallback {
+protected CallVisitorCallback callback;
+static boolean isCandidateUsage(Node name) {
+private class FindCandidatesReferences
+private void checkNameUsage(NodeTraversal t, Node n, Node parent) {
+private static class Inline implements CallVisitorCallback {
+private void trimCanidatesNotMeetingMinimumRequirements() {
+private boolean mimimizeCost(FunctionState fs) {
+private boolean inliningLowersCost(FunctionState fs) {
+private void resolveInlineConflicts() {
+private void resolveInlineConflictsForFunction(FunctionState fs) {
+private Set<String> findCalledFunctions(Node node) {
+private void decomposeExpressions(Set<String> fnNames) {
+private static class FunctionState {
+public void setReferencesThis(boolean referencesThis) {
+public boolean getReferencesThis() {
+public void setHasInnerFunctions(boolean hasInnerFunctions) {
+public boolean hasInnerFunctions() {
+public boolean hasBlockInliningReferences() {
+public Function getFn() {
+public void setFn(Function fn) {
+public Node getSafeFnNode() {
+public void setSafeFnNode(Node safeFnNode) {
+public boolean canInline() {
+public void setInline(boolean inline) {
+public boolean canRemove() {
+public void setRemove(boolean remove) {
+public boolean canInlineDirectly() {
+public void inlineDirectly(boolean directReplacement) {
+public boolean hasReferences() {
+private Map<Node, Reference> getReferencesInternal() {
+public void addReference(Reference ref) {
+public Collection<Reference> getReferences() {
+public Reference getReference(Node n) {
+public Set<String> getNamesToAlias() {
+public void setNamesToAlias(Set<String> names) {
+public void setModule(JSModule module) {
+public JSModule getModule() {
+private static interface Function {
+public String getName();
+public Node getFunctionNode();
+public void remove();
+public Node getDeclaringBlock();
+/** NamedFunction implementation of the Function interface */
+private static class NamedFunction implements Function {
+public NamedFunction(Node fn) {
+public String getName() {
+public Node getFunctionNode() {
+public void remove() {
+public Node getDeclaringBlock() {
+/** FunctionVar implementation of the Function interface */
+private static class FunctionVar implements Function {
+public FunctionVar(Node var) {
+/** FunctionExpression implementation of the Function interface */
+private static class FunctionExpression implements Function {
+public FunctionExpression(Node fn, int index) {
+class Reference extends FunctionInjector.Reference {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.FunctionInjector.CanInlineResult;
+import com.google.javascript.jscomp.FunctionInjector.InliningMode;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.Callback;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+class InlineFunctions implements SpecializationAwareCompilerPass {
+
+/* METHOD InlineFunctions */
+InlineFunctions(AbstractCompiler compiler,
+ Supplier<String> safeNameIdSupplier,
+ boolean inlineGlobalFunctions,
+ boolean inlineLocalFunctions,
+ boolean blockFunctionInliningEnabled) {
+ Preconditions.checkArgument(compiler != null);
+ Preconditions.checkArgument(safeNameIdSupplier != null);
+ this.compiler = compiler;
+
+ this.inlineGlobalFunctions = inlineGlobalFunctions;
+ this.inlineLocalFunctions = inlineLocalFunctions;
+ this.blockFunctionInliningEnabled = blockFunctionInliningEnabled;
+
+ this.injector = new FunctionInjector(compiler, safeNameIdSupplier, true);
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ Preconditions.checkState(compiler.getLifeCycleStage().isNormalized());
+
+ NodeTraversal.traverse(compiler, root, new FindCandidateFunctions());
+ if (fns.isEmpty()) {
+ return; // Nothing left to do.
+ }
+ NodeTraversal.traverse(compiler, root,
+ new FindCandidatesReferences(fns, anonFns));
+ trimCanidatesNotMeetingMinimumRequirements();
+ if (fns.isEmpty()) {
+ return; // Nothing left to do.
+ }
+
+ // Store the set of function names eligible for inlining and use this to
+ // prevent function names from being moved into temporaries during
+ // expression decomposition. If this movement were allowed it would prevent
+ // the Inline callback from finding the function calls.
+ //
+ // This pass already assumes these are constants, so this is safe for anyone
+ // using function inlining.
+ //
+ Set<String> fnNames = Sets.newHashSet(fns.keySet());
+ injector.setKnownConstants(fnNames);
+
+ trimCanidatesUsingOnCost();
+ if (fns.isEmpty()) {
+ return; // Nothing left to do.
+ }
+ resolveInlineConflicts();
+ decomposeExpressions(fnNames);
+ NodeTraversal.traverse(compiler, root,
+ new CallVisitor(
+ fns, anonFns, new Inline(injector, specializationState)));
+
+ removeInlinedFunctions();
+ }
+
+/* METHOD visitCallSite */
+public void visitCallSite(
+ NodeTraversal t, Node callNode, Node parent, FunctionState fs) {
+ Preconditions.checkState(fs.hasExistingFunctionDefinition());
+ if (fs.canInline()) {
+ Reference ref = fs.getReference(callNode);
+ // There are two cases ref can be null: if the call site was introduce
+ // because it was part of a function that was inlined during this pass
+ // or if the call site was trimmed from the list of references because
+ // the function couldn't be inlined at this location.
+ if (ref != null) {
+ if (specializationState != null) {
+ Node containingFunction = getContainingFunction(t);
+
+ if (containingFunction != null) {
+ // Report that the function was specialized so that
+ // {@link SpecializeModule} can fix it up.
+ specializationState.reportSpecializedFunction(containingFunction);
+ }
+ }
+
+ inlineFunction(t, callNode, fs, ref.mode);
+ // Keep track of references that have been inlined so that
+ // we can verify that none have been missed.
+ ref.inlined = true;
+ }
+ }
+ }
+
+ /**
+ * Inline a function into the call site.
+ */
+ private void inlineFunction(
+ NodeTraversal t, Node callNode, FunctionState fs, InliningMode mode) {
+ Function fn = fs.getFn();
+ String fnName = fn.getName();
+ Node fnNode = fs.getSafeFnNode();
+
+ Node newCode = injector.inline(t, callNode, fnName, fnNode, mode);
+ t.getCompiler().reportCodeChange();
+ t.getCompiler().addToDebugLog("Inlined function: " + fn.getName());
+ }
+ }
+
+ /**
+ * Remove entries that aren't a valid inline candidates, from the list of
+ * encountered names.
+ */
+ private void trimCanidatesNotMeetingMinimumRequirements() {
+ Iterator<Entry<String, FunctionState>> i;
+ for (i = fns.entrySet().iterator(); i.hasNext();) {
+ FunctionState fs = i.next().getValue();
+ if (!fs.hasExistingFunctionDefinition() || !fs.canInline()) {
+ i.remove();
+ }
+ }
+ }
+
+ /**
+ * Remove entries from the list of candidates that can't be inlined.
+ */
+ void trimCanidatesUsingOnCost() {
+ Iterator<Ent
+...[truncated deterministically]...
+ferences()) {
+ // Only inline function if it decreases the code size.
+ boolean lowersCost = mimimizeCost(fs);
+ if (!lowersCost) {
+ // It shouldn't be inlined; remove it from the list.
+ i.remove();
+ }
+ }
+
+/* METHOD inlineFunction */
+private void inlineFunction(
+ NodeTraversal t, Node callNode, FunctionState fs, InliningMode mode) {
+ Function fn = fs.getFn();
+ String fnName = fn.getName();
+ Node fnNode = fs.getSafeFnNode();
+
+ Node newCode = injector.inline(t, callNode, fnName, fnNode, mode);
+ t.getCompiler().reportCodeChange();
+ t.getCompiler().addToDebugLog("Inlined function: " + fn.getName());
+ }
+
+/* METHOD removeInlinedFunctions */
+void removeInlinedFunctions() {
+ for (FunctionState fs : fns.values()) {
+ if (fs.canRemove()) {
+ Function fn = fs.getFn();
+ Preconditions.checkState(fs.canInline());
+ Preconditions.checkState(fn != null);
+ verifyAllReferencesInlined(fs);
+
+ if (specializationState != null) {
+ specializationState.reportRemovedFunction(
+ fn.getFunctionNode(), fn.getDeclaringBlock());
+ }
+
+ fn.remove();
+ compiler.reportCodeChange();
+ }
+ }
+ }
+
+/* METHOD setInline */
+public void setInline(boolean inline) {
+ this.inline = inline;
+ if (inline == false) {
+ // No need to keep references to function that can't be inlined.
+ references = null;
+ // Don't remove functions that we aren't inlining.
+ remove = false;
+ }
+ }
+
+ public boolean canRemove() {
+ return remove;
+ }
+
+ public void setRemove(boolean remove) {
+ this.remove = remove;
+ }
+
+ public boolean canInlineDirectly() {
+ return inlineDirectly;
+ }
+
+ public void inlineDirectly(boolean directReplacement) {
+ this.inlineDirectly = directReplacement;
+ }
+
+ public boolean hasReferences() {
+ return (references != null && !references.isEmpty());
+ }
+
+ private Map<Node, Reference> getReferencesInternal() {
+ if (references == null) {
+ return Collections.emptyMap();
+ }
+ return references;
+ }
+
+ public void addReference(Reference ref) {
+ if (references == null) {
+ references = Maps.newHashMap();
+ }
+ references.put(ref.callNode, ref);
+ }
+
+ public Collection<Reference> getReferences() {
+ return getReferencesInternal().values();
+ }
+
+ public Reference getReference(Node n) {
+ return getReferencesInternal().get(n);
+ }
+
+ public Set<String> getNamesToAlias() {
+ if (namesToAlias == null) {
+ return Collections.emptySet();
+ }
+ return Collections.unmodifiableSet(namesToAlias);
+ }
+
+ public void setNamesToAlias(Set<String> names) {
+ namesToAlias = names;
+ }
+
+ public void setModule(JSModule module) {
+ this.module = module;
+ }
+
+ public JSModule getModule() {
+ return module;
+ }
+ }
+
+ /**
+ * Interface for dealing with function declarations and function
+ * expressions equally
+ */
+ private static interface Function {
+ /** Gets the name of the function */
+ public String getName();
+
+ /** Gets the function node */
+ public Node getFunctionNode();
+
+ /** Removes itself from the javascript */
+ public void remove();
+
+ public Node getDeclaringBlock();
+ }
+
+ /** NamedFunction implementation of the Function interface */
+ private static class NamedFun
+...[truncated deterministically]...
+public String getName() {
+ return var.getFirstChild().getString();
+ }
+
+ public Node getFunctionNode() {
+ return var.getFirstChild().getFirstChild();
+ }
+
+ public void remove() {
+ NodeUtil.removeChild(var.getParent(), var);
+ }
+
+ @Override
+ public Node getDeclaringBlock() {
+ return var.getParent();
+ }
+ }
+
+ /** FunctionExpression implementation of the Function interface */
+ private static class FunctionExpression implements Function {
+ private final Node fn;
+ private final String fakeName;
+
+ public FunctionExpression(Node fn, int index) {
+ this.fn = fn;
+ // A number is not a valid function javascript indentifier
+ // so we don't need to worry about collisions.
+ this.fakeName = String.valueOf(index);
+ }
+
+ public String getName() {
+ return fakeName;
+ }
+
+ public Node getFunctionNode() {
+ return fn;
+ }
+
+ public void remove() {
+ // Nothing to do. The function is removed with the call.
+ }
+
+ @Override
+ public Node getDeclaringBlock() {
+ return null;
+ }
+
+ }

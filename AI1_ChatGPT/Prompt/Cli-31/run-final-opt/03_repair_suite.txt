@@ -1,0 +1,170 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 31  Version: Cli-31b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-205
+Trigger failures:
+- org.apache.commons.cli.HelpFormatterTest::testDefaultArgName
+ --> junit.framework.ComparisonFailure: expected:<usage: app -f <arg[ument]>
+Modified: org.apache.commons.cli.HelpFormatter, org.apache.commons.cli.Option, org.apache.commons.cli.OptionBuilder
+
+Available API/signatures:
+[org.apache.commons.cli.HelpFormatter | java]
+package org.apache.commons.cli;
+public class HelpFormatter
+public static final int DEFAULT_WIDTH = 74;
+public static final int DEFAULT_LEFT_PAD = 1;
+public static final int DEFAULT_DESC_PAD = 3;
+public static final String DEFAULT_SYNTAX_PREFIX = "usage: ";
+public static final String DEFAULT_OPT_PREFIX = "-";
+public static final String DEFAULT_LONG_OPT_PREFIX = "--";
+public static final String DEFAULT_LONG_OPT_SEPARATOR = " ";
+public static final String DEFAULT_ARG_NAME = "arg";
+public int defaultWidth = DEFAULT_WIDTH;
+public int defaultLeftPad = DEFAULT_LEFT_PAD;
+public int defaultDescPad = DEFAULT_DESC_PAD;
+public String defaultSyntaxPrefix = DEFAULT_SYNTAX_PREFIX;
+public String defaultNewLine = System.getProperty("line.separator");
+public String defaultOptPrefix = DEFAULT_OPT_PREFIX;
+pub
+...[truncated deterministically]...
+ftPad, int descPad)
+final String lpad = createPadding(leftPad);
+final String dpad = createPadding(descPad);
+final String padding = createPadding(nextLineTabStop);
+protected int findWrapPos(String text, int width, int startPos)
+protected String createPadding(int len)
+protected String rtrim(String s)
+private static class OptionComparator implements Comparator
+public int compare(Object o1, Object o2)
+
+[org.apache.commons.cli.Option | java]
+package org.apache.commons.cli;
+public class Option implements Cloneable, Serializable
+public static final int UNINITIALIZED = -1;
+public static final int UNLIMITED_VALUES = -2;
+private List values = new ArrayList();
+public Option(String opt, String description) throws IllegalArgumentException
+public Option(String opt, boolean hasArg, Strin
+...[truncated deterministically]...
+Arg(boolean hasArg)
+public static OptionBuilder withArgName(String name)
+public static OptionBuilder isRequired()
+public static OptionBuilder withValueSeparator(char sep)
+public static OptionBuilder withValueSeparator()
+public static OptionBuilder isRequired(boolean newRequired)
+public static OptionBuilder hasArgs()
+public static OptionBuilder hasArgs(int num)
+public static OptionBuilder hasOptionalArg()
+public static OptionBuilder hasOptionalArgs()
+public static OptionBuilder hasOptionalArgs(int numArgs)
+public static OptionBuilder withType(Object newType)
+public static OptionBuilder withDescription(String newDescription)
+public static Option create(char opt) throws IllegalArgumentException
+public static Option create() throws IllegalArgumentException
+public static Option create(String opt) throws IllegalArgumentException
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
+import junit.framework.TestCase;
+
+public class HelpFormatterDefaultArgNameRegressionTest extends TestCase {
+
+    public void testConfiguredDefaultArgNameIsUsedForOptionWithoutExplicitName() {
+        Option option = new Option("f", true, "file");
+        assertNull(option.getArgName());
+
+        assertEquals("usage: app -f <argument>" + System.getProperty("line.separator"),
+                renderUsage(option, "argument"));
+    }
+
+    public void testExplicitOptionArgNameOverridesFormatterDefault() {
+        Option option = new Option("f", true, "file");
+        option.setArgName("file");
+
+        assertEquals("file", option.getArgName());
+        assertEquals("usage: app -f <file>" + System.getProperty("line.separator"),
+                renderUsage(option, "argument"));
+    }
+
+    public void testBuilderHasArgLeavesArgNameUnsetForFormatterDefault() {
+        OptionBuilder.hasArg();
+        Option option = OptionBuilder.create("f");
+
+        assertNull(option.getArgName());
+        assertEquals("usage: app -f <argument>" + System.getProperty("line.separator"),
+                renderUsage(option, "argument"));
+    }
+
+    public void testBuilderWithArgNameTransfersExplicitName() {
+        OptionBuilder.withArgName("file");
+        OptionBuilder.hasArg();
+        Option option = OptionBuilder.create("f");
+
+        assertEquals("file", option.getArgName());
+        assertEquals("usage: app -f <file>" + System.getProperty("line.separator"),
+                renderUsage(option, "argument"));
+    }
+
+    public void testBuilderResetDoesNotRetainArgNameAfterCreate() {
+        OptionBuilder.withArgName("first");
+        OptionBuilder.hasArg();
+        OptionBuilder.create("a");
+
+        OptionBuilder.hasArg();
+        Option option = OptionBuilder.create("b");
+
+        assertNull(option.getArgName());
+        assertEquals("usage: app -b <argument>" + System.getProperty("line.separator"),
+                renderUsage(option, "argument"));
+    }
+
+    public void testNoArgumentOptionDoesNotRenderArgumentPlaceholder() {
+        Option option = new Option("v", false, "verbose");
+
+        assertFalse(option.hasArg());
+        assertEquals("usage: app -v" + System.getProperty("line.separator"),
+                renderUsage(option, "argument"));
+    }
+
+    public void testInvalidEmptyOptionNameIsRejected() {
+        try {
+            new Option("", true, "invalid");
+            fail("An empty option name must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    private String renderUsage(Option option, String defaultArgName) {
+        option.setRequired(true);
+
+        Options options = new Options();
+        options.addOption(option);
+
+        HelpFormatter formatter = new HelpFormatter();
+        formatter.defaultArgName = defaultArgName;
+
+        StringWriter output = new StringWriter();
+        PrintWriter writer = new PrintWriter(output);
+        formatter.printUsage(writer, 80, "app", options);
+        writer.flush();
+
+        return output.toString();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.cli.HelpFormatterDefaultArgNameRegressionTest::testInvalidEmptyOptionNameIsRejected
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.cli.HelpFormatterDefaultArgNameRegressionTest::testInvalidEmptyOptionNameIsRejected

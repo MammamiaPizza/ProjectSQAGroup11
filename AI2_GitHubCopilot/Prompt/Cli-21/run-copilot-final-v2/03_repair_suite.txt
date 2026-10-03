@@ -1,0 +1,262 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 21  Version: Cli-21b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-150
+Trigger failures:
+- org.apache.commons.cli2.bug.BugCLI150Test::testNegativeNumber
+ --> org.apache.commons.cli2.OptionException: Unexpected -42 while processing --num
+Modified: org.apache.commons.cli2.WriteableCommandLine, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.GroupImpl
+
+Available API/signatures:
+[org.apache.commons.cli2.WriteableCommandLine | java]
+package org.apache.commons.cli2;
+public interface WriteableCommandLine extends CommandLine {
+void addOption(final Option option);
+void addValue(final Option option, final Object value);
+List getUndefaultedValues(final Option option);
+void setDefaultValues(final Option option, final List defaultValues);
+void addSwitch(final Option option, final boolean value) throws IllegalStateException;
+void setDefaultSwitch(final Option option, final Boolean defaultSwitch);
+void addProperty(final Option option, final String property, final String value);
+void addProperty(final String property, final String value);
+boolean looksLikeOption(final String argument);
+
+[org.apache.commons.cli2.commandline.WriteableCommandLineImpl | java]
+package org.apache.commons.cli2.commandline;
+public class WriteableCommandLineImpl
+private final Map optionToProperties = new HashMap();
+private final List options = new ArrayList();
+private final Map nameToOption = new HashMap();
+private final Map values = new HashMap();
+private final Map switches = new HashMap();
+private final Map defaultValues = new HashMap();
+private final Map defaultSwitches = new HashMap();
+public void addOption(Option option) {
+public boolean hasOption(final Option option) {
+final boolean present = options.contains(option);
+public Option getOption(final String trigger) {
+public List getUndefaultedValues(Option option) {
+public String getProperty(final String property) {
+public void addProperty(final String property, final String value) {
+public Set getProperties(fin
+...[truncated deterministically]...
+ksLikeOption(final String trigger)
+for (final Ite
+...[truncated deterministically]...
+ailMap(arg);
+for (final Iterator iter = tailMap.values().iterator(); iter.hasNext();) {
+final Option option = (Option) iter.next();
+public Set getPrefixes() {
+public Set getTriggers() {
+final String arg = (String) arguments.next();
+final Option opt = (Option) optionMap.get(arg);
+final Collection values = optionMap.tailMap(arg).values();
+for (final Iterator i = anonymous.iterator(); i.hasNext();
+...[truncated deterministically]...
+inimum() {
+public int getMaximum() {
+public boolean isRequired()
+public void defaults(final WriteableCommandLine commandLine) {
+class ReverseStringComparator implements Comparator {
+private static final Comparator instance = new ReverseStringComparator();
+private ReverseStringComparator() {
+public static final Comparator getInstance() {
+final String s1 = (String) o1;
+final String s2 = (String) o2;
+
+Generated JUnit Test:
+package org.apache.commons.cli2.bug;
+
+ import junit.framework.TestCase;
+ import org.apache.commons.cli2.*;
+ import org.apache.commons.cli2.builder.*;
+ import java.util.List;
+
+ /**
+  * Tests for negative-number handling (CLI-150).
+  * Verifies that numeric arguments like "-42" are treated as option values,
+  * not as option triggers.
+  */
+ public class BugCLI150Test extends TestCase {
+
+     private DefaultOptionBuilder ob;
+     private ArgumentBuilder ab;
+     private Parser parser;
+
+     private Option numOption;
+     private Option multiNumOption;
+     private Option anonArg;
+     private Option flagOption;
+
+     private Group numGroup;
+     private Group numAnonGroup;
+     private Group numFlagGroup;
+     private Group multinumGroup;
+
+     protected void setUp() {
+         ob = new DefaultOptionBuilder();
+         ab = new ArgumentBuilder();
+         parser = new Parser();
+
+         // --num with a single value
+         numOption = ob.withLongName("num")
+                       .withArgument(ab.withName("number")
+                                       .withMinimum(1)
+                                       .withMaximum(1)
+                                       .create())
+                       .create();
+
+         // --num allowed to take multiple values
+         multiNumOption = ob.withLongName("num")
+                            .withArgument(ab.withName("number")
+                                            .withMinimum(1)
+                                            .withMaximum(Integer.MAX_VALUE)
+                                            .create())
+                            .create();
+
+         // anonymous trailing argument
+         anonArg = ab.withName("anon")
+                     .withMinimum(0)
+                     .withMaximum(1)
+                     .create();
+
+         // boolean flag
+         flagOption = ob.withLongName("flag").create();
+
+         // various groups
+         numGroup = new GroupBuilder()
+                     .withName("num")
+                     .withOption(numOption)
+                     .create();
+
+         numAnonGroup = new GroupBuilder()
+                         .withName("numAnon")
+                         .withOption(numOption)
+                         .withOption(anonArg)   // becomes anonymous
+                         .create();
+
+         numFlagGroup = new GroupBuilder()
+                         .withName("numFlag")
+                         .withOption(numOption)
+                         .withOption(flagOption)
+                         .create();
+
+         multinumGroup = new GroupBuilder()
+                         .withName("multi")
+                         .withOption(multiNumOption)
+                         .create();
+     }
+
+     private CommandLine safeParse(Group group, String[] args) {
+         try {
+             return parser.parse(group, args);
+         } catch (OptionException e) {
+             fail("OptionException should not be thrown for negative values: " + e.getMessage());
+             return null; // never reached
+         }
+     }
+
+     // 1. basic negative integer
+     public void testNegativeNumber() {
+         CommandLine cl = safeParse(numGroup, new String[] { "--num", "-42" });
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-42", cl.getValue(numOption));
+     }
+
+     // 2. negative value via equals syntax
+     public void testNegativeNumberWithEquals() {
+         CommandLine cl = safeParse(numGroup, new String[] { "--num=-42" });
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-42", cl.getValue(numOption));
+     }
+
+     // 3. negative zero
+     public void testNegativeZero() {
+         CommandLine cl = safeParse(numGroup, new String[] { "--num", "-0" });
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-0", cl.getValue(numOption));
+     }
+
+     // 4. negative floating-point value
+     public void testNegativeFloat() {
+         CommandLine cl = safeParse(numGroup, new String[] { "--num", "-3.14" });
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-3.14", cl.getValue(numOption));
+     }
+
+     // 5. option accepting multiple negative values
+     public void testMultipleNegativeValues() {
+         CommandLine cl = safeParse(multinumGroup, new String[] { "--num", "-1", "-2" });
+         assertTrue(cl.hasOption(multiNumOption));
+         List values = cl.getValues(multiNumOption);
+         assertEquals("wrong number of values", 2, values.size());
+         assertEquals("-1", values.get(0));
+         assertEquals("-2", values.get(1));
+     }
+
+     // 6. "--" separator turns following negative numbers into anonymous arguments
+     public void testDashDashSeparator() {
+         CommandLine cl = safeParse(numAnonGroup, new String[] { "--num", "-1", "--", "-42" });
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-1", cl.getValue(numOption));
+         assertTrue(cl.hasOption(anonArg));
+         assertEquals("-42", cl.getValue(anonArg));
+     }
+
+     // 7. single dash as value
+     public void testDashAlone() {
+         CommandLine cl = safeParse(numGroup, new String[] { "--num", "-" });
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-", cl.getValue(numOption));
+     }
+
+     // 8. mixing a boolean flag with a negative option value
+     public void testMixedOptionFlagNegativeValue() {
+         CommandLine cl = safeParse(numFlagGroup, new String[] { "--flag", "--num", "-42" });
+         assertTrue(cl.hasOption(flagOption));
+         assertEquals(Boolean.TRUE, cl.getValue(flagOption));
+         assertTrue(cl.hasOption(numOption));
+         assertEquals("-42", cl.getValue(numOption));
+     }
+
+     // 9. direct looksLikeOption checks
+     public void testLooksLikeOption() {
+         CommandLine cl = safeParse(numGroup, new String[] { "--num", "-42" });
+         WriteableCommandLine wcl = (WriteableCommandLine) cl;
+         // negative numbers must NOT be considered option triggers
+         assertFalse("should not look like option: -42", wcl.looksLikeOption("-42"));
+         assertFalse("should not look like option: -3.14", wcl.looksLikeOption("-3.14"));
+         assertFalse("should not look like option: -0", wcl.looksLikeOption("-0"));
+         // well-known option triggers must be recognised
+         assertTrue("should recognise --num", wcl.looksLikeOption("--num"));
+         assertTrue("should recognise --flag", wcl.looksLikeOption("--flag"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-21f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-21f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Cli-21f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+ [mkdir] Created dir: /root/sqa-workspaces/Cli-21f-copilot/target
+ [get] To: /root/sqa-workspaces/Cli-21f-copilot/target/lib/junit/jars/junit-3.8.1.jar
+ [get] Error getting file:/root/defects4j/framework/projects/lib/junit-4.12.jar to /root/sqa-workspaces/Cli-21f-copilot/target/lib/junit/jars/junit-3.8.1.jar
+
+get-dep-junit.jar:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-21f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-21f-copilot/.test_suite/org/apache/commons/cli2/bug/BugCLI150Test.java:17: error: cannot find symbol
+ [javac] private Parser parser;
+ [javac] ^
+ [javac] symbol: class Parser
+ [javac] location: class BugCLI150Test
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

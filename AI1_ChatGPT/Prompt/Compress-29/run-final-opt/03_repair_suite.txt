@@ -1,0 +1,213 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 29  Version: Compress-29b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-306
+Trigger failures:
+- org.apache.commons.compress.archivers.ArchiveStreamFactoryTest::testEncodingInputStream
+ --> junit.framework.AssertionFailedError: Tests failed: 20
+ - org.apache.commons.compress.archivers.ArchiveStreamFactoryTest::testEncodingInputStreamAutodetect
+ --> junit.framework.AssertionFailedError: Tests failed: 24
+ - org.apache.commons.compress.archivers.ArchiveStreamFactoryTest::testEncodingOutputStream
+ --> junit.framework.AssertionFailedError: Tests failed: 14
+Modified: org.apache.commons.compress.archivers.ArchiveStreamFactory, org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream, org.apache.commons.compress.archivers.cpio.CpioArchiveOutputStream, org.apache.commons.compress.archivers.dump.DumpArchiveInputStream, org.apache.commons.compress.archivers.tar.TarArchiveInputStream, org.apache.commons.compress.archivers.tar.TarArchiveOutputStream, org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.ArchiveStreamFactory | java]
+package org.apache.commons.compress.archivers;
+public class ArchiveStreamFactory {
+public static final String AR = "ar";
+public static final String ARJ = "arj";
+public static final String CPIO = "cpio";
+public static final String DUMP = "dump";
+public static final String JAR = "jar";
+public static final String TAR = "tar";
+public static final String ZIP = "zip";
+public static final String SEVEN_Z = "7z";
+public ArchiveStreamFactory() {
+public ArchiveStreamFactory(String encoding) {
+public String getEntryEncoding() {
+@Deprecated
+public void setEntryEncoding(String entryEncoding) {
+public ArchiveInputStream createArchiveInputStream(final InputStream in)
+
+[org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream | java]
+package org.apache.commons.compress.archivers.cpio;
+public class CpioArchiveInputStream extends ArchiveInputStream implements
+public CpioArchiveInputStream(final InputStream in) {
+public CpioArchiveInputStream(final InputStream in, String encoding) {
+public CpioArchiveInputStream(final InputStream in, int blockSize) {
+public CpioArchiveInputStream(final InputStream in, int blockSize, String encoding) {
+@Override
+public int available() throws IOException {
+public void close() throws IOException {
+private void closeEntry() throws IOException {
+private void ensureOpen() throws IOException {
+public CpioArchiveEntry getNextCPIOEntry() throws IOException {
+private void skip(int bytes) throws IOException{
+public int read(final byte[] b, final int off, final int len)
+private final int readFully(fi
+...[truncated deterministically]...
+Entry readOldBinaryEntry(
+...[truncated deterministically]...
+Stream(InputStream inputStream, String encoding, boolean useUnicodeExtraFields) {
+public ZipArchiveEntry getNextZipEntry() throws IOException {
+final GeneralPurposeBit gpFlag = GeneralPurposeBit.parse(LFH_BUF, off);
+final boolean hasUTF8Flag = gpFlag.usesUTF8ForNames();
+private void readFirstLocalFileHeader(byte[] lfh) throws IOException {
+private void processZip64Extra(ZipLong size, ZipLong cS
+...[truncated deterministically]...
+{
+public int read(final byte[] b, final int off, final int len) throws IOException {
+final long maxRead = max >= 0 ? Math.min(len, max - pos) : len;
+final int bytesRead = in.read(b, off, (int) maxRead);
+public long skip(final long n) throws IOException {
+final long toSkip = max >= 0 ? Math.min(n, max - pos) : n;
+final long skippedBytes = in.skip(toSkip);
+public int available() throws IOException {
+
+Generated JUnit Test:
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.ArchiveStreamFactory;
+import org.apache.commons.compress.archivers.cpio.CpioArchiveEntry;
+import org.apache.commons.compress.archivers.cpio.CpioConstants;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class ArchiveStreamFactoryEncodingRegressionTest {
+
+    private static final String UTF8 = "UTF-8";
+    private static final String LATIN1 = "ISO-8859-1";
+
+    @Test
+    public void configuredEncodingIsReportedByFactory() {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory(UTF8);
+
+        assertEquals(UTF8, factory.getEntryEncoding());
+    }
+
+    @Test
+    public void explicitCpioStreamCreationPreservesUtf8EntryName() throws Exception {
+        String name = "ä-東京.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.CPIO, UTF8, name);
+
+        assertEntryName(name, new ArchiveStreamFactory(UTF8)
+                .createArchiveInputStream(ArchiveStreamFactory.CPIO,
+                        new ByteArrayInputStream(archive)));
+    }
+
+    @Test
+    public void explicitTarStreamCreationPreservesUtf8EntryName() throws Exception {
+        String name = "ä-東京.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.TAR, UTF8, name);
+
+        assertEntryName(name, new ArchiveStreamFactory(UTF8)
+                .createArchiveInputStream(ArchiveStreamFactory.TAR,
+                        new ByteArrayInputStream(archive)));
+    }
+
+    @Test
+    public void explicitZipStreamCreationPreservesLatin1EntryName() throws Exception {
+        String name = "café.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.ZIP, LATIN1, name);
+
+        assertEntryName(name, new ArchiveStreamFactory(LATIN1)
+                .createArchiveInputStream(ArchiveStreamFactory.ZIP,
+                        new ByteArrayInputStream(archive)));
+    }
+
+    @Test
+    public void autodetectedCpioStreamUsesConfiguredEncoding() throws Exception {
+        String name = "ä-東京.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.CPIO, UTF8, name);
+
+        assertEntryName(name, new ArchiveStreamFactory(UTF8)
+                .createArchiveInputStream(new ByteArrayInputStream(archive)));
+    }
+
+    @Test
+    public void autodetectedTarStreamUsesConfiguredEncoding() throws Exception {
+        String name = "ä-東京.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.TAR, UTF8, name);
+
+        assertEntryName(name, new ArchiveStreamFactory(UTF8)
+                .createArchiveInputStream(new ByteArrayInputStream(archive)));
+    }
+
+    @Test
+    public void autodetectedZipStreamUsesConfiguredEncoding() throws Exception {
+        String name = "café.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.ZIP, LATIN1, name);
+
+        assertEntryName(name, new ArchiveStreamFactory(LATIN1)
+                .createArchiveInputStream(new ByteArrayInputStream(archive)));
+    }
+
+    @Test
+    public void zipOutputCreatedByFactoryUsesConfiguredEncoding() throws Exception {
+        String name = "café.txt";
+        byte[] archive = createArchive(ArchiveStreamFactory.ZIP, LATIN1, name);
+
+        ZipArchiveInputStream input = new ZipArchiveInputStream(
+                new ByteArrayInputStream(archive), LATIN1);
+        assertEntryName(name, input);
+    }
+
+    private byte[] createArchive(String format, String encoding, String name) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        ArchiveOutputStream output = new ArchiveStreamFactory(encoding)
+                .createArchiveOutputStream(format, bytes);
+
+        if (ArchiveStreamFactory.CPIO.equals(format)) {
+            CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW, name);
+            entry.setSize(0);
+            output.putArchiveEntry(entry);
+        } else if (ArchiveStreamFactory.TAR.equals(format)) {
+            TarArchiveEntry entry = new TarArchiveEntry(name);
+            entry.setSize(0);
+            output.putArchiveEntry(entry);
+        } else if (ArchiveStreamFactory.ZIP.equals(format)) {
+            ZipArchiveEntry entry = new ZipArchiveEntry(name);
+            entry.setSize(0);
+            output.putArchiveEntry(entry);
+        } else {
+            throw new IllegalArgumentException("Unsupported test format: " + format);
+        }
+
+        output.closeArchiveEntry();
+        output.finish();
+        output.close();
+        return bytes.toByteArray();
+    }
+
+    private void assertEntryName(String expectedName, ArchiveInputStream input) throws Exception {
+        try {
+            ArchiveEntry entry = input.getNextEntry();
+            assertNotNull(entry);
+            assertEquals(expectedName, entry.getName());
+        } finally {
+            input.close();
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - ArchiveStreamFactoryEncodingRegressionTest::explicitCpioStreamCreationPreservesUtf8EntryName
+ - ArchiveStreamFactoryEncodingRegressionTest::autodetectedCpioStreamUsesConfiguredEncoding
+
+Failing generated tests: ArchiveStreamFactoryEncodingRegressionTest::autodetectedCpioStreamUsesConfiguredEncoding, ArchiveStreamFactoryEncodingRegressionTest::explicitCpioStreamCreationPreservesUtf8EntryName

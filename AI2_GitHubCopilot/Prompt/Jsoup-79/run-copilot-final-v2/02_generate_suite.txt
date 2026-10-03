@@ -1,0 +1,125 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 79  Version: Jsoup-79b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.nodes.LeafNode
+Modified: org.jsoup.nodes.LeafNode
+Triggers: org.jsoup.nodes.TextNodeTest::testLeadNodesHaveNoChildren
+
+Bug/specification summary:
+Bug report: 1032
+Trigger failures:
+- org.jsoup.nodes.TextNodeTest::testLeadNodesHaveNoChildren
+ --> java.lang.UnsupportedOperationException: Leaf Nodes do not have child nodes.
+Modified: org.jsoup.nodes.LeafNode
+
+Prompt-01 test plan:
+Based on the provided context, here is the analysis for test generation:
+
+TARGETS: LeafNode.childNodes(), childNodeSize(), ensureChildNodes()
+ORACLES: UnsupportedOperationException with specific message for child ops
+CASES: Call childNodes(); Call childNodeSize(); verify empty list or 0
+RISKS: LeafNode is abstract; needs concrete subclass (TextNode) access
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.LeafNode (java) =====
+package org.jsoup.nodes;
+
+import org.jsoup.helper.Validate;
+
+import java.util.List;
+
+abstract class LeafNode extends Node {
+
+ Object value; // either a string value, or an attribute map (in the rare case multiple attributes are set)
+
+ protected final boolean hasAttributes() {
+ return value instanceof Attributes;
+ }
+
+ @Override
+ public final Attributes attributes() {
+ ensureAttributes();
+ return (Attributes) value;
+ }
+
+ private void ensureAttributes() {
+ if (!hasAttributes()) {
+ Object coreValue = value;
+ Attributes attributes = new Attributes();
+ value = attributes;
+ if (coreValue != null)
+ attributes.put(nodeName(), (String) coreValue);
+ }
+ }
+
+ String coreValue() {
+ return attr(nodeName());
+ }
+
+ void coreValue(String value) {
+ attr(nodeName(), value);
+ }
+
+ @Override
+ public String attr(String key) {
+ Validate.notNull(key);
+ if (!hasAttributes()) {
+ return key.equals(nodeName()) ? (String) value : EmptyString;
+ }
+ return super.attr(key);
+ }
+
+ @Override
+ public Node attr(String key, String value) {
+ if (!hasAttributes() && key.equals(nodeName())) {
+ this.value = value;
+ } else {
+ ensureAttributes();
+ super.attr(key, value);
+ }
+ return this;
+ }
+
+ @Override
+ public boolean hasAttr(String key) {
+ ensureAttributes();
+ return super.hasAttr(key);
+ }
+
+ @Override
+ public Node removeAttr(String key) {
+ ensureAttributes();
+ return super.removeAttr(key);
+ }
+
+ @Override
+ public String absUrl(String key) {
+ ensureAttributes();
+ return super.absUrl(key);
+ }
+
+ @Override
+ public String baseUri() {
+ return hasParent() ? parent().baseUri() : "";
+ }
+
+ @Override
+ protected void doSetBaseUri(String baseUri) {
+ // noop
+ }
+
+ @Override
+ public int childNodeSize() {
+ return 0;
+ }
+
+ @Override
+ protected List<Node> ensureChildNodes() {
+ throw new UnsupportedOperationException("Leaf Nodes do not have child nodes.");
+ }
+}

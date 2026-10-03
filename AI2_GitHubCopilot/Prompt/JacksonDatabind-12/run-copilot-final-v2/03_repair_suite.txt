@@ -1,0 +1,262 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 12  Version: JacksonDatabind-12b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 735
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestCustomDeserializers::testCustomMapValueDeser735
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<100>
+Modified: com.fasterxml.jackson.databind.deser.std.MapDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.std.MapDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class MapDeserializer
+protected final JavaType _mapType;
+protected final KeyDeserializer _keyDeserializer;
+protected boolean _standardStringKey;
+protected final JsonDeserializer<Object> _valueDeserializer;
+protected final TypeDeserializer _valueTypeDeserializer;
+protected final ValueInstantiator _valueInstantiator;
+protected final boolean _hasDefaultCreator;
+protected JsonDeserializer<Object> _delegateDeserializer;
+protected PropertyBasedCreator _propertyBasedCreator;
+protected HashSet<String> _ignorableProperties;
+protected MapDeserializer(MapDeserializer src)
+@SuppressWarnings("unchecked")
+protected final boolean _isStdKeyDeser(JavaType mapType, KeyDeserializer keyDeser)
+return ((rawKeyType == String.class || rawKeyType == Object.class)
+public void setIgnorableProperties(String[] ignorable) {
+@Override
+public void resolve(DeserializationContext ctxt) throws JsonMappingException
+public JavaType getContentType() {
+public JsonDeserializer<Object> getContentDeserializer() {
+public boolean isCachable() {
+public Map<Object,Object> deserialize(JsonParser jp, DeserializationContext ctxt)
+final Map<Object,Object> result = (Map<Object,Object>) _valueInstantiator.createUsingDefault(ctxt);
+public final Class<?> getMapClass() { return (Class<Map<Object,Object>>) _mapType.getRawClass(); }
+@Override public JavaType getValueType() { return _mapType; }
+public Map<Object,Object> _deserializeUsingCreator(JsonParser jp, DeserializationContext ctxt)
+@Deprecated // since 2.5
+protected void wrapAndThrow(Throwable t, Object ref) throws IOException {
+protected void wrapAndThrow(Throwable t, Object ref, String key) throws IOException
+private final static class MapReferringAccumulator {
+private List<MapReferring> _accumulator = new ArrayList<MapReferring>();
+public MapReferringAccumulator(Class<?> valueType, Map<Object, Object> result) {
+public void put(Object key, Object value)
+public Referring handleUnresolvedReference(UnresolvedForwardReference reference, Object key)
+public void resolveForwardReference(Object id, Object value) throws IOException
+private final static class MapReferring extends Referring {
+public final Map<Object, Object> next = new LinkedHashMap<Object, Object>();
+public final Object key;
+public void handleResolvedForwardReference(Object id, Object value) throws IOException {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.std;
+
+ import static org.junit.Assert.*;
+
+ import com.fasterxml.jackson.core.*;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+ import com.fasterxml.jackson.databind.module.SimpleModule;
+ import java.io.IOException;
+ import java.util.*;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ /**
+  * Tests for MapDeserializer that expose the caching issue described in bug #735.
+  * The bug is that {@link MapDeserializer#isCachable()} does not consider the presence of a
+  * custom value deserializer, causing the deserializer to be cached and reused later without the
+  * custom deserializer when an annotation-based custom deserializer should apply.
+  */
+ public class MapDeserializerTest {
+
+     private ObjectMapper mapper;
+
+     @Before
+     public void setUp() {
+         mapper = new ObjectMapper();
+     }
+
+     // ---------- custom deserializers ----------
+
+     public static class FixedIntDeserializer extends JsonDeserializer<Integer> {
+         @Override
+         public Integer deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+             // Consume the value but always return 1
+             p.skipChildren();
+             return 1;
+         }
+     }
+
+     public static class NullSafeFixedIntDeserializer extends JsonDeserializer<Integer> {
+         @Override
+         public Integer deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+  p.skipChildren();
+             return1;
+  }
+         @Override
+         public Integer getNullValue() {
+             return -1;
+  }
+     }
+
+     // ---------- POJO for annotation tests ----------
+
+     public static class AnnotatedMapWrapper {
+         @JsonDeserialize(contentUsing = FixedIntDeserializer.class)
+         public Map<String, Integer> values;
+     }
+
+     public static class AnnotatedMapWrapperWithNull {
+         @JsonDeserialize(contentUsing = NullSafeFixedIntDeserializer.class)
+         public Map<String, Integer> values;
+     }
+
+     // ---------- tests ----------
+
+     /**
+      * Direct use: register a module with a custom Integer deserializer.
+      * Expect map value to be the custom deserialized value (1), not the raw JSON number.
+      */
+     @Test
+     public void testModuleRegisteredCustomValueDeserializer() throws Exception {
+  SimpleModule module = new SimpleModule("test", Version.unknownVersion());
+         module.addDeserializer(Integer.class, new FixedIntDeserializer());
+  mapper.registerModule(module);
+
+         Map<String, Integer> result = mapper.readValue("{\"a\": 100}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+         assertEquals(Integer.valueOf(1), result.get("a"));
+     }
+
+     /**
+      * Annotated field with custom content deserializer should be used even when the
+      * plain Map<String, Integer> has been cached before (the core bug: isCachable ignores value
+deser).
+      */
+     @Test
+     public void testAnnotatedCustomValueDeserializerAfterCacheWarm() throws Exception {
+         // 1. Warm the cache with a plain Map that has no custom deserializer
+         Map<String, Integer> dummy = mapper.readValue("{\"x\": 999}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+         assertNotNull(dummy);
+         assertEquals(Integer.valueOf(999), dummy.get("x"));
+
+         // 2. Deserialize a wrapper that has @JsonDeserialize(contentUsing=...)
+         AnnotatedMapWrapper wrapper = mapper.readValue("{\"values\": {\"key\": 100}}",
+                 AnnotatedMapWrapper.class);
+         assertNotNull("wrapper values must not be null", wrapper.values);
+         assertEquals("custom deserializer must produce 1", Integer.valueOf(1),
+wrapper.values.get("key"));
+     }
+
+     /**
+      * Make sure the custom deserializer is also used when no other map has been cached yet.
+      */
+     @Test
+     public void testAnnotatedCustomValueDeserializerWithoutWarmup() throws Exception {
+         AnnotatedMapWrapper wrapper = mapper.readValue("{\"values\": {\"key\": 100}}",
+                 AnnotatedMapWrapper.class);
+         assertNotNull(wrapper.values);
+         assertEquals(Integer.valueOf(1), wrapper.values.get("key"));
+     }
+
+     /**
+      * Null map value -> custom deserializer getNullValue() is invoked.
+      */
+     @Test
+     public void testNullValueUsesGetNullValueOfCustomDeserializer() throws Exception {
+         SimpleModule module = new SimpleModule("test", Version.unknownVersion());
+         module.addDeserializer(Integer.class, new NullSafeFixedIntDeserializer());
+  mapper.registerModule(module);
+
+         Map<String, Integer> result = mapper.readValue("{\"a\": null}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+         assertEquals(Integer.valueOf(-1), result.get("a"));
+     }
+
+     @Test
+     public void testNullValueWithAnnotatedCustomDeserializer() throws Exception {
+         // Warm cache
+         mapper.readValue("{\"a\": 1}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+
+         AnnotatedMapWrapperWithNull wrapper = mapper.readValue(
+                 "{\"values\": {\"key\": null}}", AnnotatedMapWrapperWithNull.class);
+         assertNotNull(wrapper.values);
+         assertEquals(Integer.valueOf(-1), wrapper.values.get("key"));
+     }
+
+     @Test
+     public void testEmptyMap() throws Exception {
+         Map<String, Integer> result = mapper.readValue("{}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+         assertNotNull(result);
+         assertTrue("map should be empty", result.isEmpty());
+     }
+
+     /**
+      * Several entries with custom deserializer all produce 1.
+      */
+     @Test
+     public void testMultipleEntriesWithCustomDeserializer() throws Exception {
+         SimpleModule module = new SimpleModule("test", Version.unknownVersion());
+         module.addDeserializer(Integer.class, new FixedIntDeserializer());
+  mapper.registerModule(module);
+
+         Map<String, Integer> result = mapper.readValue("{\"a\": 10, \"b\": 20, \"c\": 30}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+         for (Integer val : result.values()) {
+             assertEquals(Integer.valueOf(1), val);
+         }
+     }
+
+     /**
+      * In the faulty version, even after a clean instance, two fields with different custom
+deserializers
+      * might interfere if caching ignores the content deserializer.
+      * This test demonstrates that a plain map deserializer does not leak into annotated usage.
+      */
+     @Test
+     public void testRepeatedUseKeepsCustomDeserializer() throws Exception {
+         // First, deserialize with plain map (no annotation)
+         mapper.readValue("{\"x\": 111}",
+                 mapper.getTypeFactory().constructMapType(Map.class, String.class, Integer.class));
+
+         // Second, deserialize with annotation
+         AnnotatedMapWrapper w1 = mapper.readValue("{\"values\": {\"k1\": 100}}",
+                 AnnotatedMapWrapper.class);
+         assertEquals(Integer.valueOf(1), w1.values.get("k1"));
+
+         // Third, deserialize another annotated instance
+         AnnotatedMapWrapper w2 = mapper.readValue("{\"values\": {\"k2\": 200}}",
+                 AnnotatedMapWrapper.class);
+         assertEquals(Integer.valueOf(1), w2.values.get("k2"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-12f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-12f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-12f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-12f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-12f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/std/MapDeserializerTest.java:45: error: not a statement
+ [javac] return1;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 30 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

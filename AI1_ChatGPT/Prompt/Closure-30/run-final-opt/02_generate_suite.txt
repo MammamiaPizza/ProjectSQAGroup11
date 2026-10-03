@@ -1,0 +1,428 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 30  Version: Closure-30b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.FlowSensitiveInlineVariables, com.google.javascript.jscomp.MustBeReachingVariableDef
+Modified: com.google.javascript.jscomp.FlowSensitiveInlineVariables, com.google.javascript.jscomp.MustBeReachingVariableDef
+Triggers: com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testInlineAcrossSideEffect1, com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testCanInlineAcrossNoSideEffect, com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testIssue698
+
+Bug/specification summary:
+Bug report: 698
+Trigger failures:
+- com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testInlineAcrossSideEffect1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testCanInlineAcrossNoSideEffect
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testIssue698
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.FlowSensitiveInlineVariables, com.google.javascript.jscomp.MustBeReachingVariableDef
+
+Prompt-01 test plan:
+TARGETS: FlowSensitiveInlineVariables.process/visit and Candidate.canInline/inlineVariable flow-sensitive substitutions.
+TARGETS: MustBeReachingVariableDef analysis, MustDef join, dependency tracking, and parameter escaping.
+ORACLES: Existing three triggering FlowSensitiveInlineVariablesTest assertions and compiler output expectations.
+CASES: Inline across a side-effecting statement; ensure reaching definition/use safety is preserved.
+CASES: Inline across a no-side-effect statement when the definition remains uniquely reaching.
+CASES: Issue698 scenario covering affected flow/dependency behavior.
+RISKS: No source bodies or expected transformed JavaScript provided; derive inputs/outputs only from existing tests.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.FlowSensitiveInlineVariables (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class FlowSensitiveInlineVariables extends AbstractPostOrderCallback
+@Override
+public boolean apply(Node n) {
+public FlowSensitiveInlineVariables(AbstractCompiler compiler) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {}
+public void process(Node externs, Node root) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private class GatherCandiates extends AbstractShallowCallback {
+final MustDef defs = state.getIn();
+private class Candidate {
+private boolean canInline() {
+public boolean apply(Node input) {
+private void inlineVariable() {
+private void getDefinition(Node n, Node parent) {
+private void getNumUseInUseCfgNode(Node n, Node parant) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
+import com.google.javascript.jscomp.ControlFlowGraph.AbstractCfgNodeTraversalCallback;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.DataFlowAnalysis.FlowState;
+import com.google.javascript.jscomp.MustBeReachingVariableDef.MustDef;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.AbstractShallowCallback;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphEdge;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphNode;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.List;
+class FlowSensitiveInlineVariables extends AbstractPostOrderCallback
+
+/* METHOD FlowSensitiveInlineVariables */
+public FlowSensitiveInlineVariables(AbstractCompiler compiler) {
+ this.compiler = compiler;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ // TODO(user): While the helpers do a subtree traversal on the AST, the
+ // compiler pass itself only traverse the AST to look for function
+ // declarations to perform dataflow analysis on. We could combine
+ // the traversal in DataFlowAnalysis's computeEscaped later to save some
+ // time.
+ }
+
+ /**
+ * Gathers a list of possible candidates for inlining based only on
+ * information from {@link MustBeReachingVariableDef}. The list will be stored
+ * in {@code candidiates} and the validity of each inlining Candidate should
+ * be later verified with {@link Candidate#canInline()} when
+ * {@link MaybeReachingVariableUse} has been performed.
+ */
+ private class GatherCandiates extends AbstractShallowCallback {
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ DiGraphNode<Node, Branch> graphNode = cfg.getDirectedGraphNode(n);
+ if (graphNode == null) {
+ // Not a CFG node.
+ return;
+ }
+ FlowState<MustDef> state = graphNode.getAnnotation();
+ final MustDef defs = state.getIn();
+ final Node cfgNode = n;
+ AbstractCfgNodeTraversalCallback gatherCb =
+ new AbstractCfgNodeTraversalCallback() {
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName()) {
+
+ // Make sure that the name node is purely a read.
+ if ((NodeUtil.isAssignmentOp(parent) && parent.getFirstChild() == n)
+ || parent.isVar() || parent.isInc() ||
+ parent.isDec() || parent.isParamList() ||
+ parent.isCatch()) {
+ return;
+ }
+
+ String name = n.getString();
+ if (compiler.getCodingConvention().isExported(name)) {
+ return;
+ }
+
+ Node defNode = reachingDef.getDef(name, cfgNode);
+ // TODO(nicksantos): We need to add some notion of @const outer
+ // scope vars. We can inline those just fine.
+ if (defNode != null &&
+ !reachingDef.dependsOnOuterScopeVars(name, cfgNode)) {
+ candidates.add(new Candidate(name, defNode, n, cfgNode));
+ }
+ }
+ }
+ };
+
+ NodeTraversal.traverse(compiler, cfgNode, gatherCb);
+ }
+ }
+
+ /**
+ * Models the connection between a definition a
+...[truncated deterministically]...
+// Name of the variable.
+ private final String varName;
+
+ // Nodes related to the definition.
+ private Node def;
+ private final Node defCfgNode;
+
+ // Nodes related to the use.
+ private final Node use;
+ private final Node useCfgNode;
+
+ // Number of uses of the variable within the CFG node that represented the
+ // use in the CFG.
+ private int numUseWithinUseCfgNode;
+
+ Candidate(String varName, Node defCfgNode, Node use, Node useCfgNode) {
+ Preconditions.checkArgument(use.isName());
+ this.varName = varName;
+ this.defCfgNode = defCfgNode;
+ this.use = use;
+ this.useCfgNode = useCfgNode;
+ }
+
+ private boolean
+...[truncated deterministically]...
+// TODO(user): We could get more accuracy by looking more in-detail
+ // what j is and what x is trying to into to.
+ if (NodeUtil.has(def.getLastChild(),
+ new Predicate<Node>() {
+ @Override
+ public boolean apply(Node input) {
+ switch (input.getType()) {
+ case Token.GETELEM:
+ case Token.GETPROP:
+ case Token.ARRAYLIT:
+ case Token.OBJECTLIT:
+ case Token.REGEXP:
+ case Token.NEW:
+ return true;
+ }
+ return false;
+ }
+ },
+ new Predicate<Node>() {
+ @Override
+ public boolean apply(Node input) {
+ // Recurse if the node is not a function.
+ return !input.isFunction();
+ }
+ })) {
+ return false;
+ }
+
+ // We can skip the side effect check along the paths of two nodes if
+ // they are just next to each other.
+ if (NodeUtil.isStatementBlock(defCfgNode.getParent()) &&
+ defCfgNode.getNext() != useCfgNode) {
+ // Similar side effect check as above but this time the side effect is
+ // else where along the path.
+ // x = readProp(b); while(modifyProp(b)) {}; print(x);
+ CheckPathsBetweenNodes<Node, ControlFlowGraph.Branch>
+ pathCheck = new CheckPathsBetweenNodes<Node, ControlFlowGraph.Branch>(
+ cfg,
+ cfg.getDirectedGraphNode(defCfgNode),
+ cfg.getDirectedGraphNode(useCfgNode),
+ SIDE_EFFECT_PREDICATE,
+ Predicates.
+ <DiGraphEdge<Node, ControlFlowGraph.Branch>>alwaysTrue(),
+ false);
+ if (pathCheck.somePathsSatisfyPredicate()) {
+ return false;
+ }
+ }
+
+ return true;
+ }
+
+===== com.google.javascript.jscomp.MustBeReachingVariableDef (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+final class MustBeReachingVariableDef extends
+private static class Definition {
+final Set<Var> depends = Sets.newHashSet();
+@Override
+public boolean equals(Object other) {
+static final class MustDef implements LatticeElement {
+public MustDef() {
+public MustDef(Iterator<Var> vars) {
+public MustDef(MustDef other) {
+private static class MustDefJoin extends JoinOp.BinaryJoinOp<MustDef> {
+public MustDef apply(MustDef a, MustDef b) {
+@Nullable Node rValue, MustDef def) {
+private void escapeParameters(MustDef output) {
+private boolean isParameter(Var v) {
+private void computeDependence(final Definition def, Node rValue) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.ControlFlowGraph.AbstractCfgNodeTraversalCallback;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.jscomp.graph.GraphNode;
+import com.google.javascript.jscomp.graph.LatticeElement;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import javax.annotation.Nullable;
+
+/* METHOD MustBeReachingVariableDef */
+MustBeReachingVariableDef(
+ ControlFlowGraph<Node> cfg, Scope jsScope, AbstractCompiler compiler) {
+ super(cfg, new MustDefJoin());
+ this.jsScope = jsScope;
+ this.compiler = compiler;
+ this.escaped = Sets.newHashSet();
+ computeEscaped(jsScope, escaped, compiler);
+ }
+
+/* METHOD computeDependence */
+private void computeDependence(fina
+...[truncated deterministically]...
+.getString(), true)) {
+ Var dep = jsScope.getVar(n.getString());
+ def.depends.add(dep);
+ }
+ }
+ });
+ }
+
+/* METHOD MustDef */
+public MustDef(Iterator<Var> vars) {
+ this();
+ while(vars.hasNext()) {
+ Var var = vars.next();
+ // Every variable in the scope is defined once in the beginning of the
+ // function: all the declared variables are undefined, all functions
+ // have been assigned and all arguments has its value from the caller.
+ reachingDef.put(var, new Definition(var.scope.getRootNode()));
+ }
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object other) {
+ if (!(other instanceof Definition)) {
+ return false;
+ }
+ Definition otherDef = (Definition) other;
+ // If the var has the same definition node we can assume they have the
+ // same depends set.
+ return otherDef.node == node;
+ }
+
+/* METHOD MustDef */
+public MustDef() {
+ reachingDef = Maps.newHashMap();
+ }
+
+/* METHOD MustDef */
+public MustDef(MustDef other) {
+ reachingDef = Maps.newHashMap(other.reachingDef);
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object other) {
+ return (other instanceof MustDef) &&
+ ((MustDef) other).reachingDef.equals(this.reachingDef);
+ }
+
+/* METHOD apply */
+@Override
+ public MustDef apply(MustDef a, MustDef b) {
+ MustDef result = new MustDef();
+ Map<Var, Definition> resultMap = result.reachingDef;
+
+ // Take the join of all variables that are not TOP in this.
+ for (Map.Entry<Var, Definition> varEntry : a.reachingDef.entrySet()) {
+ Var var = varEntry.getKey();
+ Definition aDef = varEntry.getValue();
+
+ if (aDef == null) {
+ // "a" is BOTTOM implies that the variable has more than one possible
+ // definition. We set the join of this to be BOTTOM regardless of what
+ // "b" might be.
+ resultMap.put(var, null);
+ continue;
+ }
+
+ Node aNode = aDef.node;
+
+ if (b.reachingDef.containsKey(var)) {
+ Definition bDef = b.reachingDef.get(var);
+
+ if (aDef.equals(bDef)) {
+ resultMap.put(var, aDef);
+ } else {
+ resultMap.put(var, null);
+ }
+ } else {
+ res
+...[truncated deterministically]...
+ut it is TOP
+ // in this.
+ for (Map.Entry<Var, Definition> entry : b.reachingDef.entrySet()) {
+ Var var = entry.getKey();
+ if (!a.reachingDef.containsKey(var)) {
+ resultMap.put(var, entry.getValue());
+ }
+ }
+ return result;
+ }
+
+/* METHOD AbstractCfgNodeTraversalCallback */
+new AbstractCfgNodeTraversalCallback() {
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName() && jsScope.isDeclared(n.getString(), true)) {
+ Var dep = jsScope.getVar(n.getString());
+ def.depends.add(dep);
+ }
+ }
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName() && jsScope.isDeclared(n.getString(), true)) {
+ Var dep = jsScope.getVar(n.getString());
+ def.depends.add(dep);
+ }
+ }
+
+/* METHOD flowThrough */
+@Override
+ MustDef flowThrough(Node n, MustDef input) {
+ // TODO(user): We are doing a straight copy from input to output. There
+ // might be some opportunities to cut down overhead.
+ MustDef output = new MustDef(input);
+ // TODO(user): This must know about ON_EX edges but it should handle
+ // it better than what we did in liveness. Because we are in a forward mode,
+ // we can used the branched forward analysis.
+ computeMustDef(n, n, output, false);
+ return output;
+ }
+
+/* METHOD addToDefIfLocal */
+private void addToDefIfLocal( String name, @Nullable Node node,
+ @Nullable Node rValue, MustDef def) {
+ Var var = jsScope.getVar(name);
+
+ // var might be null because the variable might be defined in the extern
+ // that we might not traverse.
+ if (var == null || var.scope != jsScope) {
+ return;
+ }
+
+ for (Var other : def.reachingDef.keySet()) {
+ Definition otherDef = def.reachingDef.get(other);
+ if (otherDef == null) {
+ continue;
+ }
+ if (otherDef.depends.con
+...[truncated deterministically]...
+ar)) {
+ if (node == null) {
+ def.reachingDef.put(var, null);
+ } else {
+ Definition definition = new Definition(node);
+ if (rValue != null) {
+ computeDependence(definition, rValue);
+ }
+ def.reachingDef.put(var, definition);
+ }
+ }
+ }

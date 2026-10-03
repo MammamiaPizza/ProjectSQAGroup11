@@ -1,0 +1,137 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 14  Version: Mockito-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 138
+Trigger failures:
+- org.mockitousage.bugs.VerifyingWithAnExtraCallToADifferentMockTest::shouldAllowVerifyingWhenOtherMockCallIsInTheSameLine
+ --> junit.framework.AssertionFailedError:
+Modified: org.mockito.internal.MockHandler, org.mockito.internal.MockitoCore
+
+Available API/signatures:
+[org.mockito.internal.MockHandler | java]
+package org.mockito.internal;
+public class MockHandler<T> implements MockitoInvocationHandler, MockHandlerInterface<T> {
+public MockHandler(MockSettingsImpl mockSettings) {
+public MockHandler(MockHandlerInterface<T> oldMockHandler) {
+public Object handle(Invocation invocation) throws Throwable {
+public VoidMethodStubbable<T> voidMethodStubbable(T mock) {
+public MockSettingsImpl getMockSettings() {
+@SuppressWarnings("unchecked")
+public void setAnswersForStubbing(List<Answer> answers) {
+public InvocationContainer getInvocationContainer() {
+
+[org.mockito.internal.MockitoCore | java]
+package org.mockito.internal;
+@SuppressWarnings("unchecked")
+public class MockitoCore {
+private final Reporter reporter = new Reporter();
+private final MockUtil mockUtil = new MockUtil();
+private final MockingProgress mockingProgress = new ThreadSafeMockingProgress();
+public <T> T mock(Class<T> classToMock, MockSettings mockSettings) {
+public IOngoingStubbing stub() {
+public <T> DeprecatedOngoingStubbing<T> stub(T methodCall) {
+public <T> OngoingStubbing<T> when(T methodCall) {
+public <T> T verify(T mock, VerificationMode mode) {
+public <T> void reset(T ... mocks) {
+public void verifyNoMoreInteractions(Object... mocks) {
+public void verifyNoMoreInteractionsInOrder(List<Object> mocks, InOrderContext inOrderContext) {
+private void assertMocksNotEmpty(Object[] mocks) {
+public InOrder inOrder(Object... mocks) {
+public Stubber doAnswer(Answer answer) {
+public <T> VoidMethodStubbable<T> stubVoid(T mock) {
+public void validateMockitoUsage() {
+public Invocation getLastInvocation() {
+
+Generated JUnit Test:
+package org.mockitousage.bugs;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+
+import org.junit.Test;
+import org.mockito.exceptions.misusing.NotAMockException;
+
+public class VerifyingWithExtraCallToDifferentMockRegressionTest {
+
+    public interface Target {
+        void call(String value);
+    }
+
+    public interface Other {
+        String value();
+    }
+
+    @Test
+    public void shouldVerifyNormalInvocationOnSingleMock() {
+        Target target = mock(Target.class);
+
+        target.call("value");
+
+        verify(target).call("value");
+        verifyNoMoreInteractions(target);
+    }
+
+    @Test
+    public void shouldAllowVerifyingWhenOtherMockCallIsInTheSameLine() {
+        Target target = mock(Target.class);
+        Other other = mock(Other.class);
+        target.call(null);
+
+        verify(target).call(other.value());
+
+        verify(other).value();
+        verifyNoMoreInteractions(target, other);
+    }
+
+    @Test
+    public void shouldKeepVerificationModeForTargetWhenOtherMockCallOccursDuringVerification() {
+        Target target = mock(Target.class);
+        Other other = mock(Other.class);
+        target.call(null);
+        target.call(null);
+
+        verify(target, times(2)).call(other.value());
+
+        verify(other).value();
+        verifyNoMoreInteractions(target, other);
+    }
+
+    @Test
+    public void shouldVerifyTargetAfterAnEarlierInvocationOnAnotherMock() {
+        Target target = mock(Target.class);
+        Other other = mock(Other.class);
+
+        String argument = other.value();
+        target.call(argument);
+
+        verify(target).call(null);
+        verify(other).value();
+        verifyNoMoreInteractions(target, other);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void shouldFailVerificationWhenWantedInvocationDidNotOccur() {
+        Target target = mock(Target.class);
+
+        verify(target).call("missing");
+    }
+
+    @Test(expected = NotAMockException.class)
+    public void shouldRejectVerificationOfANonMockObject() {
+        verify(new Object());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.mockitousage.bugs.VerifyingWithExtraCallToDifferentMockRegressionTest::shouldAllowVerifyingWhenOtherMockCallIsInTheSameLine
+ - org.mockitousage.bugs.VerifyingWithExtraCallToDifferentMockRegressionTest::shouldKeepVerificationModeForTargetWhenOtherMockCallOccursDuringVerification
+
+Failing generated tests: org.mockitousage.bugs.VerifyingWithExtraCallToDifferentMockRegressionTest::shouldAllowVerifyingWhenOtherMockCallIsInTheSameLine, org.mockitousage.bugs.VerifyingWithExtraCallToDifferentMockRegressionTest::shouldKeepVerificationModeForTargetWhenOtherMockCallOccursDuringVerification

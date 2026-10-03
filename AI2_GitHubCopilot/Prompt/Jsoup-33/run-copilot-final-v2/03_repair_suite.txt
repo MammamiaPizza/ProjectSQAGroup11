@@ -1,0 +1,238 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 33  Version: Jsoup-33b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 305
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::handlesKnownEmptyBlocks
+ --> junit.framework.AssertionFailedError: expected:<...src="/foo"></script>[<div id="2"><img /><img /></div><a id="3"></a><i></i><foo /><foo>One</foo> <hr /> hr text <hr />] hr text two> but was:<...src="/foo"></script>[&lt;div id=2&gt;&lt;img /&gt;&lt;img&gt;&lt;/div&gt;&lt;a id=3 /&gt;&lt;i /&gt;&lt;foo /&gt;&lt;foo&gt;One&lt;/foo&gt; &lt;hr /&gt; hr text &lt;hr&gt;] hr text two>
+Modified: org.jsoup.parser.HtmlTreeBuilder
+
+Available API/signatures:
+[org.jsoup.parser.HtmlTreeBuilder | java]
+package org.jsoup.parser;
+class HtmlTreeBuilder extends TreeBuilder {
+private DescendableLinkedList<Element> formattingElements = new DescendableLinkedList<Element>(); // active (open) formatting elements
+private List<Token.Character> pendingTableCharacters = new ArrayList<Token.Character>(); // chars in table to be shifted out
+@Override
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(DescendableLinkedList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(LinkedList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+
+import java.util.List;
+
+/**
+
+ - Tests for HtmlTreeBuilder focusing on known empty (void) block handling.
+ -
+ - The bug (issue 305) causes void elements like img, hr, br, input to be
+ - treated as text when parsed in certain contexts, leading to escaped HTML
+ - in the output instead of real elements.
+  */
+ public class HtmlTreeBuilderTest {
+  // ---- direct HtmlTreeBuilder tests ----
+  @Test
+  public void insertEmptyKnownVoidTagCreatesElement() {
+  HtmlTreeBuilder tb = new HtmlTreeBuilder();
+  tb.initialiseParse("", "", new ParseErrorList(0, 0));
+  // Create a token for <img>
+  Token.StartTag t = new Token.StartTag("img");
+  t.attributes.put("src", "x");
+  t.setSelfClosing();
+  Element el = tb.insertEmpty(t);
+  assertNotNull(el);
+  assertEquals("img", el.tagName());
+  assertEquals("x", el.attr("src"));
+  // The element should be a child of the current stack element or doc
+  // after setting up correctly. Here we just check the element itself.
+  // No escaped text should be generated.
+  }
+  @Test
+  public void insertEmptyUnknownVoidTagCreatesElement() {
+  HtmlTreeBuilder tb = new HtmlTreeBuilder();
+  tb.initialiseParse("", "", new ParseErrorList(0, 0));
+  Token.StartTag t = new Token.StartTag("customvoid");
+  t.setSelfClosing();
+  Element el = tb.insertEmpty(t);
+  assertNotNull(el);
+  assertEquals("customvoid", el.tagName());
+  }
+  @Test
+  public void insertEmptyDoesNotEscapeTagName() {
+  HtmlTreeBuilder tb = new HtmlTreeBuilder();
+  tb.initialiseParse("", "", new ParseErrorList(0, 0));
+  Token.StartTag t = new Token.StartTag("img");
+  t.setSelfClosing();
+  tb.insertEmpty(t);
+  // After inserting, the document (or stack element) should contain the
+  // element, not a text node with "<img".
+  Node child = tb.doc.childNode(0);
+  assertTrue("Expected an Element, got " + child.getClass().getSimpleName(),
+          child instanceof Element);
+  assertEquals("img", child.nodeName());
+  }
+  @Test
+  public void processKnownEmptyBlockDoesNotCreateTextNode() {
+  HtmlTreeBuilder tb = new HtmlTreeBuilder();
+  tb.initialiseParse("", "", new ParseErrorList(0, 0));
+  // Simulate a state that would normally process tags in body
+  Token.StartTag tag = new Token.StartTag("img");
+  tag.setSelfClosing();
+  // Processing should insert element, not text
+  tb.process(tag);
+  // The document should now have an img element, not a text node
+  Node child = tb.doc.childNode(0);
+  assertTrue(child instanceof Element);
+  assertEquals("img", child.nodeName());
+  }
+  // ---- parser-based tests reproducing trigger scenario ----
+  @Test
+  public void handlesKnownEmptyBlocksFragmentDoesNotEscapeTags() {
+  // This mimics the fragment from the trigger test's expected output.
+  // The bug causes escaped tags like <div...> in the output.
+  String input = "<div id=2><img /><img></div><a id=3 /><i /><foo /><foo>One</foo> <hr /> hr text
+<hr> hr text two";
+  Document doc = Jsoup.parseBodyFragment(input);
+  // The outerHtml of the body should contain the real tags, not entities
+  String bodyHtml = doc.body().html().trim();
+  assertFalse("Output should not contain escaped div tag",
+          bodyHtml.contains("<div"));
+  assertFalse("Output should not contain escaped img tag",
+          bodyHtml.contains("<img"));
+  assertTrue("Output should contain img element",
+          bodyHtml.contains("<img") || bodyHtml.contains("<img />") || bodyHtml.contains("<img>"));
+  // Also verify key known empty tags appear as elements
+  assertTrue(bodyHtml.contains("<hr") || bodyHtml.contains("<hr />") || bodyHtml.contains("<hr>"));
+  assertTrue(bodyHtml.contains("<a id="3""));
+  // Check that the id attribute is preserved with quotes (normalization)
+  assertTrue(bodyHtml.contains("id="2""));
+  }
+  @Test
+  public void handlesKnownEmptyBlocksInFullDocumentDoesNotEscapeTags() {
+  String input = "<script src="/foo"></script><div id=2><img /><img></div><a id=3 /><i /><foo
+/><foo>One</foo> <hr /> hr text <hr> hr text two";
+  Document doc = Jsoup.parse(input);
+  String bodyHtml = doc.body().html().trim();
+  // The body must not contain escaped angle brackets for these known elements
+  assertFalse("Output should not contain escaped div tag",
+          bodyHtml.contains("<div"));
+  assertFalse("Output should not contain escaped img tag",
+          bodyHtml.contains("<img"));
+  assertFalse("Output should not contain escaped a tag",
+          bodyHtml.contains("<a"));
+  // Known void elements should be present
+  assertTrue(bodyHtml.contains("<img") || bodyHtml.contains("<img />"));
+  assertTrue(bodyHtml.contains("<hr") || bodyHtml.contains("<hr />"));
+  assertTrue(bodyHtml.contains("<br") || bodyHtml.contains("<br />"));
+  }
+  @Test
+  public void parseSingleKnownEmptyBlockImgCreatesElement() {
+  Document doc = Jsoup.parseBodyFragment("<img src='x'>");
+  Elements imgs = doc.body().getElementsByTag("img");
+  assertEquals(1, imgs.size());
+  assertEquals("x", imgs.first().attr("src"));
+  }
+  @Test
+  public void parseSingleKnownEmptyBlockHrCreatesElement() {
+  Document doc = Jsoup.parseBodyFragment("<hr>");
+  Elements hrs = doc.body().getElementsByTag("hr");
+  assertEquals(1, hrs.size());
+  }
+  @Test
+  public void parseSingleKnownEmptyBlockBrCreatesElement() {
+  Document doc = Jsoup.parseBodyFragment("<br>");
+  Elements brs = doc.body().getElementsByTag("br");
+  assertEquals(1, brs.size());
+  }
+  @Test
+  public void parseSingleKnownEmptyBlockInputCreatesElement() {
+  Document doc = Jsoup.parseBodyFragment("<input type='text'>");
+  Elements inputs = doc.body().getElementsByTag("input");
+  assertEquals(1, inputs.size());
+  assertEquals("text", inputs.first().attr("type"));
+  }
+  @Test
+  public void knownEmptyBlockWithTextSiblingsKeepsStructure() {
+  Document doc = Jsoup.parseBodyFragment("before <img /> after <br>");
+  List<Node> children = doc.body().childNodes();
+  assertEquals(3, children.size());
+  assertTrue(children.get(0) instanceof TextNode);
+  assertEquals("before ", ((TextNode)children.get(0)).getWholeText().trim());
+  assertTrue(children.get(1) instanceof Element);
+  assertEquals("img", ((Element)children.get(1)).tagName());
+  assertTrue(children.get(2) instanceof TextNode);
+  // The text after should not be corrupted
+  assertTrue(((TextNode)children.get(2)).getWholeText().contains("after"));
+  // Also verify that the br is handled (it might be in a following <p> etc; this test is
+simplistic)
+  }
+  @Test
+  public void nestedKnownEmptyBlocksInDiv() {
+  Document doc = Jsoup.parseBodyFragment("<div><img src='a'><br><hr></div>");
+  Element div = doc.body().child(0);
+  assertEquals("div", div.tagName());
+  Elements imgs = div.getElementsByTag("img");
+  assertEquals(1, imgs.size());
+  Elements brs = div.getElementsByTag("br");
+  assertEquals(1, brs.size());
+  Elements hrs = div.getElementsByTag("hr");
+  assertEquals(1, hrs.size());
+  }
+  @Test
+  public void fragmentParsingWithNullContextDoesNotEscapeTags() {
+  // Use parseFragment directly via the package-private HtmlTreeBuilder
+  HtmlTreeBuilder tb = new HtmlTreeBuilder();
+  tb.initialiseParse("", "]8;id=md-3j18as;http://example.comhttp://example.com]8;;]8;;", new ParseErrorList(0, 0));]8;;
+  List<Node> nodes = tb.parseFragment("<img src='test'> <br/> text", null,
+          "]8;id=md-3j18as;http://example.comhttp://example.com]8;;]8;;", new ParseErrorList(0, 0));]8;;
+  String combined = "";
+  for (Node node : nodes) {
+      combined += node.outerHtml();
+  }
+  assertFalse("Output should not contain escaped img tag",
+          combined.contains("<img"));
+  assertTrue("Output should contain img element",
+          combined.contains("<img"));
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-33f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-33f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-33f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-33f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-33f-copilot/.test_suite/org/jsoup/parser/HtmlTreeBuilderTest.java:83: error: unclosed string literal
+ [javac] String input = "<div id=2><img /><img></div><a id=3 /><i /><foo /><foo>One</foo> <hr /> hr text
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,188 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: Compress  Bug: 41  Version: Compress-41b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+Bug/specification summary:
+Bug report: COMPRESS-367
+Trigger failures:
+- org.apache.commons.compress.archivers.ZipTestCase::testListAllFilesWithNestedArchive
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+ - org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamTest::testThrowOnInvalidEntry
+ --> junit.framework.AssertionFailedError: IOException expected
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.zip.ZipArchiveInputStream | java]
+package org.apache.commons.compress.archivers.zip;
+public class ZipArchiveInputStream extends ArchiveInputStream {
+private final Inflater inf = new Inflater(true);
+private final ByteBuffer buf = ByteBuffer.allocate(ZipArchiveOutputStream.BUFFER_SIZE);
+public ZipArchiveInputStream(final InputStream inputStream) {
+public ZipArchiveInputStream(final InputStream inputStream, final String encoding) {
+public ZipArchiveInputStream(final InputStream inputStream, final String encoding, final boolean useUnicodeExtraFields) {
+public ZipArchiveEntry getNextZipEntry() throws IOException {
+} catch (final EOFException e) {
+final ZipLong sig = new ZipLong(LFH_BUF);
+final int versionMadeBy = ZipShort.getValue(LFH_BUF, off);
+final GeneralPurposeBit gpFlag = GeneralPurposeBit.parse(LFH_BUF, off);
+final boolean hasUTF8Flag = gpFlag.usesUTF8ForNames();
+final long time = ZipUtil.dosToJavaTime(ZipLong.getValue(LFH_BUF, off));
+final int fileNameLen = ZipShort.getValue(LFH_BUF, off);
+final int extraLen = ZipShort.getValue(LFH_BUF, off);
+private void readFirstLocalFileHeader(final byte[] lfh) throws IOException {
+final ZipLong sig = new ZipLong(lfh);
+private void processZip64Extra(final ZipLong size, final ZipLong cSize) {
+@Override
+public ArchiveEntry getNextEntry() throws IOException {
+public boolean canReadEntryData(final ArchiveEntry ae) {
+final ZipArchiveEntry ze = (ZipArchiveEntry) ae;
+public int read(final byte[] buffer, final int offset, final int length) throws IOException {
+private int readStored(final byte[] buffer, final int offset, final int length) throws IOException {
+final lon
+...[truncated deterministically]...
+ivate boolean isFirstByteOfEocdSig(final int b) {
+private static final class CurrentEntry {
+private final ZipArchiveEntry entry = new ZipArchiveEntry();
+private final CRC32 crc = new CRC32();
+private class BoundedInputStream extends InputStream {
+public BoundedInputStream(final InputStream in, final long size) {
+public int read() throws IOException {
+final int result = in.read();
+public int read(final byte[] b) throws IOException {
+public int read(final byte[] b, final int off, final int len) throws IOException {
+final long maxRead = max >= 0 ? Math.min(len, max - pos) : len;
+final int bytesRead = in.read(b, off, (int) maxRead);
+public long skip(final long n) throws IOException {
+final long toSkip = max >= 0 ? Math.min(n, max - pos) : n;
+final long skippedBytes = in.skip(toSkip);
+public int available() throws IOException {
+
+Existing test summary (method names/assertions only):
+Test methods: invalidLocalFileHeaderIsRejected, readsNestedZipEntryAndTraversesItsContents, advancingToNextEntryDrainsUnreadPreviousEntry
+Representative assertions:
+fail("An invalid local file header must cause an IOException");
+assertNotNull(outerEntry);
+assertEquals("nested.zip", outerEntry.getName());
+assertArrayEquals(nestedZip, extractedNestedZip);
+assertNull(outer.getNextZipEntry());
+assertNotNull(nestedEntry);
+assertEquals("inside.txt", nestedEntry.getName());
+assertArrayEquals(payload, readAll(nested));
+assertNull(nested.getNextZipEntry());
+assertNotNull(first);
+assertEquals("first.txt", first.getName());
+assertNotNull(second);
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+413,219,260,81
+
+Line/branch gaps:
+Class: org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+Uncovered lines: 77, 839, 840, 841, 842, 843, 844, 846, 847, 849, 851, 852, 854, 859, 860, 861, 865, 878, 879, 880, 881, 882, 884, 886, 385, 386, 387, 388, 391, 585 ... (+298 more)
+Partially covered branch lines: 522 (50% (1/2)), 612 (50% (1/2)), 615 (50% (1/2)), 620 (50% (1/2)), 625 (50% (1/2)), 633 (50% (1/2)), 639 (50% (1/2)), 644 (50% (2/4)), 662 (50% (1/2)), 709 (50% (1/2)), 713 (50% (1/2)), 934 (50% (2/4)), 940 (50% (1/2)), 948 (50% (1/2)), 956 (50% (2/4)), 700 (50% (1/2)), 221 (50% (2/4)), 244 (75% (3/4)), 262 (50% (1/2)), 276 (50% (1/2)), 304 (25% (1/4)), 310 (50% (1/2)), 358 (50% (1/2)), 359 (50% (1/2)), 396 (50% (1/2)), 400 (50% (1/2)), 405 (50% (4/8)), 410 (50% (1/2)), 416 (50% (1/2)), 418 (50% (1/2)) ... (+64 more)
+
+Relevant buggy-source snippets around reported gaps:
+[org.apache.commons.compress.archivers.zip.ZipArchiveInputStream]
+75: * @NotThreadSafe
+76: */
+77: public class ZipArchiveInputStream extends ArchiveInputStream {
+78: 
+79: /** The zip encoding to use for filenames and the file comment. */
+---
+837: 
+838: boolean done = false;
+839: int readTooMuch = 0;
+840: for (int i = 0; !done && i < lastRead - 4; i++) {
+841: if (buf.array()[i] == LFH[0] && buf.array()[i + 1] == LFH[1]) {
+---
+838: boolean done = false;
+839: int readTooMuch = 0;
+840: for (int i = 0; !done && i < lastRead - 4; i++) {
+841: if (buf.array()[i] == LFH[0] && buf.array()[i + 1] == LFH[1]) {
+842: if ((buf.array()[i + 2] == LFH[2] && buf.array()[i + 3] == LFH[3])
+---
+839: int readTooMuch = 0;
+840: for (int i = 0; !done && i < lastRead - 4; i++) {
+841: if (buf.array()[i] == LFH[0] && buf.array()[i + 1] == LFH[1]) {
+842: if ((buf.array()[i + 2] == LFH[2] && buf.array()[i + 3] == LFH[3])
+843: || (buf.array()[i] == CFH[2] && buf.array()[i + 3] == CFH[3])) {
+---
+840: for (int i = 0; !done && i < lastRead - 4; i++) {
+841: if (buf.array()[i] == LFH[0] && buf.array()[i + 1] == LFH[1]) {
+842: if ((buf.array()[i + 2] == LFH[2] && buf.array()[i + 3] == LFH[3])
+843: || (buf.array()[i] == CFH[2] && buf.array()[i + 3] == CFH[3])) {
+844: // found a LFH or CFH:
+---
+841: if (buf.array()[i] == LFH[0] && buf.array()[i + 1] == LFH[1]) {
+842: if ((buf.array()[i + 2] == LFH[2] && buf.array()[i + 3] == LFH[3])
+843: || (buf.array()[i] == CFH[2] && buf.array()[i + 3] == CFH[3])) {
+844: // found a LFH or CFH:
+845: readTooMuch = offset + lastRead - i - expectedDDLen;
+---
+842: if ((buf.array()[i + 2] == LFH[2] && buf.array()[i + 3] == LFH[3])
+843: || (buf.array()[i] == CFH[2] && buf.array()[i + 3] == CFH[3])) {
+844: // found a LFH or CFH:
+845: readTooMuch = offset + lastRead - i - expectedDDLen;
+846: done = true;
+---
+844: // found a LFH or CFH:
+845: readTooMuch = offset + lastRead - i - expectedDDLen;
+846: done = true;
+847: }
+848: else if (buf.array()[i + 2] == DD[2] && buf.array()[i + 3] == DD[3]) {
+---
+845: readTooMuch = offset + lastRead - i - expectedDDLen;
+846: done = true;
+847: }
+848: else if (buf.array()[i + 2] == DD[2] && buf.array()[i + 3] == DD[3]) {
+849: // found DD:
+---
+847: }
+848: else if (buf.array()[i + 2] == DD[2] && buf.array()[i + 3] == DD[3]) {
+849: // found DD:
+850: readTooMuch = offset + lastR
+...[truncated deterministically]...
+> 0) {
+879: bos.write(buf.array(), 0, cacheable);
+880: System.arraycopy(buf.array(), cacheable, buf.array(), 0, expecteDDLen + 3);
+---
+877: final int cacheable = offset + lastRead - expecteDDLen - 3;
+878: if (cacheable > 0) {
+879: bos.write(buf.array(), 0, cacheable);
+880: System.arraycopy(buf.array(), cacheable, buf.array(), 0, expecteDDLen + 3);
+881: offset = expecteDDLen + 3;
+---
+878: if (cacheable > 0) {
+879: bos.write(buf.array(), 0, cacheable);
+880: System.arraycopy(buf.array(), cacheable, buf.array(), 0, expecteDDLen + 3);
+881: offset = expecteDDLen + 3;
+882: } else {
+---
+879: bos.write(buf.array(), 0, cacheable);
+880: System.arraycopy(buf.array(), cacheable, buf.array(), 0, expecteDDLen + 3);
+881: offset = expecteDDLen + 3;
+882: } else {
+883: offset += lastRead;
+---
+880: System.arraycopy(buf.array(), cacheable, buf.array(), 0, expecteDDLen + 3);
+881: offset = expecteDDLen + 3;
+882: } else {
+883: offset += lastRead;
+884: }
+---
+882: } else {
+883: offset += lastRead;
+884: }
+885: return offset;
+886: }
+---
+884: }
+885: return offset;
+886: }
+887: 
+888: private void pushback(final byte[] buf, final int offset, final int length) throws IOException {

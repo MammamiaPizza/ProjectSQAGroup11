@@ -1,0 +1,135 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 65  Version: Jsoup-65b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 807
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::testTemplateInsideTable
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState
+
+Available API/signatures:
+[org.jsoup.parser.HtmlTreeBuilder | java]
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(ArrayList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(ArrayList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+[org.jsoup.parser.HtmlTreeBuilderState | java]
+package org.jsoup.parser;
+enum HtmlTreeBuilderState {
+private boolean anythingElse(Token t, HtmlTreeBuilder tb) {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+final int stackSize = stack.size();
+private boolean exitTableBody(Token t, HtmlTreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(HtmlTreeBuilder tb) {
+private static String nullString = String.valueOf('\u0000');
+abstract boolean process(Token t, HtmlTreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static boolean isWhitespace(String data) {
+private static void handleRcData(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static final class Constants {
+
+Generated JUnit Test:
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+
+public class HtmlTreeBuilderTemplateTest {
+
+    @Test
+    public void templateInsideTableKeepsTemplateAndCellInsideTable() {
+        Document document = Jsoup.parse("<table><template><td>Foo</td></template></table>");
+
+        Element table = document.select("table").get(0);
+        Elements templates = document.select("template");
+        assertEquals(1, templates.size());
+
+        Element template = templates.get(0);
+        assertSame(table, template.parent());
+
+        Elements cells = template.getElementsByTag("td");
+        assertEquals(1, cells.size());
+        assertEquals("Foo", cells.get(0).text());
+    }
+
+    @Test
+    public void templateEndTagRestoresTableParsingForFollowingRow() {
+        Document document = Jsoup.parse(
+            "<table><template><tr><td>inside</td></tr></template><tr><td>outside</td></tr></table>");
+
+        Element table = document.select("table").get(0);
+        Element template = document.select("template").get(0);
+        assertSame(table, template.parent());
+
+        Elements rows = table.getElementsByTag("tr");
+        assertEquals(2, rows.size());
+        assertSame(template, rows.get(0).parent());
+        assertEquals("inside", rows.get(0).getElementsByTag("td").get(0).text());
+        assertEquals("outside", rows.get(1).getElementsByTag("td").get(0).text());
+    }
+
+    @Test
+    public void templateInsideTableBodyRemainsInThatTableBody() {
+        Document document = Jsoup.parse(
+            "<table><tbody><template><tr><td>template value</td></tr></template><tr><td>row value</td></tr></tbody></table>");
+
+        Element tbody = document.select("tbody").get(0);
+        Element template = document.select("template").get(0);
+        assertSame(tbody, template.parent());
+
+        Elements templateCells = template.getElementsByTag("td");
+        assertEquals(1, templateCells.size());
+        assertEquals("template value", templateCells.get(0).text());
+
+        Elements rows = tbody.getElementsByTag("tr");
+        assertEquals(2, rows.size());
+        assertEquals("row value", rows.get(1).getElementsByTag("td").get(0).text());
+    }
+
+    @Test
+    public void unclosedTemplateInTableDoesNotMoveTemplateOutsideTable() {
+        Document document = Jsoup.parse("<table><template><tr><td>unfinished</td></tr>");
+
+        Element table = document.select("table").get(0);
+        Elements templates = document.select("template");
+        assertEquals(1, templates.size());
+
+        Element template = templates.get(0);
+        assertSame(table, template.parent());
+
+        Element cell = template.getElementsByTag("td").get(0);
+        assertNotNull(cell);
+        assertEquals("unfinished", cell.text());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - HtmlTreeBuilderTemplateTest::unclosedTemplateInTableDoesNotMoveTemplateOutsideTable
+ - HtmlTreeBuilderTemplateTest::templateEndTagRestoresTableParsingForFollowingRow
+ - HtmlTreeBuilderTemplateTest::templateInsideTableKeepsTemplateAndCellInsideTable
+Failing generated tests: HtmlTreeBuilderTemplateTest::templateEndTagRestoresTableParsingForFollowingRow, HtmlTreeBuilderTemplateTest::templateInsideTableKeepsTemplateAndCellInsideTable, HtmlTreeBuilderTemplateTest::unclosedTemplateInTableDoesNotMoveTemplateOutsideTable

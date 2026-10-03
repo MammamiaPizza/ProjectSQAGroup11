@@ -1,0 +1,336 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 8  Version: Lang-8b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-818
+Trigger failures:
+- org.apache.commons.lang3.time.FastDateFormat_PrinterTest::testCalendarTimezoneRespected
+ --> junit.framework.AssertionFailedError: expected:<2:43PM [IC]T> but was:<2:43PM [PS]T>
+ - org.apache.commons.lang3.time.FastDatePrinterTest::testCalendarTimezoneRespected
+ --> junit.framework.AssertionFailedError: expected:<2:43PM [IC]T> but was:<2:43PM [PS]T>
+Modified: org.apache.commons.lang3.time.FastDatePrinter
+
+Available API/signatures:
+[org.apache.commons.lang3.time.FastDatePrinter | java]
+package org.apache.commons.lang3.time;
+public class FastDatePrinter implements DatePrinter, Serializable {
+public static final int FULL = DateFormat.FULL;
+public static final int LONG = DateFormat.LONG;
+public static final int MEDIUM = DateFormat.MEDIUM;
+public static final int SHORT = DateFormat.SHORT;
+protected FastDatePrinter(String pattern, TimeZone timeZone, Locale locale) {
+private void init() {
+protected List<Rule> parsePattern() {
+protected String parseToken(String pattern, int[] indexRef) {
+protected NumberRule selectNumberRule(int field, int padding) {
+@Override
+public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
+throw new IllegalArgumentException("Unknown class: " +
+public String format(long millis) {
+public String format(Date date) {
+public String format(Calendar calendar) {
+public StringBuffer format(long millis, StringBuffer buf) {
+public StringBuffer format(Date date, StringBuffer buf) {
+public StringBuffer format(Calendar calendar, StringBuffer buf) {
+protected StringBuffer applyRules(Calendar calendar, StringBuffer buf) {
+public String getPattern() {
+public TimeZone getTimeZone() {
+public Locale getLocale() {
+public int getMaxLengthEstimate() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+private interface Rule {
+private interface NumberRule extends Rule {
+private static class CharacterLiteral implements Rule {
+public int estimateLength() {
+public void appendTo(StringBuffer buffer, Calendar calendar) {
+pr
+...[truncated deterministically]...
+s TwoDigitYearField implements NumberRule {
+static final TwoDigitYearField INSTANCE = new TwoDigitYearField();
+private static class TwoDigitMonthField implements NumberRule {
+static final TwoDigitMonthField INSTANCE = new TwoDigitMonthField();
+private static class TwelveHourField implements NumberRule {
+public void appendTo(StringBuffer buffer, int value) {
+private static class TwentyFourHourField implements NumberRule {
+static String getTimeZoneDisplay(TimeZone tz, boolean daylight, int style, Locale locale) {
+private static class TimeZoneNameRule implements Rule {
+private static class TimeZoneNumberRule implements Rule {
+static final TimeZoneNumberRule INSTANCE_COLON = new TimeZoneNumberRule(true);
+static final TimeZoneNumberRule INSTANCE_NO_COLON = new TimeZoneNumberRule(false);
+private static class TimeZoneDisplayKey {
+
+Generated JUnit Test:
+package org.apache.commons.lang3.time;
+
+ import java.util.Calendar;
+ import java.util.Date;
+ import java.util.Locale;
+ import java.util.TimeZone;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for FastDatePrinter, focusing on LANG-818:
+  * TimeZoneNameRule incorrectly uses the printer's timezone
+  * instead of the calendar's timezone for timezone name display.
+  */
+ public class FastDatePrinterTest {
+
+     /**
+      * LANG-818: When formatting a Calendar with a timezone that differs
+      * from the printer's timezone, the timezone abbreviation in the output
+      * must come from the calendar, not the printer.
+      */
+     @Test
+     public void testCalendarTimezoneRespected() {
+         TimeZone printerTZ = TimeZone.getTimeZone("America/Los_Angeles");
+         TimeZone calendarTZ = TimeZone.getTimeZone("Asia/Bangkok");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("h:mma z", printerTZ, locale);
+
+         Calendar cal = Calendar.getInstance(calendarTZ, locale);
+         cal.set(Calendar.HOUR_OF_DAY, 14);
+         cal.set(Calendar.MINUTE, 43);
+         cal.set(Calendar.SECOND, 0);
+         cal.set(Calendar.MILLISECOND, 0);
+
+         String result = printer.format(cal);
+         assertTrue("Expected ICT, got: " + result, result.contains("ICT"));
+         assertFalse("Should not contain PST: " + result, result.contains("PST"));
+     }
+
+     /**
+      * LANG-818 variant with long timezone name (zzzz pattern).
+      */
+     @Test
+     public void testCalendarTimezoneRespectedLongName() {
+         TimeZone printerTZ = TimeZone.getTimeZone("America/Los_Angeles");
+         TimeZone calendarTZ = TimeZone.getTimeZone("Asia/Bangkok");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("h:mma zzzz", printerTZ, locale);
+
+         Calendar cal = Calendar.getInstance(calendarTZ, locale);
+         cal.set(Calendar.HOUR_OF_DAY, 14);
+         cal.set(Calendar.MINUTE, 43);
+         cal.set(Calendar.SECOND, 0);
+         cal.set(Calendar.MILLISECOND, 0);
+
+         String result = printer.format(cal);
+         assertTrue("Expected Indochina Time, got: " + result,
+                 result.contains("Indochina"));
+         assertFalse("Should not contain Pacific: " + result,
+                 result.contains("Pacific"));
+     }
+
+     /**
+      * Formatting a Date object uses the printer's timezone (correct,
+      * non-buggy path) because a new GregorianCalendar is created with mTimeZone.
+      */
+     @Test
+     public void testFormatDateUsesPrinterTimezone() {
+         TimeZone tz = TimeZone.getTimeZone("America/Los_Angeles");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("z", tz, locale);
+
+         Calendar cal = Calendar.getInstance();
+         cal.set(Calendar.HOUR_OF_DAY, 10);
+         cal.set(Calendar.MINUTE, 0);
+         cal.set(Calendar.SECOND, 0);
+         cal.set(Calendar.MILLISECOND, 0);
+
+         String result = printer.format(cal.getTime());
+         assertTrue("Expected PT/PST/PDT, got: " + result,
+                 result.contains("PT") || result.contains("PST") || result.contains("PDT"));
+     }
+
+     /**
+      * DST detection uses Calendar.DST_OFFSET which correctly reflects
+      * the calendar's DST state, but the timezone name must also come
+      * from the calendar's timezone.
+      */
+     @Test
+     public void testCalendarDSTAndStandardTime() {
+         TimeZone printerTZ = TimeZone.getTimeZone("UTC");
+         TimeZone calendarTZ = TimeZone.getTimeZone("America/Chicagoo");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("z", printerTZ, locale);
+
+         // Summer: DST active in Chicago (CDT)
+         Calendar cal = Calendar.getInstance(calendarTZ, locale);
+         cal.set(2023, Calendar.JUNE, 15, 14, 43, 0);
+         cal.set(Calendar.MILLISECOND, 0);
+
+         String summerResult = printer.format(cal);
+         assertTrue("Expected CDT in summer, got: " + summerResult,
+                 summerResult.contains("CDT"));
+
+         // Winter: standard time in Chicago (CST)
+         cal.set(2023, Calendar.JANUARY, 15, 14, 43, 0);
+         String winterResult = printer.format(cal);
+         assertTrue("Expected CST in winter, got: " + winterResult,
+                 winterResult.contains("CST"));
+     }
+
+     /**
+      * Formatting a different Calendar timezone with a non-US locale
+      * still must respect the calendar's timezone.
+      */
+     @Test
+     public void testCalendarTimezoneDifferentLocale() {
+         TimeZone printerTZ = TimeZone.getTimeZone("UTC");
+         TimeZone calendarTZ = TimeZone.getTimeZone("Asia/Tokyo");
+         Locale locale = Locale.JAPAN;
+
+         FastDatePrinter printer = new FastDatePrinter("h:mma z", printerTZ, locale);
+
+         Calendar cal = Calendar.getInstance(calendarTZ, locale);
+         cal.set(Calendar.HOUR_OF_DAY, 14);
+         cal.set(Calendar.MINUTE, 30);
+         cal.set(Calendar.SECOND, 0);
+         cal.set(Calendar.MILLISECOND, 0);
+
+         String result = printer.format(cal);
+         assertNotNull(result);
+         assertTrue("Expected JST, got: " + result, result.contains("JST"));
+         assertFalse("Should not contain UTC: " + result, result.contains("UTC"));
+     }
+
+     /**
+      * format(Object) with a Calendar must respect the calendar's timezone.
+      */
+     @Test
+     public void testFormatObjectWithCalendar() {
+         TimeZone printerTZ = TimeZone.getTimeZone("America/Los_Angeles");
+         TimeZone calendarTZ = TimeZone.getTimeZone("America/Denver");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("z", printerTZ, locale);
+
+         Calendar cal = Calendar.getInstance(calendarTZ, locale);
+         cal.set(Calendar.HOUR_OF_DAY, 10);
+         cal.set(Calendar.MINUTE, 0);
+
+         StringBuffer buf = new StringBuffer();
+         StringBuffer result = printer.format((Object) cal, buf, null);
+         assertSame(buf, result);
+         assertTrue("Expected Mountain timezone, got: " + result,
+                 result.toString().contains("MT") || result.toString().contains("MST")
+                         || result.toString().contains("MDT"));
+     }
+
+     /**
+      * format(Object) with a Date delegates to format(Date) which correctly
+      * uses the printer's timezone.
+      */
+     @Test
+     public void testFormatObjectWithDate() {
+         TimeZone tz = TimeZone.getTimeZone("America/New_York");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("z", tz, locale);
+
+         Date date = new Date(0);
+         StringBuffer buf = new StringBuffer();
+         StringBuffer result = printer.format((Object) date, buf, null);
+         assertSame(buf, result);
+         assertTrue("Should contain timezone abbreviation", result.length() > 0);
+     }
+
+     /**
+      * format(Object) with a Long delegates to format(long) which delegates
+      * to format(Date).
+      */
+     @Test
+     public void testFormatObjectWithLong() {
+         TimeZone tz = TimeZone.getTimeZone("UTC");
+         Locale locale = Locale.US;
+
+         FastDatePrinter printer = new FastDatePrinter("yyyy", tz, locale);
+
+         Long millis = 0L;
+         StringBuffer buf = new StringBuffer();
+         StringBuffer result = printer.format(millis, buf, null);
+         assertSame(buf, result);
+         assertTrue(result.toString().length() > 0);
+     }
+
+     /**
+      * format(Object) with an unrecognized type throws IllegalArgumentException.
+      */
+     @Test(expected = IllegalArgumentException.class)
+     public void testFormatObjectWithInvalidType() {
+         TimeZone tz = TimeZone.getDefault();
+         Locale locale = Locale.US;
+         FastDatePrinter printer = new FastDatePrinter("yyyy", tz, locale);
+         printer.format("invalid", new StringBuffer(), null);
+     }
+
+     /**
+      * format(long) path exercised.
+      */
+     @Test
+     public void testFormatLong() {
+         TimeZone tz = TimeZone.getTimeZone("UTC");
+         Locale locale = Locale.US;
+         FastDatePrinter printer = new FastDatePrinter("yyyy-MM-dd HH:mm:ss", tz, locale);
+
+         String result = printer.format(0L);
+         assertNotNull(result);
+         assertTrue(result.startsWith("1970-01-01 "));
+     }
+
+     /**
+      * Equals and hashCode contract for FastDatePrinter.
+      */
+     @Test
+     public void testEqualsAndHashCode() {
+         TimeZone tz1 = TimeZone.getTimeZone("UTC");
+         TimeZone tz2 = TimeZone.getTimeZone("America/Chicagoo");
+         Locale locale = Locale.US;
+
+         FastDatePrinter p1 = new FastDatePrinter("yyyy-MM-dd", tz1, locale);
+         FastDatePrinter p2 = new FastDatePrinter("yyyy-MM-dd", tz1, locale);
+         FastDatePrinter p3 = new FastDatePrinter("yyyy-MM-dd", tz2, locale);
+         FastDatePrinter p4 = new FastDatePrinter("HH:mm", tz1, locale);
+
+         assertEquals(p1, p2);
+         assertEquals(p1.hashCode(), p2.hashCode());
+         assertFalse(p1.equals(p3));
+         assertFalse(p1.equals(p4));
+         assertFalse(p1.equals(null));
+         assertFalse(p1.equals("string"));
+     }
+ }```
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Lang-8f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Lang-8f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Lang-8f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- commons-lang3 3.2-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Lang-8f-copilot/target
+compile:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Lang-8f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Lang-8f-copilot/.test_suite/org/apache/commons/lang3/time/FastDatePrinterTest.java:246: error: illegal character: '`'
+ [javac] }```
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

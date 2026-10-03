@@ -1,0 +1,186 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 171  Version: Closure-171b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1023
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue1023
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testMethodBeforeFunction2
+ --> junit.framework.ComparisonFailure: expected:<[function (this:Window, ?): undefined]> but was:<[?]>
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testPropertiesOnInterface2
+ --> java.lang.NullPointerException
+Modified: com.google.javascript.jscomp.TypeInference, com.google.javascript.jscomp.TypedScopeCreator
+
+Available API/signatures:
+[com.google.javascript.jscomp.TypeInference | java]
+package com.google.javascript.jscomp;
+class TypeInference
+private void inferArguments(Scope functionScope) {
+@Override
+@SuppressWarnings({"fallthrough", "incomplete-switch"})
+private FlowScope traverse(Node n, FlowScope scope) {
+private FlowScope traverseReturn(Node n, FlowScope scope) {
+private FlowScope traverseCatch(Node catchNode, FlowScope scope) {
+private FlowScope traverseAssign(Node n, FlowScope scope) {
+private void ensurePropertyDefined(Node getprop, JSType rightType) {
+private void ensurePropertyDeclared(Node getprop) {
+private FlowScope traverseName(Node n, FlowScope scope) {
+private FlowScope traverseArrayLiteral(Node n, FlowScope scope) {
+private FlowScope traverseObjectLiteral(Node n, FlowScope scope) {
+private FlowScope traverseAdd(Node n, FlowScope scope) {
+private boolean isAddedAsNumber(JSType type) {
+p
+...[truncated deterministically]...
+private FlowScope traverseGetElem(Node n, FlowScope scope) {
+private FlowScope traverseGetProp(Node n, FlowScope scope) {
+private FlowScope dereferencePointer(Node n, FlowScope scope) {
+private BooleanOutcomePair traverseOr(Node n, FlowScope scope) {
+private final class BooleanOutcomePair {
+private boolean isUnflowable(Var v) {
+private JSType getJSType(Node n) {
+private JSType getNativeType(JSTypeNative typeId) {
+
+[com.google.javascript.jscomp.TypedScopeCreator | java]
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private final List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+@Overri
+...[truncated deterministically]...
+scope, String name, JSType t) {
+private static class DiscoverEnumsAndTypedefs
+public void visit(NodeTraversal t, Node node, Node parent) {
+private JSType getNativeType(JSTypeNative nativeType) {
+private abstract class AbstractScopeBuilder
+private final List<Node> nonExternFunctions = Lists.newArrayList();
+private AbstractScopeBuilder(Scope scope) {
+public void resolveTypes() {
+...[truncated deterministically]...
+lScopeBuilder extends AbstractScopeBuilder {
+private LocalScopeBuilder(Scope scope) {
+private void handleFunctionInputs(Node fnNode) {
+private void declareArguments(Node functionNode) {
+private static class FirstOrderFunctionAnalyzer
+@Override public void process(Node externs, Node root) {
+@Override public void enterScope(NodeTraversal t) {
+private AstFunctionContents getFunctionAnalysisResults(@Nullable Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import static junit.framework.Assert.*;
+
+ import com.google.common.collect.ImmutableList;
+ import com.google.javascript.jscomp.Compiler;
+ import com.google.javascript.jscomp.CompilerOptions;
+ import com.google.javascript.jscomp.DiagnosticGroups;
+ import com.google.javascript.jscomp.JSError;
+ import com.google.javascript.jscomp.Scope;
+ import com.google.javascript.jscomp.SourceFile;
+ import com.google.javascript.jscomp.TypeCheck;
+ import com.google.javascript.jscomp.CheckLevel;
+ import com.google.javascript.rhino.jstype.JSType;
+
+ import java.util.List;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Regression tests for bug 1023.
+  * Tests that a warning is issued for type mismatch, the type of a
+  * function used before its definition is correctly inferred, and
+  * interface property definitions do not cause a NullPointerException.
+  */
+ public class Bug1023Test extends TestCase {
+
+   public void testIssue1023_warningExpected() {
+     // Code where a function expects a number but receives a string.
+     String js =
+         "/** @param {number} x */ function f(x) {};\n" +
+         "f('string');";
+     Compiler compiler = compile(js);
+     List<JSError> warnings = compiler.getResult().warnings;
+     assertFalse("Expected at least one warning", warnings.isEmpty());
+     boolean found = false;
+     for (JSError w : warnings) {
+       if (TypeCheck.TYPE_MISMATCH.key.equals(w.getType().key)) {
+         found = true;
+         break;
+       }
+     }
+     assertTrue("Expected a TYPE_MISMATCH warning", found);
+   }
+
+   public void testMethodBeforeFunction2_typeString() {
+     // Function used before its definition – the type should be resolved,
+     // not left as ?.
+     String js =
+         "var a = someFunc;\n" +
+         "function someFunc(x) {}";
+     Compiler compiler = compile(js);
+     Scope topScope = compiler.getTopScope();
+     assertNotNull("Top scope should not be null", topScope);
+     Scope.Var var = topScope.getVar("a");
+     assertNotNull("Variable 'a' should be defined", var);
+     JSType type = var.getType();
+     assertNotNull("Type of 'a' should not be null", type);
+     // The expected type signature for a function with unknown parameter
+     // and undefined return, and this typed as the global Window object.
+     assertEquals("function (this:Window, ?): undefined",
+                  type.toAnnotationString());
+   }
+
+   public void testPropertiesOnInterface2_noNPE() {
+     // An interface with a property should not throw a NullPointerException.
+     String js =
+         "/** @interface */\n" +
+         "function Foo() {}\n" +
+         "/** @type {number} */\n" +
+         "Foo.prototype.bar;";
+     try {
+       compile(js);
+     } catch (NullPointerException e) {
+       fail("NullPointerException while handling interface properties: "
+           + e.getMessage());
+     }
+   }
+
+   private Compiler compile(String source) {
+     CompilerOptions options = new CompilerOptions();
+     options.setCheckTypes(true);
+     options.setWarningLevel(DiagnosticGroups.TYPE_MISMATCH, CheckLevel.WARNING);
+     options.setContinueAfterErrors(true);
+     Compiler compiler = new Compiler();
+     List<SourceFile> externs = CommandLineRunner.getDefaultExterns();
+     List<SourceFile> inputs = ImmutableList.of(
+         SourceFile.fromCode("test.js", source));
+     compiler.compile(externs, inputs, options);
+     return compiler;
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-171f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-171f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-171f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-171f-copilot/.test_suite/com/google/javascript/jscomp/Bug1023Test.java:34: error: incompatible types: JSError[] cannot be converted to List<JSError>
+ [javac] List<JSError> warnings = compiler.getResult().warnings;
+ [javac] ^
+ [javac] Note: /root/sqa-workspaces/Closure-171f-copilot/.test_suite/com/google/javascript/jscomp/Bug1023Test.java uses or overrides a deprecated API.
+ [javac] Note: Recompile with -Xlint:deprecation for details.
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 19 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

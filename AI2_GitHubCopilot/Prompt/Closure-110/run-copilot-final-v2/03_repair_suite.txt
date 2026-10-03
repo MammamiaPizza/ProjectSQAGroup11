@@ -1,0 +1,312 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 110  Version: Closure-110b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1111
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testHoistedFunctionDeclaration
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable f is in a goog.scope and is not an alias. at testcode line 1 : 39 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.ScopedAliasesTest::testFunctionDeclaration
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable f is in a goog.scope and is not an alias. at testcode line 1 : 41 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.ScopedAliases, com.google.javascript.rhino.Node
+
+Available API/signatures:
+[com.google.javascript.jscomp.ScopedAliases | java]
+package com.google.javascript.jscomp;
+class ScopedAliases implements HotSwapCompilerPass {
+private Multiset<String> scopedAliasNames = HashMultiset.create();
+@Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node root, Node originalRoot) {
+private abstract class AliasUsage {
+public boolean referencesOtherAlias() {
+public abstract void applyAlias();
+private class AliasedNode extends AliasUsage {
+public void applyAlias() {
+private class AliasedTypeNode extends AliasUsage {
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> aliasUsages = Lists.newArrayList();
+...[truncated deterministically]...
+sition<AliasTransformation> getSourceRegion(Node n) {
+private void findAliases(NodeTraversal t) {
+private void recordAlias(Var aliasVar) {
+private void findNamespaceShadows(NodeTraversal t) {
+private void renameNamespaceShadows(NodeTraversal t) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+[com.google.javascript.rhino.Node | java]
+package com.google.javascript.rhino;
+public class Node implements Cloneable, Serializable {
+private static final String propToString(int propType) {
+private static class NumberNode extends Node {
+public NumberNode(double number, int lineno, int charno) {
+@Override
+public double getD
+...[truncated deterministically]...
+isQuotedString() {
+public void setQuotedString() {
+private interface PropListItem {
+private abstract static class AbstractPropListItem
+public int getType() {
+public PropListItem getNext() {
+public abstract PropListItem chain(PropListItem next);
+private static class ObjectPropListItem
+public int getIntValue() {
+public Object getObjectValue() {
+public String toString() {
+public P
+...[truncated deterministically]...
+Exp() {
+public boolean isReturn() {
+public boolean isScript() {
+public boolean isSetterDef() {
+public boolean isString() {
+public boolean isStringKey() {
+public boolean isSwitch() {
+public boolean isThis() {
+public boolean isThrow() {
+public boolean isTrue() {
+public boolean isTry() {
+public boolean isTypeOf() {
+public boolean isVar() {
+public boolean isVoid() {
+public boolean isWhile() {
+public boolean isWith() {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ public class ScopedAliasesTest extends CompilerTestCase {
+
+     private static final String EXTERNS =
+         "var goog = {};\n" +
+         "goog.scope = function(fn) {};\n" +
+         "goog.dom = {};\n" +
+         "goog.dom.bar = function() {};\n" +
+         "goog.array = {};\n" +
+         "goog.array.forEach = function() {};\n" +
+         "goog.events = {};\n" +
+         "goog.events.listen = function() {};";
+
+     public ScopedAliasesTest() {
+         super(EXTERNS);
+     }
+
+     @Override
+     protected CompilerPass getProcessor(Compiler compiler) {
+         return new ScopedAliases(compiler, null,
+             CompilerOptions.AliasTransformationHandler.NULL);
+     }
+
+     @Override
+     protected int getNumRepetitions() {
+         return 1;
+     }
+
+     @Override
+     protected Compiler createCompiler() {
+         return new Compiler();
+     }
+
+     /**
+      * A plain function declaration inside goog.scope must not trigger
+      * GOOG_SCOPE_NON_ALIAS_LOCAL. This is the core bug: function declarations
+      * were incorrectly flagged as non-alias locals.
+      */
+     public void testFunctionDeclaration() {
+         test(
+             "goog.scope(function() {\n" +
+             "  function f() {}\n" +
+             "});",
+             "function f() {}");
+     }
+
+     /**
+      * A hoisted function declaration (used before its definition) inside
+      * goog.scope must not trigger GOOG_SCOPE_NON_ALIAS_LOCAL either.
+      */
+     public void testHoistedFunctionDeclaration() {
+         test(
+             "goog.scope(function() {\n" +
+             "  f();\n" +
+             "  function f() {}\n" +
+             "});",
+             "f();\n" +
+             "function f() {}");
+     }
+
+     /**
+      * Multiple function declarations in the same goog.scope should all be
+      * allowed without errors.
+      */
+     public void testMultipleFunctionDeclarations() {
+         test(
+             "goog.scope(function() {\n" +
+             "  function f() {}\n" +
+             "  function g() {}\n" +
+             "  function h() {}\n" +
+             "});",
+             "function f() {}\n" +
+             "function g() {}\n" +
+             "function h() {}");
+     }
+
+     /**
+      * A var assignment to a non-namespaced value (not an alias) must still
+      * produce GOOG_SCOPE_NON_ALIAS_LOCAL.
+      */
+     public void testNonAliasVarAssignment() {
+         testError(
+             "goog.scope(function() {\n" +
+             "  var f = 1;\n" +
+             "});",
+             ScopedAliases.GOOG_SCOPE_NON_ALIAS_LOCAL);
+     }
+
+     /**
+      * A var assignment to a function expression (not a function declaration)
+      * is still a non-alias local and must produce the error.
+      */
+     public void testFunctionExpressionAsVar() {
+         testError(
+             "goog.scope(function() {\n" +
+             "  var f = function() {};\n" +
+             "});",
+             ScopedAliases.GOOG_SCOPE_NON_ALIAS_LOCAL);
+     }
+
+     /**
+      * A var assignment to an object literal is not an alias and must error.
+      */
+     public void testObjectLiteralVarAssignment() {
+         testError(
+             "goog.scope(function() {\n" +
+             "  var f = {};\n" +
+             "});",
+             ScopedAliases.GOOG_SCOPE_NON_ALIAS_LOCAL);
+     }
+
+     /**
+      * A proper alias assignment (var x = goog.something) must not error.
+      */
+     public void testValidAliasAssignment() {
+         test(
+             "goog.scope(function() {\n" +
+             "  var foo = goog.dom;\n" +
+             "  foo.bar();\n" +
+             "});",
+             "goog.dom.bar();");
+     }
+
+     /**
+      * Function declarations mixed with valid alias assignments must all work
+      * without spurious NON_ALIAS_LOCAL errors.
+      */
+     public void testFunctionDeclarationMixedWithAlias() {
+         test(
+             "goog.scope(function() {\n" +
+             "  var foo = goog.dom;\n" +
+             "  foo.bar();\n" +
+             "  function f() {}\n" +
+             "});",
+             "goog.dom.bar();\n" +
+             "function f() {}");
+     }
+
+     /**
+      * A function declaration that itself uses an alias should still be allowed
+      * and the alias should be resolved inside the function body.
+      */
+     public void testFunctionDeclarationUsingAlias() {
+         test(
+             "goog.scope(function() {\n" +
+             "  var foo = goog.dom;\n" +
+             "  function f() {\n" +
+             "    foo.bar();\n" +
+             "  }\n" +
+             "});",
+             "function f() {\n" +
+             "  goog.dom.bar();\n" +
+             "}");
+     }
+
+     /**
+      * Nested function declarations inside goog.scope must not produce errors.
+      */
+     public void testNestedFunctionDeclaration() {
+         test(
+             "goog.scope(function() {\n" +
+             "  function outer() {\n" +
+             "    function inner() {}\n" +
+             "  }\n" +
+             "});",
+             "function outer() {\n" +
+             "  function inner() {}\n" +
+             "}");
+     }
+
+     /**
+      * Function declarations placed both before and after an alias definition
+      * must all be accepted without errors.
+      */
+     public void testFunctionsBeforeAndAfterAlias() {
+         test(
+             "goog.scope(function() {\n" +
+             "  function f() {}\n" +
+             "  var foo = goog.dom;\n" +
+             "  foo.bar();\n" +
+             "  function g() {}\n" +
+             "});",
+             "function f() {}\n" +
+             "goog.dom.bar();\n" +
+             "function g() {}");
+     }
+
+     /**
+      * Multiple aliases together with function declarations must work without
+      * errors. All aliases should be resolved and function declarations kept.
+      */
+     public void testMultipleAliasesWithFunctions() {
+         test(
+             "goog.scope(function() {\n" +
+             "  var dom = goog.dom;\n" +
+             "  var arr = goog.array;\n" +
+             "  dom.bar();\n" +
+             "  function f() {\n" +
+             "    arr.forEach();\n" +
+             "  }\n" +
+             "});",
+             "goog.dom.bar();\n" +
+             "function f() {\n" +
+             "  goog.array.forEach();\n" +
+             "}");
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-110f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-110f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-110f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-110f-copilot/.test_suite/com/google/javascript/jscomp/ScopedAliasesTest.java:3: error: cannot find symbol
+ [javac] public class ScopedAliasesTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 58 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

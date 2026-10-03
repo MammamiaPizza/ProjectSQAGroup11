@@ -1,0 +1,141 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 54  Version: Jsoup-54b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 721
+Trigger failures:
+- org.jsoup.helper.W3CDomTest::handlesInvalidAttributeNames
+ --> org.w3c.dom.DOMException: INVALID_CHARACTER_ERR: An invalid or illegal XML character is specified.
+Modified: org.jsoup.helper.W3CDom
+
+Available API/signatures:
+[org.jsoup.helper.W3CDom | java]
+package org.jsoup.helper;
+public class W3CDom {
+protected DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+public Document fromJsoup(org.jsoup.nodes.Document in) {
+public void convert(org.jsoup.nodes.Document in, Document out) {
+protected static class W3CBuilder implements NodeVisitor {
+private final HashMap<String, String> namespaces = new HashMap<String, String>(); // prefix => urn
+public W3CBuilder(Document doc) {
+public void head(org.jsoup.nodes.Node source, int depth) {
+public void tail(org.jsoup.nodes.Node source, int depth) {
+private void copyAttributes(org.jsoup.nodes.Node source, Element el) {
+private String updateNamespaces(org.jsoup.nodes.Element el) {
+public String asString(Document doc) {
+
+Generated JUnit Test:
+package org.jsoup.helper;
+
+ import org.jsoup.Jsoup;
+ import org.junit.Test;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+
+ public class W3CDomTest {
+
+     @Test
+     public void handlesInvalidAttributeNames() {
+         String[] names = {"-leading", "1leading", "a b", "=", "<", "属性", "."};
+
+         for (String name : names) {
+             org.jsoup.nodes.Document html = Jsoup.parse("<div data-ok=\"yes\"></div>");
+             org.jsoup.nodes.Element div = html.select("div").first();
+             div.attr(name, "value");
+
+             org.w3c.dom.Document w3cDoc = new W3CDom().fromJsoup(html);
+
+             assertNotNull(w3cDoc);
+             org.w3c.dom.Element w3cDiv = (org.w3c.dom.Element) w3cDoc.getDocumentElement();
+             assertEquals("yes", w3cDiv.getAttribute("data-ok"));
+         }
+     }
+
+     @Test
+     public void handlesColonContainingAndUnboundPrefixAttributeNames() {
+         org.jsoup.nodes.Document html = Jsoup.parse("<div></div>");
+         org.jsoup.nodes.Element div = html.select("div").first();
+         div.attr("fb:like", "test");
+         div.attr(":", "");
+
+         org.w3c.dom.Document w3cDoc = new W3CDom().fromJsoup(html);
+
+         assertNotNull(w3cDoc);
+         org.w3c.dom.Element w3cDiv = (org.w3c.dom.Element) w3cDoc.getDocumentElement();
+         assertEquals("div", w3cDiv.getTagName());
+         assertEquals("test", w3cDiv.getAttribute("fb:like"));
+     }
+
+     @Test
+     public void ignoresInvalidAttributesWhenElementHasOnlyInvalidAttributes() {
+         org.jsoup.nodes.Document html = Jsoup.parse("<div></div>");
+         org.jsoup.nodes.Element div = html.select("div").first();
+         div.attr("-bad", "x");
+         div.attr("123abc", "x");
+         div.attr("属性", "x");
+
+         org.w3c.dom.Document w3cDoc = new W3CDom().fromJsoup(html);
+
+         assertNotNull(w3cDoc);
+         org.w3c.dom.Element w3cDiv = (org.w3c.dom.Element) w3cDoc.getDocumentElement();
+         assertEquals("div", w3cDiv.getTagName());
+     }
+
+     @Test
+     public void convertsEmptyAttributeValue() {
+         org.jsoup.nodes.Document html = Jsoup.parse("<div data-empty=\"\"></div>");
+
+         org.w3c.dom.Document w3cDoc = new W3CDom().fromJsoup(html);
+
+         org.w3c.dom.Element w3cDiv = (org.w3c.dom.Element) w3cDoc.getDocumentElement();
+         assertEquals("", w3cDiv.getAttribute("data-empty"));
+     }
+
+     @Test
+     public void convertsVeryLongAttributeName() {
+         String longName = repeat('a', 1024);
+         org.jsoup.nodes.Document html = Jsoup.parse("<div></div>");
+         html.select("div").first().attr(longName, "long");
+
+         org.w3c.dom.Document w3cDoc = new W3CDom().fromJsoup(html);
+
+         org.w3c.dom.Element w3cDiv = (org.w3c.dom.Element) w3cDoc.getDocumentElement();
+         assertEquals("long", w3cDiv.getAttribute(longName));
+     }
+
+     @Test
+     public void convertsSimpleDocument() {
+         org.jsoup.nodes.Document html = Jsoup.parse("<div>Hello</div>");
+
+         org.w3c.dom.Document w3cDoc = new W3CDom().fromJsoup(html);
+
+         org.w3c.dom.Element w3cDiv = (org.w3c.dom.Element) w3cDoc.getDocumentElement();
+         assertEquals("div", w3cDiv.getTagName());
+         assertEquals("Hello", w3cDiv.getTextContent());
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void fromJsoupRejectsNullInput() {
+         new W3CDom().fromJsoup(null);
+     }
+
+     private static String repeat(char c, int count) {
+         StringBuilder sb = new StringBuilder(count);
+         for (int i = 0; i < count; i++) {
+             sb.append(c);
+         }
+         return sb.toString();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - org.jsoup.helper.W3CDomTest::handlesColonContainingAndUnboundPrefixAttributeNames
+ - org.jsoup.helper.W3CDomTest::convertsSimpleDocument
+ - org.jsoup.helper.W3CDomTest::handlesInvalidAttributeNames
+Failing generated tests: org.jsoup.helper.W3CDomTest::convertsSimpleDocument, org.jsoup.helper.W3CDomTest::convertsVeryLongAttributeName, org.jsoup.helper.W3CDomTest::handlesColonContainingAndUnboundPrefixAttributeNames, org.jsoup.helper.W3CDomTest::handlesInvalidAttributeNames, org.jsoup.helper.W3CDomTest::ignoresInvalidAttributesWhenElementHasOnlyInvalidAttributes

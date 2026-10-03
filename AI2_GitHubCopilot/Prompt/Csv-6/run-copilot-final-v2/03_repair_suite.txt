@@ -1,0 +1,218 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 6  Version: Csv-6b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-111
+Trigger failures:
+- org.apache.commons.csv.CSVRecordTest::testToMapWithShortRecord
+ --> java.lang.ArrayIndexOutOfBoundsException: 2
+Modified: org.apache.commons.csv.CSVRecord
+
+Available API/signatures:
+[org.apache.commons.csv.CSVRecord | java]
+package org.apache.commons.csv;
+public final class CSVRecord implements Serializable, Iterable<String> {
+/** The record number. */
+/** The values of the record */
+public String get(final Enum<?> e) {
+public String get(final int i) {
+public String get(final String name) {
+"No header mapping was specified, the record values can't be accessed by name");
+final Integer index = mapping.get(name);
+} catch (final ArrayIndexOutOfBoundsException e) {
+public String getComment() {
+public long getRecordNumber() {
+public boolean isConsistent() {
+public boolean isMapped(final String name) {
+public boolean isSet(final String name) {
+public Iterator<String> iterator() {
+<M extends Map<String, String>> M putIn(final M map) {
+for (final Entry<String, Integer> entry : mapping.entrySet()) {
+final int col = entry.getValue().intValue();
+public int size() {
+private List<String> toList() {
+public Map<String, String> toMap() {
+@Override
+public String toString() {
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+ import static org.junit.Assert.*;
+
+ import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.Map;
+ import java.util.NoSuchElementException;
+
+ import org.junit.Test;
+
+ public class CSVRecordTest {
+
+     // Helper to create a mapping from header names to zero-based column indices.
+     private Map<String, Integer> mapping(String... headers) {
+         Map<String, Integer> map = new HashMap<String, Integer>();
+         for (int i = 0; i < headers.length; i++) {
+             map.put(headers[i], i);
+         }
+         return map;
+     }
+
+     // Helper to create a CSVRecord with given values, mapping, and comment.
+     private CSVRecord record(String[] values, Map<String, Integer> mapping, String comment) {
+         return new CSVRecord(values, mapping, comment, 1L);
+     }
+
+     // ---------- toMap() fault-related tests ----------
+
+     @Test
+     public void testToMapWithShortRecord() {
+         // Record has 2 values, mapping expects 3 columns -> bug CSV-111
+         Map<String, Integer> m = mapping("A", "B", "C");
+         CSVRecord r = record(new String[]{"1", "2"}, m, null);
+         Map<String, String> map = r.toMap();
+         assertNotNull(map);
+         assertEquals(3, map.size());
+         assertEquals("1", map.get("A"));
+         assertEquals("2", map.get("B"));
+         assertNull(map.get("C"));          // missing column -> null, no exception
+     }
+
+     @Test
+     public void testToMapWithEmptyRecord() {
+         // no values, mapping expects columns
+         Map<String, Integer> m = mapping("X", "Y");
+         CSVRecord r = record(new String[0], m, null);
+         Map<String, String> map = r.toMap();
+         assertEquals(2, map.size());
+         assertNull(map.get("X"));
+         assertNull(map.get("Y"));
+     }
+
+     @Test
+     public void testToMapWithEmptyMapping() {
+         // mapping is empty, record has values
+         Map<String, Integer> m = new HashMap<String, Integer>();
+         CSVRecord r = record(new String[]{"a", "b"}, m, null);
+         Map<String, String> map = r.toMap();
+         assertTrue(map.isEmpty());
+     }
+
+     @Test
+     public void testToMapNormal() {
+         // matching record and mapping lengths
+         Map<String, Integer> m = mapping("K1", "K2");
+         CSVRecord r = record(new String[]{"v1", "v2"}, m, null);
+         Map<String, String> map = r.toMap();
+         assertEquals(2, map.size());
+         assertEquals("v1", map.get("K1"));
+         assertEquals("v2", map.get("K2"));
+     }
+
+     // ---------- putIn() variant ----------
+
+     @Test
+     public void testPutInWithShortRecord() {
+         Map<String, Integer> m = mapping("A", "B", "C");
+         CSVRecord r = record(new String[]{"x", "y"}, m, null);
+         Map<String, String> target = new HashMap<String, String>();
+         r.putIn(target);
+         assertEquals(3, target.size());
+         assertEquals("x", target.get("A"));
+         assertEquals("y", target.get("B"));
+         assertNull(target.get("C"));
+     }
+
+     // ---------- get(int) bounds ----------
+
+     @Test
+     public void testGetIntWithinRange() {
+         CSVRecord r = record(new String[]{"first", "second", "third"}, null, null);
+         assertEquals("first", r.get(0));
+         assertEquals("second", r.get(1));
+         assertEquals("third", r.get(2));
+     }
+
+     @Test(expected = ArrayIndexOutOfBoundsException.class)
+     public void testGetIntAtSizeThrows() {
+         CSVRecord r = record(new String[]{"a", "b"}, null, null);
+         r.get(2); // exactly equals size
+     }
+
+     @Test(expected = ArrayIndexOutOfBoundsException.class)
+     public void testGetIntBeyondSizeThrows() {
+         CSVRecord r = record(new String[]{"x"}, null, null);
+         r.get(5);
+     }
+
+     // ---------- get(String) bounds ----------
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testGetStringWithIndexBeyondRecordThrows() {
+         Map<String, Integer> m = mapping("col0", "col1");
+         // only 1 value, "col1" maps to index 1 which is out of bounds
+         CSVRecord r = record(new String[]{"val0"}, m, null);
+         r.get("col1");
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testGetStringWithInvalidNameThrows() {
+         Map<String, Integer> m = mapping("name");
+         CSVRecord r = record(new String[]{"data"}, m, null);
+         r.get("nonExistent");
+     }
+
+     @Test(expected = IllegalStateException.class)
+     public void testGetStringWithNullMappingThrows() {
+         CSVRecord r = record(new String[]{"a"}, null, null);
+         r.get("any");
+     }
+
+     // ---------- consistency and set-check ----------
+
+     @Test
+     public void testIsConsistent() {
+         Map<String, Integer> m = mapping("a", "b");
+         CSVRecord good = record(new String[]{"1", "2"}, m, null);
+         CSVRecord shortRecord = record(new String[]{"1"}, m, null);
+         CSVRecord longRecord = record(new String[]{"1", "2", "3"}, m, null);
+         assertTrue(good.isConsistent());
+         assertFalse(shortRecord.isConsistent());
+         assertFalse(longRecord.isConsistent());
+     }
+
+     @Test
+     public void testIsSet() {
+         Map<String, Integer> m = mapping("first", "second");
+         CSVRecord r = record(new String[]{"hello"}, m, null);
+         assertTrue(r.isSet("first"));
+         assertFalse(r.isSet("second"));   // index 1 >= values.length
+     }
+
+     // ---------- trivial attribute access ----------
+
+     @Test
+     public void testSizeAndIterator() {
+         CSVRecord r = record(new String[]{"x", "y", "z"}, null, "comment");
+         assertEquals(3, r.size());
+         assertEquals("comment", r.getComment());
+         assertEquals(1L, r.getRecordNumber());
+         Iterator<String> it = r.iterator();
+         assertTrue(it.hasNext());
+         assertEquals("x", it.next());
+         assertEquals("y", it.next());
+         assertEquals("z", it.next());
+         assertFalse(it.hasNext());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - org.apache.commons.csv.CSVRecordTest::testPutInWithShortRecord
+ - org.apache.commons.csv.CSVRecordTest::testToMapWithShortRecord
+ - org.apache.commons.csv.CSVRecordTest::testToMapWithEmptyRecord
+Failing generated tests: org.apache.commons.csv.CSVRecordTest::testPutInWithShortRecord, org.apache.commons.csv.CSVRecordTest::testToMapWithEmptyRecord, org.apache.commons.csv.CSVRecordTest::testToMapWithShortRecord

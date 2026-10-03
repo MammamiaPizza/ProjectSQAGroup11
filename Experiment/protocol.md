@@ -10,3 +10,13 @@
 8. ทำซ้ำตามรอบ/seed ที่กำหนดไว้ก่อนทดลอง แล้วคำนวณค่าเฉลี่ยจากผลเครื่องมือจริงเท่านั้น
 
 `Result_Round1` และ `Result_Round2` ในแต่ละอัลกอริทึมเป็นช่องสำหรับการทดลองซ้ำ ไม่ใช่รายงานรอบส่งงาน การทดลองนำร่องหนึ่ง bug ยังไม่ครบข้อกำหนดที่ให้ทดสอบทุก Java project ในขอบเขตงาน
+
+## AI repair-round rule
+
+For both ChatGPT and GitHub Copilot, each bug is allowed at most one Prompt 03 repair round.
+
+- If the Prompt 02 suite is valid on the fixed version, Prompt 03 is skipped.
+- If Prompt 02 is invalid, Prompt 03 may be used once.
+- If the repaired suite still fails to compile, fails to run, or contains failing generated tests on the fixed version, the case is recorded as `INVALID_AFTER_REPAIR`.
+- `INVALID_AFTER_REPAIR` cases do not proceed to Prompt 04 and are not counted as successful fault-detection evaluations.
+- The same rule is applied to both AI tools.

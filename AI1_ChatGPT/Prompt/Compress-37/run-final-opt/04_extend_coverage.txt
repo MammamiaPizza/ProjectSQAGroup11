@@ -1,0 +1,195 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: Compress  Bug: 37  Version: Compress-37b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+Bug/specification summary:
+Bug report: COMPRESS-355
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::survivesBlankLinesInPaxHeader
+ --> java.lang.NegativeArraySizeException
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarArchiveInputStream | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveInputStream extends ArchiveInputStream {
+private Map<String, String> globalPaxHeaders = new HashMap<String, String>();
+public TarArchiveInputStream(final InputStream is) {
+public TarArchiveInputStream(final InputStream is, final String encoding) {
+public TarArchiveInputStream(final InputStream is, final int blockSize) {
+public TarArchiveInputStream(final InputStream is, final int blockSize, final int recordSize) {
+@Override
+public void close() throws IOException {
+public int getRecordSize() {
+public int available() throws IOException {
+public long skip(final long n) throws IOException {
+final long skipped = is.skip(Math.min(n, available));
+public boolean markSupported() {
+public void mark(final int markLimit) {
+public synchronized void reset() {
+public TarArchiveEntry getNextTarEntry() throws IOException {
+/* skip to the end of the last record */
+final byte[] headerBuf = getRecord();
+} catch (final IllegalArgumentException e) {
+final byte[] longLinkData = getLongNameData();
+final byte[] longNameData = getLongNameData();
+private void skipRecordPadding() throws IOException {
+final long numRecords = (this.entrySize / this.recordSize) + 1;
+final long padding = (numRecords * this.recordSize) - this.entrySize;
+final long skipped = IOUtils.skip(is, padding);
+protected byte[] getLongNameData() throws IOException {
+final ByteArrayOutputStream longName = new ByteArrayOutputStream();
+private byte[] getRecord() throws IOException {
+protected boolean isEOFRecord(final byte[] record) {
+return record == null
+...[truncated deterministically]...
+irectory() {
+public ArchiveEntry getNextEntry() throws IOException {
+private void tryToConsumeSecondEOFRecord() throws IOException {
+final boolean marked = is.markSupported();
+public int read(final byte[] buf, final int offset, int numToRead) throws IOException {
+public boolean canReadEntryData(final ArchiveEntry ae) {
+final TarArchiveEntry te = (TarArchiveEntry) ae;
+public TarArchiveEntry getCurrentEntry() {
+protected final void setCurrentEntry(final TarArchiveEntry e) {
+protected final boolean isAtEOF() {
+protected final void setAtEOF(final boolean b) {
+private void consumeRemainderOfLastBlock() throws IOException {
+final long bytesReadOfLastBlock = getBytesRead() % blockSize;
+final long skipped = IOUtils.skip(is, blockSize - bytesReadOfLastBlock);
+public static boolean matches(final byte[] signature, final int length) {
+
+Existing test summary (method names/assertions only):
+Test methods: appliesValidPaxPathToFollowingEntry, survivesBlankLineBeforePaxRecord, survivesBlankLineBetweenPaxRecords, survivesBlankLineAfterPaxRecord, survivesPaxHeaderContainingOnlyBlankLine
+Representative assertions:
+assertPaxArchive(pax, "renamed.txt");
+assertPaxArchive(pax, "before.txt");
+assertPaxArchive(pax, "second.txt");
+assertPaxArchive(pax, "after.txt");
+assertPaxArchive("\n", "original.txt");
+private void assertPaxArchive(String paxContents, String expectedName) throws Exception {
+assertEquals(expectedName, entry.getName());
+assertEquals(4, input.read(contents));
+assertArrayEquals("data".getBytes(ASCII), contents);
+assertNull(input.getNextTarEntry());
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+239,128,154,54
+
+Line/branch gaps:
+Class: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+Uncovered lines: 109, 110, 121, 122, 99, 101, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542, 543, 544, 545, 546, 547, 548, 549, 550, 551, 552, 553 ... (+192 more)
+Partially covered branch lines: 528 (50% (1/2)), 184 (50% (1/2)), 187 (50% (1/2)), 713 (50% (1/2)), 263 (50% (1/2)), 292 (50% (1/2)), 303 (50% (1/2)), 314 (50% (1/2)), 320 (50% (1/2)), 324 (50% (1/2)), 400 (75% (3/4)), 588 (50% (2/4)), 416 (75% (3/4)), 467 (50% (1/2)), 473 (50% (1/2)), 478 (50% (1/2)), 646 (66% (4/6)), 650 (50% (1/2)), 658 (50% (1/2)), 431 (50% (1/2)), 212 (50% (2/4)), 342 (50% (3/6)), 616 (50% (1/2)), 620 (50% (1/2)), 622 (25% (1/4)), 184 (50% (1/2)), 187 (50% (1/2)), 212 (50% (2/4)), 263 (50% (1/2)), 292 (50% (1/2)) ... (+20 more)
+
+Relevant buggy-source snippets around reported gaps:
+[org.apache.commons.compress.archivers.tar.TarArchiveInputStream]
+107: */
+108: public TarArchiveInputStream(final InputStream is, final int blockSize) {
+109: this(is, blockSize, TarConstants.DEFAULT_RCDSIZE);
+110: }
+111: 
+---
+108: public TarArchiveInputStream(final InputStream is, final int blockSize) {
+109: this(is, blockSize, TarConstants.DEFAULT_RCDSIZE);
+110: }
+111: 
+112: /**
+---
+119: public TarArchiveInputStream(final InputStream is, final int blockSize,
+120: final String encoding) {
+121: this(is, blockSize, TarConstants.DEFAULT_RCDSIZE, encoding);
+122: }
+123: 
+---
+120: final String encoding) {
+121: this(is, blockSize, TarConstants.DEFAULT_RCDSIZE, encoding);
+122: }
+123: 
+124: /**
+---
+97: */
+98: public TarArchiveInputStream(final InputStream is, final String encoding) {
+99: this(is, TarConstants.DEFAULT_BLKSIZE, TarConstants.DEFAULT_RCDSIZE,
+100: encoding);
+101: }
+---
+99: this(is, TarConstants.DEFAULT_BLKSIZE, TarConstants.DEFAULT_RCDSIZE,
+100: encoding);
+101: }
+102: 
+103: /**
+---
+528: } else if ("linkpath".equals(key)){
+529: currEntry.setLinkName(val);
+530: } else if ("gid".equals(key)){
+531: currEntry.setGroupId(Long.parseLong(val));
+532: } else if ("gname".equals(key)){
+---
+529: currEntry.setLinkName(val);
+530: } else if ("gid".equals(key)){
+531: currEntry.setGroupId(Long.parseLong(val));
+532: } else if ("gname".equals(key)){
+533: currEntry.setGroupName(val);
+---
+530: } else if ("gid".equals(key)){
+531: currEntry.setGroupId(Long.parseLong(val));
+532: } else if ("gname".equals(key)){
+533: currEntry.setGroupName(val);
+534: } else if ("uid".equals(key)){
+---
+531: currEntry.setGroupId(Long.parseLong(val));
+532: } else if ("gname".equals(key)){
+533: currEntry.setGroupName(val);
+534: } else if ("uid".equals(key)){
+535: currEntry.setUserId(Long.parseLong(val));
+---
+532: } else if ("gname".equals(key)){
+533: currEntry.setGroupName(val);
+534: } else if ("uid".equals(key)){
+535: currEntry.setUserId(Long.parseLong(val));
+536: } else if ("uname".equals(key)){
+---
+533: currEntry.setGroupName(val);
+534: } else if ("uid".equals(key)){
+535: currEntry.setUserId(Long.parseLong(val));
+536: } else if ("uname".equals(key)){
+537: currEntry.setUserName(val);
+---
+534: } else if ("uid".equals(key)){
+535: currEntry.setUserId(Long.parseLong(val));
+536: } else if ("uname".equals(key)){
+537: currEntry.setUserName
+...[truncated deterministically]...
+vminor".equals(key)){
+543: currEntry.setDevMinor(Integer.parseInt(val));
+544: } else if ("SCHILY.devmajor".equals(key)){
+545: currEntry.setDevMajor(Integer.parseInt(val));
+---
+542: } else if ("SCHILY.devminor".equals(key)){
+543: currEntry.setDevMinor(Integer.parseInt(val));
+544: } else if ("SCHILY.devmajor".equals(key)){
+545: currEntry.setDevMajor(Integer.parseInt(val));
+546: } else if ("GNU.sparse.size".equals(key)) {
+---
+543: currEntry.setDevMinor(Integer.parseInt(val));
+544: } else if ("SCHILY.devmajor".equals(key)){
+545: currEntry.setDevMajor(Integer.parseInt(val));
+546: } else if ("GNU.sparse.size".equals(key)) {
+547: currEntry.fillGNUSparse0xData(headers);
+---
+544: } else if ("SCHILY.devmajor".equals(key)){
+545: currEntry.setDevMajor(Integer.parseInt(val));
+546: } else if ("GNU.sparse.size".equals(key)) {
+547: currEntry.fillGNUSparse0xData(headers);
+548: } else if ("GNU.sparse.realsize".equals(key)) {
+---
+545: currEntry.setDevMajor(Integer.parseInt(val));
+546: } else if ("GNU.sparse.size".equals(key)) {
+547: currEntry.fillGNUSparse0xData(headers);
+548: } else if ("GNU.sparse.realsize".equals(key)) {
+549: currEntry.fillGNUSparse1xData(headers);

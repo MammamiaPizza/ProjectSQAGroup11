@@ -1,0 +1,417 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Lang  Bug: 42  Version: Lang-42b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.lang.Entities
+Modified: org.apache.commons.lang.Entities
+Triggers: org.apache.commons.lang.StringEscapeUtilsTest::testEscapeHtmlHighUnicode
+
+Bug/specification summary:
+Bug report: LANG-480
+Trigger failures:
+- org.apache.commons.lang.StringEscapeUtilsTest::testEscapeHtmlHighUnicode
+ --> junit.framework.ComparisonFailure: High unicode was not escaped correctly expected:<&#[119650];> but was:<&#[55348;&#57186];>
+Modified: org.apache.commons.lang.Entities
+
+Prompt-01 test plan:
+TARGETS: Entities.escape(String), escape(Writer,String) handling supplementary Unicode code points 
+ORACLES: Trigger expects U+1D306 escaped as "&#119650;" (not separate surrogate numeric entities) 
+CASES: Escape a String containing the high-Unicode character used by StringEscapeUtilsTest 
+CASES: Compare String-returning and Writer overload outputs for the same supplementary character 
+CASES: Boundary around surrogate pairs; preserve normal BMP/entity escaping behavior where observable 
+RISKS: Entities is package-private; tests may need same-package access or exercise via existing public callers 
+RISKS: No other-version context; avoid assuming behavior for malformed/unpaired surrogate input
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.lang.Entities (java) =====
+/* API SIGNATURES */
+package org.apache.commons.lang;
+class Entities {
+public static final Entities XML;
+public static final Entities HTML32;
+public static final Entities HTML40;
+static void fillWithHtml40Entities(Entities entities) {
+static interface EntityMap {
+static class PrimitiveEntityMap implements EntityMap {
+private Map mapNameToValue = new HashMap();
+private IntHashMap mapValueToName = new IntHashMap();
+public void add(String name, int value) {
+public String name(int value) {
+public int value(String name) {
+static abstract class MapIntMap implements Entities.EntityMap {
+protected Map mapNameToValue;
+protected Map mapValueToName;
+static class HashEntityMap extends MapIntMap {
+public HashEntityMap() {
+static class TreeEntityMap extends MapIntMap {
+public TreeEntityMap() {
+static class LookupEntityMap extends PrimitiveEntityMap {
+private String[] lookupTable() {
+private void createLookupTable() {
+static class ArrayEntityMap implements EntityMap {
+protected int growBy = 100;
+protected int size = 0;
+protected String[] names;
+protected int[] values;
+public ArrayEntityMap() {
+public ArrayEntityMap(int growBy) {
+protected void ensureCapacity(int capacity) {
+static class BinaryEntityMap extends ArrayEntityMap {
+public BinaryEntityMap() {
+public BinaryEntityMap(int growBy) {
+private int binarySearch(int key) {
+public void addEntities(String[][] entityArray) {
+public void addEntity(String name, int value) {
+public String entityName(int value) {
+public int entityValue(String name) {
+public String escape(String str) {
+public void escape(Writer writer, String str) throws IOException {
+public String unescape(String str) {
+private StringWriter createStringWriter(String str) {
+public void unescape(Writer writer, String str) throws IOException {
+private void doUnescape(Writer writer, String str, int firstAmp) throws IOException {
+
+/* HEADER */
+package org.apache.commons.lang;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
+class Entities {
+
+/* METHOD escape */
+public String escape(String str) {
+ StringWriter stringWriter = createStringWriter(str);
+ try {
+ this.escape(stringWriter, str);
+ } catch (IOException e) {
+ // This should never happen because ALL the StringWriter methods called by #escape(Writer, String) do not
+ // throw IOExceptions.
+ throw new UnhandledException(e);
+ }
+ return stringWriter.toString();
+ }
+
+/* METHOD unescape */
+public String unescape(String str) {
+ int firstAmp = str.indexOf('&');
+ if (firstAmp < 0) {
+ return str;
+ } else {
+ StringWriter stringWriter = createStringWriter(str);
+ try {
+ this.doUnescape(stringWriter, str, firstAmp);
+ } catch (IOException e) {
+ // This should never happen because ALL the StringWriter methods called by #escape(Writer, String) 
+ // do not throw IOExceptions.
+ throw new UnhandledException(e);
+ }
+ return stringWriter.toString();
+ }
+ }
+
+/* METHOD addEntities */
+public void addEntities(String[][] entityArray) {
+ for (int i = 0; i < entityArray.length; ++i) {
+ addEntity(entityArray[i][0], Integer.parseInt(entityArray[i][1]));
+ }
+ }
+
+/* METHOD add */
+public void add(String name, int value) {
+ mapNameToValue.put(name, new Integer(value));
+ mapValueToName.put(value, name);
+ }
+
+/* METHOD name */
+public String name(int value) {
+ return (String) mapValueToName.get(value);
+ }
+
+/* METHOD value */
+public int value(String name) {
+ Object value = mapNameToValue.get(name);
+ if (value == null) {
+ return -1;
+ }
+ return ((Integer) value).intValue();
+ }
+
+/* METHOD add */
+public void add(String name, int value) {
+ mapNameToValue.put(name, new Integer(value));
+ mapValueToName.put(new Integer(value), name);
+ }
+
+/* METHOD name */
+public String name(int value) {
+ return (String) mapValueToName.get(new Integer(value));
+ }
+
+/* METHOD value */
+public int value(String name) {
+ Object value = mapNameToValue.get(name);
+ if (value == null) {
+ return -1;
+ }
+ return ((Integer) value).intValue();
+ }
+
+/* METHOD HashEntityMap */
+public HashEntityMap() {
+ mapNameToValue = new HashMap();
+ mapValueToName = new HashMap();
+ }
+
+/* METHOD TreeEntityMap */
+public TreeEntityMap() {
+ mapNameToValue = new TreeMap();
+ mapValueToName = new TreeMap();
+ }
+
+/* METHOD name */
+public String name(int value) {
+ if (value < LOOKUP_TABLE_SIZE) {
+ return lookupTable()[value];
+ }
+ return super.name(value);
+ }
+
+/* METHOD ArrayEntityMap */
+public ArrayEntityMap() {
+ names = new String[growBy];
+ values = new int[growBy];
+ }
+
+/* METHOD ArrayEntityMap */
+public ArrayEntityMap(int growBy) {
+ this.growBy = growBy;
+ names = new String[growBy];
+ values = new int[growBy];
+ }
+
+/* METHOD add */
+public void add(String name, int value) {
+ ensureCapacity(size + 1);
+ names[size] = name;
+ values[size] = value;
+ size++;
+ }
+
+/* METHOD ensureCapacity */
+protected void ensureCapacity(int capacity) {
+ if (capacity > names.length) {
+ int newSize = Math.max(capacity, size + growBy);
+ String[] newNames = new String[newSize];
+ System.arraycopy(names, 0, newNames, 0, size);
+ names = newNames;
+ int[] newValues = new int[newSize];
+ System.arraycopy(values, 0, newValues, 0, size);
+ values = newValues;
+ }
+ }
+
+/* METHOD name */
+public String name(int value) {
+ for (int i = 0; i < size; ++i) {
+ if (values[i] == value) {
+ return names[i];
+ }
+ }
+ return null;
+ }
+
+/* METHOD value */
+public int value(String name) {
+ for (int i = 0; i < size; ++i) {
+ if (names[i].equals(name)) {
+ return values[i];
+ }
+ }
+ return -1;
+ }
+
+/* METHOD BinaryEntityMap */
+public BinaryEntityMap() {
+ super();
+ }
+
+/* METHOD BinaryEntityMap */
+public BinaryEntityMap(int growBy) {
+ super(growBy);
+ }
+
+/* METHOD name */
+public String name(int value) {
+ int index = binarySearch(value);
+ if (index < 0) {
+ return null;
+ }
+ return names[index];
+ }
+
+/* METHOD addEntity */
+public void addEntity(String name, int value) {
+ map.add(name, value);
+ }
+
+/* METHOD entityName */
+public String entityName(int value) {
+ return map.name(value);
+ }
+
+/* METHOD entityValue */
+public int entityValue(String name) {
+ return map.value(name);
+ }
+
+/* METHOD escape */
+public void escape(Writer writer, String str) throws IOException {
+ int len = str.length();
+ for (int i = 0; i < len; i++) {
+ char c = str.charAt(i);
+ String entityName = this.entityName(c);
+ if (entityName == null) {
+ if (c > 0x7F) {
+ writer.write("&#");
+ writer.write(Integer.toString(c, 10));
+ writer.write(';');
+ } else {
+ writer.write(c);
+ }
+ } else {
+ writer.write('&');
+ writer.write(entityName);
+ writer.write(';');
+ }
+ }
+ }
+
+/* METHOD unescape */
+public void unescape(Writer writer, String str) throws IOException {
+ int firstAmp = str.indexOf('&');
+ if (firstAmp < 0) {
+ writer.write(str);
+ return;
+ } else {
+ doUnescape(writer, str, firstAmp);
+ }
+ }
+
+/* METHOD binarySearch */
+private int binarySearch(int key) {
+ int low = 0;
+ int high = size - 1;
+
+ while (low <= high) {
+ int mid = (low + high) >>> 1;
+ int midVal = values[mid];
+
+ if (midVal < key) {
+ low = mid + 1;
+ } else if (midVal > key) {
+ high = mid - 1;
+ } else {
+ return mid; // key found
+ }
+ }
+ return -(low + 1); // key not found.
+ }
+
+/* METHOD fillWithHtml40Entities */
+static void fillWithHtml40Entities(Entities entities) {
+ entities.addEntities(BASIC_ARRAY);
+ entities.addEntities(ISO8859_1_ARRAY);
+ entities.addEntities(HTML40_ARRAY);
+ }
+
+/* METHOD doUnescape */
+private void doUnescape(Writer writer, String str, int firstAmp) throws IOException {
+ writer.write(str, 0, firstAmp);
+ int len = str.length();
+ for (int i = firstAmp; i < len; i++) {
+ char c = str.charAt(i);
+ if (c == '&') {
+ int nextIdx = i + 1;
+ int semiColonIdx = str.indexOf(';', nextIdx);
+ if (semiColonIdx == -1) {
+ writer.write(c);
+ continue;
+ }
+ int amphersandIdx = str.indexOf('&', i + 1);
+ if (amphersandIdx != -1 && amphersandIdx < semiColonIdx) {
+ // Then the text looks like &...&...;
+ writer.write(c);
+ continue;
+ }
+ String entityContent = str.substring(nextIdx, semiColonIdx);
+ int entityValue = -1;
+ int entityContentLen = entityContent.length();
+ if (entityContentLen > 0) {
+ if (entityContent.charAt(0) == '#') { // escaped value content is an integer (decimal or
+ // hexidecimal)
+ if (entityContentLen > 1) {
+ char isHexChar = entityContent.charAt(1);
+ try {
+ switch (isHexChar) {
+ case 'X' :
+ case 'x' : {
+ entityValue = Integer.parseInt(entityContent.substring(2), 16);
+ break;
+ }
+ default : {
+ entityValue = Integer.parseInt(entityContent.substring(1), 10);
+ }
+ }
+ if (entityValue > 0xFFFF) {
+ entityValue = -1;
+ }
+ } catch (NumberFormatException e) {
+ entityValue = -1;
+ }
+ }
+ } else { // escaped value content is an entity name
+ entityValue = this.entityValue(entityContent);
+ }
+ }
+
+ if (entityValue == -1) {
+ writer.write('&');
+ writer.write(entityContent);
+ writer.write(';');
+ } else {
+ writer.write(entityValue);
+ }
+ i = semiColonIdx; // move index up to the semi-colon
+ } else {
+ writer.write(c);
+ }
+ }
+ }
+
+/* METHOD lookupTable */
+private String[] lookupTable() {
+ if (lookupTable == null) {
+ createLookupTable();
+ }
+ return lookupTable;
+ }
+
+/* METHOD createLookupTable */
+private void createLookupTable() {
+ lookupTable = new String[LOOKUP_TABLE_SIZE];
+ for (int i = 0; i < LOOKUP_TABLE_SIZE; ++i) {
+ lookupTable[i] = super.name(i);
+ }
+ }
+
+/* METHOD createStringWriter */
+private StringWriter createStringWriter(String str) {
+ return new StringWriter((int) (str.length() + (str.length() * 0.1)));
+ }

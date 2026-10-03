@@ -1,0 +1,589 @@
+## Scope and test target
+
+The supplied class is `org.apache.commons.lang3.math.NumberUtils`. It is a stateless utility class with a public no-argument constructor and static utility methods.
+
+The supplied bug report, **LANG-747**, specifically concerns:
+
+```java
+public static Number createNumber(final String str)
+```
+
+Therefore, the primary regression tests should target `createNumber(String)`, especially hexadecimal inputs whose numeric value exceeds `Integer.MAX_VALUE` despite having no more than eight hexadecimal digits.
+
+No production changes should be made.
+
+---
+
+## 1. Public methods that should be tested
+
+### Primary bug-related method
+
+- `public static Number createNumber(String str)`
+
+### Other public conversion methods
+
+These are public and independently testable, although they are not directly implicated by LANG-747:
+
+- `toInt(String str)`
+- `toInt(String str, int defaultValue)`
+- `toLong(String str)`
+- `toLong(String str, long defaultValue)`
+- `toFloat(String str)`
+- `toFloat(String str, float defaultValue)`
+- `toDouble(String str)`
+- `toDouble(String str, double defaultValue)`
+- `toByte(String str)`
+- `toByte(String str, byte defaultValue)`
+- `toShort(String str)`
+- `toShort(String str, short defaultValue)`
+
+### Public object-creation methods
+
+- `createFloat(String str)`
+- `createDouble(String str)`
+- `createInteger(String str)`
+- `createLong(String str)`
+- `createBigInteger(String str)`
+- `createBigDecimal(String str)`
+
+### Public minimum methods: arrays
+
+- `min(long[] array)`
+- `min(int[] array)`
+- `min(short[] array)`
+- `min(byte[] array)`
+- `min(double[] array)`
+- `min(float[] array)`
+
+### Public maximum methods: arrays
+
+- `max(long[] array)`
+- `max(int[] array)`
+- `max(short[] array)`
+- `max(byte[] array)`
+- `max(double[] array)`
+- `max(float[] array)`
+
+### Public minimum methods: three values
+
+- `min(long a, long b, long c)`
+- `min(int a, int b, int c)`
+- `min(short a, short b, short c)`
+- `min(byte a, byte b, byte c)`
+- `min(double a, double b, double c)`
+- `min(float a, float b, float c)`
+
+### Public maximum methods: three values
+
+- `max(long a, long b, long c)`
+- `max(int a, int b, int c)`
+- `max(short a, short b, short c)`
+- `max(byte a, byte b, byte c)`
+- `max(double a, double b, double c)`
+- `max(float a, float b, float c)`
+
+### Public validation methods
+
+- `isDigits(String str)`
+- `isNumber(String str)`
+
+### Public constructor
+
+- `public NumberUtils()`
+
+The constructor has no observable behavior beyond constructing an instance. It is generally not important for LANG-747 regression coverage, but it can be instantiated if constructor coverage is required.
+
+---
+
+## 2. Input types and valid input ranges
+
+### `createNumber(String)`
+
+Input type: `String`, including `null`.
+
+Supported categories, according to the supplied source documentation and implementation:
+
+- Decimal integers:
+  - `"0"`, `"1"`, `"-1"`
+  - Integer, Long, and BigInteger-sized values.
+- Hexadecimal integer syntax:
+  - `"0x..."`, `"0X..."`
+  - `"-0x..."`, `"-0X..."`
+  - `"#..."`
+  - `"-#..."`
+- Octal integral syntax:
+  - Leading zero, such as `"0777"`.
+- Decimal floating-point syntax:
+  - `"1.5"`, `"1."`, `".5"` where accepted by the delegated parsers.
+- Scientific notation:
+  - `"1e3"`, `"1E3"`, `"1.2e-3"`.
+- Type suffixes:
+  - `f`, `F`, `d`, `D`, `l`, `L`.
+- `null`, which must return `null`.
+- Blank input, which must throw `NumberFormatException`.
+- Invalid numeric syntax, which must throw `NumberFormatException`.
+
+For hexadecimal values, the important representable ranges are:
+
+| Result type | Positive hexadecimal magnitude range |
+|---|---|
+| `Integer` | `0x0` through `0x7FFFFFFF` |
+| `Long` | `0x80000000` through `0x7FFFFFFFFFFFFFFF` |
+| `BigInteger` | Values outside signed `long` range |
+
+For negative hexadecimal values, valid limits differ because the signed minimum is one larger in magnitude:
+
+| Result type | Negative hexadecimal boundary |
+|---|---|
+| `Integer` | `-0x80000000` is representable as `Integer.MIN_VALUE` |
+| `Long` | `-0x8000000000000000` is representable as `Long.MIN_VALUE` |
+
+The exact handling of all negative hex boundary cases should be confirmed against the authoritative fix or existing test suite if tests beyond the supplied bug description are desired.
+
+### Primitive `toXxx` methods
+
+Input type: `String`, plus a primitive default-value overload where present.
+
+Valid numeric range is the corresponding Java primitive parser range:
+
+- `byte`: `Byte.MIN_VALUE` through `Byte.MAX_VALUE`
+- `short`: `Short.MIN_VALUE` through `Short.MAX_VALUE`
+- `int`: `Integer.MIN_VALUE` through `Integer.MAX_VALUE`
+- `long`: `Long.MIN_VALUE` through `Long.MAX_VALUE`
+- `float`: Java `Float.parseFloat` accepted syntax/range
+- `double`: Java `Double.parseDouble` accepted syntax/range
+
+Invalid, null, empty, malformed, and out-of-range strings return the configured default rather than throwing.
+
+### `createFloat`, `createDouble`, `createInteger`, `createLong`
+
+Input type: `String`, including `null`.
+
+- `null` returns `null`.
+- Valid syntax/ranges are delegated to:
+  - `Float.valueOf`
+  - `Double.valueOf`
+  - `Integer.decode`
+  - `Long.decode`
+- Invalid or out-of-range input raises `NumberFormatException`.
+
+### `createBigInteger`
+
+Input type: `String`, including `null`.
+
+Supported prefixes in the implementation:
+
+- Optional initial `-`
+- `"0x"` lower-case only, as implemented
+- `"#"`
+- Leading `"0"` for octal, when additional digits follow
+- Decimal otherwise
+
+Potential implementation/documentation inconsistency:
+
+```java
+if (str.startsWith("0x", pos) || str.startsWith("0x", pos))
+```
+
+The same lower-case condition is repeated. Upper-case `"0X"` is not recognized by this method, despite `createNumber` recognizing `"0X"` as a hexadecimal prefix. This is outside the supplied LANG-747 report, but it is a reachable behavior worth noting for broader testing.
+
+### `createBigDecimal`
+
+Input type: `String`, including `null`.
+
+- `null` returns `null`.
+- Blank strings throw `NumberFormatException`.
+- Strings which trim to a `"--"` prefix throw `NumberFormatException`.
+- Otherwise behavior is delegated to `new BigDecimal(str)`.
+
+### `min` and `max` array methods
+
+Input types:
+
+- `long[]`
+- `int[]`
+- `short[]`
+- `byte[]`
+- `float[]`
+- `double[]`
+
+Valid input: non-null, non-empty array.
+
+For `float[]` and `double[]`:
+
+- `NaN` in an element visited after index zero returns `NaN`.
+- The supplied implementation does **not** explicitly inspect whether element zero is `NaN`; comparison behavior still results in that initial `NaN` being retained unless a later NaN is encountered. Tests should treat this as implementation behavior only unless an external oracle specifies intended semantics.
+- Infinity is supported through ordinary comparisons.
+
+### `min` and `max` three-value methods
+
+Input types are primitive numeric values. All primitive values are valid.
+
+For `float` and `double` overloads, behavior is delegated to `Math.min` / `Math.max`, including NaN and signed-zero semantics.
+
+### `isDigits(String)`
+
+Input type: `String`, including `null`.
+
+- `null` and empty string return `false`.
+- Uses `Character.isDigit`, so valid digit characters include Unicode digit characters, not just ASCII `'0'` through `'9'`.
+
+### `isNumber(String)`
+
+Input type: `String`, including `null`.
+
+- `null` and empty string return `false`.
+- Accepts a subset of Java-like numeric formats described by its internal parser.
+- Its validation behavior is not guaranteed to align exactly with `createNumber`; for example, `isNumber` recognizes lower-case `"0x"` but its source does not check upper-case `"0X"` in the hexadecimal shortcut.
+
+---
+
+## 3. Conditions and reachable branches
+
+## `createNumber(String)` branch structure
+
+The most relevant branches for LANG-747 are the hexadecimal-prefix path:
+
+1. `str == null`
+   - Returns `null`.
+
+2. `StringUtils.isBlank(str)`
+   - Throws `NumberFormatException`.
+
+3. Hexadecimal-prefix recognition:
+   - `"0x"`
+   - `"0X"`
+   - `"-0x"`
+   - `"-0X"`
+   - `"#"`
+   - `"-#"`
+
+4. Hexadecimal digit-count selection:
+   ```java
+   if (hexDigits > 16) {
+       return createBigInteger(str);
+   }
+   if (hexDigits > 8) {
+       return createLong(str);
+   }
+   return createInteger(str);
+   ```
+
+5. Non-hex processing:
+   - Decimal-point detection.
+   - Exponent detection.
+   - Suffix detection (`L/l`, `F/f`, `D/d`).
+   - Integral type escalation:
+     `Integer` → `Long` → `BigInteger`.
+   - Floating type escalation:
+     `Float` → `Double` → `BigDecimal`.
+   - Precision routing based on digits after the decimal point:
+     - ≤7 decimal digits: try `Float`.
+     - 8–16 decimal digits: try `Double`.
+     - >16 decimal digits: `BigDecimal`.
+
+### LANG-747 faulty branch
+
+A hexadecimal literal with exactly eight digits is always routed to:
+
+```java
+return createInteger(str);
+```
+
+This is wrong when the hexadecimal magnitude exceeds the positive signed `int` range.
+
+Examples:
+
+- `"0x7FFFFFFF"` fits in `Integer`; current routing is valid.
+- `"0x80000000"` has eight hex digits but exceeds `Integer.MAX_VALUE`; it must not be forced through `createInteger`.
+- `"0xFFFFFFFF"` has eight hex digits but represents `4294967295`, which requires `Long`.
+
+The current buggy source will invoke `Integer.decode` for the latter two positive values, causing `NumberFormatException`.
+
+### Other key reachable branches
+
+- Hex values with 9–16 digits are sent to `createLong`.
+- Hex values with more than 16 digits are sent to `createBigInteger`.
+- Decimal integral values attempt `Integer`, then `Long`, then `BigInteger`.
+- Decimal floating values select among `Float`, `Double`, and `BigDecimal`.
+- Type-qualified long values reject decimal/exponent forms.
+- Invalid suffixes and malformed exponent forms throw `NumberFormatException`.
+
+---
+
+## 4. Normal, boundary, invalid, null, and exceptional cases
+
+## Required LANG-747-focused cases
+
+These are the highest-value regression cases.
+
+### Normal hexadecimal integer case
+
+- Input: `"0x7FFFFFFF"`
+- Expected result:
+  - type: `Integer`
+  - value: `Integer.MAX_VALUE` (`2147483647`)
+- Purpose: establishes the largest positive hexadecimal value that still fits in `Integer`.
+
+### Boundary just above `Integer.MAX_VALUE`
+
+- Input: `"0x80000000"`
+- Expected result:
+  - type: `Long`
+  - value: `2147483648L`
+- Purpose: exact transition from `Integer` to `Long`.
+
+### Eight-digit hexadecimal value requiring `Long`
+
+- Input: `"0xFFFFFFFF"`
+- Expected result:
+  - type: `Long`
+  - value: `4294967295L`
+- Purpose: direct reproduction of the reported defect: an eight-digit hexadecimal value must not be assumed to fit `Integer`.
+
+### Prefix variants
+
+The implementation expressly supports these prefixes, so representative coverage should include:
+
+- `"0XFFFFFFFF"` → `Long` with value `4294967295L`
+- `"#FFFFFFFF"` → `Long` with value `4294967295L`
+
+The expected result follows the documented prefix support and the same numeric-range requirement described in LANG-747.
+
+### Existing behavior control case
+
+- Input: `"0x100000000"`
+- Expected:
+  - type: `Long`
+  - value: `4294967296L`
+- Purpose: validates that the existing `hexDigits > 8` Long-routing branch continues to work.
+
+## Useful extended boundaries
+
+These are logically related to hex type selection but go beyond the explicit supplied bug text.
+
+- `"0x7FFFFFFFFFFFFFFF"`
+  - Expected: `Long.valueOf(Long.MAX_VALUE)`.
+- `"0x8000000000000000"`
+  - Expected: likely `BigInteger` with value `9223372036854775808`.
+- `"0xFFFFFFFFFFFFFFFF"`
+  - Expected: likely `BigInteger` with value `18446744073709551615`.
+
+These expected results follow representability requirements, but the supplied `createNumber` Javadoc says selection is based on “more than 8” and “more than 16” digits, which is incomplete at signed boundaries. The exact desired outcome for the 16-digit overflow cases should ideally be corroborated by the fixed version or original tests before adding them as strict regression assertions.
+
+## Null cases
+
+For `createNumber`:
+
+- Input: `null`
+- Expected: `null`
+
+For `createFloat`, `createDouble`, `createInteger`, `createLong`, `createBigInteger`, and `createBigDecimal`:
+
+- Input: `null`
+- Expected: `null`
+
+For primitive conversion methods:
+
+- Input: `null`
+- Expected:
+  - no-default overload: zero of the corresponding primitive type;
+  - default overload: specified default.
+
+For array `min`/`max` methods:
+
+- Input: `null`
+- Expected: `IllegalArgumentException`.
+
+For `isDigits` and `isNumber`:
+
+- Input: `null`
+- Expected: `false`.
+
+## Invalid and exceptional `createNumber` cases
+
+Per supplied source and documentation:
+
+- `""` → `NumberFormatException`
+- `" "` / whitespace-only input → `NumberFormatException`
+- `" 1"` and `"1 "` → `NumberFormatException`; `createNumber` does not trim.
+- `"0x"` → `NumberFormatException`
+- `"-0x"` → `NumberFormatException`
+- malformed hex, e.g. `"0xG"` → `NumberFormatException`
+- malformed exponent, e.g. `"1e"`, `"1e+"`, `"1e2e3"` → `NumberFormatException`
+- invalid qualifier combinations, e.g. `"1.0L"` → `NumberFormatException`
+- invalid characters, e.g. `"abc"` → `NumberFormatException`
+
+## Array `min`/`max` boundaries
+
+For each primitive array overload:
+
+- one-element array;
+- already ordered values;
+- first element is minimum/maximum;
+- middle or final element is minimum/maximum;
+- duplicate extrema;
+- primitive min/max values where applicable.
+
+Additional float/double cases:
+
+- `NaN` after index zero;
+- positive and negative infinity;
+- positive zero and negative zero if signed-zero behavior is relevant.
+
+---
+
+## 5. Required constructors, dependencies, and external objects
+
+### Constructor
+
+`NumberUtils` has:
+
+```java
+public NumberUtils()
+```
+
+No constructor dependency is required. All production APIs of interest are static.
+
+### Production dependencies
+
+The class depends on:
+
+- `org.apache.commons.lang3.StringUtils`
+  - `StringUtils.isBlank`
+  - `StringUtils.isEmpty`
+- Java standard library:
+  - `java.math.BigDecimal`
+  - `java.math.BigInteger`
+  - `java.lang.reflect.Array`
+  - wrapper classes and parsing utilities.
+
+### Test dependencies
+
+For focused `createNumber` regression tests, only the following are needed:
+
+- `org.junit.Test`
+- static JUnit assertions, typically:
+  - `assertEquals`
+  - `assertTrue`
+  - `assertNull`
+  - optionally `fail`
+- Java:
+  - `java.math.BigInteger` only if testing BigInteger cases.
+
+No mocks, filesystem resources, clocks, network calls, service objects, or test fixtures are needed.
+
+---
+
+## 6. JUnit version and build tool
+
+Supplied project context states:
+
+- **JUnit:** 4.12
+- **Build system:** Ant, through Defects4J
+- **Project/version:** Defects4J `Lang-1b`
+- **Java:** Java 11
+
+Tests must therefore use JUnit 4 style, such as:
+
+```java
+import org.junit.Test;
+import static org.junit.Assert.*;
+```
+
+JUnit Jupiter/JUnit 5 APIs must not be used.
+
+---
+
+## 7. Available test oracles
+
+The supplied reliable oracles are:
+
+1. **LANG-747 bug report**
+   - States that `NumberUtils.createNumber` must handle hexadecimal values too large for `Integer`.
+   - Explicitly identifies the defect: the implementation incorrectly assumes every short hexadecimal literal fits into `Integer`.
+
+2. **Supplied `createNumber` Javadoc**
+   - Establishes supported hexadecimal prefix forms.
+   - Establishes return types as `Integer`, `Long`, or `BigInteger`.
+   - Establishes null and exception behavior.
+
+3. **Java numeric ranges**
+   - `Integer.MAX_VALUE = 0x7FFFFFFF`
+   - First positive value above it: `0x80000000 = 2147483648L`
+   - `0xFFFFFFFF = 4294967295L`
+   - These are objective numeric facts and support type/value assertions.
+
+4. **Java parsing behavior**
+   - `Long.decode("0xFFFFFFFF")` represents `4294967295L`.
+   - `Integer.decode("0xFFFFFFFF")` cannot represent the value and throws `NumberFormatException`.
+
+Not supplied:
+
+- Original project test suite.
+- Fixed production source.
+- Existing regression test for LANG-747.
+- Exact patch.
+- Full build-file/test-source layout.
+
+The absence of these artifacts does not prevent a focused, meaningful regression test for `0x80000000` and `0xFFFFFFFF`, because LANG-747 and Java numeric ranges provide a sufficient oracle.
+
+---
+
+## 8. Behaviors related to LANG-747 that should be tested
+
+The regression tests should verify all of the following:
+
+1. **Eight hex digits alone must not determine `Integer` suitability.**
+   - A positive eight-digit hex value can exceed `Integer.MAX_VALUE`.
+
+2. **`createNumber("0x80000000")` must return a `Long`.**
+   - Expected numeric value: `2147483648L`.
+
+3. **`createNumber("0xFFFFFFFF")` must return a `Long`.**
+   - Expected numeric value: `4294967295L`.
+
+4. **Existing valid `Integer` hex behavior is retained.**
+   - `createNumber("0x7FFFFFFF")` remains an `Integer`.
+
+5. **Supported hexadecimal prefix variants should receive equivalent range handling.**
+   - At minimum, consider `"0XFFFFFFFF"` and `"#FFFFFFFF"`.
+   - The source explicitly recognizes these prefix forms in `createNumber`.
+
+6. **No `NumberFormatException` should be thrown for valid, positive hexadecimal values that fit in `long`.**
+   - This is the observed failure mechanism in the buggy implementation.
+
+A test that only verifies numeric equality is insufficient: it should also assert the concrete returned type. For example, an expected `Long` must not merely be numerically equal to some other `Number`; the type-selection behavior is part of the API behavior under test.
+
+---
+
+## 9. Missing context and limitations
+
+### Sufficient context for focused bug tests
+
+There is enough supplied information to generate compilable and meaningful JUnit 4 regression tests for LANG-747, particularly for:
+
+- `"0x7FFFFFFF"` → `Integer`
+- `"0x80000000"` → `Long`
+- `"0xFFFFFFFF"` → `Long`
+- optionally uppercase and `#` prefixes.
+
+### Missing context for broad project-wide tests
+
+The following information is not supplied:
+
+- The repository’s existing test directory/package conventions.
+- Ant targets or the exact Defects4J test command.
+- Existing `NumberUtils` tests and historical expected behavior.
+- The fixed source or upstream patch.
+- The exact intended behavior for every hex edge case at the `Long`/`BigInteger` signed boundary, particularly:
+  - `"0x8000000000000000"`
+  - `"0xFFFFFFFFFFFFFFFF"`
+  - negative values at signed minimum boundaries.
+- The source of `StringUtils`, though it is not needed to compile/use focused tests if the project dependency is present in the supplied Defects4J checkout.
+
+### Important documentation limitation
+
+The supplied `createNumber` Javadoc says hexadecimal values become `Long` only when there are “more than 8” digits. LANG-747 directly demonstrates that this digit-count rule is insufficient: exactly eight digits can exceed signed `int` range. Therefore, tests should use the bug report and numeric representability as the oracle rather than treating that wording as authoritative for the defective behavior.
+
+No JUnit test class has been generated in this response.

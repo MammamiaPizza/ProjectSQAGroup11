@@ -1,0 +1,183 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 133  Version: Closure-133b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 919
+Trigger failures:
+- com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testTextExtents
+ --> java.lang.IllegalStateException: Recorded bad position information
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+
+Available API/signatures:
+[com.google.javascript.jscomp.parsing.JsDocInfoParser | java]
+package com.google.javascript.jscomp.parsing;
+public final class JsDocInfoParser {
+private final ErrorReporterParser parser = new ErrorReporterParser();
+private class ErrorReporterParser {
+private enum State {
+private String getSourceName() {
+public JSDocInfo parseInlineTypeDoc() {
+public static Node parseTypeString(String typeString) {
+@SuppressWarnings("incomplete-switch")
+parser.addTypeWarning("msg.jsdoc.interface.constructor",
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+private JsDocToken parseSuppressTag(JsDocToken token) {
+private JsDocToken parseModifiesTag(JsDocToken token) {
+private Node parseAndRecordTypeNode(JsDocToken token, boolean matchingLC) {
+private Node parseAndRecordParamTypeNode(JsDocToken token) {
+private String toString(JsDocToken token) {
+private static class ExtractionInfo {
+public ExtractionInfo(String string, JsDocToken token) {
+private static class ExtendedTypeInfo {
+public ExtendedTypeInfo(JSTypeExpression type, int lineno, int charno) {
+private ExtractionInfo extractSingleLineBlock() {
+private ExtractionInfo extractMultilineTextualBlock(JsDocToken token) {
+private enum WhitespaceOption {
+@SuppressWarnings("fallthrough")
+private ExtractionInfo extractBlockComment(JsDocToken token) {
+private static String trimEnd(String s) {
+private Node parseTypeExpressionAnnotation(JsDocToken token) {
+private Node parseParamTypeExpressionAnnotation(JsDocToken token) {
+private Node parseTypeNameAnnotation(JsDocToken token) {
+private Node parseTopLevelTypeExpression(JsDocToken token) {
+private Node parseTypeExpressionList(JsDocToken token)
+...[truncated deterministically]...
+vate Node parseFieldName(JsDocToken token) {
+private Node wrapNode(int type, Node n) {
+private Node newNode(int type) {
+private Node newStringNode(String s) {
+private Node newStringNode(String s, int lineno, int charno) {
+private Node createTemplateNode() {
+private Node reportTypeSyntaxWarning(String warning) {
+private Node reportGenericTypeSyntaxWarning() {
+private JsDocToken eatTokensUntilEOL() {
+private JsDocToken eatTokensUntilEOL(JsDocToken token) {
+private void restoreLookAhead(JsDocToken token) {
+private boolean match(JsDocToken token) {
+private boolean match(JsDocToken token1, JsDocToken token2) {
+private JsDocToken next() {
+private JsDocToken current() {
+private void skipEOLs() {
+private String getRemainingJSDocLine() {
+private boolean hasParsedFileOverviewDocInfo() {
+private boolean lookAheadForTypeAnnotation() {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp.parsing;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+import com.google.javascript.rhino.JSDocInfo;
+import java.util.HashSet;
+import org.junit.Test;
+
+public class JsDocInfoParserTextExtentsTest {
+
+  private JSDocInfo parse(String comment) {
+    Config config = new Config(
+        new HashSet<String>(),
+        new HashSet<String>(),
+        true,
+        LanguageMode.ECMASCRIPT3,
+        false);
+    JsDocInfoParser parser = new JsDocInfoParser(
+        new JsDocTokenStream(comment),
+        null,
+        null,
+        config,
+        NullErrorReporter.forNewRhino());
+
+    assertTrue(parser.parse());
+    JSDocInfo info = parser.retrieveAndResetParsedJSDocInfo();
+    assertNotNull(info);
+    return info;
+  }
+
+  @Test
+  public void testMultilineBlockDescriptionHasStableTextExtent() {
+    JSDocInfo info = parse(
+        "/**\n"
+            + " * First line of documentation.\n"
+            + " * Second line of documentation.\n"
+            + " */");
+
+    assertEquals(
+        "First line of documentation.\nSecond line of documentation.",
+        info.getBlockDescription());
+  }
+
+  @Test
+  public void testSingleLineBlockDescription() {
+    JSDocInfo info = parse("/** A concise description. */");
+
+    assertEquals("A concise description.", info.getBlockDescription());
+  }
+
+  @Test
+  public void testMultilineParameterDescriptionBeforeClosingComment() {
+    JSDocInfo info = parse(
+        "/**\n"
+            + " * @param {string} value First part of the description.\n"
+            + " *     Second part of the description.\n"
+            + " */");
+
+    assertEquals(
+        "First part of the description.\nSecond part of the description.",
+        info.getDescriptionForParameter("value"));
+  }
+
+  @Test
+  public void testMultilineReturnDescriptionWithWhitespaceOnlyLine() {
+    JSDocInfo info = parse(
+        "/**\n"
+            + " * @return {number} The computed value.\n"
+            + " *     It is always finite.\n"
+            + " *\n"
+            + " */");
+
+    assertEquals(
+        "The computed value.\nIt is always finite.",
+        info.getReturnDescription());
+  }
+
+  @Test
+  public void testDescriptionDoesNotIncludeTrailingWhitespaceOnlyLines() {
+    JSDocInfo info = parse(
+        "/**\n"
+            + " * Text immediately before the end of the comment.\n"
+            + " *    \n"
+            + " *\n"
+            + " */");
+
+    assertEquals(
+        "Text immediately before the end of the comment.",
+        info.getBlockDescription());
+  }
+
+  @Test
+  public void testDeprecatedReasonCanSpanMultipleLines() {
+    JSDocInfo info = parse(
+        "/**\n"
+            + " * @deprecated Use the replacement API.\n"
+            + " *     This API will be removed later.\n"
+            + " */");
+
+    assertEquals(
+        "Use the replacement API.\nThis API will be removed later.",
+        info.getDeprecationReason());
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 6
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testMultilineReturnDescriptionWithWhitespaceOnlyLine
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testMultilineParameterDescriptionBeforeClosingComment
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testDescriptionDoesNotIncludeTrailingWhitespaceOnlyLines
+Failing generated tests: com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testDeprecatedReasonCanSpanMultipleLines, com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testDescriptionDoesNotIncludeTrailingWhitespaceOnlyLines, com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testMultilineBlockDescriptionHasStableTextExtent, com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testMultilineParameterDescriptionBeforeClosingComment, com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testMultilineReturnDescriptionWithWhitespaceOnlyLine, com.google.javascript.jscomp.parsing.JsDocInfoParserTextExtentsTest::testSingleLineBlockDescription

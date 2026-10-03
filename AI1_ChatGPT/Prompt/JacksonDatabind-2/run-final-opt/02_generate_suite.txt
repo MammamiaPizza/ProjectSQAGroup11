@@ -1,0 +1,456 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 2  Version: JacksonDatabind-2b
+JUnit: junit-4.8.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.util.TokenBuffer
+Modified: com.fasterxml.jackson.databind.util.TokenBuffer
+Triggers: com.fasterxml.jackson.databind.node.TestConversions::testConversionOfPojos
+
+Bug/specification summary:
+Bug report: 467
+Trigger failures:
+- com.fasterxml.jackson.databind.node.TestConversions::testConversionOfPojos
+ --> junit.framework.AssertionFailedError: Expected Object, got POJO
+Modified: com.fasterxml.jackson.databind.util.TokenBuffer
+
+Prompt-01 test plan:
+TARGETS: TokenBuffer POJO/object writing and parser token/value exposure used by POJO conversion. 
+ORACLES: Trigger expectation: converted POJO is exposed as Object, not POJO. 
+CASES: Buffer a POJO via ObjectCodec, parse/deserialize it, and assert resulting node/value type is Object. 
+CASES: Exercise nested POJO properties and scalar fields through TokenBuffer serialization/parsing. 
+CASES: Check firstToken/asParser token sequence for buffered object start, field names, values, end. 
+RISKS: Available context omits complete writeObject/writePOJO signatures and exact conversion setup.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.util.TokenBuffer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.util;
+public class TokenBuffer
+protected final static int DEFAULT_GENERATOR_FEATURES = JsonGenerator.Feature.collectDefaults();
+protected ObjectCodec _objectCodec;
+protected int _generatorFeatures;
+protected boolean _closed;
+protected boolean _hasNativeTypeIds;
+protected boolean _hasNativeObjectIds;
+protected boolean _mayHaveNativeIds;
+protected Segment _first;
+protected Segment _last;
+protected int _appendAt;
+protected Object _typeId;
+protected Object _objectId;
+protected boolean _hasNativeId = false;
+protected JsonWriteContext _writeContext;
+@Deprecated
+public TokenBuffer(ObjectCodec codec) {
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+public TokenBuffer(JsonParser jp)
+@Override
+public Version version() {
+public JsonParser asParser()
+public JsonParser asParser(ObjectCodec codec)
+public JsonParser asParser(JsonParser src)
+public JsonToken firstToken() {
+@SuppressWarnings("resource")
+public TokenBuffer append(TokenBuffer other)
+public void serialize(JsonGenerator jgen)
+public TokenBuffer deserialize(JsonParser jp, DeserializationContext ctxt)
+public String toString()
+private final void _appendNativeIds(StringBuilder sb)
+public JsonGenerator enable(Feature f) {
+public JsonGenerator disable(Feature f) {
+public boolean isEnabled(Feature f) {
+public int getFeatureMask() {
+public JsonGenerator setFeatureMask(int mask) {
+public JsonGenerator useDefaultPrettyPrinter() {
+public JsonGenerator setCodec(ObjectCodec oc) {
+public ObjectCodec getCodec() { return _objectCodec; }
+public final JsonWriteContext getOutputContext() { return _writeContext; }
+public boolean canWriteBinaryNatively() {
+public void flush() throws IOException { /* NOP */ }
+public void close() throws IOException {
+public boolean isClosed() { return _closed; }
+public final void writeStartArray()
+public final void writeEndArray()
+public final void writeStartObject()
+public final void writeEndObject()
+public final void writeFieldName(String name)
+public void writeFieldName(SerializableString name)
+public void writeString(String text) throws IOException,JsonGenerationException {
+public void writeString(char[] text, int offset, int len) throws IOException, JsonGenerationException {
+public void writeString(SerializableString text) throws IOException, JsonGenerationException {
+public void writeRawUTF8String(byte[] text, int offset, int length)
+public void writeUTF8String(byte[] text, int offset, int length)
+public void writeRaw(String text) throws IOException, JsonGenerationException {
+public void writeRaw(String text, int offset, int len) throws IOException, JsonGenerationException {
+public void writeRaw(Serializa
+...[truncated deterministically]...
+t getObjectId() {
+protected final Object _currentObject() {
+protected final void _checkIsNumber() throws JsonParseException
+protected void _handleEOF() throws JsonParseException {
+protected final static class Segment
+public final static int TOKENS_PER_SEGMENT = 16;
+protected Segment _next;
+protected long _tokenTypes;
+protected final Object[] _tokens = new Object[TOKENS_PER_SEGMENT];
+protected TreeMap<Integer,Object> _nativeIds;
+public Segment() { }
+public JsonToken type(int index)
+public int rawType(int index)
+public Object get(int index) {
+public Segment next() { return _next; }
+public boolean hasIds() {
+public Segment append(int index, JsonToken tokenType)
+public Segment append(int index, JsonToken tokenType, Object value)
+public Segment appendRaw(int index, int rawTokenType, Object value)
+private void set(int index, JsonToken tokenType)
+private void set(int index, JsonToken tokenType, Object value)
+private void set(int index, int rawTokenType, Object value)
+private void set(int index, int rawTokenType, Object value, Object objectId, Object typeId)
+private final void assignNativeIds(int index, Object objectId, Object typeId)
+public Object findObjectId(int index) {
+public Object findTypeId(int index) {
+private final int _typeIdIndex(int i) { return i+i; }
+private final int _objectIdIndex(int i) { return i+i+1; }
+
+/* HEADER */
+package com.fasterxml.jackson.databind.util;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.TreeMap;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.base.ParserMinimalBase;
+import com.fasterxml.jackson.core.json.JsonReadContext;
+import com.fasterxml.jackson.core.json.JsonWriteContext;
+import com.fasterxml.jackson.core.util.ByteArrayBuilder;
+import com.fasterxml.jackson.databind.*;
+public class TokenBuffer
+
+/* METHOD TokenBuffer */
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+ {
+ _objectCodec = codec;
+ _generatorFeatures = DEFAULT_GENERATOR_FEATURES;
+ _writeContext = JsonWriteContext.createRootContext(null);
+ // at first we have just one segment
+ _first = _last = new Segment();
+ _appendAt = 0;
+ _hasNativeTypeIds = hasNativeIds;
+ _hasNativeObjectIds = hasNativeIds;
+
+ _mayHaveNativeIds = _hasNativeTypeIds | _hasNativeObjectIds;
+ }
+
+/* METHOD TokenBuffer */
+public TokenBuffer(JsonParser jp)
+ {
+ _objectCodec = jp.getCodec();
+ _generatorFeatures = DEFAULT_GENERATOR_FEATURES;
+ _writeContext = JsonWriteContext.createRootContext(null);
+ // at first we have just one segment
+ _first = _last = new Segment();
+ _appendAt = 0;
+ _hasNativeTypeIds = jp.canReadTypeId();
+ _hasNativeObjectIds = jp.canReadObjectId();
+ _mayHaveNativeIds = _hasNativeTypeIds | _hasNativeObjectIds;
+ }
+
+/* METHOD TokenBuffer */
+@Deprecated
+ public TokenBuffer(ObjectCodec codec) {
+ this(codec, false);
+ }
+
+/* METHOD version */
+@Override
+ public Version version() {
+ return com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION;
+ }
+
+/* METHOD writeBinary */
+@Override
+ public void writeBinary(Base64Variant b64variant, byte[] data, int offset, int len)
+ throws IOException, JsonGenerationException
+ {
+ /* 31-Dec-2009, tatu: can do this using multiple alternatives; but for
+ * now, let's try to limit number of conversions.
+ * The only (?) tricky thing is that of whether to preserve variant,
+ * seems pointless, so let's not worry about it unless there's some
+ * compelling reason to.
+ */
+ byte[] copy = new byte[len];
+ System.arraycopy(data, offset, copy, 0, len);
+ writeObject(copy);
+ }
+
+ /**
+ * Although we could support this method, it does not necessarily make
+ * sense: we can not make good use of streaming because buffer must
+ * hold all the data. Because of this, currently this will simply
+ * throw {@link UnsupportedOperationException}
+ */
+ @Override
+ public int writeBinary(Base64Variant b64variant, InputStream data, int dataLength) {
+ throw new UnsupportedOperationException();
+ }
+
+ /*
+ /***********************************************************
+ /* JsonGenerator implementation: native ids
+ /***********************************************************
+ */
+
+ @Override
+ public boolean canWriteTypeId() {
+ return _hasNativeTypeIds;
+ }
+
+ @Override
+ public boolean canWriteObjectId() {
+ return _hasNativeObjectIds;
+ }
+ 
+ @Override
+ public void writeTypeId(Object id) {
+ _typeId = id;
+ _hasNativeId = true;
+ }
+ 
+ @Override
+ public void writeObjectId(Object id) {
+ _objectId = id;
+ _hasNativeId = true;
+ }
+
+ /*
+ /**********************************************************
+ /* JsonGenerator implementation; pass-through copy
+ /**********************************************************
+ */
+
+ @Override
+ public void copyCurrentEvent(JsonParser jp) throws IOException, JsonProcessingException
+ {
+ if (_mayHaveNativeIds) {
+ _checkNativeIds(jp);
+ }
+ switch (jp.getCurrentToken()) {
+ case START_OBJECT:
+ writeStartObject();
+ break;
+ case END_OBJECT:
+ writeEndObject();
+ break;
+ case START_ARRAY:
+ writeStartArray();
+ break;
+ case END_ARRAY:
+ writeEndArray();
+ break;
+ case FIELD_NAME:
+ writeFieldName(jp.getCurrentName());
+ break;
+ case VALUE_STRING:
+ if (jp.hasTextCharacters()) {
+ writeString(jp.getTextCharacters(), jp.getTextOffset(), jp.getTextLength());
+ } else {
+ writeString(jp.get
+...[truncated deterministically]...
+MBER_INT:
+ switch (jp.getNumberType()) {
+ case INT:
+ writeNumber(jp.getIntValue());
+ break;
+ case BIG_INTEGER:
+ writeNumber(jp.getBigIntegerValue());
+ break;
+ default:
+ writeNumber(jp.getLongValue());
+ }
+ break;
+ case VALUE_NUMBER_FLOAT:
+ switch (jp.getNumberType()) {
+ case BIG_DECIMAL:
+ writeNumber(jp.getDecimalValue());
+ break;
+ case FLOAT:
+ writeNumber(jp.getFloatValue());
+ break;
+ default:
+ writeNumber(jp.getDoubleValue());
+ }
+ break;
+ case VALUE_TRUE:
+ writeBoolean(true);
+ break;
+ case VALUE_FALSE:
+ writeBoolean(false);
+ break;
+ case VALUE_NULL:
+ writeNull();
+ break;
+ case VALUE_EMBEDDED_OBJECT:
+ writeObject(jp.getEmbeddedObject());
+ break;
+ default:
+ throw new RuntimeException("Internal error: should never end up through this code path");
+ }
+ }
+ 
+ @Override
+ public void copyCurrentStructure(JsonParser jp) throws IOException, JsonProcessingException
+ {
+ JsonToken t = jp.getCurrentToken();
+
+ // Let's handle field-name separately first
+ if (t == JsonToken.FIELD_NAME) {
+ if (_mayHaveNativeIds) {
+ _checkNativeIds(jp);
+ }
+ writeFieldName(jp.getCurrentName());
+ t = jp.nextToken();
+ // fall-through to copy the associated value
+ }
+
+ if (_mayHaveNativeIds) {
+ _checkNativeIds(jp);
+ }
+ 
+ switch (t) {
+ case START_ARRAY:
+ writeStartArray();
+ while (jp.nextToken() != JsonToken.END_ARRAY) {
+ copyCurrentStructure(jp);
+ }
+ writeEndArray();
+ break;
+ case START_OBJECT:
+ writeStartObject();
+ while (jp.nextToken() != JsonToken.END_OBJECT) {
+ copyCurrentStructure(jp);
+ }
+ writeEndObject();
+ break;
+ default: // others are simple:
+ copyCurrentEvent(jp);
+ }
+ }
+
+/* METHOD version */
+@Override
+ public Version version() {
+ return com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION;
+ }
+
+/* METHOD toString */
+@Override
+ @SuppressWarnings("resource")
+ public String toString()
+ {
+ // Let's print up to 100 first tokens...
+ final int MAX_COUNT = 100;
+
+ StringBuilder sb = new StringBuilder();
+ sb.append("[TokenBuffer: ");
+
+ /*
+sb.append("NativeTypeIds=").append(_hasNativeTypeIds).append(",");
+sb.append("NativeObjectIds=").append(_hasNativeObjectIds).append(",");
+*/
+ 
+ JsonParser jp = asParser();
+ int count = 0;
+ final boolean hasNativeIds = _hasNativeTypeIds || _hasNativeObjectIds;
+
+ while (true) {
+ JsonToken t;
+ try {
+ t = jp.nextToken();
+ if (t == null) break;
+
+ if (hasNativeIds) {
+ _appendNativeIds(sb);
+ }
+ 
+ if (count < MAX_COUNT) {
+ if (count > 0) {
+ sb.append(", ");
+ }
+ sb.append(t.toString());
+ if (t == JsonToken.FIELD_NAME) {
+ sb.append('(');
+ sb.append(jp.getCurrentName());
+ sb.append(')');
+ }
+ }
+ } catch (IOException ioe) { // should never occur
+ throw new IllegalStateException(ioe);
+ }
+ ++count;
+ }
+
+ if (count >= MAX_COUNT) {
+ sb.append(" ... (truncated ").append(count-MAX_COUNT).append(" entries)");
+ }
+ sb.append(']');
+ return sb.toString();
+ }
+
+ private final void _appendNativeIds(StringBuilder sb)
+ {
+ Object objectId = _last.findObjectId(_appendAt-1);
+ if (objectId != null) {
+ sb.append("[objectId=").append(String.valueOf(objectId)).append(']');
+ }
+ Object typeId = _last.findTypeId(_appendAt-1);
+ if (typeId != null) {
+ sb.append("[typeId=").append(String.valueOf(typeId)).append(']');
+ }
+ }
+ 
+ /*
+ /**********************************************************
+ /* JsonGenerator implementation: configuration
+ /**********************************************************
+ */
+
+ @Override
+ public JsonGenerator enable(Feature f) {
+ _generatorFeatures |= f.getMask();
+ return this;
+ }
+
+ @Override
+ public JsonGenerator disable(Feature f) {
+ _generatorFeatures &= ~f.getMask();
+ return this;
+ }
+
+ //public JsonGenerator configure(SerializationFeature f, boolean state) { }
+
+ @Override
+ public boolean isEnabled(Feature f) {
+ return (_generatorFeatures & f.getMask()) != 0;
+ }
+
+ @Override
+ public int getFeatureMask() {
+ return _generatorFeatures;
+ }
+
+ @Override
+ public JsonGenerator setFeatureMask(int mask) {
+ _generatorFeatures = mask;
+ return this;
+ }
+ 
+ @Override
+ public JsonGenerator useDefaultPrettyPrinter() {
+ // No-op: we don't indent
+ return this;
+ }

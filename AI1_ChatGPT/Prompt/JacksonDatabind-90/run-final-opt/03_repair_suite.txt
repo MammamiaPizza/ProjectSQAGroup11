@@ -1,0 +1,175 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 90  Version: JacksonDatabind-90b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1804
+Trigger failures:
+- com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test::testDelegatingArray1804
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test$MyType: abstract types either need to be mapped to concrete types, have custom deserializer, or contain additional type information
+Modified: com.fasterxml.jackson.databind.deser.ValueInstantiator, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.ValueInstantiator | java]
+package com.fasterxml.jackson.databind.deser;
+public abstract class ValueInstantiator
+public Class<?> getValueClass() {
+return Object.class;
+public String getValueTypeDesc() {
+public boolean canInstantiate() {
+public boolean canCreateFromString() { return false; }
+public boolean canCreateFromInt() { return false; }
+public boolean canCreateFromLong() { return false; }
+public boolean canCreateFromDouble() { return false; }
+public boolean canCreateFromBoolean() { return false; }
+public boolean canCreateUsingDefault() { return getDefaultCreator() != null; }
+public boolean canCreateUsingDelegate() { return false; }
+public boolean canCreateUsingArrayDelegate() { return false; }
+public boolean canCreateFromObjectWith() { return false; }
+public SettableBeanProperty[] getFromObjectArguments(DeserializationConfig config) {
+public J
+...[truncated deterministically]...
+etArrayDelegateCreator() { return null; }
+public AnnotatedWithParams getWithArgsCreator() { return null; }
+public AnnotatedParameter getIncompleteParameter() { return null; }
+protected Object _createFromStringFallbacks(DeserializationContext ctxt, String value)
+public static class Base extends ValueInstantiator
+protected final Class<?> _valueType;
+public Base(Class<?> type) {
+public Base(JavaType type) {
+@Override
+
+[com.fasterxml.jackson.databind.deser.std.StdValueInstantiator | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class StdValueInstantiator
+protected final String _valueTypeDesc;
+protected final Class<?> _valueClass;
+protected AnnotatedWithParams _defaultCreator;
+protected Annotate
+...[truncated deterministically]...
+rguments;
+protected JavaType _arrayDelegateType;
+protected AnnotatedWithParams _arrayDelegateCreator;
+protected SettableBeanProperty[] _arrayDelegateArguments;
+protected AnnotatedWithParams _fromStringCreator;
+protected AnnotatedWithParams _fromIntCreator;
+protected AnnotatedWithParams _fromLongCreator;
+protected AnnotatedWithParams _fromDoubleCreator;
+protected AnnotatedWithPa
+...[truncated deterministically]...
+) {
+public AnnotatedWithParams getDefaultCreator() {
+public AnnotatedWithParams getWithArgsCreator() {
+public AnnotatedParameter getIncompleteParameter() {
+@Deprecated // since 2.7
+protected JsonMappingException wrapException(Throwable t)
+protected JsonMappingException unwrapAndWrapException(DeserializationContext ctxt, Throwable t)
+if ((t instanceof ExceptionInInitializerError) // from static initialization block
+
+Generated JUnit Test:
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+
+import java.util.Map;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.ValueInstantiator;
+
+public class DelegatingArrayCreatorRegressionTest
+{
+    @Test
+    public void abstractTypeCanBeCreatedUsingArrayDelegateCreator() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        ArrayOnlyType value = mapper.readValue("[1,2,3]", ArrayOnlyType.class);
+
+        assertEquals(ArrayOnlyTypeImpl.class, value.getClass());
+        assertArrayEquals(new int[] { 1, 2, 3 }, value.values);
+    }
+
+    @Test
+    public void arrayDelegateCreatorIsSelectedSeparatelyFromRegularDelegateCreator()
+            throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        BothDelegateTypes arrayValue = mapper.readValue("[4,5]", BothDelegateTypes.class);
+        BothDelegateTypes objectValue = mapper.readValue("{\"answer\":42}",
+                BothDelegateTypes.class);
+
+        assertArrayEquals(new int[] { 4, 5 }, arrayValue.arrayValues);
+        assertNull(arrayValue.objectValues);
+        assertNull(objectValue.arrayValues);
+        assertEquals(Integer.valueOf(42), objectValue.objectValues.get("answer"));
+    }
+
+    @Test
+    public void baseValueInstantiatorHasNoDelegateCapabilitiesByDefault() {
+        ValueInstantiator instantiator = new ValueInstantiator.Base(Object.class);
+
+        assertFalse(instantiator.canCreateUsingDelegate());
+        assertFalse(instantiator.canCreateUsingArrayDelegate());
+        assertNull(instantiator.getDelegateType(null));
+        assertNull(instantiator.getArrayDelegateType(null));
+    }
+
+    public static abstract class ArrayOnlyType {
+        public final int[] values;
+
+        protected ArrayOnlyType(int[] values) {
+            this.values = values;
+        }
+
+        @JsonCreator
+        public static ArrayOnlyType fromArray(int[] values) {
+            return new ArrayOnlyTypeImpl(values);
+        }
+    }
+
+    public static class ArrayOnlyTypeImpl extends ArrayOnlyType {
+        public ArrayOnlyTypeImpl(int[] values) {
+            super(values);
+        }
+    }
+
+    public static abstract class BothDelegateTypes {
+        public final int[] arrayValues;
+        public final Map<String, Integer> objectValues;
+
+        protected BothDelegateTypes(int[] arrayValues, Map<String, Integer> objectValues) {
+            this.arrayValues = arrayValues;
+            this.objectValues = objectValues;
+        }
+
+        @JsonCreator
+        public static BothDelegateTypes fromArray(int[] values) {
+            return new BothDelegateTypesImpl(values, null);
+        }
+
+        @JsonCreator
+        public static BothDelegateTypes fromObject(Map<String, Integer> values) {
+            return new BothDelegateTypesImpl(null, values);
+        }
+    }
+
+    public static class BothDelegateTypesImpl extends BothDelegateTypes {
+        public BothDelegateTypesImpl(int[] arrayValues, Map<String, Integer> objectValues) {
+            super(arrayValues, objectValues);
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - DelegatingArrayCreatorRegressionTest::arrayDelegateCreatorIsSelectedSeparatelyFromRegularDelegateCreator
+
+Extract test suite......................................................... OK
+Failing generated tests: DelegatingArrayCreatorRegressionTest::arrayDelegateCreatorIsSelectedSeparatelyFromRegularDelegateCreator

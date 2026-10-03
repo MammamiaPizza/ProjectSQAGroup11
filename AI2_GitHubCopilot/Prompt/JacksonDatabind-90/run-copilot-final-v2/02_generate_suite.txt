@@ -1,0 +1,331 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 90  Version: JacksonDatabind-90b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.ValueInstantiator, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator
+Modified: com.fasterxml.jackson.databind.deser.ValueInstantiator, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator
+Triggers: com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test::testDelegatingArray1804
+
+Bug/specification summary:
+Bug report: 1804
+Trigger failures:
+- com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test::testDelegatingArray1804
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test$MyType: abstract types either need to be mapped to concrete types, have custom deserializer, or contain additional type information
+Modified: com.fasterxml.jackson.databind.deser.ValueInstantiator, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator
+
+Prompt-01 test plan:
+TARGETS: canInstantiate, canCreateUsingArrayDelegate, createUsingArrayDelegate,
+getArrayDelegateType, getArrayDelegateCreator
+ORACLES: canInstantiate==true for abstract types with array delegate; createUsingArrayDelegate
+succeeds without "abstract types" error
+CASES: abstract class + @JsonCreator taking array param; abstract without any creator (error);
+non-abstract with array delegate; abstract with both delegate and array delegate
+RISKS: No fixed source; rely on trigger test as correctness oracle; only public API; cannot verify
+internal _arrayDelegateCreator field setting
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.ValueInstantiator (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser;
+public abstract class ValueInstantiator
+public Class<?> getValueClass() {
+return Object.class;
+public String getValueTypeDesc() {
+public boolean canInstantiate() {
+public boolean canCreateFromString() { return false; }
+public boolean canCreateFromInt() { return false; }
+public boolean canCreateFromLong() { return false; }
+public boolean canCreateFromDouble() { return false; }
+public boolean canCreateFromBoolean() { return false; }
+public boolean canCreateUsingDefault() { return getDefaultCreator() != null; }
+public boolean canCreateUsingDelegate() { return false; }
+public boolean canCreateUsingArrayDelegate() { return false; }
+public boolean canCreateFromObjectWith() { return false; }
+public SettableBeanProperty[] getFromObjectArguments(DeserializationConfig config) {
+public JavaType getDelegateType(DeserializationConfig config) { return null; }
+public JavaType getArrayDelegateType(DeserializationConfig config) { return null; }
+public Object createUsingDefault(DeserializationContext ctxt) throws IOException {
+public Object createFromObjectWith(DeserializationContext ctxt, Object[] args) throws IOException {
+public Object createUsingDelegate(DeserializationContext ctxt, Object delegate) throws IOException {
+public Object createUsingArrayDelegate(DeserializationContext
+...[truncated deterministically]...
+ic Object createFromBoolean(DeserializationContext ctxt, boolean value) throws IOException {
+public AnnotatedWithParams getDefaultCreator() { return null; }
+public AnnotatedWithParams getDelegateCreator() { return null; }
+public AnnotatedWithParams getArrayDelegateCreator() { return null; }
+public AnnotatedWithParams getWithArgsCreator() { return null; }
+public AnnotatedParameter getIncompleteParameter() { return null; }
+protected Object _createFromStringFallbacks(DeserializationContext ctxt, String value)
+public static class Base extends ValueInstantiator
+protected final Class<?> _valueType;
+public Base(Class<?> type) {
+public Base(JavaType type) {
+@Override
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser;
+import java.io.IOException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.impl.PropertyValueBuffer;
+import com.fasterxml.jackson.databind.introspect.AnnotatedParameter;
+import com.fasterxml.jackson.databind.introspect.AnnotatedWithParams;
+
+/* METHOD Base */
+public Base(Class<?> type) {
+ _valueType = type;
+ }
+
+/* METHOD Base */
+public Base(JavaType type) {
+ _valueType = type.getRawClass();
+ }
+
+/* METHOD createFromObjectWith */
+public Object createFromObjectWith(DeserializationContext ctxt, Object[] args) throws IOException {
+ // sanity check; shouldn't really get called if no Creator specified
+ return ctxt.handleMissingInstantiator(getValueClass(), ctxt.getParser(),
+ "no creator with arguments specified");
+ }
+
+ /**
+ * Method that delegates to
+ * {@link #createFromObjectWith(DeserializationContext, Object[])} by
+ * default, but can be overridden if the application should have customized
+ * behavior with respect to missing properties.
+ *<p>
+ * The default implementation of this method uses
+ * {@link PropertyValueBuffer#getParameters(SettableBeanProperty[])} to read
+ * and validate all properties in bulk, possibly substituting defaults for
+ * missing properties or throwing exceptions for missing properties. An
+ * overridden implementation of this method could, for example, use
+ * {@link PropertyValueBuffer#hasParameter(SettableBeanProperty)} and
+ * {@link PropertyValueBuffer#getParameter(SettableBeanProperty)} to safely
+ * read the present properties only, and to have some other behavior for the
+ * missing properties.
+ * 
+ * @since 2.8
+ */
+ public Object createFromObjectWith(DeserializationContext ctxt,
+ SettableBeanProperty[] props, PropertyValueBuffer buffer)
+ throws IOException
+ {
+ return createFromObjectWith(ctxt, buffer.getParameters(props));
+ }
+
+ /**
+ * Method to called to create value instance from JSON Obje
+...[truncated deterministically]...
+blic Object createUsingDelegate(DeserializationContext ctxt, Object delegate) throws IOException {
+ return ctxt.handleMissingInstantiator(getValueClass(), ctxt.getParser(),
+ "no delegate creator specified");
+ }
+
+ /**
+ * Method to called to create value instance from JSON Array using
+ * an intermediate "delegate" value to pass to createor method
+ */
+ public Object createUsingArrayDelegate(DeserializationContext ctxt, Object delegate) throws IOException {
+ return ctxt.handleMissingInstantiator(getValueClass(), ctxt.getParser(),
+ "no array delegate creator specified");
+ }
+
+ /*
+ /**********************************************************
+ /* Instantiation methods for JSON scalar types
+ /* (String, Number, Boolean)
+ /**********************************************************
+ */
+ 
+ public Object createFro
+...[truncated deterministically]...
+arameter() { return null; }
+
+ /*
+ /**********************************************************
+ /* Helper methods
+ /**********************************************************
+ */
+
+ /**
+ * @since 2.4 (demoted from <code>StdValueInstantiator</code>)
+ */
+ protected Object _createFromStringFallbacks(DeserializationContext ctxt, String value)
+ throws IOException
+ {
+ /* 28-Sep-2011, tatu: Ok this is not clean at all; but since there are legacy
+ * systems that expect conversions in some cases, let's just add a minimal
+ * patch (note: same could conceivably be used for numbers too).
+ */
+ if (canCreateFromBoolean()) {
+ String str = value.trim();
+ if ("true".equals(str)) {
+ return createFromBoolean(ctxt, true);
+ }
+ if ("false".equals(str)) {
+ return createFromBoolean(ctxt, false);
+ }
+ }
+ // also, empty Strings might be accepted as null Object...
+ if (value.length() == 0) {
+ if (ctxt.isEnabled(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)) {
+ return null;
+ }
+ }
+ return ctxt.handleMissingInstantiator(getValueClass(), ctxt.getParser(),
+ "no String-argument constructor/factory method to deserialize from String value ('%s')",
+ value);
+ }
+
+===== com.fasterxml.jackson.databind.deser.std.StdValueInstantiator (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class StdValueInstantiator
+protected final String _valueTypeDesc;
+protected final Class<?> _valueClass;
+protected AnnotatedWithParams _defaultCreator;
+protected AnnotatedWithParams _withArgsCreator;
+protected SettableBeanProperty[] _constructorArguments;
+protected JavaType _delegateType;
+protected AnnotatedWithParams _delegateCreator;
+protected SettableBeanProperty[] _delegateArguments;
+protected JavaType _arrayDelegateType;
+protected AnnotatedWithParams _arrayDelegateCreator;
+protected SettableBeanProperty[] _arrayDelegateArguments;
+protected AnnotatedWithParams _fromStringCreator;
+protected AnnotatedWithParams _fromIntCreator;
+protected AnnotatedWithParams _fromLongCreator;
+protected AnnotatedWithParams _fromDoubleCreator;
+protected AnnotatedWithParams _fromBooleanCreator;
+protected AnnotatedParameter _incompleteParameter;
+@Deprecated
+public StdValueInstantiator(DeserializationConfig config, Class<?> valueType) {
+_valueClass = (valueType == null) ? Object.class : valueType;
+public StdValueInstantiator(DeserializationConfig config, JavaType valueType) {
+_valueClass = (valueType == null) ? Object.class : valueType.getRawClass();
+protected StdValueInstantiator(StdValueInstantiator src)
+public void configureFromStringCreator(AnnotatedWithPara
+...[truncated deterministically]...
+Exception
+public Object createFromBoolean(DeserializationContext ctxt, boolean value) throws IOException
+final Boolean arg = Boolean.valueOf(value);
+public AnnotatedWithParams getDelegateCreator() {
+public AnnotatedWithParams getArrayDelegateCreator() {
+public AnnotatedWithParams getDefaultCreator() {
+public AnnotatedWithParams getWithArgsCreator() {
+public AnnotatedParameter getIncompleteParameter() {
+@Deprecat
+...[truncated deterministically]...
+alizationContext ctxt, Throwable t)
+if ((t instanceof ExceptionInInitializerError) // from static initialization block
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser.std;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+import com.fasterxml.jackson.databind.deser.*;
+import com.fasterxml.jackson.databind.introspect.AnnotatedParameter;
+import com.fasterxml.jackson.databind.introspect.AnnotatedWithParams;
+public class StdValueInstantiator
+
+/* METHOD StdValueInstantiator */
+@Deprecated
+ public StdValueInstantiator(DeserializationConfig config, Class<?> valueType) {
+ _valueTypeDesc = (valueType == null) ? "UNKNOWN TYPE" : valueType.getName();
+ _valueClass = (valueType == null) ? Object.class : valueType;
+ }
+
+/* METHOD StdValueInstantiator */
+public StdValueInstantiator(DeserializationConfig config, JavaType valueType) {
+ _valueTypeDesc = (valueType == null) ? "UNKNOWN TYPE" : valueType.toString();
+ _valueClass = (valueType == null) ? Object.class : valueType.getRawClass();
+ }
+
+/* METHOD StdValueInstantiator */
+protected StdValueInstantiator(StdValueInstantiator src)
+ {
+ _valueTypeDesc = src._valueTypeDesc;
+ _valueClass = src._valueClass;
+
+ _defaultCreator = src._defaultCreator;
+
+ _constructorArguments = src._constructorArguments;
+ _withArgsCreator = src._withArgsCreator;
+
+ _delegateType = src._delegateType;
+ _delegateCreator = src._delegateCreator;
+ _delegateArguments = src._delegateArguments;
+
+ _arrayDelegateType = src._arrayDelegateType;
+ _arrayDelegateCreator = src._arrayDelegateCreator;
+ _arrayDelegateArguments = src._arrayDelegateArguments;
+ 
+ _fromStringCreator = src._fromStringCreator;
+ _fromIntCreator = src._fromIntCreator;
+ _fromLongCreator = src._fromLongCreator;
+ _fromDoubleCreator = src._fromDoubleCreator;
+ _fromBooleanCreator = src._fromBooleanCreator;
+ }
+
+/* METHOD rewrapCtorProblem */
+protected JsonMappingException rewrapCtorProblem(DeserializationContext ctxt,
+ Throwable t)
+ {
+ // 05-Nov-2015, tatu: Seems like there are really only 2 useless wrapper errors/exceptions,
+ // so just peel those, and nothing else
+ if ((t instanceof ExceptionInInitializerError) // from static initialization block
+ || (t instanceof InvocationTargetException) // from constructor/method
+ ) {
+ Throwable cause = t.getCause();
+ if (cause != null) {
+ t = cause;
+ }
+ }
+ return wrapAsJsonMappingException(ctxt, t);
+ }
+
+/* METHOD wrapException */
+protected JsonMappingException wrapException(Throwable t)
+ {
+ // 05-Nov-2015, tatu: This used to always unwrap the whole exception, but now only
+ // does so if and until `JsonMappingException` is found.
+ for (Throwable curr = t; curr != null; curr = curr.getCause()) {
+ if (curr instanceof JsonMappingException) {
+ return (JsonMappingException) curr;
+ }
+ }
+ return new JsonMappingException(null,
+ "Instantiation of "+getValueTypeDesc()+" value failed: "+t.getMessage(), t);
+ }
+
+/* METHOD unwrapAndWrapException */
+protected JsonMappingException unwrapAndWrapException(DeserializationContext ctxt, Throwable t)
+ {
+ // 05-Nov-2015, tatu: This used to always unwrap the whole exception, but now only
+ // does so if and until `JsonMappingException` is found.
+ for (Throwable curr = t; curr != null; curr = curr.getCause()) {
+ if (curr instanceof JsonMappingException) {
+ return (JsonMappingException) curr;
+ }
+ }
+ return ctxt.instantiationException(getValueClass(), t);
+ }
+
+/* METHOD configureFromObjectSettings */
+public void configureFromObjectSettings(AnnotatedWithParams defaultCreator,
+ AnnotatedWithParams delegateCreator, JavaType delegateType, SettableBeanProperty[] delegateArgs,
+ AnnotatedWithParams withArgsCreator, SettableBeanProperty[] constructorArgs)
+ {
+ _defaultCreator = defaultCreator;
+ _delegateCreator = delegateCreator;
+ _delegateType = delegateType;
+ _delegateArguments = delegateArgs;
+ _withArgsCreator = withArgsCreator;
+ _constructorArguments = constructorArgs;
+ }

@@ -1,0 +1,411 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 2  Version: JacksonCore-2b
+JUnit: junit-4.8.2.jar  Build: Maven
+Target: com.fasterxml.jackson.core.json.ReaderBasedJsonParser, com.fasterxml.jackson.core.json.UTF8StreamJsonParser
+Modified: com.fasterxml.jackson.core.json.ReaderBasedJsonParser, com.fasterxml.jackson.core.json.UTF8StreamJsonParser
+Triggers: com.fasterxml.jackson.core.json.TestParserErrorHandling::testMangledNumbersBytes, com.fasterxml.jackson.core.json.TestParserErrorHandling::testMangledNumbersChars
+
+Bug/specification summary:
+Bug report: 105
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestParserErrorHandling::testMangledNumbersBytes
+ --> junit.framework.AssertionFailedError: Should have gotten an exception; instead got token: VALUE_NUMBER_INT
+ - com.fasterxml.jackson.core.json.TestParserErrorHandling::testMangledNumbersChars
+ --> junit.framework.AssertionFailedError: Should have gotten an exception; instead got token: VALUE_NUMBER_INT
+Modified: com.fasterxml.jackson.core.json.ReaderBasedJsonParser, com.fasterxml.jackson.core.json.UTF8StreamJsonParser
+
+Prompt-01 test plan:
+TARGETS: ReaderBasedJsonParser and UTF8StreamJsonParser numeric-token parsing/error handling. 
+ORACLES: Trigger tests require malformed numbers to throw, not return VALUE_NUMBER_INT. 
+CASES: Exercise mangled numeric inputs through character-based parser construction. 
+CASES: Exercise identical mangled numeric inputs through UTF-8 byte-stream parser construction. 
+RISKS: Exact malformed-number strings and intended exception type/message are not provided. 
+RISKS: Available context does not expose modified method bodies or parser factory setup.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.json.ReaderBasedJsonParser (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json;
+public final class ReaderBasedJsonParser
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+private final static int[] _icWS = CharTypes.getInputCodeWS();
+protected Reader _reader;
+protected char[] _inputBuffer;
+protected ObjectCodec _objectCodec;
+final protected CharsToNameCanonicalizer _symbols;
+final protected int _hashSeed;
+protected boolean _tokenIncomplete = false;
+@Override
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public int releaseBuffered(Writer w) throws IOException
+public Object getInputSource() {
+protected boolean loadMore() throws IOException
+protected char getNextChar(String eofMsg)
+protected void _closeInput() throws IOException
+protected void _releaseBuffers()
+public String getText()
+public String getValueAsString() throws IOException, JsonParseException
+public String getValueAsString(String defValue) throws IOException, JsonParseException
+protected String _getText2(JsonToken t)
+public char[] getTextCharacters()
+public int getTextLength()
+public int getTextOffset() throws IOException, JsonParseException
+public byte[] getBinaryValue(Base64Variant b64variant)
+@SuppressWarnings("resource")
+public int readBinaryValue(Base64Variant b64variant, OutputStream out)
+protected int _readBinary(Base64Variant b64variant
+...[truncated deterministically]...
+IOException
+private int _skipWS() throws IOException
+private int _skipWSOrEnd() throws IOException
+private void _skipComment() throws IOException
+private void _skipCComment() throws IOException
+private boolean _skipYAMLComment() throws IOException
+private void _skipLine() throws IOException
+protected char _decodeEscaped() throws IOException
+protected void _matchToken(String matchStr, int i) throws IOException
+final int len = matchStr.length();
+protected byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+protected void _reportInvalidToken(String matchedPart) throws IOException {
+protected void _reportInvalidToken(String matchedPart, String msg)
+
+/* HEADER */
+package com.fasterxml.jackson.core.json;
+import java.io.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.base.ParserBase;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.CharsToNameCanonicalizer;
+import com.fasterxml.jackson.core.util.*;
+
+/* METHOD ReaderBasedJsonParser */
+public ReaderBasedJsonParser(IOContext ctxt, int features, Reader r,
+ ObjectCodec codec, CharsToNameCanonicalizer st)
+ {
+ super(ctxt, features);
+ _reader = r;
+ _inputBuffer = ctxt.allocTokenBuffer();
+ _objectCodec = codec;
+ _symbols = st;
+ _hashSeed = st.hashSeed();
+ }
+
+/* METHOD getTextOffset */
+@Override
+ public int getTextOffset() throws IOException, JsonParseException
+ {
+ // Most have offset of 0, only some may have other values:
+ if (_currToken != null) {
+ switch (_currToken) {
+ case FIELD_NAME:
+ return 0;
+ case VALUE_STRING:
+ if (_tokenIncomplete) {
+ _tokenIncomplete = false;
+ _finishString(); // only strings can be incomplete
+ }
+ // fall through
+ case VALUE_NUMBER_INT:
+ case VALUE_NUMBER_FLOAT:
+ return _textBuffer.getTextOffset();
+ default:
+ }
+ }
+ return 0;
+ }
+
+/* METHOD getBinaryValue */
+@Override
+ public byte[] getBinaryValue(Base64Variant b64variant)
+ throws IOException, JsonParseException
+ {
+ if (_currToken != JsonToken.VALUE_STRING &&
+ (_currToken != JsonToken.VALUE_EMBEDDED_OBJECT || _binaryValue == null)) {
+ _reportError("Current token ("+_currToken+") not VALUE_STRING or VALUE_EMBEDDED_OBJECT, can not access as binary");
+ }
+ /* To ensure that we won't see inconsistent data, better clear up
+ * state...
+ */
+ if (_tokenIncomplete) {
+ try {
+ _binaryValue = _decodeBase64(b64variant);
+ } catch (IllegalArgumentException iae) {
+ throw _constructError("Failed to decode VALUE_STRING as base64 ("+b64variant+"): "+iae.getMessage());
+ }
+ /* let's clear incomplete only now; allows for accessing other
+ * textual content in error cases
+ */
+ _tokenIncomplete = false;
+ }
+
+/* METHOD getTextCharacters */
+@Override
+ public char[] getTextCharacters()
+ throws IOException, JsonParseException
+ {
+ if (_currToken != null) { // null only before/after document
+ switch (_currToken) {
+ 
+ case FIELD_NAME:
+ if (!_nameCopied) {
+ String name = _parsingContext.getCurrentName();
+ int nameLen = name.length();
+ if (_nameCopyBuffer == null) {
+ _nameCopyBuffer = _ioContext.allocNameCopyBuffer(nameLen);
+ } else if (_nameCopyBuffer.length < nameLen) {
+ _nameCopyBuffer = new char[nameLen];
+ }
+ name.getChars(0, nameLen, _nameCopyBuffer, 0);
+ _nameCopied = true;
+ }
+ return _nameCopyBuffer;
+ 
+ case VALUE_STRING:
+ if (_tokenIncomplete) {
+ _tokenIncomplete = false;
+ _finishString(); // only strings can be incomplete
+ }
+ // fall through
+ case VALUE_NUMBER_INT:
+ case VALUE_NUMBER_FLOAT:
+ return _textBuffer.getTextBuffer();
+ 
+ default:
+ return _currToken.asCharArray();
+ }
+ }
+ return null;
+ }
+
+/* METHOD getTextLength */
+@Override
+ public int getTextLength()
+ throws IOException, JsonParseException
+ {
+ if (_currToken != null) { // null only before/after document
+ switch (_currToken) {
+ 
+ case FIELD_NAME:
+ return _parsingContext.getCurrentName().length();
+ case VALUE_STRING:
+ if (_tokenIncomplete) {
+ _tokenIncomplete = false;
+ _finishString(); // only strings can be incomplete
+ }
+ // fall through
+ case VALUE_NUMBER_INT:
+ case VALUE_NUMBER_FLOAT:
+ return _textBuffer.size();
+ 
+ default:
+ return _currToken.asCharArray().length;
+ }
+ }
+ return 0;
+ }
+
+===== com.fasterxml.jackson.core.json.UTF8StreamJsonParser (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json;
+public final class UTF8StreamJsonParser
+final static byte BYTE_LF = (byte) '\n';
+private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+private final static int[] _icWS = CharTypes.getInputCodeWS();
+protected ObjectCodec _objectCodec;
+final protected BytesToNameCanonicalizer _symbols;
+protected int[] _quadBuffer = new int[16];
+protected boolean _tokenIncomplete = false;
+protected InputStream _inputStream;
+protected byte[] _inputBuffer;
+protected boolean _bufferRecyclable;
+@Override
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public int releaseBuffered(OutputStream out) throws IOException
+public Object getInputSource() {
+protected boolean loadMore()
+protected boolean _loadToHaveAtLeast(int minAvailable)
+protected void _closeInput() throws IOException
+protected void _releaseBuffers() throws IOException
+public String getText()
+public String getValueAsString() throws IOException, JsonParseException
+public String getValueAsString(String defValue) throws IOException, JsonParseException
+protected String _getText2(JsonToken t)
+public char[] getTextCharacters()
+public int getTextLength()
+public int getTextOffset() throws IOException, JsonParseException
+public byte[] getBi
+...[truncated deterministically]...
+ion
+private int _decodeUtf8_3fast(int c1) throws IOException
+private int _decodeUtf8_4(int c) throws IOException
+private void _skipUtf8_2(int c) throws IOException
+private void _skipUtf8_3(int c) throws IOException
+private void _skipUtf8_4(int c) throws IOException
+protected void _skipCR() throws IOException
+private int nextByte() throws IOException
+protected void _reportInvalidChar(int c)
+protected void _reportInvalidInitial(int mask)
+protected void _reportInvalidOther(int mask)
+protected void _reportInvalidOther(int mask, int ptr)
+public static int[] growArrayBy(int[] arr, int more)
+protected byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.json;
+import java.io.*;
+import java.util.Arrays;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.base.ParserBase;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.*;
+import com.fasterxml.jackson.core.util.*;
+
+/* METHOD UTF8StreamJsonParser */
+public UTF8StreamJsonParser(IOContext ctxt, int features, InputStream in,
+ ObjectCodec codec, BytesToNameCanonicalizer sym,
+ byte[] inputBuffer, int start, int end,
+ boolean bufferRecyclable)
+ {
+ super(ctxt, features);
+ _inputStream = in;
+ _objectCodec = codec;
+ _symbols = sym;
+ _inputBuffer = inputBuffer;
+ _inputPtr = start;
+ _inputEnd = end;
+ _bufferRecyclable = bufferRecyclable;
+ }
+
+/* METHOD getTextOffset */
+@Override
+ public int getTextOffset() throws IOException, JsonParseException
+ {
+ // Most have offset of 0, only some may have other values:
+ if (_currToken != null) {
+ switch (_currToken) {
+ case FIELD_NAME:
+ return 0;
+ case VALUE_STRING:
+ if (_tokenIncomplete) {
+ _tokenIncomplete = false;
+ _finishString(); // only strings can be incomplete
+ }
+ // fall through
+ case VALUE_NUMBER_INT:
+ case VALUE_NUMBER_FLOAT:
+ return _textBuffer.getTextOffset();
+ default:
+ }
+ }
+ return 0;
+ }
+
+/* METHOD getBinaryValue */
+@Override
+ public byte[] getBinaryValue(Base64Variant b64variant)
+ throws IOException, JsonParseException
+ {
+ if (_currToken != JsonToken.VALUE_STRING &&
+ (_currToken != JsonToken.VALUE_EMBEDDED_OBJECT || _binaryValue == null)) {
+ _reportError("Current token ("+_currToken+") not VALUE_STRING or VALUE_EMBEDDED_OBJECT, can not access as binary");
+ }
+ /* To ensure that we won't see inconsistent data, better clear up
+ * state...
+ */
+ if (_tokenIncomplete) {
+ try {
+ _binaryValue = _decodeBase64(b64variant);
+ } catch (IllegalArgumentException iae) {
+ throw _constructError("Failed to decode VALUE_STRING as base64 ("
+...[truncated deterministically]...
+ow; allows for accessing other
+ * textual content in error cases
+ */
+ _tokenIncomplete = false;
+ }
+
+/* METHOD nextFieldName */
+@Override
+ public boolean nextFieldName(SerializableString str)
+ throws IOException, JsonParseException
+ {
+ // // // Note: most of code below is copied from nextToken()
+ 
+ _numTypesValid = NR_UNKNOWN;
+ if (_currToken == JsonToken.FIELD_NAME) { // can't have name right after name
+ _nextAfterName();
+ return false;
+ }
+ if (_tokenIncomplete) {
+ _skipString();
+ }
+ int i = _skipWSOrEnd();
+ if (i < 0) { // end-of-input
+ close();
+ _currToken = null;
+ return false;
+ }
+ _tokenInputTotal = _currInputProcessed + _inputPtr - 1;
+ _tokenInputRow = _currInputRow;
+ _tokenInputCol = _inputPtr - _currInputRowStart - 1;
+
+ // finally: clear any data retained so far
+ _binaryValue = null;
+
+ // Closing scope?
+ if (i == INT_RBRACKET) {
+ if (!_parsingContext.inArray()) {
+ _reportMismatchedEndMarker(i, '}');
+ }
+ _parsingContext = _parsingContext.getParent();
+ _currToken = JsonToken.END_ARRAY;
+ return false;
+ }
+ if (i == INT_RCURLY) {
+ if (!_parsingContext.inObject()) {
+ _reportMismatchedEndMarker(i, ']');
+ }
+ _parsingContext = _parsingContext.getParent();
+ _currToken = JsonToken.END_OBJECT;
+ return false;
+ }
+
+ // Nope: do we then expect a comma?
+ if (_parsingContext.expectComma()) {
+ if (i != INT_COMMA) {
+ _reportUnexpectedChar(i,
+...[truncated deterministically]...
+080) {
+ _reportInvalidOther(ch2);
+ }
+ ch = (ch << 6) | (ch2 & 0x3F);
+ if (needed > 2) { // 4 bytes? (need surrogates on output)
+ ch2 = quads[ix >> 2];
+ byteIx = (ix & 3);
+ ch2 = (ch2 >> ((3 - byteIx) << 3));
+ ++ix;
+ if ((ch2 & 0xC0) != 0x080) {
+ _reportInvalidOther(ch2 & 0xFF);
+ }
+ ch = (ch << 6) | (ch2 & 0x3F);
+ }
+ }
+ if (needed > 2) { // surrogate pair? once again, let's output one here, one later on
+ ch -= 0x10000; // to normalize it starting with 0x0
+ if (cix >= cbuf.length) {
+ cbuf = _textBuffer.expandCurrentSegment();
+ }
+ cbuf[cix++] = (char) (0xD800 + (ch >> 10));
+ ch = 0xDC00 | (ch & 0x03FF);
+ }
+ }

@@ -1,0 +1,373 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 29  Version: JacksonDatabind-29b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler
+Modified: com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler
+Triggers: com.fasterxml.jackson.databind.jsontype.TestExternalId::testExternalTypeIdWithNull
+
+Bug/specification summary:
+Bug report: 942
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestExternalId::testExternalTypeIdWithNull
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not deserialize instance of com.fasterxml.jackson.databind.jsontype.TestExternalId$ValueBean out of VALUE_STRING token
+Modified: com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler
+
+Prompt-01 test plan:
+TARGETS: ExternalTypeHandler.complete(JsonParser, DeserializationContext, Object) external type-id handling 
+ORACLES: Existing trigger TestExternalId.testExternalTypeIdWithNull expected to deserialize ValueBean 
+CASES: External type id is JSON null; value property follows or precedes its type-id property 
+CASES: Normal non-null external type id with matching value property 
+CASES: Missing external type id/value and scalar VALUE_STRING input error handling 
+RISKS: Context omits ValueBean fields, JSON fixtures, and intended null-type-id semantics beyond trigger failure
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser.impl;
+public class ExternalTypeHandler
+protected ExternalTypeHandler(ExternalTypeHandler h)
+public ExternalTypeHandler start() {
+@SuppressWarnings("resource")
+public Object complete(JsonParser p, DeserializationContext ctxt, Object bean)
+public static class Builder
+private final ArrayList<ExtTypedProperty> _properties = new ArrayList<ExtTypedProperty>();
+private final HashMap<String, Integer> _nameToPropertyIndex = new HashMap<String, Integer>();
+public void addExternal(SettableBeanProperty property, TypeDeserializer typeDeser)
+public ExternalTypeHandler build() {
+private final static class ExtTypedProperty
+public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser)
+public boolean hasTypePropertyName(String n) {
+public boolean hasDefaultType() {
+public String getDefaultTypeId() {
+public String getTypePropertyName() { return _typePropertyName; }
+public SettableBeanProperty getProperty() {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser.impl;
+import java.io.IOException;
+import java.util.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.SettableBeanProperty;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+public class ExternalTypeHandler
+
+/* METHOD ExternalTypeHandler */
+protected ExternalTypeHandler(ExtTypedProperty[] properties,
+ HashMap<String, Integer> nameToPropertyIndex,
+ String[] typeIds, TokenBuffer[] tokens)
+ {
+ _properties = properties; 
+ _nameToPropertyIndex = nameToPropertyIndex;
+ _typeIds = typeIds;
+ _tokens = tokens;
+ }
+
+/* METHOD ExternalTypeHandler */
+protected ExternalTypeHandler(ExternalTypeHandler h)
+ {
+ _properties = h._properties;
+ _nameToPropertyIndex = h._nameToPropertyIndex;
+ int len = _properties.length;
+ _typeIds = new String[len];
+ _tokens = new TokenBuffer[len];
+ }
+
+/* METHOD build */
+public ExternalTypeHandler build() {
+ return new ExternalTypeHandler(_properties.toArray(new ExtTypedProperty[_properties.size()]),
+ _nameToPropertyIndex, null, null);
+ }
+
+/* METHOD complete */
+@SuppressWarnings("resource")
+ public Object complete(JsonParser p, DeserializationContext ctxt, Object bean)
+ throws IOException
+ {
+ for (int i = 0, len = _properties.length; i < len; ++i) {
+ String typeId = _typeIds[i];
+ if (typeId == null) {
+ TokenBuffer tokens = _tokens[i];
+ // let's allow missing both type and property (may already have been set, too)
+ // but not just one
+ if (tokens == null) {
+ continue;
+ }
+ // [databind#118]: Need to mind natural types, for which no type id
+ // will be included.
+ JsonToken t = tokens.firstToken();
+ if (t != null && t.isScalarValue()) {
+ JsonParser buffered = tokens.asParser(p);
+ buffered.nextToken();
+ SettableBeanProperty extProp = _properties[i].getProperty();
+ Object result = TypeDeserializer.deserializeIfNatural(buffered, ctxt, extProp.getType());
+ if (result != null) {
+ extProp.set(bean, result);
+ continue;
+ }
+ // 26-Oct-2012, tatu: As per [databind#94], must allow use of 'defaultImpl'
+ if (!_properties[i].hasDefaultType()) {
+ throw ctxt.mappingException("Missing external type id property '%s'",
+ _properties[i].getTypePropertyName()); 
+ }
+ typeId = _properties[i].getDefaultTypeId();
+ }
+ } else if (_tokens[i] == null) {
+ SettableBeanProperty prop = _properties[i].getProperty();
+ throw ctxt.mappingException("Missing property '%s' for external type id '%s'",
+ prop.getName(), _properties[i].getTypePropertyName());
+ }
+ _deserializeAndSet(p, ctxt, bean, i, typeId);
+ }
+ return bean;
+ }
+
+ /**
+ * Variant called when creation of the POJO involves buffering of creator properties
+ * as well as property-based creator.
+ */
+ public Object complete(JsonParser jp, DeserializationContext ctxt,
+ PropertyValueBuffer buffer, PropertyBasedCreator creator)
+ throws IOException
+ {
+ // first things first: deserialize all data buffered:
+ final int len = _properties.length;
+ Object[] values = new Object[len];
+ for (int i = 0; i < len; ++i) {
+ String typeId = _typeIds[i];
+ if (typeId == null) {
+ // let's allow missing both type and property (may already have been set, too)
+ if (_tokens[i] == null) {
+ continue;
+ }
+ // but not just one
+ // 26-Oct-2012, tatu: As per [Issue#94], must allow use of 'defaultImpl'
+ if (!_properties[i].hasDefaultType()) {
+ throw ctxt.mappingException("Missing external type id property '%s'",
+ _properties[i].getTypePropertyName());
+ }
+ typeId = _properties[i].getDefaultTypeId();
+ } else if (_tokens[i] == null) {
+ SettableBeanProperty prop = _properties[i].getProperty();
+ throw ctxt.mappingException("Missing property '%s' for external type id '%s'",
+ prop.getName(), _properties[i].getTypePropertyName());
+ }
+ values[i] = _deserialize(jp, ctxt, i, typeId);
+ }
+ // second: fill in creator properties:
+ for (int i = 0; i < len; ++i) {
+ SettableBeanProperty prop = _properties[i].getProperty();
+ if (creator.findCreatorProperty(prop.getName()) != null) {
+ buffer.assignParameter(prop, values[i]);
+ }
+ }
+ Object bean = creator.build(ctxt, buffer);
+ // third: assign non-creator properties
+ for (int i = 0; i < len; ++i) {
+ SettableBeanProperty prop = _properties[i].getProperty();
+ if (creator.findCreatorProperty(prop.getName()) == null) {
+ prop.set(bean, values[i]);
+ }
+ }
+ return bean;
+ }
+
+/* METHOD handleTypePropertyValue */
+public boolean handleTypePropertyValue(JsonParser jp, DeserializationContext ctxt,
+ String propName, Object bean)
+ throws IOException
+ {
+ Integer I = _nameToPropertyIndex.get(propName);
+ if (I == null) {
+ return false;
+ }
+ int index = I.intValue();
+ ExtTypedProperty prop = _properties[index];
+ if (!prop.hasTypePropertyName(propName)) {
+ return false;
+ }
+ String typeId = jp.getText();
+ // note: can NOT skip child values (should always be String anyway)
+ boolean canDeserialize = (bean != null) && (_tokens[index] != null);
+ // Minor optimization: deserialize properties as soon as we have all we need:
+ if (canDeserialize) {
+ _deserializeAndSet(jp, ctxt, bean, index, typeId);
+ // clear stored data, to avoid deserializing+setting twice:
+ _tokens[index] = null;
+ } else {
+ _typeIds[index] = typeId;
+ }
+ return true;
+ }
+
+/* METHOD _deserializeAndSet */
+@SuppressWarnings("resource")
+ protected final void _deserializeAndSet(JsonParser p, DeserializationContext ctxt,
+ Object bean, int index, String typeId) throws IOException
+ {
+ /* Ok: time to mix type id, value; and we will actually use "wrapper-array"
+ * style to ensure we can handle all kinds of JSON constructs.
+ */
+ JsonParser p2 = _tokens[index].asParser(p);
+ JsonToken t = p2.nextToken();
+ // 29-Sep-2015, tatu: As per [databind#942], nulls need special support
+ TokenBuffer merged = new TokenBuffer(p);
+ merged.writeStartArray();
+ merged.writeString(typeId);
+ 
+ merged.copyCurrentStructure(p2);
+ merged.writeEndArray();
+ // needs to point to START_OBJECT (or whatever first token is)
+ JsonParser mp = merged.asParser(p);
+ mp.nextToken();
+ _properties[index].getProperty().deserializeAndSet(mp, ctxt, bean);
+ }
+
+/* METHOD handlePropertyValue */
+public boolean handlePropertyValue(JsonParser jp, DeserializationContext ctxt,
+ String propName, Object bean) throws IOException
+ {
+ Integer I = _nameToPropertyIndex.get(propName);
+ if (I == null) {
+ return false;
+ }
+ int index = I.intValue();
+ ExtTypedProperty prop = _properties[index];
+ boolean canDeserialize;
+ if (prop.hasTypePropertyName(propName)) {
+ _typeIds[index] = jp.getText();
+ jp.skipChildren();
+ canDeserialize = (bean != null) && (_tokens[index] != null);
+ } else {
+ @SuppressWarnings("resource")
+ TokenBuffer tokens = new TokenBuffer(jp);
+ tokens.copyCurrentStructure(jp);
+ _tokens[index] = tokens;
+ canDeserialize = (bean != null) && (_typeIds[index] != null);
+ }
+ /* Minor optimization: let's deserialize properties as soon as
+ * we have all pertinent information:
+ */
+ if (canDeserialize) {
+ String typeId = _typeIds[index];
+ // clear stored data, to avoid deserializing+setting twice:
+ _typeIds[index] = null;
+ _deserializeAndSet(jp, ctxt, bean, index, typeId);
+ _tokens[index] = null;
+ }
+ return true;
+ }
+
+ /**
+ * Method called after JSON Object closes, and has to ensure that all external
+ * type ids have been handled.
+ */
+ @SuppressWarnings("resource")
+ public Object complete(JsonParser p, DeserializationContext ctxt, Object bean)
+ throws IOException
+ {
+ for (int i = 0, len = _properties.length; i < len; ++i) {
+ String typeId = _typeIds[i];
+ if (typeId == null) {
+ TokenBuffer tokens = _tokens[i];
+ // let's allow missing both type and property (may already have been set, too)
+ // but not just one
+ if (tokens == null) {
+ continue;
+ }
+ // [databind#118]: Need to mind natural types, for which no type id
+ // will be included.
+ JsonToken t = tokens.firstToken();
+ if (t != null && t.isScalarValue()) {
+ JsonParser buffered = tokens.asParser(p);
+ buffered.nextToken();
+ SettableBeanProperty extProp = _properties[i].getProperty();
+ Object result = TypeDeserializer.deserializeIfNatural(buffered, ctxt, extProp.getType());
+ if (result != null) {
+ extProp.set(bean, result);
+ continue;
+ }
+ // 26-Oct-2012, tatu: As per [databind#94], must allow use of 'defaultImpl'
+ if (!_properties[i].hasDefaultType()) {
+ throw ctxt.mappingException("Missing external type id property '%s'",
+ _properties[i].getTypePropertyName()); 
+ }
+ typeId = _properties[i].getDefaultTypeId();
+ }
+ }
+
+/* METHOD _deserialize */
+@SuppressWarnings("resource")
+ protected final Object _deserialize(JsonParser p, DeserializationContext ctxt,
+ int index, String typeId) throws IOException
+ {
+ JsonParser p2 = _tokens[index].asParser(p);
+ JsonToken t = p2.nextToken();
+ // 29-Sep-2015, tatu: As per [databind#942], nulls need special support
+
+ TokenBuffer merged = new TokenBuffer(p);
+ merged.writeStartArray();
+ merged.writeString(typeId);
+ merged.copyCurrentStructure(p2);
+ merged.writeEndArray();
+
+ // needs to point to START_OBJECT (or whatever first token is)
+ JsonParser mp = merged.asParser(p);
+ mp.nextToken();
+ return _properties[index].getProperty().deserialize(mp, ctxt);
+ }
+
+/* METHOD hasDefaultType */
+public boolean hasDefaultType() {
+ return _typeDeserializer.getDefaultImpl() != null;
+ }
+
+/* METHOD getDefaultTypeId */
+public String getDefaultTypeId() {
+ Class<?> defaultType = _typeDeserializer.getDefaultImpl();
+ if (defaultType == null) {
+ return null;
+ }
+ return _typeDeserializer.getTypeIdResolver().idFromValueAndType(null, defaultType);
+ }
+
+/* METHOD addExternal */
+public void addExternal(SettableBeanProperty property, TypeDeserializer typeDeser)
+ {
+ Integer index = _properties.size();
+ _properties.add(new ExtTypedProperty(property, typeDeser));
+ _nameToPropertyIndex.put(property.getName(), index);
+ _nameToPropertyIndex.put(typeDeser.getPropertyName(), index);
+ }
+
+/* METHOD ExtTypedProperty */
+public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser)
+ {
+ _property = property;
+ _typeDeserializer = typeDeser;
+ _typePropertyName = typeDeser.getPropertyName();
+ }
+
+/* METHOD start */
+public ExternalTypeHandler start() {
+ return new ExternalTypeHandler(this);
+ }
+
+/* METHOD hasTypePropertyName */
+public boolean hasTypePropertyName(String n) {
+ return n.equals(_typePropertyName);
+ }
+
+/* METHOD getTypePropertyName */
+public String getTypePropertyName() { return _typePropertyName; }
+
+/* METHOD getProperty */
+public SettableBeanProperty getProperty() {
+ return _property;
+ }

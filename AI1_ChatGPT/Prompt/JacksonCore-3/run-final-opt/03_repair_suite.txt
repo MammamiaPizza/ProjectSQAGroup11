@@ -1,0 +1,156 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 3  Version: JacksonCore-3b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 111
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestLocation::testOffsetWithInputOffset
+ --> junit.framework.AssertionFailedError: expected:<0> but was:<3>
+Modified: com.fasterxml.jackson.core.json.UTF8StreamJsonParser
+
+Available API/signatures:
+[com.fasterxml.jackson.core.json.UTF8StreamJsonParser | java]
+package com.fasterxml.jackson.core.json;
+public class UTF8StreamJsonParser
+final static byte BYTE_LF = (byte) '\n';
+private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+private final static int[] _icWS = CharTypes.getInputCodeWS();
+protected ObjectCodec _objectCodec;
+final protected BytesToNameCanonicalizer _symbols;
+protected int[] _quadBuffer = new int[16];
+protected boolean _tokenIncomplete = false;
+protected InputStream _inputStream;
+protected byte[] _inputBuffer;
+protected boolean _bufferRecyclable;
+@Override
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public int releaseBuffered(OutputStream out) throws IOException
+public Object getInputSource() {
+protected final boolean loadMore()
+protected final boolean _loadToHaveAtLeast(int minAvailable)
+protected void _closeInput() throws IOException
+protected void _releaseBuffers() throws IOException
+public String getText()
+public String getValueAsString() throws IOException, JsonParseException
+public String getValueAsString(String defValue) throws IOException, JsonParseException
+protected final String _getText2(JsonToken t)
+public char[] getTextCharacters()
+public int getTextLength()
+public int getTextOffset() throws IOException, JsonParseException
+public byte[] getBinaryValue(Base64Variant b64variant)
+@SuppressWarnings("resource")
+public int readBinaryValue(Base64Variant b64variant, OutputStream out)
+public JsonLocation getTokenLocation()
+public JsonLocation getCurrentLocation()
+public JsonToken nextToken()
+private final
+...[truncated deterministically]...
+fast(int c1) throws IOException
+private final int _decodeUtf8_4(int c) throws IOException
+private final void _skipUtf8_2(int c) throws IOException
+private final void _skipUtf8_3(int c) throws IOException
+private final void _skipUtf8_4(int c) throws IOException
+protected final void _skipCR() throws IOException
+private int nextByte() throws IOException
+protected void _reportInvalidToken(String matchedPart) throws IOException
+protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
+protected void _reportInvalidChar(int c)
+protected void _reportInvalidInitial(int mask)
+protected void _reportInvalidOther(int mask)
+protected void _reportInvalidOther(int mask, int ptr)
+public static int[] growArrayBy(int[] arr, int more)
+protected final byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.json;
+
+import java.io.ByteArrayInputStream;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.BytesToNameCanonicalizer;
+import com.fasterxml.jackson.core.util.BufferRecycler;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+public class UTF8StreamJsonParserInputOffsetTest
+{
+    private UTF8StreamJsonParser parserFor(byte[] buffer, int start) {
+        IOContext context = new IOContext(new BufferRecycler(), "offset-test", false);
+        return new UTF8StreamJsonParser(
+                context,
+                JsonParser.Feature.collectDefaults(),
+                new ByteArrayInputStream(new byte[0]),
+                null,
+                BytesToNameCanonicalizer.createRoot(),
+                buffer,
+                start,
+                buffer.length,
+                false);
+    }
+
+    @Test
+    public void testFirstTokenLocationExcludesInitialBufferOffset() throws Exception {
+        byte[] input = "xxx[1]".getBytes("UTF-8");
+        UTF8StreamJsonParser parser = parserFor(input, 3);
+
+        assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+
+        JsonLocation location = parser.getTokenLocation();
+        assertEquals(0L, location.getByteOffset());
+    }
+
+    @Test
+    public void testTokenAndCurrentLocationsRemainRelativeAfterOffsetBuffer() throws Exception {
+        byte[] input = "prefix[1,2]".getBytes("UTF-8");
+        UTF8StreamJsonParser parser = parserFor(input, 6);
+
+        assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+        assertEquals(0L, parser.getTokenLocation().getByteOffset());
+        assertEquals(1L, parser.getCurrentLocation().getByteOffset());
+
+        assertEquals(JsonToken.VALUE_NUMBER_INT, parser.nextToken());
+        assertEquals(1L, parser.getTokenLocation().getByteOffset());
+        assertEquals(2L, parser.getCurrentLocation().getByteOffset());
+
+        assertEquals(JsonToken.VALUE_NUMBER_INT, parser.nextToken());
+        assertEquals(3L, parser.getTokenLocation().getByteOffset());
+        assertEquals(4L, parser.getCurrentLocation().getByteOffset());
+
+        assertEquals(JsonToken.END_ARRAY, parser.nextToken());
+        assertEquals(4L, parser.getTokenLocation().getByteOffset());
+        assertEquals(5L, parser.getCurrentLocation().getByteOffset());
+
+        assertNull(parser.nextToken());
+    }
+
+    @Test
+    public void testWhitespaceBeforeTokenUsesSourceRelativeLocation() throws Exception {
+        byte[] input = "skip \n true".getBytes("UTF-8");
+        UTF8StreamJsonParser parser = parserFor(input, 4);
+
+        assertEquals(JsonToken.VALUE_TRUE, parser.nextToken());
+
+        assertEquals(2L, parser.getTokenLocation().getByteOffset());
+        assertEquals(6L, parser.getCurrentLocation().getByteOffset());
+        assertNull(parser.nextToken());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.core.json.UTF8StreamJsonParserInputOffsetTest::testWhitespaceBeforeTokenUsesSourceRelativeLocation
+ - com.fasterxml.jackson.core.json.UTF8StreamJsonParserInputOffsetTest::testTokenAndCurrentLocationsRemainRelativeAfterOffsetBuffer
+
+Failing generated tests: com.fasterxml.jackson.core.json.UTF8StreamJsonParserInputOffsetTest::testTokenAndCurrentLocationsRemainRelativeAfterOffsetBuffer, com.fasterxml.jackson.core.json.UTF8StreamJsonParserInputOffsetTest::testWhitespaceBeforeTokenUsesSourceRelativeLocation

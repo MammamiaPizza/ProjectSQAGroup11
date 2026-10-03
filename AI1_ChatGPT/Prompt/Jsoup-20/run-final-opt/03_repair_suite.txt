@@ -1,0 +1,125 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 20  Version: Jsoup-20b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 134
+Trigger failures:
+- org.jsoup.helper.DataUtilTest::discardsSpuriousByteOrderMark
+ --> junit.framework.AssertionFailedError: expected:<[One]> but was:<[]>
+Modified: org.jsoup.helper.DataUtil
+
+Available API/signatures:
+[org.jsoup.helper.DataUtil | java]
+package org.jsoup.helper;
+public class DataUtil {
+private static final Pattern charsetPattern = Pattern.compile("(?i)\\bcharset=\\s*\"?([^\\s;\"]*)");
+private DataUtil() {}
+public static Document load(File in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+static Document parseByteData(ByteBuffer byteData, String charsetName, String baseUri, Parser parser) {
+static ByteBuffer readToByteBuffer(InputStream inStream) throws IOException {
+static String getCharsetFromContentType(String contentType) {
+
+Generated JUnit Test:
+package org.jsoup.helper;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+public class DataUtilBOMRegressionTest {
+    private static final String BASE_URI = "http://example.com/";
+
+    @Test
+    public void parseByteDataDiscardsUtf8BomWhenCharsetIsInferred() throws Exception {
+        String html = "<html><head></head><body>One</body></html>";
+        ByteBuffer bytes = ByteBuffer.wrap(withUtf8Bom(html));
+
+        Document document = DataUtil.parseByteData(bytes, null, BASE_URI, Parser.htmlParser());
+
+        assertEquals("One", document.body().text());
+    }
+
+    @Test
+    public void loadDiscardsUtf8BomWhenCharsetIsExplicitlySpecified() throws Exception {
+        String html = "<html><head></head><body>One</body></html>";
+
+        Document document = DataUtil.load(
+            new ByteArrayInputStream(withUtf8Bom(html)),
+            "UTF-8",
+            BASE_URI
+        );
+
+        assertEquals("One", document.body().text());
+    }
+
+    @Test
+    public void loadParsesNormalUtf8HtmlWhenCharsetIsInferred() throws Exception {
+        String html = "<html><head></head><body>Normal content</body></html>";
+
+        Document document = DataUtil.load(
+            new ByteArrayInputStream(html.getBytes("UTF-8")),
+            null,
+            BASE_URI
+        );
+
+        assertEquals("Normal content", document.body().text());
+    }
+
+    @Test
+    public void loadRedecodesDocumentUsingCharsetDeclaredInMetaTag() throws Exception {
+        String html = "<html><head><meta charset=\"ISO-8859-1\"></head><body>caf\u00e9</body></html>";
+
+        Document document = DataUtil.load(
+            new ByteArrayInputStream(html.getBytes("ISO-8859-1")),
+            null,
+            BASE_URI
+        );
+
+        assertEquals("café", document.body().text());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void loadRejectsEmptyExplicitCharsetName() throws Exception {
+        DataUtil.load(
+            new ByteArrayInputStream("<html><body>One</body></html>".getBytes("UTF-8")),
+            "",
+            BASE_URI
+        );
+    }
+
+    @Test
+    public void getCharsetFromContentTypeHandlesQuotedCharsetAndMissingCharset() {
+        assertEquals("EUC-JP",
+            DataUtil.getCharsetFromContentType("text/html; boundary=x; charset=\"euc-jp\""));
+        assertNull(DataUtil.getCharsetFromContentType("text/html; boundary=x"));
+    }
+
+    private static byte[] withUtf8Bom(String value) throws Exception {
+        byte[] content = value.getBytes("UTF-8");
+        byte[] bytes = new byte[content.length + 3];
+        bytes[0] = (byte) 0xEF;
+        bytes[1] = (byte) 0xBB;
+        bytes[2] = (byte) 0xBF;
+        System.arraycopy(content, 0, bytes, 3, content.length);
+        return bytes;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.helper.DataUtilBOMRegressionTest::parseByteDataDiscardsUtf8BomWhenCharsetIsInferred
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.helper.DataUtilBOMRegressionTest::parseByteDataDiscardsUtf8BomWhenCharsetIsInferred

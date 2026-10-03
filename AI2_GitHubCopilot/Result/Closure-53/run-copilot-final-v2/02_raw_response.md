@@ -1,0 +1,126 @@
+package com.google.javascript.jscomp;
+
+import junit.framework.TestCase;
+import com.google.common.base.Supplier;
+import com.google.javascript.rhino.Node;
+
+public class InlineObjectLiteralsTest extends TestCase {
+
+ private Compiler compiler;
+ private Supplier<String> nameSupplier;
+ private InlineObjectLiterals pass;
+
+ @Override
+ protected void setUp() throws Exception {
+     super.setUp();
+     compiler = new Compiler();
+     CompilerOptions options = new CompilerOptions();
+     options.setCodingConvention(new ClosureCodingConvention());
+     compiler.initOptions(options);
+     nameSupplier = new Supplier<String>() {
+         private int id;
+         @Override
+         public String get() { return String.valueOf(id++); }
+     };
+     pass = new InlineObjectLiterals(compiler, nameSupplier);
+ }
+
+ /** Helper: run the InlineObjectLiterals pass on the given JS, return compiled source. */
+ private String processJS(String js) {
+     Node externs = compiler.parseSyntheticCode("externs", "");
+     Node root = compiler.parseSyntheticCode("testCode", js);
+     pass.process(externs, root);
+     return compiler.toSource(root);
+ }
+
+ /** Regression test for bug 545: variable that is only read as a property but never assigned
+  *  with an object literal in a simple reference list used to cause an Internal Compiler Error. */
+ public void testBug545() {
+     String result = processJS("var x = {a: 1}; x.a;");
+     // Must not throw RuntimeException and should inline the object literal
+     assertTrue("Expected inlined variable name missing",
+                result.contains("JSCompiler_object_inline_a_"));
+ }
+
+ /** Normal inlining: object literal with a single property should be split into a separate var. */
+ public void testSimpleInlining() {
+     String result = processJS("var x = {a: 1}; var y = x.a;");
+     assertTrue(result.contains("JSCompiler_object_inline_a_"));
+     assertTrue(result.contains("1"));
+ }
+
+ /** Object literal referenced via multiple properties should produce multiple inlined vars. */
+ public void testMultipleProperties() {
+     String result = processJS("var x = {a: 1, b: 2}; x.a; x.b;");
+     assertTrue(result.contains("JSCompiler_object_inline_a_"));
+     assertTrue(result.contains("JSCompiler_object_inline_b_"));
+ }
+
+ /** Self-referential assignment: {a: x.b} must not be inlined (would be order-dependent). */
+ public void testSelfReferentialNotInlined() {
+     String result = processJS("var x = {a: x.b, b: 1}; x.a;");
+     assertFalse("Self-referential assignment was incorrectly inlined",
+                 result.contains("JSCompiler_object_inline_a_"));
+ }
+
+ /** ES5 getter must not be inlined (not supported by the pass). */
+ public void testGetterNotInlined() {
+     String result = processJS("var x = {get a() { return 1; }}; x.a;");
+     assertFalse("Getter was incorrectly inlined",
+                 result.contains("JSCompiler_object_inline_a_"));
+ }
+
+ /** Empty object literal: must not crash and does not produce inlined variables. */
+ public void testEmptyObject() {
+     String result = processJS("var x = {}; x;");
+     assertNotNull(result);
+     // No property to inline, still should survive
+ }
+
+ /** An assignment to a property of the object should be replaced by assignment to the inlined var.
+*/
+ public void testPropertyAssignment() {
+     String result = processJS("var x = {a: 1}; x.a = 2;");
+     assertTrue(result.contains("JSCompiler_object_inline_a_"));
+     assertTrue(result.contains("JSCompiler_object_inline_a_=2") ||
+                result.contains("JSCompiler_object_inline_a_ = 2"));
+ }
+
+ /** Object literal with nested object-like value should inline the top-level properties. */
+ public void testNestedObjectLiteral() {
+     String result = processJS("var x = {a: {b: 1}}; x.a;");
+     assertTrue(result.contains("JSCompiler_object_inline_a_"));
+ }
+
+ /** Variable used only on right-hand side of a var decl (not a property read) should not be
+inlined,
+  *  because computeVarList would encounter a non-GETPROP reference and could crash without the fix.
+*/
+ public void testDirectReferenceNotInlined() {
+     String result = processJS("var x = {a: 1}; var y = x;");
+     // x is used directly, not via property; the pass should skip it safely
+     assertFalse(result.contains("JSCompiler_object_inline_a_"));
+ }
+
+ /** Object used as a call target with a method call should not be inlined (would lose 'this'
+binding). */
+ public void testMethodCallTargetNotInlined() {
+     String result = processJS("var x = {a: 1, f: function(){return this.a;}}; x.f();");
+     assertFalse("Method call target was incorrectly inlined",
+                 result.contains("JSCompiler_object_inline_a_"));
+ }
+
+ /** Blacklisting: when a variable is declared but never initialized with an object literal,
+  *  the pass should not attempt to inline it (previously could cause NPE on null init). */
+ public void testUninitializedVarNoCrash() {
+     String result = processJS("var x = {a: 1}; var y; alert(x.a);");
+     assertNotNull(result);
+ }
+
+ /** Multiple assignments to the same object variable should be handled without crash. */
+ public void testMultipleAssignments() {
+     String result = processJS("var x; x = {a: 1}; x.a = 2; x = {b: 3}; x.b;");
+     assertNotNull(result);
+ }
+
+}

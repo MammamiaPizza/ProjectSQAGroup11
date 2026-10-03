@@ -1,0 +1,79 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 40  Version: Jsoup-40b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.DocumentType
+Modified: org.jsoup.nodes.DocumentType
+Triggers: org.jsoup.nodes.DocumentTypeTest::constructorValidationOkWithBlankName, org.jsoup.parser.HtmlParserTest::handlesInvalidDoctypes
+
+Bug/specification summary:
+Bug report: 460
+Trigger failures:
+- org.jsoup.nodes.DocumentTypeTest::constructorValidationOkWithBlankName
+ --> java.lang.IllegalArgumentException: String must not be empty
+ - org.jsoup.parser.HtmlParserTest::handlesInvalidDoctypes
+ --> java.lang.IllegalArgumentException: String must not be empty
+Modified: org.jsoup.nodes.DocumentType
+
+Prompt-01 test plan:
+TARGETS: DocumentType constructor must accept empty/blank name without throwing.
+ORACLES: nodeName() returns the passed name (including empty); no IllegalArgumentException.
+CASES: name="" (empty), name=" " (blank), name=null (if allowed), name=valid with empty publicId.
+RISKS: Buggy version throws on empty; fix must not re-introduce validation for name while keeping
+other validations.
+TRIGGERS: constructorValidationOkWithBlankName, handlesInvalidDoctypes (both expect no exception).
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.DocumentType (java) =====
+package org.jsoup.nodes;
+
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+
+/**
+ * A {@code <!DOCTYPE>} node.
+ */
+public class DocumentType extends Node {
+ // todo: quirk mode from publicId and systemId
+
+ /**
+ * Create a new doctype element.
+ * @param name the doctype's name
+ * @param publicId the doctype's public ID
+ * @param systemId the doctype's system ID
+ * @param baseUri the doctype's base URI
+ */
+ public DocumentType(String name, String publicId, String systemId, String baseUri) {
+ super(baseUri);
+
+ Validate.notEmpty(name);
+ attr("name", name);
+ attr("publicId", publicId);
+ attr("systemId", systemId);
+ }
+
+ @Override
+ public String nodeName() {
+ return "#doctype";
+ }
+
+ @Override
+ void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out) {
+ accum.append("<!DOCTYPE");
+ if (!StringUtil.isBlank(attr("name")))
+ accum.append(" ").append(attr("name"));
+ if (!StringUtil.isBlank(attr("publicId")))
+ accum.append(" PUBLIC \"").append(attr("publicId")).append('"');
+ if (!StringUtil.isBlank(attr("systemId")))
+ accum.append(" \"").append(attr("systemId")).append('"');
+ accum.append('>');
+ }
+
+ @Override
+ void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out) {
+ }
+}

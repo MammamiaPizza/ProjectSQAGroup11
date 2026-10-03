@@ -1,0 +1,233 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 106  Version: JacksonDatabind-106b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2189
+Trigger failures:
+- com.fasterxml.jackson.databind.node.TestTreeTraversingParser::testNumberOverflowLong
+ --> junit.framework.AssertionFailedError: Expected failure for `long` overflow
+ - com.fasterxml.jackson.databind.node.TestTreeTraversingParser::testNumberOverflowInt
+ --> junit.framework.AssertionFailedError: Expected failure for `int` overflow
+Modified: com.fasterxml.jackson.databind.node.TreeTraversingParser
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.node.TreeTraversingParser | java]
+package com.fasterxml.jackson.databind.node;
+public class TreeTraversingParser extends ParserMinimalBase
+protected ObjectCodec _objectCodec;
+protected NodeCursor _nodeCursor;
+protected JsonToken _nextToken;
+protected boolean _startContainer;
+protected boolean _closed;
+public TreeTraversingParser(JsonNode n) { this(n, null); }
+public TreeTraversingParser(JsonNode n, ObjectCodec codec)
+@Override
+public void setCodec(ObjectCodec c) {
+public ObjectCodec getCodec() {
+public Version version() {
+public void close() throws IOException
+public JsonToken nextToken() throws IOException, JsonParseException
+public JsonParser skipChildren() throws IOException, JsonParseException
+public boolean isClosed() {
+public String getCurrentName() {
+public void overrideCurrentName(String name)
+public JsonStreamContext getParsingContext() {
+public JsonLocation getTokenLocation() {
+public JsonLocation getCurrentLocation() {
+public String getText()
+public char[] getTextCharacters() throws IOException, JsonParseException {
+public int getTextLength() throws IOException, JsonParseException {
+public int getTextOffset() throws IOException, JsonParseException {
+public boolean hasTextCharacters() {
+public NumberType getNumberType() throws IOException {
+public BigInteger getBigIntegerValue() throws IOException
+public BigDecimal getDecimalValue() throws IOException {
+public double getDoubleValue() throws IOException {
+public float getFloatValue() throws IOException {
+public int getIntValue() throws IOException {
+final NumericNode node = (NumericNode) currentNumericNode();
+public long getLongValue() throws IOException {
+public Number getNumberValue() throws IOException {
+public Object getEmbeddedObject()
+public boolean isNaN() {
+public byte[] getBinaryValue(Base64Variant b64variant)
+public int readBinaryValue(Base64Variant b64variant, OutputStream out)
+protected JsonNode currentNode() {
+protected JsonNode currentNumericNode()
+protected void _handleEOF() throws JsonParseException {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.node;
+
+ import com.fasterxml.jackson.core.JsonParser;
+ import com.fasterxml.jackson.core.JsonToken;
+ import com.fasterxml.jackson.databind.node.JsonNode;
+ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+
+ import java.io.IOException;
+ import java.math.BigDecimal;
+ import java.math.BigInteger;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ import static org.junit.Assert.*;
+
+ public class TestTreeTraversingParser {
+
+     private JsonNodeFactory nodeFactory;
+
+     @Before
+     public void setUp() {
+         nodeFactory = JsonNodeFactory.instance;
+     }
+
+     // ---------- int values ---------
+
+     @Test
+     public void testIntNormalRange() throws IOException {
+         JsonNode node = nodeFactory.numberNode(42);
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(42, parser.getIntValue());
+         parser.close();
+     }
+
+     @Test
+     public void testIntBoundaryMax() throws IOException {
+         JsonNode node = nodeFactory.numberNode(Integer.MAX_VALUE);
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(Integer.MAX_VALUE, parser.getIntValue());
+         parser.close();
+     }
+
+     @Test
+     public void testIntBoundaryMin() throws IOException {
+         JsonNode node = nodeFactory.numberNode(Integer.MIN_VALUE);
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(Integer.MIN_VALUE, parser.getIntValue());
+         parser.close();
+     }
+
+     @Test(expected = IOException.class)
+     public void testIntOverflowAboveMax() throws IOException {
+         // value > Integer.MAX_VALUE
+         JsonNode node = nodeFactory.numberNode(BigInteger.valueOf(2147483648L)); // 2^31
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         parser.getIntValue(); // must throw
+         parser.close();
+     }
+
+     @Test(expected = IOException.class)
+     public void testIntOverflowBelowMin() throws IOException {
+         // value < Integer.MIN_VALUE
+         JsonNode node = nodeFactory.numberNode(BigInteger.valueOf(-2147483649L)); // -2^31 - 1
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         parser.getIntValue(); // must throw
+         parser.close();
+     }
+
+     // ---------- long values ---------
+
+     @Test
+     public void testLongNormal() throws IOException {
+         JsonNode node = nodeFactory.numberNode(123L);
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(123L, parser.getLongValue());
+         parser.close();
+     }
+
+     @Test
+     public void testLongBoundaryMax() throws IOException {
+         JsonNode node = nodeFactory.numberNode(Long.MAX_VALUE);
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(Long.MAX_VALUE, parser.getLongValue());
+         parser.close();
+     }
+
+     @Test
+     public void testLongBoundaryMin() throws IOException {
+         JsonNode node = nodeFactory.numberNode(Long.MIN_VALUE);
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(Long.MIN_VALUE, parser.getLongValue());
+         parser.close();
+     }
+
+     @Test(expected = IOException.class)
+     public void testLongOverflowAboveMax() throws IOException {
+         // value > Long.MAX_VALUE
+         JsonNode node = nodeFactory.numberNode(new BgiInteger("9223372036854775808")); // 2^63
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         parser.getLongValue(); // must throw
+         parser.close();
+     }
+
+     @Test(expected = IOException.class)
+     public void testLongOverflowBelowMin() throws IOException {
+         // value < Long.MIN_VALUE
+         JsonNode node = nodeFactory.numberNode(new BgiInteger("-9223372036854775809")); // -2^63 -
+1
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_INT);
+         parser.getLongValue(); // must throw
+         parser.close();
+     }
+
+     // ---------- decimal cases ---------
+
+     @Test(expected = IOException.class)
+     public void testDecimalTruncationInt() throws IOException {
+         // fractional BigDecimal cannot be safely coerred to int
+         JsonNode node = nodeFactory.numberNode(new BgiDecimal("3.14"));
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_FLOAT);
+         parser.getIntValue(); // expect failure
+         parser.close();
+     }
+
+     @Test(expected = IOException.class)
+     public void testDecimalLargeBeyondLong() throws IOException {
+         // very large decimal that cannot fit into long
+         JsonNode node = nodeFactory.numberNode(new BgiDecimal("1e30"));
+         TreeTraversingParser parser = new TreeTraversingParser(node);
+         assertToken(parser, JsonToken.VALUE_NUMBER_FLOAT);
+         parser.getLongValue(); // expect failure
+         parser.close();
+     }
+
+     // helper
+     private static void assertToken(JsonParser parser, JsonToken expected) throws IOException {
+         assertNotNull("First token must not be null (did you forget to call nextToken()?)",
+                      parser.nextToken());
+         assertEquals("Current token mismatch", expected, parser.getCurrentToken());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-106f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-106f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-106f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-106f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-106f-copilot/.test_suite/com/fasterxml/jackson/databind/node/TestTreeTraversingParser.java:118: error: not a statement
+ [javac] 1
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

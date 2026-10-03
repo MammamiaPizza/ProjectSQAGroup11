@@ -1,0 +1,200 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 24  Version: JacksonDatabind-24b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 889
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.TestConfig::testDateFormatConfig
+ --> junit.framework.AssertionFailedError: expected:<sun.util.calendar.ZoneInfo[id="America/Los_Angeles",offset=-28800000,dstSavings=3600000,useDaylight=true,transitions=185,lastRule=java.util.SimpleTimeZone[id=America/Los_Angeles,offset=-28800000,dstSavings=3600000,useDaylight=true,startYear=0,startMode=3,startMonth=2,startDay=8,startDayOfWeek=1,startTime=7200000,startTimeMode=0,endMode=3,endMonth=10,endDay=1,endDayOfWeek=1,endTime=7200000,endTimeMode=0]]> but was:<sun.util.calendar.ZoneInfo[id="GMT",offset=0,dstSavings=0,useDaylight=false,transitions=0,lastRule=null]>
+Modified: com.fasterxml.jackson.databind.cfg.BaseSettings
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.cfg.BaseSettings | java]
+package com.fasterxml.jackson.databind.cfg;
+public final class BaseSettings
+protected final ClassIntrospector _classIntrospector;
+protected final AnnotationIntrospector _annotationIntrospector;
+protected final VisibilityChecker<?> _visibilityChecker;
+protected final PropertyNamingStrategy _propertyNamingStrategy;
+protected final TypeFactory _typeFactory;
+protected final TypeResolverBuilder<?> _typeResolverBuilder;
+protected final DateFormat _dateFormat;
+protected final HandlerInstantiator _handlerInstantiator;
+protected final Locale _locale;
+protected final TimeZone _timeZone;
+protected final Base64Variant _defaultBase64;
+public BaseSettings withClassIntrospector(ClassIntrospector ci) {
+public BaseSettings withAnnotationIntrospector(AnnotationIntrospector ai) {
+public BaseSettings withInsertedAnnotationIntrospector(AnnotationIntrospector ai) {
+public BaseSettings withAppendedAnnotationIntrospector(AnnotationIntrospector ai) {
+public BaseSettings withVisibilityChecker(VisibilityChecker<?> vc) {
+public BaseSettings withVisibility(PropertyAccessor forMethod, JsonAutoDetect.Visibility visibility) {
+public BaseSettings withPropertyNamingStrategy(PropertyNamingStrategy pns) {
+public BaseSettings withTypeFactory(TypeFactory tf) {
+public BaseSettings withTypeResolverBuilder(TypeResolverBuilder<?> typer) {
+public BaseSettings withDateFormat(DateFormat df) {
+public BaseSettings withHandlerInstantiator(HandlerInstantiator hi) {
+public BaseSettings with(Locale l) {
+public BaseSettings with(TimeZone tz)
+public BaseSettings with(Base64Variant base64) {
+public ClassIntrospector getClassIntrospector() {
+public AnnotationIntrospector getAnnotationIntrospector() {
+public VisibilityChecker<?> getVisibilityChecker() {
+public PropertyNamingStrategy getPropertyNamingStrategy() {
+public TypeFactory getTypeFactory() {
+public TypeResolverBuilder<?> getTypeResolverBuilder() {
+public DateFormat getDateFormat() {
+public HandlerInstantiator getHandlerInstantiator() {
+public Locale getLocale() {
+public TimeZone getTimeZone() {
+public Base64Variant getBase64Variant() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.cfg;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import com.fasterxml.jackson.core.Base64Variant;
+import com.fasterxml.jackson.core.Base64Variants;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+
+public class TestBaseSettings {
+
+ private BaseSettings createDefaultSettings() {
+     return new BaseSettings(null, null, null, null,
+             TypeFactory.defaultInstance(), null,
+             null, null, Locale.US,
+             TimeZone.getTimeZone("GMT"), Base64Variants.getDefaultVariant());
+ }
+
+ @Test
+ public void testWithDateFormatUpdatesTimeZone() {
+     BaseSettings settings = createDefaultSettings();
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     df.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+     BaseSettings updated = settings.withDateFormat(df);
+     assertEquals("TimeZone should be updated from DateFormat",
+             TimeZone.getTimeZone("America/Los_Angeles"), updated.getTimeZone());
+ }
+
+ @Test
+ public void testWithDateFormatKeepsTimeZoneOnSameInstance() {
+     BaseSettings settings = createDefaultSettings();
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     df.setTimeZone(TimeZone.getTimeZone("America/Chicago"));
+     BaseSettings updated1 = settings.withDateFormat(df);
+     BaseSettings updated2 = updated1.withDateFormat(df); // same instance
+     assertSame("Should return same instance when DateFormat unchanged", updated1, updated2);
+     assertEquals("TimeZone should remain after same DateFormat call",
+             TimeZone.getTimeZone("America/Chicago"), updated2.getTimeZone());
+ }
+
+ @Test
+ public void testWithDateFormatNullKeepsPreviousTimeZone() {
+     BaseSettings settings = createDefaultSettings();
+     BaseSettings updated = settings.withDateFormat(null);
+     assertEquals("TimeZone should remain previous when null DateFormat",
+             TimeZone.getTimeZone("GMT"), updated.getTimeZone());
+ }
+
+ @Test
+ public void testWithDateFormatMultipleCallsLastWins() {
+     BaseSettings settings = createDefaultSettings();
+     DateFormat df1 = new SimpleDateFormat("yyyy-MM-dd");
+     df1.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+     DateFormat df2 = new SimpleDateFormat("MM-dd-yyyy");
+     df2.setTimeZone(TimeZone.getTimeZone("PST"));
+     BaseSettings updated = settings.withDateFormat(df1).withDateFormat(df2);
+     assertEquals("Last DateFormat's timezone should apply",
+             TimeZone.getTimeZone("PST"), updated.getTimeZone());
+     assertEquals("DateFormat should be the last one", df2, updated.getDateFormat());
+ }
+
+ @Test
+ public void testWithTimeZoneOverrides() {
+     BaseSettings settings = createDefaultSettings();
+     BaseSettings updated = settings.with(TimeZone.getTimeZone("America/New_York"));
+     assertEquals("TimeZone should be overridden by with(TimeZone)",
+             TimeZone.getTimeZone("America/New_York"), updated.getTimeZone());
+ }
+
+ @Test
+ public void testWithTimeZoneOverridesAfterDateFormat() {
+     BaseSettings settings = createDefaultSettings();
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     df.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+     BaseSettings updated = settings.withDateFormat(df)
+             .with(TimeZone.getTimeZone("GMT"));
+     assertEquals("Explicit with(TimeZone) should override DateFormat timezone",
+             TimeZone.getTimeZone("GMT"), updated.getTimeZone());
+ }
+
+ @Test
+ public void testWithDateFormatOverridesAfterWithTimeZone() {
+     BaseSettings settings = createDefaultSettings();
+     settings = settings.with(TimeZone.getTimeZone("America/New_York"));
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     df.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+     BaseSettings updated = settings.withDateFormat(df);
+     assertEquals("withDateFormat should override previously set TimeZone",
+             TimeZone.getTimeZone("America/Los_Angeles"), updated.getTimeZone());
+ }
+
+ @Test
+ public void testConstructionPreservesTimeZone() {
+     TimeZone tz = TimeZone.getTimeZone("Europe/London");
+     BaseSettings settings = new BaseSettings(null, null, null, null,
+             TypeFactory.defaultInstance(), null,
+             null, null, Locale.UK, tz, Base64Variants.getDefaultVariant());
+     assertEquals("Constructor should set given TimeZone", tz, settings.getTimeZone());
+ }
+
+ @Test
+ public void testWithDateFormatDoesNotAffectOtherProperties() {
+     BaseSettings original = createDefaultSettings();
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     df.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+     BaseSettings updated = original.withDateFormat(df);
+     assertEquals(original.getLocale(), updated.getLocale());
+     assertEquals(original.getTypeFactory(), updated.getTypeFactory());
+     assertEquals(original.getBase64Variant(), updated.getBase64Variant());
+ }
+
+ @Test
+ public void testWithReturnsNewInstance() {
+     BaseSettings settings = createDefaultSettings();
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     assertNotSame("withDateFormat should return new instance", settings,
+settings.withDateFormat(df));
+     assertNotSame("with(TimeZone) should return new instance", settings,
+settings.with(TimeZone.getTimeZone("PST")));
+ }
+
+ @Test
+ public void testTimeZoneSyncedWithDateFormat() {
+     BaseSettings settings = createDefaultSettings();
+     DateFormat df = new SimpleDateFormat("yyyy-MM-dd");
+     df.setTimeZone(TimeZone.getTimeZone("Asia/Tokyo"));
+     BaseSettings updated = settings.withDateFormat(df);
+     assertEquals(df.getTimeZone(), updated.getTimeZone());
+     assertEquals(df, updated.getDateFormat());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 7
+ - com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithReturnsNewInstance
+ - com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithDateFormatKeepsTimeZoneOnSameInstance
+ - com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithDateFormatUpdatesTimeZone
+Failing generated tests: com.fasterxml.jackson.databind.cfg.TestBaseSettings::testTimeZoneSyncedWithDateFormat, com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithDateFormatKeepsTimeZoneOnSameInstance, com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithDateFormatMultipleCallsLastWins, com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithDateFormatOverridesAfterWithTimeZone, com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithDateFormatUpdatesTimeZone, com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithReturnsNewInstance, com.fasterxml.jackson.databind.cfg.TestBaseSettings::testWithTimeZoneOverrides

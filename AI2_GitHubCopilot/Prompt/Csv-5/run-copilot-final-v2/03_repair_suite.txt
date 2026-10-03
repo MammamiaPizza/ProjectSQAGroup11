@@ -1,0 +1,216 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 5  Version: Csv-5b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-106
+Trigger failures:
+- org.apache.commons.csv.CSVFormatTest::testNullRecordSeparatorCsv106
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.csv.CSVPrinter
+
+Available API/signatures:
+[org.apache.commons.csv.CSVPrinter | java]
+package org.apache.commons.csv;
+public final class CSVPrinter implements Flushable, Closeable {
+/** True if we just began a new record. */
+public CSVPrinter(final Appendable out, final CSVFormat format) {
+public void close() throws IOException {
+public void flush() throws IOException {
+public void print(final Object value) throws IOException {
+final String nullString = format.getNullString();
+private void printAndEscape(final CharSequence value, final int offset, final int len) throws IOException {
+final char delim = format.getDelimiter();
+final char escape = format.getEscape().charValue();
+final char delimChar = format.getDelimiter();
+final char quoteChar = format.getQuoteChar().charValue();
+final char c = value.charAt(pos);
+public void printComment(final String comment) throws IOException {
+final char c = comment.charAt(i);
+public void println() throws IOException {
+final String recordSeparator = format.getRecordSeparator();
+public void printRecord(final Iterable<?> values) throws IOException {
+for (final Object value : values) {
+public void printRecord(final Object... values) throws IOException {
+public void printRecords(final Iterable<?> values) throws IOException {
+public void printRecords(final Object[] values) throws IOException {
+public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+final int columnCount = resultSet.getMetaData().getColumnCount();
+public Appendable getOut() {
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for CSV-106: CSVPrinter.println() should handle null record separator
+  * gracefully instead of appending the literal string "null".
+  */
+ public class CSVPrinterNullRecordSeparatorTest {
+
+     @Test
+     public void testPrintlnWithNullRecordSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.print("hello");
+         printer.println();
+         printer.print("world");
+         printer.flush();
+         assertEquals("helloworld", sb.toString());
+     }
+
+     @Test
+     public void testPrintlnWithEmptyRecordSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator("");
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.print("hello");
+         printer.println();
+         printer.print("world");
+         printer.flush();
+         assertEquals("helloworld", sb.toString());
+     }
+
+     @Test
+     public void testPrintlnWithNormalRecordSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator("\n");
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.print("hello");
+         printer.println();
+         printer.print("world");
+         printer.flush();
+         assertEquals("hello\nworld", sb.toString());
+     }
+
+     @Test
+     public void testPrintRecordWithNullRecordSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.printRecord("a", "b");
+         printer.printRecord("c");
+         printer.flush();
+         assertEquals("a,bc", sb.toString());
+     }
+
+     @Test
+     public void testMultiplePrintRecordsWithNullSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.printRecord("x", "y");
+         printer.printRecord("1", "2", "3");
+         printer.printRecord("last");
+         printer.flush();
+         assertEquals("x,y1,2,3last", sb.toString());
+     }
+
+     @Test
+     public void testPrintlnOnlyWithNullSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.println();
+         printer.println();
+         printer.println();
+         printer.flush();
+         assertEquals("", sb.toString());
+     }
+
+     @Test
+     public void testPrintCommentWithNullRecordSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT
+                 .withRecordSeparator(null)
+                 .withCommentStart('#');
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.printComment("test comment");
+         printer.flush();
+         assertFalse("Output should not contain 'null'", sb.toString().contains("null"));
+         assertTrue(sb.toString().startsWith("# test comment"));
+     }
+
+     @Test
+     public void testPrintCommentMidRecordWithNullSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT
+                 .withRecordSeparator(null)
+                 .withCommentStart('#');
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.print("value");
+         printer.printComment("note");
+         printer.flush();
+         assertFalse("Output should not contain 'null'", sb.toString().contains("null"));
+         assertTrue(sb.toString().startsWith("value"));
+     }
+
+     @Test
+     public void testFlushAndCloseAfterNullSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.print("data");
+         printer.println();
+         printer.flush();
+         printer.close();
+         assertEquals("data", sb.toString());
+     }
+
+     @Test
+     public void testNewRecordStateAfterNullSeparator() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         printer.print("first");
+         printer.println();
+         printer.print("second");
+         printer.flush();
+         assertEquals("firstsecond", sb.toString());
+     }
+
+     @Test
+     public void testNullVersusNewlineSeparatorContrast() throws IOException {
+         CSVFormat nullFormat = CSVFormat.DEFAULT.withRecordSeparator(null);
+         CSVFormat newlineFormat = CSVFormat.DEFAULT.withRecordSeparator("\n");
+
+         StringBuilder sbNull = new StringBuilder();
+         CSVPrinter pNull = new CSVPrinter(sbNull, nullFormat);
+         pNull.printRecord("a");
+         pNull.printRecord("b");
+         pNull.flush();
+
+         StringBuilder sbNL = new StringBuilder();
+         CSVPrinter pNL = new CSVPrinter(sbNL, newlineFormat);
+         pNL.printRecord("a");
+         pNL.printRecord("b");
+         pNL.flush();
+
+         assertEquals("ab", sbNull.toString());
+         assertEquals("a\nb", sbNL.toString());
+     }
+
+     @Test
+     public void testGetOutReturnsCorrectAppendable() throws IOException {
+         CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+         StringBuilder sb = new StringBuilder();
+         CSVPrinter printer = new CSVPrinter(sb, format);
+         assertSame(sb, printer.getOut());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.csv.CSVPrinterNullRecordSeparatorTest::testNullVersusNewlineSeparatorContrast
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.csv.CSVPrinterNullRecordSeparatorTest::testNullVersusNewlineSeparatorContrast

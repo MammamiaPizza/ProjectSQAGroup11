@@ -1,0 +1,403 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 66  Version: Closure-66b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.TypeCheck
+Modified: com.google.javascript.jscomp.TypeCheck
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testGetTypedPercent5, com.google.javascript.jscomp.TypeCheckTest::testGetTypedPercent6
+
+Bug/specification summary:
+Bug report: 482
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testGetTypedPercent5
+ --> junit.framework.AssertionFailedError: expected:<100.0> but was:<62.5>
+ - com.google.javascript.jscomp.TypeCheckTest::testGetTypedPercent6
+ --> junit.framework.AssertionFailedError: expected:<100.0> but was:<66.66666666666667>
+Modified: com.google.javascript.jscomp.TypeCheck
+
+Prompt-01 test plan:
+TARGETS: TypeCheck.process/processForTesting traversal and private doPercentTypedAccounting behavior. 
+ORACLES: Existing triggers expect typed-percent 100.0 for testGetTypedPercent5 and testGetTypedPercent6. 
+CASES: Cover GETPROP/GETELEM expressions whose types should count as typed during traversal. 
+CASES: Include nested property/index access and assignment/use contexts reflected by the two trigger tests. 
+CASES: Assert exact percent accounting, including numerator/denominator effects for all visited relevant nodes. 
+RISKS: Private accounting method requires exercising through public processForTesting or existing test harness. 
+RISKS: Context lacks source diff and full trigger JS inputs; derive cases only from existing TypeCheckTest behavior.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.TypeCheck (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public class TypeCheck implements NodeTraversal.Callback, CompilerPass {
+"element {0} does not exist on this enum");
+"enum element {0} already defined");
+"enum key {0} must be a syntactic constant");
+"interface members can only be empty property declarations,"
+"interface member functions must have an empty body");
+"and an interface can only extend interfaces");
+"an interface can only extend, but not implement interfaces");
+"property {0} already defined on interface {1}; " +
+"property {0} is already defined by the {1} extended interface");
+public void process(Node externsRoot, Node jsRoot) {
+public Scope processForTesting(Node externsRoot, Node jsRoot) {
+public void check(Node node, boolean externs) {
+private void checkNoTypeCheckSection(Node n, boolean enterSection) {
+final Scope outerScope = t.getScope();
+final FunctionType functionType = (FunctionType) n.getJSType();
+final String functionPrivateName = n.getFirstChild().getString();
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void doPercentTypedAccounting(NodeTraversal t, Node n) {
+private void visitAssign(NodeTraversal t, Node assign) {
+private void visitObjLitKey(NodeTraversal t, Node key, Node objlit) {
+private boolean propertyIsImplicitCast(ObjectType type, String prop) {
+private static boolean hasUnknownOrEmptySupertype(FunctionType ctor) {
+private void visitGetProp(NodeTraversal t, Node n, Node parent) {
+private boolean isPropertyTest(Node getProp) {
+private void visitGetElem(NodeTraversal t, Node n) {
+private void visitVar(NodeTraversal t, Node n) {
+private void visitNew(NodeTraversal t, Node n) {
+private void visitFunction(NodeTraversal t, Node n) {
+private void visitCall(NodeTraversal t, Node n) {
+private void visitReturn(NodeTraversal t, Node n) {
+private void visitBinaryOperator(int op, NodeTraversal t, Node n) {
+"element type must match enum's type");
+primitiveType, "incompatible enum element types");
+private static boolean isReference(Node n) {
+private JSType getJSType(Node n) {
+private FunctionType getFunctionType(Node n) {
+private void ensureTyped(NodeTraversal t, Node n) {
+private void ensureTyped(NodeTraversal t, Node n, JSTypeNative type) {
+private void ensureTyped(NodeTraversal t, Node n, JSType type) {
+private JSType getNativeType(JSTypeNative typeId) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ARRAY_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.BOOLEAN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NULL_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NUMBER_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.REGEXP_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.STRING_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.VOID_TYPE;
+import com.google.common.base.Preconditions;
+import com.google.javascript.jscomp.CheckLevel;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.EnumType;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.TernaryValue;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.HashMap;
+public class TypeCheck implements NodeTraversal.Callback, CompilerPass {
+
+/* METHOD TypeCheck */
+public TypeCheck(AbstractCompiler compiler,
+ ReverseAbstractInterpreter reverseInterpreter,
+ JSTypeRegistry typeRegistry,
+ Scope topScope,
+ ScopeCreator scopeCreator,
+ CheckLevel reportMissingOverride,
+ CheckLevel reportUnknownTypes) {
+ this.compiler = compiler;
+ this.validator = compiler.getTypeValidator();
+ this.reverseInterpreter = reverseInterpreter;
+ this.typeRegistry = typeRegistry;
+ this.topScope = topScope;
+ this.scopeCreator = scopeCreator;
+ this.reportMissingOverride = reportMissingOverride;
+ this.reportUnknownTypes = reportUnknownTypes;
+ this.inferJSDocInfo = new InferJSDocInfo(compiler);
+ }
+
+/* METHOD TypeCheck */
+public TypeCheck(AbstractCompiler compiler,
+ ReverseAbstractInterpreter reverseInterpreter,
+ JSTypeRegistry typeRegistry,
+ CheckLevel reportMissingOverride,
+ CheckLevel reportUnknownTypes) {
+ this(compiler, reverseInterpreter, typeRegistry, null, null,
+ reportMissingOverride, reportUnknownTypes);
+ }
+
+/* METHOD TypeCheck */
+TypeCheck(AbstractCompiler compiler,
+ ReverseAbstractInterpreter reverseInterpreter,
+ JSTypeRegistry typeRegistry) {
+ this(compiler, reverseInterpreter, typeRegistry, null, null,
+ CheckLevel.WARNING, CheckLevel.OFF);
+ }
+
+/* METHOD report */
+private void report(NodeTraversal t, Node n, DiagnosticType diagnosticType,
+ String... arguments) {
+ if (noTypeCheckSection == 0) {
+ t.report(n, diagnosticType, arguments);
+ }
+ }
+
+/* METHOD shouldTraverse */
+public boolean shouldTraverse(
+ NodeTraversal t, Node n, Node parent) {
+ checkNoTypeCheckSection(n, true);
+ switch (n.getType()) {
+ case Token.FUNCTION:
+ // normal type checking
+ final TypeCheck outerThis = this;
+ final Scope outerScope = t.getScope();
+ final FunctionType functionType = (FunctionType) n.getJSType();
+ final String functionPrivateName = n.getFirstChild().getString();
+ if (functionPrivateName != null && functionPrivateName.length() > 0 &&
+ outerScope.isDeclared(functionPrivateName, false) &&
+ // Ideally, we would want to check whether the type in the scope
+ // differs from the type being defined, but then the extern
+ // redeclarations of built-in types generates spurious warnings.
+ !(outerScope.getVar(
+ functionPrivateName).getType() instanceof FunctionType)) {
+ report(t, n, FUNCTION_MASKS_VARIABLE, functionPrivateName);
+ }
+
+ // TODO(user): Only traverse the function's body. The function's
+ // name and arguments are traversed by the scope creator, and ideally
+ // should not be traversed by the type checker.
+ break;
+ }
+ return true;
+ }
+
+/* METHOD processForTesting */
+public Scope processForTesting(Node externsRoot, Node jsRoot) {
+ Preconditions.checkState(scopeCreator == null);
+ Preconditions.checkState(topScope == null);
+
+ Preconditions.checkState(jsRoot.getParent() != null);
+ Node externsAndJsRoot = jsRoot.getParent();
+
+ scopeCreator = new MemoizedScopeCreator(new TypedScopeCreator(compiler));
+ topScope = scopeCreator.createScope(externsAndJsRoot, null);
+
+ TypeInferencePass inference = new TypeInferencePass(compiler,
+ reverseInterpreter, topScope, scopeCreator);
+
+ inference.process(externsRoot, jsRoot);
+ process(externsRoot, jsRoot);
+
+ return topScope;
+ }
+
+/* METHOD check */
+public void check(Node node, boolean externs) {
+ Preconditions.checkNotNull(node);
+
+ NodeTraversal t = new NodeTraversal(compiler, this, scopeCreator);
+ inExterns = externs;
+ t.traverseWithScope(node, topScope);
+ if (externs) {
+ inferJSDocInfo.process(node, null);
+ } else {
+ inferJSDocInfo.process(null, node);
+ }
+ }
+
+/* METHOD visit */
+public void visit(NodeTraversal t, Node n, Node parent) {
+ JSType childType;
+ JSType leftType, rightType;
+ Node left, right;
+ // To be explicitly set to false if the node is not typeable.
+ boolean typeable = true;
+
+ switch (n.getType()) {
+ case Token.NAME:
+ typeable = visitName(t, n, parent);
+ break;
+
+ case Token.LP:
+ // If this is under a FUNCTION node, it is a parameter list and can be
+ // ignored here.
+ if (par
+...[truncated deterministically]...
+Token.COMMA:
+ ensureTyped(t, n, getJSType(n.getLastChild()));
+ break;
+
+ case Token.TRUE:
+ case Token.FALSE:
+ ensureTyped(t, n, BOOLEAN_TYPE);
+ break;
+
+ case Token.THIS:
+ ensureTyped(t, n, t.getScope().getTypeOfThis());
+ break;
+
+ case Token.REF_SPECIAL:
+ ensureTyped(t, n);
+ break;
+
+ case Token.GET_REF:
+ ensureTyped(t, n, getJSType(n.getFirstChild()));
+ break;
+
+ case Token.NULL:
+ ensureTyped(t, n, NULL_TYPE);
+ break;
+
+ case Token.NUMBER:
+ ensureTyped(t, n, NUMBER_TYPE);
+ break;
+
+ case Token.STRING:
+ // Object literal keys are handled with OBJECTLIT
+ if (!NodeUtil.isObjectLitKey(n, n.getParent())) {
+ ensureTyped(t, n, STRING_TYPE);
+ // Object literal keys are not typeable
+ }
+ break;
+
+ case Token.GET:
+ case Token.SET:
+ // Object literal keys are handled with OBJECTLIT
+ break;
+
+ case Token.ARRAYLIT:
+ ensureTyped(t, n, ARRAY_TYPE);
+ break;
+
+ case Token.REGEXP:
+ ensureTyped(t, n, REGEXP_TYPE);
+ break;
+
+ case Token.GETPROP:
+ visitGetProp(t, n, parent);
+ typeable = !(parent.getType() == Token.ASSIGN &&
+ parent.getFirstChild() == n);
+ break;
+
+ case Token.GETELEM:
+ visitGetElem(t, n);
+ // The type of GETELEM is always unknown, so no point counting that.
+ // If that unknown leaks elsewhere (say by an assignment to another
+ // variable), then it will be counted.
+ typeable = false;
+ break;
+
+ case Token.VAR:
+ visitVar(t, n);
+ typeable = false;
+ break;
+
+ case Token.NEW:
+ visitNew(t, n);
+ typeable = true;
+ break;
+
+ case Token.CALL:
+ visitCall(t, n);
+ typeable = !NodeUtil.isExpressionNode(parent);
+ break;
+
+ case Token.RETURN:
+ visitReturn(t, n);
+ typeable = false;
+ break;
+
+ case Token.DEC:
+ case Token.INC:
+ left = n.getFirstChild();
+ validator.expectNumber(
+ t, left, getJSType(left), "increment/decrement");
+ ensureTyped(t, n, NUMBER_TYPE);
+ break;
+
+ case Token.NOT:
+ ensureTyped(t, n, BOOLEAN_TYPE);
+ break;
+
+ case Token.VOID:
+ ensureTyped(t, n, VOID_TYPE);
+ break;
+
+ case Token.TYPEOF:
+ ensureTyped(t, n, STRING_TYPE);
+ break;
+
+ case Token.BITNOT:
+ childType = getJSType(n.getFirstChild());
+ if (!childType.matchesInt32Context()) {
+ report(t, n, BIT_OPERATION, NodeUtil.opToStr(n.getType()),
+ childType.toString());
+ }
+ ensureTyped(t, n, NUMBER_TYPE);
+ break;
+
+ case Token.POS:
+ case Token.NEG:
+ left = n.getFirstChild();
+ validator.expectNumber(t, left, getJSType(left), "sign operator");
+ ensureTyped(t, n, NUMBER_TYPE);
+ break;
+
+ case Token.EQ:
+ case Token.NE: {
+ leftType = getJSType(n.getFirstChild());
+ rightType = getJSType(n.getLastChild(
+...[truncated deterministically]...
+t, a call to a void function can
+ // never be on the left. getPropertyType will decide what is acceptable
+ // and what isn't.
+ Node property = n.getLastChild();
+ Node objNode = n.getFirstChild();
+ JSType childType = getJSType(objNode);
+
+ // TODO(user): remove in favor of flagging every property access on
+ // non-object.
+ if (!validator.expectNotNullOrUndefined(t, n, childType,
+ childType + " has no properties", getNativeType(OBJECT_TYPE))) {
+ ensureTyped(t, n);
+ return;
+ }
+
+ checkPropertyAccess(childType, property.getString(), t, n);
+ ensureTyped(t, n);
+ }
+
+ /**
+ * Make sure that the access of this property is ok.
+ */
+ private void checkPropertyAccess(JSType childType, String propName,
+ NodeTraversal t, Node n) {
+ ObjectType objectType = childType.dereference();
+ if (objectType != null) {
+ JSType propType = getJSType(n);
+ if ((!objectType.hasProperty(propName) ||
+ objectType.equals(typeRegistry.getNativeType(UNKNOWN_TYPE))) &&
+ propType.equals(typeRegistry.getNativeType(UNKNOWN_TYPE))) {
+ if (objectType instanceof EnumType) {
+ report(t, n, INEXISTENT_ENUM_ELEMENT, propName);
+ } else if (!objectType.isEmptyType() &&
+ reportMissingProperties && !isPropertyTest(n)) {
+ if (!typeRegistry.canPropertyBeDefined(objectType, propName)) {
+ report(t, n, INEXISTENT_PROPERTY, propName,
+ validator.getReadableJSTypeName(n.getFirstChild(), true));
+ }
+ }
+ }
+ } else {
+ // TODO(nicksantos): might want to flag the access on a non object when
+ // it's impossible to get a property from this type.
+ }
+ }

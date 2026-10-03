@@ -1,0 +1,437 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 141  Version: Closure-141b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.PureFunctionIdentifier
+Modified: com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.PureFunctionIdentifier
+Triggers: com.google.javascript.jscomp.ExpresssionDecomposerTest::testCanExposeExpression2, com.google.javascript.jscomp.ExpresssionDecomposerTest::testCanExposeExpression7, com.google.javascript.jscomp.InlineFunctionsTest::testDecomposeAnonymousInCall, com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrGViaHookWithSideEffects, com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionForGorH, com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrG, com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrGViaHook, com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrGWithSideEffects
+
+Bug/specification summary:
+Bug report: 116
+Trigger failures:
+- com.google.javascript.jscomp.ExpresssionDecomposerTest::testCanExposeExpression2
+ --> junit.framework.AssertionFailedError: expected:<MOVABLE> but was:<DECOMPOSABLE>
+ - com.google.javascript.jscomp.ExpresssionDecomposerTest::testCanExposeExpression7
+ --> junit.framework.AssertionFailedError: expected:<MOVABLE> but was:<DECOMPOSABLE>
+ - com.google.javascript.jscomp.InlineFunctionsTest::testDecomposeAnonymousInCall
+ --> java.lang.IllegalStateException: Call site missed.
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrGViaHookWithSideEffects
+ --> junit.framework.AssertionFailedError: expected:<[(g : g), k]> but was:<[]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionForGorH
+ --> junit.framework.AssertionFailedError: expected:<[(f : (g || h)), i]> but was:<[]>
+ - com.google.javascript.jscomp.PureF
+...[truncated deterministically]...
+tionFOrG
+ --> junit.framework.AssertionFailedError: expected:<[(f || g), h]> but was:<[]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrGViaHook
+ --> junit.framework.AssertionFailedError: expected:<[(f : g), h]> but was:<[]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testCallFunctionFOrGWithSideEffects
+ --> junit.framework.AssertionFailedError: expected:<[(g || g), k]> but was:<[]>
+Modified: com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.PureFunctionIdentifier
+
+Prompt-01 test plan:
+TARGETS: NodeUtil.mayHaveSideEffects/mayEffectMutableState for OR and HOOK expressions in call contexts. 
+TARGETS: PureFunctionIdentifier.process, FunctionAnalyzer.visitCall, and side-effect propagation through calls. 
+ORACLES: Existing trigger expectations: MOVABLE for the two ExpressionDecomposer cases. 
+ORACLES: PureFunctionIdentifier trigger expected call sets, not empty sets, for OR/HOOK call targets. 
+CASES: Calls through `(f||g)`, `(g||g)`, `(f?g:h)`, and `(g?g:k)` expressions. 
+CASES: Include OR/HOOK alternatives with side effects and nested calls used by listed triggers. 
+CASES: Anonymous function call decomposition must retain a recognized call site. 
+RISKS: Available context omits method bodies and complete AST construction/test-helper APIs.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.NodeUtil (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public final class NodeUtil {
+public static final String CONSTANT_MARKER = "$$constant";
+private NodeUtil() {}
+static boolean getBooleanValue(Node n) {
+static String getStringValue(Node n) {
+static String getFunctionName(Node n, Node parent) {
+static boolean isImmutableValue(Node n) {
+static boolean isLiteralValue(Node n) {
+static boolean isValidDefineValue(Node val, Set<String> defines) {
+static boolean isEmptyBlock(Node block) {
+static boolean isSimpleOperatorType(int type) {
+public static Node newExpr(Node child) {
+static boolean mayEffectMutableState(Node n) {
+static boolean mayHaveSideEffects(Node n) {
+static boolean constructorCallHasSideEffects(Node callNode) {
+static boolean functionCallHasSideEffects(Node callNode) {
+static boolean nodeTypeMayHaveSideEffects(Node n) {
+static boolean canBeSideEffected(Node n) {
+static boolean canBeSideEffected(Node n, Set<String> knownConstants) {
+static int precedence(int type) {
+static boolean isAssociative(int type) {
+static boolean isAssignmentOp(Node n) {
+static int getOpFromAssignmentOp(Node n) {
+static boolean isExpressionNode(Node n) {
+static boolean containsFunctionDeclaration(Node n) {
+static boolean referencesThis(Node n) {
+static boolean isGet(Node n) {
+static boolean isGetProp(Node n) {
+static boolean isName(Node n) {
+st
+...[truncated deterministically]...
+de n) {
+static class MatchNodeType implements Predicate<Node>{
+static boolean isNodeTypeReferenced(Node node, int type) {
+static int getNodeTypeReferenceCount(Node node, int type) {
+static boolean isNameReferenced(Node node, String name) {
+static int getNameReferenceCount(Node node, String name) {
+static int getCount(Node n, Predicate<Node> pred) {
+static interface Visitor {
+static boolean hasFinally(Node n) {
+static Node getCatchBlock(Node n) {
+static boolean hasCatchHandler(Node n) {
+static Node getFnParameters(Node fnNode) {
+static boolean isConstantName(Node node) {
+static JSDocInfo getInfoForNameNode(Node nameNode) {
+static String getSourceName(Node n) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Maps;
+import com.google.javascript.rhino.FunctionNode;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/* METHOD NodeUtil */
+private NodeUtil() {}
+
+/* METHOD getVarsDeclaredInBranch */
+public static Collection<Node> getVarsDeclaredInBranch(Node root) {
+ VarCollector collector = new VarCollector();
+ visitPreOrder(
+ root,
+ collector,
+ Predicates.<Node>not(new NodeUtil.MatchNodeType(Token.FUNCTION)));
+ return collector.vars.values();
+ }
+
+/* METHOD newFunctionNode */
+public static FunctionNode newFunctionNode(String name, List<Node> params,
+ Node body, int lineno, int charno) {
+ Node parameterParen = new Node(Token.LP, lineno, charno);
+ for (Node param : params) {
+ parameterParen.addChildToBack(param);
+ }
+ FunctionNode function = new FunctionNode(name, lineno, charno);
+ function.addChildrenToBack(
+ Node.newString(Token.NAME, name, lineno, charno));
+ function.addChildToBack(parameterParen);
+ function.addChildToBack(body);
+ return function;
+ }
+
+/* METHOD newExpr */
+public static Node newExpr(Node child) {
+ Node expr = new Node(Token.EXPR_RESULT, child);
+ expr.copyInformationFrom(child);
+ return expr;
+ }
+
+/* METHOD newQualifiedNameNode */
+public static Node newQualifiedNameNode(String name, int lineno, int charno) {
+ int endPos = name.indexOf('.');
+ if (endPos == -1) {
+ return Node.newString(Token.NAME, name, lineno, charno);
+ }
+ Node node = Node.newString(Token.NAME, name.substring(0, endPos),
+ lineno, c
+...[truncated deterministically]...
+Pos);
+ String part = (endPos == -1
+ ? name.substring(startPos)
+ : name.substring(startPos, endPos));
+ node = new Node(Token.GETPROP, node,
+ Node.newString(Token.STRING, part, lineno, charno),
+ lineno, charno);
+ } while (endPos != -1);
+
+ return node;
+ }
+
+/* METHOD visit */
+public void visit(Node n) {
+ if (n.getType() == Token.NAME) {
+ Node parent = n.getParent();
+ if (parent != null && parent.getType() == Token.VAR) {
+ String name = n.getString();
+ if (!vars.containsKey(name)) {
+ vars.put(name, n);
+ }
+ }
+ }
+ }
+
+/* METHOD apply */
+public boolean apply(Node n) {
+ return n.getType() == Token.NAME
+ && n.getString().equals(name);
+ }
+
+/* METHOD apply */
+public boolean apply(Node n) {
+ return n.getType() == type;
+ }
+
+/* METHOD nodeTypeMayHaveSideEffects */
+static boolean nodeTypeMayHaveSideEffects(Node n) {
+ if (NodeUtil.isAssignmentOp(n)) {
+ return true;
+ }
+
+ switch(n.getType()) {
+ case Token.CALL:
+ case Token.DELPROP:
+ case Token.NEW:
+ case Token.DEC:
+ case Token.INC:
+ case Token.THROW:
+ return true;
+ case Token.NAME:
+ // A variable definition.
+ return n.hasChildren();
+ default:
+ return false;
+ }
+ }
+
+/* METHOD canBeSideEffected */
+static boolean canBeSideEffected(Node n, Set<String> knownConstants) {
+ switch (n.getType()) {
+ case Token.CALL:
+ case Token.NEW:
+ // Function calls or constructor can reference changed values.
+ // TODO(johnlenz): Add some mechanism for determining that functions
+ // are unaffected by side effects.
+ return true;
+ case Token.NAME:
+ // Non-constant names values may have been changed.
+ return !NodeUtil.isConstantName(n)
+ && !knownConstants.contains(n.getString());
+
+ // Properties on constant NAMEs can still be side-effected.
+ case Token.GETPROP:
+...[truncated deterministically]...
+// Anonymous functions definitions are not changed by side-effects,
+ // and named functions are not part of expressions.
+ }
+
+ for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+ if (canBeSideEffected(c, knownConstants)) {
+ return true;
+ }
+ }
+
+ return false;
+ }
+
+===== com.google.javascript.jscomp.PureFunctionIdentifier (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class PureFunctionIdentifier implements CompilerPass {
+@Override
+public void process(Node externsAst, Node srcAst) {
+private void propagateSideEffects() {
+private void markPureFunctionCalls() {
+private class FunctionAnalyzer implements Callback {
+public void visit(NodeTraversal traversal, Node node, Node parent) {
+private void visitCall(FunctionInformation sideEffectInfo, Node node) {
+private void visitThrow(FunctionInformation sideEffectInfo) {
+private static class SideEffectPropagationCallback
+private static Node getCallThisObject(Node callSite) {
+private static class FunctionInformation {
+private final List<Node> callsInFunctionBody = Lists.newArrayList();
+private void checkInvariant() {
+public String toString() {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.DefinitionsRemover.Definition;
+import com.google.javascript.jscomp.NodeTraversal.Callback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.jscomp.graph.DiGraph;
+import com.google.javascript.jscomp.graph.FixedPointGraphTraversal;
+import com.google.javascript.jscomp.graph.FixedPointGraphTraversal.EdgeCallback;
+import com.google.javascript.jscomp.graph.LinkedDirectedGraph;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class PureFunctionIdentifier implements CompilerPass {
+
+/* METHOD PureFunctionIdentifier */
+public PureFunctionIdentifier(AbstractCompiler compiler,
+ DefinitionProvider d
+...[truncated deterministically]...
+= null;
+ this.root = null;
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externsAst, Node srcAst) {
+ if (externs != null || root != null) {
+ throw new IllegalStateException(
+ "It is illegal to call PureFunctionIdentifier.process " +
+ "twice the same instance. Please use a new " +
+ "PureFunctionIdentifier instance each time.");
+ }
+
+ externs = externsAst;
+ root = srcAst;
+
+ NodeTraversal.traverse(compiler, externs, new FunctionAnalyzer(true));
+ NodeTraversal.traverse(compiler, root, new FunctionAnalyzer(false));
+
+ propagateSideEffects();
+
+ markPureFunctionCalls();
+ }
+
+/* METHOD getDebugReport */
+String getDebugReport() {
+ Preconditions.checkNotNull(externs);
+ Preconditions.checkNotNull(root);
+
+ StringBuilder sb = new StringBuilder();
+
+ FunctionNames functionNames = new FunctionNames(compiler);
+ functionNames.process(null, externs);
+ functionNames.process(null, root);
+
+ sb.append("Pure functions:\n");
+ for (Map.Entry<Node, FunctionInformation> entry :
+ functionSideEffectMap.entrySet()) {
+ Node function = entry.getKey();
+ FunctionInformation functionInfo = entry.getValue();
+
+ boolean isPure =
+ functionInfo.mayBePure() && !functionInfo.mayHaveSideEffects();
+ if (isPure) {
+ sb.append(" " + functionNames.getFunctionName(function) + "\n");
+ }
+ }
+ sb.append("\n");
+
+ for (Map.Entry<Node, FunctionInformation> entry :
+ functionSideEffectMap.entrySet()) {
+ Node function = entry.getKey();
+ FunctionInformation functionInfo = entry.getValue();
+
+ Set<String> depFunctionNames = Sets.newHashSet();
+ for (Node callSite : functionInfo.getCallsInFunctionBody()) {
+ Collection<Definition> defs =
+ getCallableDefinitions(definitionProvider,
+ callSite.getFirstChild());
+
+ if (defs == null) {
+ depFunctionNames.add("<null def list>");
+ continue;
+ }
+
+ for (Definition def : defs) {
+ depFunctionNames.add(
+ functionNames.getFunctionName(def.getRValue()));
+ }
+ }
+
+ sb.append(functionNames.getFunctionName(function) + " " +
+ functionInfo.toString() +
+ "
+...[truncated deterministically]...
+erseEdge */
+public boolean traverseEdge(FunctionInformation callee,
+ Node callSite,
+ FunctionInformation caller) {
+ Preconditions.checkArgument(callSite.getType() == Token.CALL ||
+ callSite.getType() == Token.NEW);
+
+ boolean changed = false;
+ if (!caller.mutatesGlobalState() && callee.mutatesGlobalState()) {
+ caller.setTaintsGlobalState();
+ changed = true;
+ }
+
+ if (!caller.functionThrows() && callee.functionThrows()) {
+ caller.setFunctionThrows();
+ changed = true;
+ }
+
+ if (callee.mutatesThis()) {
+ // Side effects only propagate via regular calls.
+ // Calling a constructor that modifies "this" has no side effects.
+ if (callSite.getType() != Token.NEW) {
+ Node objectNode = getCallThisObject(callSite);
+ if (objectNode != null && NodeUtil.isThis(objectNode)) {
+ if (!caller.mutatesThis()) {
+ caller.setTaintsThis();
+ changed = true;
+ }
+ } else if (!caller.mutatesGlobalState()) {
+ caller.setTaintsGlobalState();
+ changed = true;
+ }
+ }
+ }
+
+ return changed;
+ }
+
+/* METHOD propagateSideEffects */
+private void propagateSideEffects() {
+ // Nodes are function declarations; Edges are function call sites.
+ DiGraph<FunctionInformation, Node> sideEffectGraph =
+ new LinkedDirectedGraph<FunctionInformation, Node>();
+
+ // create graph nodes
+ for (FunctionInformation functionInfo : functionSideEffectMap.values()) {
+ sideEffectGraph.createNode(functionInfo);
+ }
+
+ // add connections to called functions and side effect root.
+ for (FunctionInformation functionInfo : functionSideEffectMap.values()) {
+ if (!functionInfo.mayHaveSideEffects()) {
+ continue;
+ }
+
+ for (Node callSite : functionInfo.getCallsInFunctionBody()) {
+ Node callee = callSite
+...[truncated deterministically]...
+rmation to a fixed point.
+ FixedPointGraphTraversal.newTraversal(new SideEffectPropagationCallback())
+ .computeFixedPoint(sideEffectGraph);
+
+ // Mark remaining functions "pure".
+ for (FunctionInformation functionInfo : functionSideEffectMap.values()) {
+ if (functionInfo.mayBePure()) {
+ functionInfo.setIsPure();
+ }
+ }
+ }

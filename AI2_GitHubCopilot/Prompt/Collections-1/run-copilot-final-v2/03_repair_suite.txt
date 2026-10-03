@@ -1,0 +1,211 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 1  Version: Collections-1b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Ant
+Bug/specification summary:
+Bug report: COLLECTIONS-217
+Trigger failures:
+- org.apache.commons.collections.map.TestFlat3Map::testEntryIteratorSetValue2
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<NewValue>
+ - org.apache.commons.collections.map.TestFlat3Map::testEntryIteratorSetValue3
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<NewValue>
+ - org.apache.commons.collections.map.TestFlat3Map::testMapIteratorSetValue2
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<NewValue>
+ - org.apache.commons.collections.map.TestFlat3Map::testMapIteratorSetValue3
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<NewValue>
+Modified: org.apache.commons.collections.map.Flat3Map
+
+Available API/signatures:
+[org.apache.commons.collections.map.Flat3Map | java]
+package org.apache.commons.collections.map;
+public class Flat3Map implements IterableMap, Serializable, Cloneable {
+public Flat3Map() {
+public Flat3Map(Map map) {
+public Object get(Object key) {
+public int size() {
+public boolean isEmpty() {
+public boolean containsKey(Object key) {
+public boolean containsValue(Object value) {
+public Object put(Object key, Object value) {
+public void putAll(Map map) {
+private void convertToMap() {
+protected AbstractHashedMap createDelegateMap() {
+public Object remove(Object key) {
+public void clear() {
+public MapIterator mapIterator() {
+static class FlatMapIterator implements MapIterator, ResettableIterator {
+public boolean hasNext() {
+public Object next() {
+public void remove() {
+public Object getKey() {
+public Object getValue() {
+public Object setValue(Object value) {
+public void reset() {
+public String toString() {
+public Set entrySet() {
+static class EntrySet extends AbstractSet {
+public boolean remove(Object obj) {
+public Iterator iterator() {
+static class EntrySetIterator implements Iterator, Map.Entry {
+public boolean equals(Object obj) {
+public int hashCode() {
+public Set keySet() {
+static class KeySet extends AbstractSet {
+public boolean contains(Object key) {
+public boolean remove(Object key) {
+static class KeySetIterator extends EntrySetIterator {
+public Collection values() {
+static class Values extends AbstractCollection {
+public boolean contains(Object value) {
+static class ValuesIterator extends EntrySetIterator {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+public Object clone() {
+
+Generated JUnit Test:
+package org.apache.commons.collections.map;
+
+ import java.util.Iterator;
+ import java.util.Map;
+ import org.apache.commons.collections.MapIterator;
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ public class TestFlat3Map {
+
+     private Flat3Map makeMap(int n) {
+         Flat3Map map = new Flat3Map();
+         for (int i = 1; i <= n; i++) {
+             map.put(Integer.valueOf(i), Integer.valueOf(i * 10));
+         }
+         return map;
+     }
+
+     @Test
+     public void testMapIteratorSetValueOneEntryReturnsOldValue() {
+         Flat3Map map = makeMap(1);
+         MapIterator it = map.mapIterator();
+         it.next();
+         Object old = it.setValue(Integer.valueOf(999));
+         assertEquals(Integer.valueOf(10), old);
+     }
+
+     @Test
+     public void testMapIteratorSetValueOneEntryUpdatesValue() {
+         Flat3Map map = makeMap(1);
+         MapIterator it = map.mapIterator();
+         it.next();
+         it.setValue(Integer.valueOf(999));
+         assertEquals(Integer.valueOf(999), map.get(Integer.valueOf(1)));
+     }
+
+     @Test
+     public void testMapIteratorSetValueTwoEntriesReturnsOldValue() {
+         Flat3Map map = makeMap(2);
+         MapIterator it = map.mapIterator();
+         it.next(); // entry for key=1
+         Object old = it.setValue(Integer.valueOf(111));
+         assertEquals(Integer.valueOf(10), old);
+     }
+
+     @Test
+     public void testMapIteratorSetValueTwoEntriesDoesNotCorruptOtherEntry() {
+         Flat3Map map = makeMap(2);
+         MapIterator it = map.mapIterator();
+         it.next(); // entry for key=1
+         it.setValue(Integer.valueOf(111));
+         assertEquals(Integer.valueOf(20), map.get(Integer.valueOf(2)));
+     }
+
+     @Test
+     public void testEntrySetIteratorSetValueThreeEntriesReturnsOldValue() {
+         Flat3Map map = makeMap(3);
+         Iterator it = map.entrySet().iterator();
+         Map.Entry e = (Map.Entry) it.next();
+         Object old = e.setValue(Integer.valueOf(777));
+         assertEquals(Integer.valueOf(10), old);
+     }
+
+     @Test
+     public void testEntrySetIteratorSetValueThreeEntriesDoesNotCorruptOtherEntries() {
+         Flat3Map map = makeMap(3);
+         Iterator it = map.entrySet().iterator();
+         Map.Entry e = (Map.Entry) it.next();
+         e.setValue(Integer.valueOf(777));
+         assertEquals(Integer.valueOf(20), map.get(Integer.valueOf(2)));
+         assertEquals(Integer.valueOf(30), map.get(Integer.valueOf(3)));
+     }
+
+     @Test
+     public void testEntrySetIteratorSetValueDelegateModeReturnsOldValue() {
+         Flat3Map map = makeMap(5);
+         Iterator it = map.entrySet().iterator();
+         Map.Entry e = (Map.Entry) it.next();
+         Object old = e.setValue(Integer.valueOf(888));
+         assertEquals(Integer.valueOf(10), old);
+     }
+
+     @Test
+     public void testEntrySetIteratorSetValueDelegateModeDoesNotCorruptOtherEntries() {
+         Flat3Map map = makeMap(5);
+         Iterator it = map.entrySet().iterator();
+         Map.Entry e = (Map.Entry) it.next();
+         e.setValue(Integer.valueOf(888));
+         assertEquals(Integer.valueOf(20), map.get(Integer.valueOf(2)));
+         assertEquals(Integer.valueOf(30), map.get(Integer.valueOf(3)));
+     }
+
+     @Test
+     public void testSetValueOnSecondEntryInThreeEntryMap() {
+         Flat3Map map = makeMap(3);
+         MapIterator it = map.mapIterator();
+         it.next();
+         it.next(); // second entry
+         Object old = it.setValue(Integer.valueOf(555));
+         assertEquals(Integer.valueOf(20), old);
+         assertEquals(Integer.valueOf(10), map.get(Integer.valueOf(1)));
+         assertEquals(Integer.valueOf(555), map.get(Integer.valueOf(2)));
+         assertEquals(Integer.valueOf(30), map.get(Integer.valueOf(3)));
+     }
+
+     @Test
+     public void testSetValueOnThirdEntryInThreeEntryMap() {
+         Flat3Map map = makeMap(3);
+         MapIterator it = map.mapIterator();
+         it.next();
+         it.next();
+         it.next(); // third entry
+         Object old = it.setValue(Integer.valueOf(555));
+         assertEquals(Integer.valueOf(30), old);
+         assertEquals(Integer.valueOf(10), map.get(Integer.valueOf(1)));
+         assertEquals(Integer.valueOf(20), map.get(Integer.valueOf(2)));
+         assertEquals(Integer.valueOf(555), map.get(Integer.valueOf(3)));
+     }
+
+     @Test
+     public void testSetValueNullValue() {
+         Flat3Map map = makeMap(1);
+         MapIterator it = map.mapIterator();
+         it.next();
+         Object old = it.setValue(null);
+         assertEquals(Integer.valueOf(10), old);
+         assertNull(map.get(Integer.valueOf(1)));
+     }
+
+     @Test(expected = IllegalStateException.class)
+     public void testSetValueBeforeNextThrowsException() {
+         Flat3Map map = makeMap(1);
+         MapIterator it = map.mapIterator();
+         it.setValue(Integer.valueOf(1));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.collections.map.TestFlat3Map::testEntrySetIteratorSetValueDelegateModeDoesNotCorruptOtherEntries
+ - org.apache.commons.collections.map.TestFlat3Map::testEntrySetIteratorSetValueDelegateModeReturnsOldValue
+
+Failing generated tests: org.apache.commons.collections.map.TestFlat3Map::testEntrySetIteratorSetValueDelegateModeDoesNotCorruptOtherEntries, org.apache.commons.collections.map.TestFlat3Map::testEntrySetIteratorSetValueDelegateModeReturnsOldValue

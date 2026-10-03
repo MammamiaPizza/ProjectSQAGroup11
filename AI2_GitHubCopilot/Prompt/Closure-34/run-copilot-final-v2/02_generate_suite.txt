@@ -1,0 +1,427 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 34  Version: Closure-34b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.CodePrinter
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.CodePrinter
+Triggers: com.google.javascript.jscomp.CodePrinterTest::testManyAdds
+
+Bug/specification summary:
+Bug report: 691
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testManyAdds
+ --> java.lang.StackOverflowError
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.CodePrinter
+
+Prompt-01 test plan:
+TARGETS: CodeGenerator.addExpr(Node,int,Context) for deep ADD chains.
+ORACLES: Output equals expected JS string; no StackOverflowError.
+ORACLES: Compare against manually verified JavaScript code for moderate depth.
+CASES: ADD chains: depth 0 (leaf), 10, 100, 500, 1000 (boundary for stack overflow).
+CASES: Deep chains of SUB, MUL, BITOR, etc. to detect recurrence in other operators.
+CASES: Mixed ADD and parenthesized subexpressions to test precedence insertion.
+RISKS: Unknown Node hierarchy; building large AST may hit memory/time limits.
+RISKS: Fix may be ADD-specific, leaving other binary ops vulnerable; test them.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CodeGenerator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CodeGenerator {
+private final Map<String, String> ESCAPED_JS_STRINGS = Maps.newHashMap();
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+private void addJsString(Node n) {
+private String jsString(String s, boolean useSlashV) {
+static String regexpEscape(String s, CharsetEncoder outputCharsetEncoder) {
+static String escapeToDoubleQuotedJsString(String s) {
+static String regexpEscape(String s) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+private Context clearContextForNoInOperator(Context context) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Charsets;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.util.Map;
+class CodeGenerator {
+
+/* METHOD CodeGenerator */
+CodeGenerator(
+ CodeConsumer consumer, Charset outputCharset) {
+ cc = consumer;
+ if (outputCharset == null || outputCharset == Charsets.US_ASCII) {
+ // If we want our default (pretending to be UTF-8, but escaping anything
+ // outside of straight ASCII), then don't use the encoder, but
+ // just special-case the code. This keeps the normal path through
+ // the code identical to how it's been for years.
+ this.outputCharsetEncoder = null;
+ } else {
+ this.outputCharsetEncoder = outputCharset.newEncoder();
+ }
+ }
+
+/* METHOD CodeGenerator */
+CodeGenerator(CodeConsumer consumer) {
+ this(consumer, null);
+ }
+
+/* METHOD tagAsStrict */
+public void tagAsStrict() {
+ add("'use strict';");
+ }
+
+/* METHOD identifierEscape */
+static String identifierEscape(String s) {
+ // First check if escaping is needed at all -- in most cases it isn't.
+ if (NodeUtil.isLatin(s)) {
+ return s;
+ }
+
+ // Now going through the string to escape non-latin characters if needed.
+ StringBuilder sb = new StringBuilder();
+ for (int i = 0; i < s.length(); i++) {
+ char c = s.charAt(i);
+ // Identifiers should always go to Latin1/ ASCII characters because
+ // different browser's rules for valid identifier characters are
+ // crazy.
+ if (c > 0x1F && c < 0x7F) {
+ sb.append(c);
+ } else {
+ appendHexJavaScriptRepresentation(sb, c);
+ }
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ StringBuilder sb, char c) {
+ try {
+ appendHexJavaScriptRepresentation(c, sb);
+ } catch (IOException ex) {
+ // StringBuilder does not throw IOException.
+ throw new RuntimeException(ex);
+ }
+ }
+
+/* METHOD appendHexJavaScriptRepresentation */
+private static void appendHexJavaScriptRepresentation(
+ int codePoint, Appendable out)
+ throws IOException {
+ if (Character.isSupplementaryCodePoint(codePoint)) {
+ // Handle supplementary unicode values which are not representable in
+ // javascript. We deal with these by escaping them as two 4B sequences
+ // so that they will round-trip properly when sent from java to javascript
+ // and back.
+ char[] surrogates = Character.toChars(codePoint);
+ appendHexJavaScriptRepresentation(surrogates[0], out);
+ appendHexJavaScriptRepresentation(surrogates[1], out);
+ return;
+ }
+ out.append("\\u")
+ .append(HEX_CHARS[(codePoint >>> 12) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 8) & 0xf])
+ .append(HEX_CHARS[(codePoint >>> 4) & 0xf])
+ .append(HEX_CHARS[codePoint & 0xf]);
+ }
+
+/* METHOD unrollBinaryOperator */
+private void unrollBinaryOperator(
+ Node n, int op, String opStr, Context context,
+ Context rhsContext, int leftPrecedence, int rightPrecedence) {
+ Node firstNonOperator = n.getFirstChild();
+ while (firstNonOperator.getType() == op) {
+ firstNonOperator = firstNonOperator.getFirstChild();
+ }
+
+ addExpr(firstNonOperator, leftPrecedence, context);
+
+ Node current = firstNonOperator;
+ do {
+ current = current.getParent();
+ cc.listSeparator();
+ addExpr(current.getFirstChild().getNext(), rightPrecedence, rhsContext);
+ } while (current != n);
+ }
+
+/* METHOD isSimpleNumber */
+static boolean isSimpleNumber(String s) {
+ int len = s.length();
+ for (int index = 0; index < len; index++) {
+ char c = s.charAt(index);
+ if (c < '0' || c > '9') {
+ return false;
+ }
+ }
+ return len > 0 && s.charAt(0) != '0';
+ }
+
+/* METHOD getSimpleNumber */
+static double getSimpleNumber(String s) {
+ if (isSimpleNumber(s)) {
+ try {
+ long l = Long.parseLong(s);
+ if (l < NodeUtil.MAX_POSITIVE_INTEGER_NUMBER) {
+ return l;
+ }
+ } catch (NumberFormatException e) {
+ // The number was too long to parse. Fall through to NaN.
+ }
+ }
+ return Double.NaN;
+ }
+
+/* METHOD isIndirectEval */
+private boolean isIndirectEval(Node n) {
+ return n.isName() && "eval".equals(n.getString()) &&
+ !n.getBooleanProp(Node.DIRECT_EVAL);
+ }
+
+/* METHOD addList */
+void addList(Node firstInList) {
+ addList(firstInList, true, Context.OTHER);
+ }
+
+/* METHOD addList */
+void addList(Node firstInList, boolean isArrayOrFunctionArgument) {
+ addList(firstInList, isArrayOrFunctionArgument, Context.OTHER);
+ }
+
+===== com.google.javascript.jscomp.CodePrinter (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CodePrinter {
+private abstract static class MappedCodePrinter extends CodeConsumer {
+protected final StringBuilder code = new StringBuilder(1024);
+protected final int lineLengthThreshold;
+protected int lineLength = 0;
+protected int lineIndex = 0;
+private static class Mapping {
+@Override
+public String getCode() {
+protected final int getCurrentCharIndex() {
+protected final int getCurrentLineIndex() {
+static class PrettyCodePrinter
+private Node getTryForCatch(Node n) {
+static class CompactCodePrinter
+static class Builder {
+enum Format {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.debugging.sourcemap.FilePosition;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.nio.charset.Charset;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+class CodePrinter {
+
+/* METHOD build */
+String build() {
+ if (root == null) {
+ throw new IllegalStateException(
+ "Cannot build without root node being specified");
+ }
+
+ Format outputFormat = outputTypes
+ ? Format.TYPED
+ : prettyPrint
+ ? Format.PRETTY
+ : Format.COMPACT;
+
+ return toSource(root, outputFormat, lineBreak, preferLineBreakAtEndOfFile,
+ lineLengthThreshold, sourceMap, sourceMapDetailLevel, outputCharset,
+ tagAsStrict);
+ }
+
+/* METHOD toSource */
+private static String toSource(Node root, Format outputFormat,
+ boolean lineBreak, boolean preferEndOfFileBreak,
+ int lineLengthThreshold,
+ SourceMap sourceMap,
+ SourceMap.DetailLevel sourceMapDetailLevel,
+ Charset outputCharset,
+ boolean tagAsStrict) {
+ Preconditions.checkState(sourceMapDetailLevel != null);
+
+ boolean createSourceMap = (sourceMap != null);
+ MappedCodePrinter mcp =
+ outputFormat == Format.COMPACT
+ ? new CompactCodePrinter(
+ lineBreak, preferEndOfFileBreak, lineLengthThreshold,
+ createSourceMap, sourceMapDetailLevel)
+ : new PrettyCodePrinter(
+ lineLengthThreshold, createSourceMap, sourceMapDetailLevel);
+ CodeGenerator cg =
+ outputFormat == Format.TYPED
+ ? new TypedCodeGenerator(mcp, outputCharset)
+ : new CodeGenerator(mcp, outputCharset);
+
+ if (tagAsStrict) {
+ cg.tagAsStrict();
+ }
+
+ cg.add(root);
+ mcp.endFile();
+
+ String code = mcp.getCode();
+
+ if (createSourceMap) {
+ mcp.generateSourceMap(sourceMap);
+ }
+
+ return code;
+ }
+
+/* METHOD getCode */
+public String getCode() {
+ return code.toString();
+ }
+
+/* METHOD getCurrentCharIndex */
+protected final int getCurrentCharIndex() {
+ return lineLength;
+ }
+
+/* METHOD getCurrentLineIndex */
+protected final int getCurrentLineIndex() {
+ return lineIndex;
+ }
+
+/* METHOD breakAfterBlockFor */
+@Override
+ boolean breakAfterBlockFor(Node n, boolean isStatementContext) {
+ Preconditions.checkState(n.isBlock());
+ Node parent = n.getParent();
+ if (parent != null) {
+ int type = parent.getType();
+ switch (type) {
+ case Token.DO:
+ // Don't break before 'while' in DO-WHILE statements.
+ return false;
+ case Token.FUNCTION:
+ // FUNCTIONs are handled separately, don't break here.
+ return false;
+ case Token.TRY:
+ // Don't break before catch
+ return n != parent.getFirstChild();
+ case Token.CATCH:
+ // Don't break before finally
+ return !NodeUtil.hasFinally(getTryForCatch(parent));
+ case Token.IF:
+ // Don't break before else
+ return n == parent.getLastChild();
+ }
+ }
+ return true;
+ }
+
+ @Override
+ void endFile() {
+ maybeEndStatement();
+ }
+ }
+
+ static class CompactCodePrinter
+ extends MappedCodePrinter {
+
+ // The CompactCodePrinter tries to emit just enough newlines to stop there
+ // being lines longer than the threshold. Since the output is going to be
+ // gzipped, it makes sense to try to make the newlines appear in similar
+ // contexts so that GZIP can encode them for 'free'.
+ //
+ // This version tries to break the lines at 'preferred' places, which are
+ // between the top-level forms. This works because top level forms tend to
+ // be more uniform than arbitary legal contexts. Better compress
+...[truncated deterministically]...
+final boolean lineBreak;
+ private final boolean preferLineBreakAtEndOfFile;
+ private int lineStartPosition = 0;
+ private int preferredBreakPosition = 0;
+ private int prevCutPosition = 0;
+ private int prevLineStartPosition = 0;
+
+ /**
+ * @param lineBreak break the lines a bit more aggressively
+ * @param lineLengthThreshold The length of a line after which we force
+ * a newline when possible.
+ * @param createSrcMap Whether to gather source position
+ * mapping information when printing.
+ * @param sourceMapDetailLevel A filter to control which nodes get mapped into
+ * the source map.
+ */
+ private CompactCodePrinter(boolean lineBreak,
+ boolean preferLineBreakAtEndOfFile, int lineLengthThreshold,
+ boolean createSrcMap, SourceMap.DetailLevel sourceMapDetailLevel) {
+ super(lineLengthThreshold, createSrcMap, sourceMapDetailLevel);
+ this.lineBr
+...[truncated deterministically]...
+- lineStartPosition);
+ lineStartPosition = position + 1;
+ } else {
+ startNewLine();
+ }
+ }
+ }
+
+ @Override
+ void notePreferredLineBreak() {
+ preferredBreakPosition = code.length();
+ }
+
+ @Override
+ void endFile() {
+ super.endFile();
+ if (!preferLineBreakAtEndOfFile) {
+ return;
+ }
+ if (lineLength > lineLengthThreshold / 2) {
+ // Add an extra break at end of file.
+ append(";");
+ startNewLine();
+ } else if (prevCutPosition > 0) {
+ // Shift the previous break to end of file by replacing it with a
+ // <space> and adding a new break at end of file. Adding the space
+ // handles cases like instanceof\nfoo. (it would be nice to avoid this)
+ code.setCharAt(prevCutPosition, ' ');
+ lineStartPosition = prevLineStartPosition;
+ lineLength = code.length() - lineStartPosition;
+ reportLineCut(lineIndex, prevCutPosition + 1, false);
+ lineIndex--;
+ prevCutPosition = 0;
+ prevLineStartPosition = 0;
+ append(";");
+ startNewLine();
+ } else {
+ // A small file with no line breaks. We do nothing in this case to
+ // avoid excessive line breaks. It's not ideal if a lot of these pile
+ // up, but that is reasonably unlikely.
+ }
+ }
+
+ }

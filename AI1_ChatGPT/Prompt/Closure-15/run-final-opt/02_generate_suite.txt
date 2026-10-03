@@ -1,0 +1,451 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 15  Version: Closure-15b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.FlowSensitiveInlineVariables
+Modified: com.google.javascript.jscomp.FlowSensitiveInlineVariables
+Triggers: com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testSimpleForIn
+
+Bug/specification summary:
+Bug report: 773
+Trigger failures:
+- com.google.javascript.jscomp.FlowSensitiveInlineVariablesTest::testSimpleForIn
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.FlowSensitiveInlineVariables
+
+Prompt-01 test plan:
+TARGETS: FlowSensitiveInlineVariables.process, visit, GatherCandiates, Candidate.canInline/inlineVariable 
+CASES: Simple for-in input exercised by FlowSensitiveInlineVariablesTest.testSimpleForIn 
+ORACLES: Existing testSimpleForIn assertion is the available expected-result source 
+CASES: Variable definition and use handling across for-in iteration flow 
+RISKS: Incorrect inlining when for-in control flow changes reaching definitions or use counts 
+RISKS: No method bodies, test input, or assertion details are provided in this context
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.FlowSensitiveInlineVariables (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class FlowSensitiveInlineVariables extends AbstractPostOrderCallback
+@Override
+public boolean apply(Node n) {
+public FlowSensitiveInlineVariables(AbstractCompiler compiler) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {}
+public void process(Node externs, Node root) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private class GatherCandiates extends AbstractShallowCallback {
+final MustDef defs = state.getIn();
+private class Candidate {
+private boolean canInline() {
+public boolean apply(Node input) {
+private void inlineVariable() {
+private void getDefinition(Node n, Node parent) {
+private void getNumUseInUseCfgNode(Node n, Node parant) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
+import com.google.javascript.jscomp.ControlFlowGraph.AbstractCfgNodeTraversalCallback;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.DataFlowAnalysis.FlowState;
+import com.google.javascript.jscomp.MustBeReachingVariableDef.MustDef;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.AbstractShallowCallback;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphEdge;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphNode;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.List;
+class FlowSensitiveInlineVariables extends AbstractPostOrderCallback
+
+/* METHOD FlowSensitiveInlineVariables */
+public FlowSensitiveInlineVariables(AbstractCompiler compiler) {
+ this.compiler = compiler;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ // TODO(user): While the helpers do a subtree traversal on the AST, the
+ // compiler pass itself only traverse the AST to look for function
+ // declarations to perform dataflow analysis on. We could combine
+ // the traversal in DataFlowAnalysis's computeEscaped later to save some
+ // time.
+ }
+
+ /**
+ * Gathers a list of possible candidates for inlining based only on
+ * information from {@link MustBeReachingVariableDef}. The list will be stored
+ * in {@code candidates} and the validity of each inlining Candidate should
+ * be later verified with {@link Candidate#canInline()} when
+ * {@link MaybeReachingVariableUse} has been performed.
+ */
+ private class GatherCandiates extends AbstractShallowCallback {
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ DiGraphNode<Node, Branch> graphNode = cfg.getDirectedGraphNode(n);
+ if (graphNode == null) {
+ // Not a CFG node.
+ return;
+ }
+ FlowState<MustDef> state = graphNode.getAnnotation();
+ final MustDef defs = state.getIn();
+ final Node cfgNode = n;
+ AbstractCfgNodeTraversalCallback gatherCb =
+ new AbstractCfgNodeTraversalCallback() {
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName()) {
+
+ // n.getParent() isn't null. This just the case where n is the root
+ // node that gatherCb started at.
+ if (parent == null) {
+ return;
+ }
+
+ // Make sure that the name node is purely a read.
+ if ((NodeUtil.isAssignmentOp(parent) && parent.getFirstChild() == n)
+ || parent.isVar() || parent.isInc() || parent.isDec() ||
+ parent.isParamList() || parent.isCatch()) {
+ return;
+ }
+
+ String name = n.getString();
+ if (compiler.getCodingConvention().isExported(name)) {
+ return;
+ }
+
+ Node defNode = reachingDef.getDef(name, cfgNode);
+ // TODO(nicksantos): We need to add some notion of @const outer
+ // scope vars. We can inline those just fine.
+ if (defNode != null &&
+ !reachingDef.dependsOnOuterScopeVars(name, cfgNode)) {
+ candidates.add(new Candidate(name, defNode, n, cfgNode));
+ }
+ }
+
+/* METHOD AbstractCfgNodeTraversalCallback */
+new AbstractCfgNodeTraversalCallback() {
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName()) {
+
+ // n.getParent() isn't null. This just the case where n is the root
+ // node that gatherCb started at.
+ if (parent == null) {
+ return;
+ }
+
+ // Make sure that the name node is purely a read.
+ if ((NodeUtil.isAssignmentOp(parent) && parent.getFirstChild() == n)
+ || parent.isVar() || parent.isInc() || parent.isDec() ||
+ parent.isParamList() || parent.isCatch()) {
+ return;
+ }
+
+ String name = n.getString();
+ if (compiler.getCodingConvention().isExported(name)) {
+ return;
+ }
+
+ Node defNode = reachingDef.getDef(name, cfgNode);
+ // TODO(nicksantos): We need to add some notion of @const outer
+ // scope vars. We can inline those just fine.
+ if (defNode != null &&
+ !reachingDef.dependsOnOuterScopeVars(name, cfgNode)) {
+ candidates.add(new Candidate(name, defNode, n, cfgNode));
+ }
+ }
+ }
+ };
+
+ NodeTraversal.traverse(compiler, cfgNode, gatherCb);
+ }
+ }
+
+ /**
+ * Models the connection between a definition and a use of that definition.
+ */
+ private class Candidate {
+
+ // Name of the variable.
+ private final String varName;
+
+ // Nodes related to the definition.
+ private Node def;
+ private final Node defCfgNode;
+
+ // Nodes related to the use.
+ private final Node use;
+ private final Node useCfgNode;
+
+ // Number of uses of the variable within the CFG node that represented the
+ // use in the CFG.
+ private int numUseWithinUseCfgNode;
+
+ Candidate(String varName, Node defCfgNode, Node use, Node useCfgNode) {
+ Preconditions.checkArgument(use.isName());
+ this.varName = varName;
+ this.defCfgNode = defCfgNode;
+ this.use = use;
+ this.useCfgNode = useCfgNode;
+ }
+
+ private boolean canInline() {
+
+ // Cannot inline a parameter.
+ if (defCfgNode.isFunction()) {
+ return false;
+ }
+
+ getDefinition(defCfgNode, null);
+ getNumUseInUseCfgNode(useCfgNode, null);
+
+ // Definition was not found.
+ if (def == null) {
+ return false;
+ }
+
+ // Check that the assignment isn't used as a R-Value.
+ // TODO(user): Certain cases we can still inline.
+ if (def.isAssign() && !NodeUtil.isExprAssign(def.getParent())) {
+ return false;
+ }
+
+ // The right of the definition has side effect:
+ // Example, for x:
+ // x = readProp(b), modifyProp(b); print(x);
+ if (checkRightOf(def, defCfgNode, SIDE_EFFECT_PREDICATE)) {
+ return false;
+ }
+
+ // Similar check as the above but this time, all the sub-expressions
+ // left of the use of the variable.
+ // x = readProp(b); modifyProp(b), print(x);
+ if (checkLeftOf(use, useCfgNode, SIDE_EFFECT_PREDICATE)) {
+ return false;
+ }
+
+ // TODO(user): Side-effect is OK sometimes. As long as there are no
+ // side-effect function down all paths to the use. Once we have all the
+ // side-effect analysis tool.
+ if (NodeUtil.mayHaveSideEffects(def.getLastChild())) {
+ return false;
+ }
+
+ // TODO(user): We could inline all the uses if the expression is short.
+
+ // Finally we have to make sure that there are no more than one use
+ // in the program and in the CFG node. Even when it is semantically
+ // correctly inlining twice increases code size.
+ if (numUseWithinUseCfgNode != 1) {
+ return false;
+ }
+
+ // Make sure that the name is not within a loop
+ if (NodeUtil.isWithinLoop(use)) {
+ return false;
+ }
+
+ Collection<Node> uses = reachingUses.getUses(varName, defCfgNode);
+
+ if (uses.size() != 1) {
+...[truncated deterministically]...
+b);
+ }
+
+ /**
+ * Computes the number of uses of the variable varName and store it in
+ * numUseWithinUseCfgNode.
+ */
+ private void getNumUseInUseCfgNode(Node n, Node parant) {
+
+ AbstractCfgNodeTraversalCallback gatherCb =
+ new AbstractCfgNodeTraversalCallback() {
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName() && n.getString().equals(varName) &&
+ // do not count in if it is left child of an assignment operator
+ !(parent.isAssign() &&
+ (parent.getFirs
+...[truncated deterministically]...
+its root and sub-expression n, return true if there
+ * the predicate is true for some expression on the right of n.
+ *
+ * Example:
+ *
+ * NotChecked(), NotChecked(), n, Checked(), Checked();
+ */
+ private static boolean checkRightOf(
+ Node n, Node expressionRoot, Predicate<Node> predicate) {
+ for (Node p = n; p != expressionRoot; p = p.getParent()) {
+ for (Node cur = p.getNext(); cur != null; cur = cur.getNext()) {
+ if (predicate.apply(cur)) {
+ return true;
+ }
+ }
+ }
+ return false;
+ }
+
+ /**
+ * Given an expression by its root and sub-expression n, return true if there
+ * the predicate is true for some expression on the left of n.
+ *
+ * Example:
+ *
+ * Checked(), Checked(), n, NotChecked(), NotChecked();
+ */
+ private static boolean checkLeftOf(
+ Node n, Node expressionRoot, Predicate<Node> predicate) {
+ for (Node p = n.getParent(); p != expressionRoot; p = p.getParent()) {
+ for (Node cur = p.getParent().getFirstChild(); cur != p;
+ cur = cur.getNext()) {
+ if (predicate.apply(cur)) {
+ return true;
+ }
+ }
+ }
+ return false;
+ }
+}
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName()) {
+
+ // n.getParent() isn't null. This just the case where n is the root
+ // node that gatherCb started at.
+ if (parent == null) {
+ return;
+ }
+
+ // Make sure that the name node is purely a read.
+ if ((NodeUtil.isAssignmentOp(parent) && parent.getFirstChild() == n)
+ || parent.isVar() || parent.isInc() || parent.isDec() ||
+ parent.isParamList() || parent.isCatch()) {
+ return;
+ }
+
+ String name = n.getString();
+ if (compiler.getCodingConvention().isExported(name)) {
+ return;
+ }
+
+ Node defNode = reachingDef.getDef(name, cfgNode);
+ // TODO(nicksantos): We need to add some notion of @const outer
+ // scope vars. We can inline those just fine.
+ if (defNode != null &&
+ !reachingDef.dependsOnOuterScopeVars(name, cfgNode)) {
+ candidates.add(new Candidate(name, defNode, n, cfgNode));
+ }
+ }
+ }
+ };
+
+ NodeTraversal.traverse(compiler, cfgNode, gatherCb);
+ }
+ }
+
+ /**
+ * Models the connection between a definition and a use of that definition.
+ */
+ private class Candidate {
+
+ // Name of the variable.
+ private final String varName;
+
+ // Nodes related to the definition.
+ private Node def;
+ private final Node defCfgNode;
+
+ // Nodes related to the use.
+ private final Node use;
+ private final Node useCfgNode;
+
+ // Number of uses of the variable within the CFG node that represented the
+ // use in the CFG.
+ private int numUseWithinUseCfgNode;
+
+ Candidate(String varName, Node defCfgNode, Node use, Node useCfgNode) {
+ Preconditions.checkArgument(use.isName());
+ this.varName = varName;
+ this.defCfgNode = defCfgNode;
+ this.use = use;
+ this.useCfgNode = useCfgNode;
+ }
+
+ private boolean canInline() {
+
+ // Cannot inline a parameter.
+ if (defCfgNode.isFunction()) {
+ return false;
+ }
+
+ getDefinition(defCfgNode, null);
+ getNumUseInUseCfgNode(useCfgNode, null);
+
+ // Definition was not found.
+ if (def == null) {
+ return false;
+ }
+
+ // Check that the assignment
+...[truncated deterministically]...
+ride
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ switch (n.getType()) {
+ case Token.NAME:
+ if (n.getString().equals(varName) && n.hasChildren()) {
+ def = n;
+ }
+ return;
+
+ case Token.ASSIGN:
+ Node lhs = n.getFirstChild();
+ if (lhs.isName() && lhs.getString().equals(varName)) {
+ def = n;
+ }
+ return;
+ }
+ }
+ };
+ NodeTraversal.traverse(compiler, n, gatherCb);
+ }
+
+ /**
+ * Computes the number of uses of the variable varName and store it in
+ * numUseWithinUseCfgNode.
+ */
+ private void getNumUseInUseCfgNode(Node n, Node parant) {
+
+ AbstractCfgNodeTraversalCallback gatherCb =
+ new AbstractCfgNodeTraversalCallback() {
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName() && n.getString().equals(varName) &&
+ // do not count in if it is left child of an assignment operator
+ !(parent.isAssign() &&
+ (parent.getFirstChild() == n))) {
+ numUseWithinUseCfgNode++;
+ }
+ }
+ };
+
+ NodeTraversal.traverse(compiler, n, gatherCb);
+ }
+ }

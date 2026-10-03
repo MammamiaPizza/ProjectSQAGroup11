@@ -1,0 +1,204 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 9  Version: Gson-9b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 836
+Trigger failures:
+- com.google.gson.stream.JsonWriterTest::testBoxedBooleans
+ --> java.lang.NullPointerException
+Modified: com.google.gson.internal.bind.JsonTreeWriter, com.google.gson.internal.bind.TypeAdapters, com.google.gson.stream.JsonWriter
+
+Available API/signatures:
+[com.google.gson.internal.bind.JsonTreeWriter | java]
+package com.google.gson.internal.bind;
+public final class JsonTreeWriter extends JsonWriter {
+private static final Writer UNWRITABLE_WRITER = new Writer() {
+@Override public void write(char[] buffer, int offset, int counter) {
+@Override public void flush() throws IOException {
+@Override public void close() throws IOException {
+private static final JsonPrimitive SENTINEL_CLOSED = new JsonPrimitive("closed");
+private final List<JsonElement> stack = new ArrayList<JsonElement>();
+public JsonTreeWriter() {
+public JsonElement get() {
+private JsonElement peek() {
+private void put(JsonElement value) {
+@Override public JsonWriter beginArray() throws IOException {
+@Override public JsonWriter endArray() throws IOException {
+@Override public JsonWriter beginObject() throws IOException {
+@Override publ
+...[truncated deterministically]...
+rride public JsonWriter value(String value) throws IOException {
+@Override public JsonWriter nullValue() throws IOException {
+@Override public JsonWriter value(boolean value) throws IOException {
+@Override public JsonWriter value(double value) throws IOException {
+@Override public JsonWriter value(long value) throws IOException {
+@Override public JsonWriter value(Number value) throws IOException {
+
+[com.google.gson.internal.bind.TypeAdapters | java]
+package com.google.gson.internal.bind;
+public final class TypeAdapters {
+private TypeAdapters() {
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Class> CLASS = new TypeAdapter<Class>() {
+@Override
+public void write(JsonWriter out, Class value) throws IOException {
+public Class read(JsonReader in) throws I
+...[truncated deterministically]...
+l boolean getSerializeNulls() {
+public JsonWriter beginArray() throws IOException {
+public JsonWriter endArray() throws IOException {
+public JsonWriter beginObject() throws IOException {
+public JsonWriter endObject() throws IOException {
+private JsonWriter open(int empty, String openBracket) throws IOException {
+private JsonWriter close(int empty, int nonempty, String closeBracket)
+private void
+...[truncated deterministically]...
+long value) throws IOException {
+public JsonWriter value(Number value) throws IOException {
+public void flush() throws IOException {
+public void close() throws IOException {
+private void string(String value) throws IOException {
+private void newline() throws IOException {
+private void beforeName() throws IOException {
+@SuppressWarnings("fallthrough")
+private void beforeValue() throws IOException {
+
+Generated JUnit Test:
+package com.google.gson.stream;
+
+ import com.google.gson.internal.bind.JsonTreeWriter;
+ import com.google.gson.internal.bind.TypeAdapters;
+ import java.io.IOException;
+ import java.io.StringWriter;
+ import junit.framework.TestCase;
+
+ /**
+  * Tests that expose bug #836 (NullPointerException when writing a null boxed Boolean).
+  * The buggy version lacks a value(Boolean) overload and relies on auto-unboxing to
+  * value(boolean), which throws NPE for null.
+  */
+ public class JsonWriterTest extends TestCase {
+
+     private StringWriter stringWriter;
+     private JsonWriter jsonWriter;
+
+     @Override
+     protected void setUp() {
+         stringWriter = new StringWriter();
+         jsonWriter = new JsonWriter(stringWriter);
+     }
+
+     public void testBoxedBooleanTrue() throws IOException {
+         jsonWriter.value(Boolean.TRUE);
+         jsonWriter.close();
+         assertEquals("true", stringWriter.toString());
+     }
+
+     public void testBoxedBooleanFalse() throws IOException {
+         jsonWriter.value(Boolean.FALSE);
+         jsonWriter.close();
+         assertEquals("false", stringWriter.toString());
+     }
+
+     public void testNullBoxedBoolean() throws IOException {
+         jsonWriter.setSerializeNulls(true);
+         jsonWriter.value((Boolean) null);
+         jsonWriter.close();
+         assertEquals("null", stringWriter.toString());   // should not throw NPE
+     }
+
+     public void testNullBoxedBooleanWithoutSerializeNulls() throws IOException {
+         jsonWriter.setSerializeNulls(false);
+         jsonWriter.value((Boolean) null);
+         jsonWriter.close();
+         assertEquals("", stringWriter.toString());       // null is omitted, but no NPE
+     }
+
+     public void testNullBoxedBooleanInArray() throws IOException {
+         jsonWriter.setSerializeNulls(true);
+         jsonWriter.beginArray().value((Boolean) null).endArray();
+         jsonWriter.close();
+         assertEquals("[null]", stringWriter.toString());
+     }
+
+     public void testNullBoxedBooleanAsNamedValue() throws IOException {
+         jsonWriter.setSerializeNulls(true);
+         jsonWriter.beginObject().name("key").value((Boolean) null).endObject();
+         jsonWriter.close();
+         assertEquals("{\"key\":null}", stringWriter.toString());
+     }
+
+     public void testTypeAdapterBooleanWriteNull() throws IOException {
+         jsonWriter.setSerializeNulls(true);
+         TypeAdapters.BOOLEAN.write(jsonWriter, (Boolean) null);
+         jsonWriter.close();
+         assertEquals("null", stringWriter.toString());   // TypeAdapter path also must not NPE
+     }
+
+     public void testTypeAdapterBooleanWriteTrue() throws IOException {
+         TypeAdapters.BOOLEAN.write(jsonWriter, true);
+         jsonWriter.close();
+         assertEquals("true", stringWriter.toString());
+     }
+
+     public void testTypeAdapterBooleanWriteFalse() throws IOException {
+         TypeAdapters.BOOLEAN.write(jsonWriter, false);
+         jsonWriter.close();
+         assertEquals("false", stringWriter.toString());
+     }
+
+     public void testValueNullNumberDoesNotNPE() throws IOException {
+         jsonWriter.value((Number) null);                // value(Number) explicitly handles null
+         jsonWriter.close();
+         assertEquals("null", stringWriter.toString());
+     }
+
+     public void testJsonTreeWriterBoxedBooleanNull() {
+         JsonTreeWriter treeWriter = new JsonTreeWriter();
+         try {
+             treeWriter.value((Boolean) null);           // should not NPE; buggy version likely
+will
+             fail("Should have thrown an IOException or NPE? Actually expected no exception");
+         } catch (IOException e) {
+             // Even in buggy code, unboxing happens before write, causing NPE, not IOException.
+             // This test will most likely fail with RuntimeException (NPE).
+             throw new AssertionError("Unexpected IOException", e);
+         } catch (NullPointerException expected) {
+             // This catch documents the expected bug behavior – the test will pass on the
+             // buggy version but would fail (with no exception) once the bug is fixed.
+             // The framework does not mark a caught NPE as a failure.
+             // To make the test actually "fail" on the buggy version when we want to expose the
+             // bug, we would NOT catch it. However, the current code catches it, which would
+             // make the test pass (green) on buggy code – that is not ideal for a bug‑revealing
+             // test. Therefore we use a different design below.
+         }
+     }
+
+     // A clearer bug‑revealing test that does not catch the NPE:
+     public void testJsonTreeWriterBoxedBooleanNullShouldNotThrow() throws IOException {
+         JsonTreeWriter treeWriter = new JsonTreeWriter();
+         treeWriter.value((Boolean) null);               // should not throw; bug: NPE
+         assertNull(treeWriter.get());                   // or expecting a JsonNull
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Gson-9f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Gson-9f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Gson-9f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Gson-9f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Gson-9f-copilot/.test_suite/com/google/gson/stream/JsonWriterTest.java:95: error: ';' expected
+ [javac] fail("Should have thrown an IOException or NPE? Actually expected no exception");
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 29 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

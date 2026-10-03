@@ -1,0 +1,208 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Chart  Bug: 24  Version: Chart-24b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Target: org.jfree.chart.renderer.GrayPaintScale
+Modified: org.jfree.chart.renderer.GrayPaintScale
+Triggers: org.jfree.chart.renderer.junit.GrayPaintScaleTests::testGetPaint
+
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.chart.renderer.junit.GrayPaintScaleTests::testGetPaint
+ --> java.lang.IllegalArgumentException: Color parameter outside of expected range: Red Green Blue
+Modified: org.jfree.chart.renderer.GrayPaintScale
+
+Prompt-01 test plan:
+TARGETS: GrayPaintScale.getPaint(double) – maps value to gray Color in [lower,upper]→[0,255]
+ORACLES: For value in bounds, R=G=B = linear scaled int (clamp 0–255) verified via Color.getRed()
+CASES: Default ctor bounds (likely 0,1): getPaint(0.0)→0, getPaint(1.0)→255, getPaint(0.5)→~127
+CASES: Custom bounds (0,255)→identity map; (0,100)→mid~128; use extreme bounds +-1e9
+CASES: Value at exact lowerBound→0, exact upperBound→255 (check rounding stable)
+CASES: Out-of-range value (just below/above) – expected clamp to 0/255 or explicit exception
+RISKS: Floating rounding (value==upperBound→fraction=1.0000000000000002 → gray=256) throws IAE; must
+clamp
+RISKS: lowerBound==upperBound: zero denominator → NaN/div-zero; document fallback (safe default
+gray)
+RISKS: Negative lowerBound with positive upperBound still maps correctly if clamp prevents negative
+gray
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jfree.chart.renderer.GrayPaintScale (java) =====
+/* ===========================================================
+ * JFreeChart : a free chart library for the Java(tm) platform
+ * ===========================================================
+ *
+ * (C) Copyright 2000-2007, by Object Refinery Limited and Contributors.
+ *
+ * Project Info: http://www.jfree.org/jfreechart/index.html
+ *
+ * This library is free software; you can redistribute it and/or modify it 
+ * under the terms of the GNU Lesser General Public License as published by 
+ * the Free Software Foundation; either version 2.1 of the License, or 
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful, but 
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public 
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, 
+ * USA. 
+ *
+ * [Java is a trademark or registered trademark of Sun Microsystems, Inc. 
+ * in the United States and other countries.]
+ *
+ * -------------------
+ * GrayPaintScale.java
+ * -------------------
+ * (C) Copyright 2006, 2007, by Object Refinery Limited.
+ *
+ * Original Author: David Gilbert (for Object Refinery Limited);
+ * Contributor(s): -;
+ *
+ * $Id: GrayPaintScale.java,v 1.1.2.1 2007/01/31 14:15:16 mungady Exp $
+ *
+ * Changes
+ * -------
+ * 05-Jul-2006 : Version 1 (DG);
+ * 31-Jan-2007 : Renamed min and max to lowerBound and upperBound (DG);
+ * 21-Jun-2007 : Removed JCommon dependencies (DG);
+ * 26-Sep-2007 : Fixed bug 1767315, problem in getPaint() method (DG);
+ * 
+ */
+
+package org.jfree.chart.renderer;
+
+import java.awt.Color;
+import java.awt.Paint;
+import java.io.Serializable;
+
+import org.jfree.chart.util.PublicCloneable;
+
+/**
+ * A paint scale that returns shades of gray.
+ * 
+ * @since 1.0.4
+ */
+public class GrayPaintScale 
+ implements PaintScale, PublicCloneable, Serializable {
+
+ /** The lower bound. */
+ private double lowerBound;
+ 
+ /** The upper bound. */
+ private double upperBound;
+ 
+ /**
+ * Creates a new <code>GrayPaintScale</code> instance with default values.
+ */
+ public GrayPaintScale() {
+ this(0.0, 1.0);
+ }
+ 
+ /**
+ * Creates a new paint scale for values in the specified range.
+ * 
+ * @param lowerBound the lower bound.
+ * @param upperBound the upper bound.
+ * 
+ * @throws IllegalArgumentException if <code>lowerBound</code> is not
+ * less than <code>upperBound</code>.
+ */
+ public GrayPaintScale(double lowerBound, double upperBound) {
+ if (lowerBound >= upperBound) {
+ throw new IllegalArgumentException(
+ "Requires lowerBound < upperBound.");
+ }
+ this.lowerBound = lowerBound;
+ this.upperBound = upperBound;
+ }
+ 
+ /**
+ * Returns the lower bound.
+ * 
+ * @return The lower bound.
+ * 
+ * @see #getUpperBound()
+ */
+ public double getLowerBound() {
+ return this.lowerBound;
+ }
+
+ /**
+ * Returns the upper bound.
+ * 
+ * @return The upper bound.
+ * 
+ * @see #getLowerBound()
+ */
+ public double getUpperBound() {
+ return this.upperBound;
+ }
+
+ /**
+ * Returns a paint for the specified value.
+ * 
+ * @param value the value (must be within the range specified by the
+ * lower and upper bounds for the scale).
+ * 
+ * @return A paint for the specified value.
+ */
+ public Paint getPaint(double value) {
+ double v = Math.max(value, this.lowerBound);
+ v = Math.min(v, this.upperBound);
+ int g = (int) ((value - this.lowerBound) / (this.upperBound 
+ - this.lowerBound) * 255.0);
+ return new Color(g, g, g);
+ }
+ 
+ /**
+ * Tests this <code>GrayPaintScale</code> instance for equality with an
+ * arbitrary object. This method returns <code>true</code> if and only
+ * if:
+ * <ul>
+ * <li><code>obj</code> is not <code>null</code>;</li>
+ * <li><code>obj</code> is an instance of <code>GrayPaintScale</code>;</li>
+ * </ul>
+ * 
+ * @param obj the object (<code>null</code> permitted).
+ * 
+ * @return A boolean.
+ */
+ public boolean equals(Object obj) {
+ if (obj == this) {
+ return true;
+ }
+ if (!(obj instanceof GrayPaintScale)) {
+ return false;
+ }
+ GrayPaintScale that = (GrayPaintScale) obj;
+ if (this.lowerBound != that.lowerBound) {
+ return false;
+ }
+ if (this.upperBound != that.upperBound) {
+ return false;
+ }
+ return true; 
+ }
+ 
+ /**
+ * Returns a clone of this <code>GrayPaintScale</code> instance.
+ * 
+ * @return A clone.
+ * 
+ * @throws CloneNotSupportedException if there is a problem cloning this
+ * instance.
+ */
+ public Object clone() throws CloneNotSupportedException {
+ return super.clone();
+ }
+ 
+}

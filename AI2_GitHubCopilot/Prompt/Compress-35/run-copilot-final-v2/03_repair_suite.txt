@@ -1,0 +1,187 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 35  Version: Compress-35b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-335
+Trigger failures:
+- org.apache.commons.compress.DetectArchiverTestCase::testCOMPRESS335
+ --> org.apache.commons.compress.archivers.ArchiveException: No Archiver found for the stream signature
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarUtils | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarUtils {
+static final ZipEncoding FALLBACK_ENCODING = new ZipEncoding() {
+public boolean canEncode(String name) { return true; }
+public ByteBuffer encode(String name) {
+final int length = name.length();
+public String decode(byte[] buffer) {
+/** Private constructor to prevent instantiation of this utility class. */
+private TarUtils(){
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+final boolean negative = buffer[offset] == (byte) 0xff;
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+public static String parseName(byte[] buffer, final int offset, final int length) {
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+final int limit = b.limit() - b.position();
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+final int bits = (length - 1) * 8;
+final byte[] b = val.toByteArray();
+final byte fill = (byte) (negative ? 0xff : 0);
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static long computeCheckSum(final byte[] buf) {
+public static boolean verifyCheckSum(byte[] header) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+import static org.apache.commons.compress.archivers.tar.TarConstants.CHKSUMLEN;
+import static org.apache.commons.compress.archivers.tar.TarConstants.CHKSUM_OFFSET;
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+/**
+
+ - Tests for TarUtils, targeting the COMPRESS-335 bug.
+ - Focused on parseOctal, verifyCheckSum, parseName, parseBoolean.
+  */
+ public class TarUtilsTest {
+  @Test
+  public void testParseOctalNormal() {
+  // 8-digit octal: 0100777 = 33279
+  byte[] buf = "0100777\u0000".getBytes();
+  long result = TarUtils.parseOctal(buf, 0, 8);
+  assertEquals(0100777L, result);
+  }
+  @Test
+  public void testParseOctalMaxLength() {
+  // 12-digit octal max: 777777777777 = 8^12 - 1 = 68719476735
+  byte[] buf = "777777777777".getBytes();
+  long result = TarUtils.parseOctal(buf, 0, 12);
+  assertEquals(0777777777777L, result);
+  }
+  @Test
+  public void testParseOctalNegative() {
+  // 0xff first byte indicates negative binary two's complement.
+  // 12-byte field: flag (0xff) + 11 bytes big-endian absolute value.
+  // Encoding -1: absolute 1 at LSB.
+  byte[] buf = new byte[12];
+  buf[0] = (byte) 0xff;
+  buf[11] = 1; // rest zeros
+  long result = TarUtils.parseOctal(buf, 0, 12);
+  assertEquals(-1L, result);
+  }
+  @Test
+  public void testParseOctalTrailingSpacesAndNuls() {
+  // 0777 followed by spaces and NULs
+  byte[] buf = new byte[8];
+  buf[0] = '0';
+  buf[1] = '7';
+  buf[2] = '7';
+  buf[3] = '7';
+  buf[4] = ' ';
+  buf[5] = 0;
+  buf[6] = 0;
+  buf[7] = 0;
+  long result = TarUtils.parseOctal(buf, 0, 8);
+  assertEquals(0777L, result);
+  }
+  @Test(expected = IllegalArgumentException.class)
+  public void testParseOctalNonOctalChar() {
+  byte[] buf = "1238".getBytes(); // '8' is invalid
+  TarUtils.parseOctal(buf, 0, 4);
+  }
+  @Test(expected = IllegalArgumentException.class)
+  public void testParseOctalLengthTooSmall() {
+  byte[] buf = new byte[1];
+  TarUtils.parseOctal(buf, 0, 1);
+  }
+  @Test
+  public void testVerifyCheckSumMatching() {
+  byte[] header = new byte[512];
+  // fill with some recognizable content
+  header[0] = 'u';
+  header[1] = 's';
+  header[2] = 't';
+  header[3] = 'a';
+  header[4] = 'r';
+  // set checksum field to spaces
+  for (int i = CHKSUM_OFFSET; i < CHKSUM_OFFSET + CHKSUMLEN; i++) {
+      header[i] = ' ';
+  }
+  long sum = TarUtils.computeCheckSum(header);
+  TarUtils.formatCheckSumOctalBytes(sum, header, CHKSUM_OFFSET, CHKSUMLEN);
+  assertTrue(TarUtils.verifyCheckSum(header));
+  }
+  @Test
+  public void testVerifyCheckSumMismatch() {
+  byte[] header = new byte[512];
+  header[0] = 0x01;
+  // checksum field spaces
+  for (int i = CHKSUM_OFFSET; i < CHKSUM_OFFSET + CHKSUMLEN; i++) {
+      header[i] = ' ';
+  }
+  long sum = TarUtils.computeCheckSum(header);
+  TarUtils.formatCheckSumOctalBytes(sum, header, CHKSUM_OFFSET, CHKSUMLEN);
+  // corrupt data
+  header[100] ^= 0x01;
+  assertFalse(TarUtils.verifyCheckSum(header));
+  }
+  @Test
+  public void testVerifyCheckSumAllSpacesReturnsFalse() {
+  byte[] header = new byte[512];
+  // checksum field spaces, rest is arbitrary non-zero -> sum cannot be zero
+  for (int i = 0; i < 512; i++) {
+      header[i] = (i < CHKSUM_OFFSET || i >= CHKSUM_OFFSET + CHKSUMLEN) ? (byte) 1 : ' ';
+  }
+  assertFalse("VerifyCheckSum should fail when checksum field is spaces and data non-zero",
+          TarUtils.verifyCheckSum(header));
+  }
+  @Test
+  public void testParseBooleanTrue() {
+  byte[] buf = new byte[] { 1 };
+  assertTrue(TarUtils.parseBoolean(buf, 0));
+  }
+  @Test
+  public void testParseBooleanFalse() {
+  byte[] buf = new byte[] { 0 };
+  assertFalse(TarUtils.parseBoolean(buf, 0));
+  }
+  @Test
+  public void testParseNameTrailingNul() {
+  byte[] buf = new byte[] { 'f', 'o', 'o', 0, 0 };
+  assertEquals("foo", TarUtils.parseName(buf, 0, 5));
+  }
+  @Test
+  public void testParseNameEmbeddedNul() {
+  // "ustar\0extra" – POSIX says parse stops at first NUL
+  byte[] buf = new byte[] { 'u', 's', 't', 'a', 'r', 0, 'x' };
+  assertEquals("ustar", TarUtils.parseName(buf, 0, 7));
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Compress-35f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Compress-35f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Compress-35f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Compress-35f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Compress-35f-copilot/.test_suite/org/apache/commons/compress/archivers/tar/TarUtilsTest.java:101: error: incompatible types: possible lossy conversion from int to byte
+ [javac] header[i] = (i < CHKSUM_OFFSET || i >= CHKSUM_OFFSET + CHKSUMLEN) ? (byte) 1 : ' ';
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,131 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 8  Version: Time-8b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 42
+Trigger failures:
+- org.joda.time.TestDateTimeZone::testForOffsetHoursMinutes_int_int
+ --> java.lang.IllegalArgumentException: Minutes out of range: -15
+Modified: org.joda.time.DateTimeZone
+
+Available API/signatures:
+[org.joda.time.DateTimeZone | java]
+package org.joda.time;
+public abstract class DateTimeZone implements Serializable {
+public static final DateTimeZone UTC = new FixedDateTimeZone("UTC", "UTC", 0, 0);
+private static final int MAX_MILLIS = (86400 * 1000) - 1;
+public static DateTimeZone getDefault() {
+synchronized(DateTimeZone.class) {
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+@FromString
+public static DateTimeZone forID(String id) {
+public static DateTimeZone forOffsetHours(int hoursOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetMillis(int millisOffset) {
+public static DateTimeZone forTimeZone(TimeZone zone) {
+final String id = zone.getID();
+private static synchronized DateTimeZone fixedOffsetZone(String id, int offset) {
+public static Set<String> getAvailableIDs() {
+public static Provider getProvider() {
+public static void setProvider(Provider provider) throws SecurityException {
+private static void setProvider0(Provider provider) {
+private static Provider getDefaultProvider() {
+public static NameProvider getNameProvider() {
+public static void setNameProvider(NameProvider nameProvider) throws SecurityException {
+private static void setNameProvider0(NameProvider nameProvider) {
+private static NameProvider getDefaultNameProvider() {
+private static synchronized String getConvertedId(String id) {
+private static int parseOffset(String str) {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public Strin
+...[truncated deterministically]...
+c long convertLocalToUTC(long instantLocal, boolean strict) {
+public long getMillisKeepLocal(DateTimeZone newZone, long oldInstant) {
+public boolean isLocalDateTimeGap(LocalDateTime localDateTime) {
+public long adjustOffset(long instant, boolean earlierOrLater) {
+public abstract boolean isFixed();
+public abstract long nextTransition(long instant);
+public abstract long previousTransition(long instant);
+public java.util.TimeZone toTimeZone() {
+public abstract boolean equals(Object object);
+public int hashCode() {
+protected Object writeReplace() throws ObjectStreamException {
+private static final class Stub implements Serializable {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException {
+private Object readResolve() throws ObjectStreamException {
+
+Generated JUnit Test:
+package org.joda.time;
+
+import junit.framework.TestCase;
+
+public class DateTimeZoneForOffsetHoursMinutesTest extends TestCase {
+
+    public void testZeroOffsetReturnsUTC() {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forOffsetHoursMinutes(0, 0));
+    }
+
+    public void testPositiveHoursAndMinutesProduceExpectedOffset() {
+        DateTimeZone zone = DateTimeZone.forOffsetHoursMinutes(5, 30);
+
+        assertEquals(5 * 60 * 60 * 1000 + 30 * 60 * 1000, zone.getOffset(0L));
+    }
+
+    public void testNegativeHoursWithPositiveMinutesProduceExpectedOffset() {
+        DateTimeZone zone = DateTimeZone.forOffsetHoursMinutes(-1, 15);
+
+        assertEquals(-(60 + 15) * 60 * 1000, zone.getOffset(0L));
+    }
+
+    public void testNegativeHoursWithNegativeMinutesAreAccepted() {
+        DateTimeZone zone = DateTimeZone.forOffsetHoursMinutes(-1, -15);
+
+        assertEquals(-45 * 60 * 1000, zone.getOffset(0L));
+    }
+
+    public void testZeroHoursWithNegativeMinutesAreAccepted() {
+        DateTimeZone zone = DateTimeZone.forOffsetHoursMinutes(0, -59);
+
+        assertEquals(-59 * 60 * 1000, zone.getOffset(0L));
+    }
+
+    public void testLargestHourMinuteCombinationsWithinRange() {
+        assertEquals((23 * 60 + 59) * 60 * 1000,
+                DateTimeZone.forOffsetHoursMinutes(23, 59).getOffset(0L));
+        assertEquals(-(23 * 60 + 59) * 60 * 1000,
+                DateTimeZone.forOffsetHoursMinutes(-23, 59).getOffset(0L));
+    }
+
+    public void testMinutesOutsideSignedMinuteRangeAreRejected() {
+        assertIllegalArgumentForOffset(0, 60);
+        assertIllegalArgumentForOffset(0, -60);
+    }
+
+    public void testHoursOutsideRangeAreRejected() {
+        assertIllegalArgumentForOffset(24, 0);
+        assertIllegalArgumentForOffset(-24, 0);
+    }
+
+    private void assertIllegalArgumentForOffset(int hours, int minutes) {
+        try {
+            DateTimeZone.forOffsetHoursMinutes(hours, minutes);
+            fail("Expected IllegalArgumentException for " + hours + ":" + minutes);
+        } catch (IllegalArgumentException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.joda.time.DateTimeZoneForOffsetHoursMinutesTest::testNegativeHoursWithNegativeMinutesAreAccepted
+
+Extract test suite......................................................... OK
+Failing generated tests: org.joda.time.DateTimeZoneForOffsetHoursMinutesTest::testNegativeHoursWithNegativeMinutesAreAccepted

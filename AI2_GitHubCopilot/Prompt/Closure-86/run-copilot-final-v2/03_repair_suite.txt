@@ -1,0 +1,227 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 86  Version: Closure-86b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 303
+Trigger failures:
+- com.google.javascript.jscomp.NodeUtilTest::testLocalValue1
+ --> junit.framework.AssertionFailedError
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testLocalizedSideEffects8
+ --> junit.framework.AssertionFailedError: expected:<[A]> but was:<[A, f]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testLocalizedSideEffects9
+ --> junit.framework.AssertionFailedError: expected:<[A]> but was:<[A, f]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testAnnotationInExterns_new4
+ --> junit.framework.AssertionFailedError: expected:<[externObjSEThis]> but was:<[externObjSEThis, NEW STRING externObjSEThisMethod]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testAnnotationInExterns_new6
+ --> junit.framework.AssertionFailedError: expected:<[externObjSEThis]> but was:<[externObjSEThis, NEW STRING externObjSEThisMethod, f]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testIssue303b
+ --> junit.framework.AssertionFailedError: expected:<[]> but was:<[NEW STRING setLocation]>
+ - com.google.javascript.jscomp.PureFunctionIdentifierTest::testIssue303
+ --> junit.framework.AssertionFailedError: expected:<[]> but was:<[NEW STRING setLocation]>
+Modified: com.google.javascript.jscomp.NodeUtil
+
+Available API/signatures:
+[com.google.javascript.jscomp.NodeUtil | java]
+package com.google.javascript.jscomp;
+public final class NodeUtil {
+private NodeUtil() {}
+static TernaryValue getExpressionBooleanValue(Node n) {
+static TernaryValue getBooleanValue(Node n) {
+static String getStringValue(Node n) {
+static Double getNumberValue(Node n) {
+static String getFunctionName(Node n) {
+static String getNearestFunctionName(Node n) {
+static boolean isImmutableValue(Node n) {
+static boolean isLiteralValue(Node n, boolean includeFunctions) {
+static boolean isValidDefineValue(Node val, Set<String> defines) {
+static boolean isEmptyBlock(Node block) {
+static boolean isSimpleOperator(Node n) {
+static boolean isSimpleOperatorType(int type) {
+public static Node newExpr(Node child) {
+static boolean mayEffectMutableState(Node n) {
+static boolean mayEffectMutableState(Node n, AbstractCompiler compiler) {
+static boolean mayHaveSideEffects(Node n) {
+static boolean mayHaveSideEffects(Node n, AbstractCompiler compiler) {
+static boolean constructorCallHasSideEffects(Node callNode) {
+static boolean callHasLocalResult(Node n) {
+static boolean nodeTypeMayHaveSideEffects(Node n) {
+static boolean nodeTypeMayHaveSideEffects(Node n, AbstractCompiler compiler) {
+static boolean canBeSideEffected(Node n) {
+static boolean canBeSideEffected(Node n, Set<String> knownConstants) {
+static int precedence(int type) {
+static boolean isAssociative(int type) {
+static boolean isCommutative(int type) {
+static boolean isAssignmentOp(Node n) {
+static int getOpFromAssignmentOp(Node n) {
+static boolean isExpressionNode(Node n) {
+static boolean containsFunction(Node n) {
+static boolean referencesThis(Node n) {
+stat
+...[truncated deterministically]...
+etNameReferenceCount(Node node, String name) {
+static interface Visitor {
+static boolean hasFinally(Node n) {
+static Node getCatchBlock(Node n) {
+static boolean hasCatchHandler(Node n) {
+static Node getFnParameters(Node fnNode) {
+static boolean isConstantName(Node node) {
+static JSDocInfo getInfoForNameNode(Node nameNode) {
+static JSDocInfo getFunctionInfo(Node n) {
+static String getSourceName(Node n) {
+static Node newCallNode(Node callTarget, Node... parameters) {
+static boolean evaluatesToLocalValue(Node value) {
+static boolean evaluatesToLocalValue(Node value, Predicate<Node> locals) {
+private static Node getNthSibling(Node first, int index) {
+static Node getArgumentForFunction(Node function, int index) {
+static Node getArgumentForCallOrNew(Node call, int index) {
+private static boolean isToStringMethodCall(Node call) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.common.base.Predicate;
+ import com.google.common.base.Predicates;
+ import com.google.javascript.rhino.Node;
+ import com.google.javascript.rhino.Token;
+
+ import junit.framework.TestCase;
+
+ public class NodeUtilTest extends TestCase {
+
+     // Positive control: a simple local variable is indeed a local value.
+     public void testLocalNameEvaluatesToLocalValue() {
+         Node nameNode = Node.newString(Token.NAME, "localVar", 0, 0);
+         boolean result = NodeUtil.evaluatesToLocalValue(nameNode,
+             Predicates.<Node>alwaysFalse());
+         // Even with a predicate that treats nothing as local, an unqualified
+         // NAME node should not be considered a local value on its own.
+         assertFalse("Bare NAME should not be local without predicate", result);
+     }
+
+     public void testLocalNameWithMatchingPredicate() {
+         Node nameNode = Node.newString(Token.NAME, "x", 0, 0);
+         final String expectedName = "x";
+         Predicate<Node> locals = new Predicate<Node>() {
+             public boolean apply(Node n) {
+                 return Token.NAME == n.getType()
+                     && expectedName.equals(n.getString());
+             }
+         };
+         assertTrue("Local NAME with predicate should be local",
+             NodeUtil.evaluatesToLocalValue(nameNode, locals));
+     }
+
+     // The core bug: NEW nodes are not recognised as local values.
+     public void testNewStringEvaluatesToLocalValue() {
+         Node constructor = Node.newString(Token.NAME, "String", 0, 0);
+         Node newExpr = new Node(Token.NEW, constructor, 0, 0);
+         assertTrue("new String() should evaluate to a local value",
+             NodeUtil.evaluatesToLocalValue(newExpr, Predicates.<Node>alwaysFalse()));
+     }
+
+     public void testNewStringWithLocalsPredicate() {
+         Node constructor = Node.newString(Token.NAME, "String", 0, 0);
+         Node newExpr = new Node(Token.NEW, constructor, 0, 0);
+         Predicate<Node> locals = Predicates.alwaysTrue();
+         assertTrue("new String() should be local regardless of predicate",
+             NodeUtil.evaluatesToLocalValue(newExpr, locals));
+     }
+
+     // Boundary: NEW with a single local variable argument.
+     public void testNewWithLocalVarArg() {
+         Node constructor = Node.newString(Token.NAME, "String", 0, 0);
+         Node arg = Node.newString(Token.NAME, "localVar", 0, 0);
+         Node newExpr = new Node(Token.NEW, constructor, arg, 0, 0);
+         Predicate<Node> locals = new Predicate<Node>() {
+             public boolean apply(Node n) {
+                 return "localVar".equals(n.getString());
+             }
+         };
+         assertTrue("new String(localVar) should be local",
+             NodeUtil.evaluatesToLocalValue(newExpr, locals));
+     }
+
+     // Boundary: NEW with multiple arguments.
+     public void testNewWithMultipleArgs() {
+         Node constructor = Node.newString(Token.NAME, "Array", 0, 0);
+         Node arg1 = Node.newString(Token.NAME, "a", 0, 0);
+         Node arg2 = Node.newString(Token.NAME, "b", 0, 0);
+         Node newExpr = new Node(Token.NEW, constructor, arg1, arg2, 0, 0);
+         assertTrue("new Array(a,b) should be local",
+             NodeUtil.evaluatesToLocalValue(newExpr, Predicates.<Node>alwaysFalse()));
+     }
+
+     // Boundary: nested NEW (inner result is an argument to outer NEW).
+     public void testNestedNewEvaluatesToLocalValue() {
+         Node innerConstructor = Node.newString(Token.NAME, "String", 0, 0);
+         Node innerNew = new Node(Token.NEW, innerConstructor, 0, 0);
+         Node outerConstructor = Node.newString(Token.NAME, "Object", 0, 0);
+         Node outerNew = new Node(Token.NEW, outerConstructor, innerNew, 0, 0);
+         assertTrue("new Object(new String()) outer should be local",
+             NodeUtil.evaluatesToLocalValue(outerNew, Predicates.<Node>alwaysFalse()));
+     }
+
+     // Error handling: the method must not throw when encountering a NEW node.
+     public void testNewDoesNotThrow() {
+         Node newExpr = new Node(Token.NEW,
+             Node.newString(Token.NAME, "String", 0, 0), 0, 0);
+         try {
+             NodeUtil.evaluatesToLocalValue(newExpr, Predicates.<Node>alwaysFalse());
+         } catch (Exception e) {
+             fail("evaluatesToLocalValue should not throw for NEW: " + e.getMessage());
+         }
+     }
+
+     // Side-effect detection: a script consisting only of "new String()" has
+     // no observable side effects (the constructor is known to be side-effect-free).
+     public void testNewMayNotHaveSideEffects() {
+         Node newExpr = new Node(Token.NEW,
+             Node.newString(Token.NAME, "String", 0, 0), 0, 0);
+         Node exprStatement = NodeUtil.newExpr(newExpr);
+         Node script = new Node(Token.SCRIPT, exprStatement, 0, 0);
+         assertFalse("new String() alone should not have side effects",
+             NodeUtil.mayHaveSideEffects(script));
+     }
+
+     // var x = new String()  --  also not a side effect.
+     public void testNewInVarDeclarationMayNotHaveSideEffects() {
+         Node newExpr = new Node(Token.NEW,
+             Node.newString(Token.NAME, "String", 0, 0), 0, 0);
+         Node varName = Node.newString(Token.NAME, "x", 0, 0);
+         // VAR node: first child is the NAME, second is the initialiser.
+         Node varDecl = new Node(Token.VAR, varName, newExpr, 0, 0);
+         Node script = new Node(Token.SCRIPT, varDecl, 0, 0);
+         assertFalse("var x = new String() should not have side effects",
+             NodeUtil.mayHaveSideEffects(script));
+     }
+
+     // NEW with a literal argument should still be local.
+     public void testNewWithStringLiteralArg() {
+         Node constructor = Node.newString(Token.NAME, "String", 0, 0);
+         Node arg = Node.newString(Token.STRING, "hello", 0, 0);
+         Node newExpr = new Node(Token.NEW, constructor, arg, 0, 0);
+         assertTrue("new String('hello') should be local",
+             NodeUtil.evaluatesToLocalValue(newExpr, Predicates.<Node>alwaysFalse()));
+     }
+
+     // Regression control: immutable values are correctly identified.
+     public void testImmutableValuesAreLocal() {
+         assertTrue(NodeUtil.evaluatesToLocalValue(
+             Node.newString(Token.STRING, "immutable", 0, 0),
+             Predicates.<Node>alwaysFalse()));
+         assertTrue(NodeUtil.evaluatesToLocalValue(
+             Node.newNumber(42.0, 0, 0),
+             Predicates.<Node>alwaysFalse()));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 8
+ - com.google.javascript.jscomp.NodeUtilTest::testNestedNewEvaluatesToLocalValue
+ - com.google.javascript.jscomp.NodeUtilTest::testNewWithLocalVarArg
+ - com.google.javascript.jscomp.NodeUtilTest::testNewWithMultipleArgs
+Failing generated tests: com.google.javascript.jscomp.NodeUtilTest::testNestedNewEvaluatesToLocalValue, com.google.javascript.jscomp.NodeUtilTest::testNewInVarDeclarationMayNotHaveSideEffects, com.google.javascript.jscomp.NodeUtilTest::testNewMayNotHaveSideEffects, com.google.javascript.jscomp.NodeUtilTest::testNewStringEvaluatesToLocalValue, com.google.javascript.jscomp.NodeUtilTest::testNewStringWithLocalsPredicate, com.google.javascript.jscomp.NodeUtilTest::testNewWithLocalVarArg, com.google.javascript.jscomp.NodeUtilTest::testNewWithMultipleArgs, com.google.javascript.jscomp.NodeUtilTest::testNewWithStringLiteralArg

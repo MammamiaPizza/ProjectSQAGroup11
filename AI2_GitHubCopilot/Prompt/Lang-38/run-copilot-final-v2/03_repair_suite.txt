@@ -1,0 +1,199 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 38  Version: Lang-38b
+JUnit: junit-4.7.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-538
+Trigger failures:
+- org.apache.commons.lang3.time.FastDateFormatTest::testLang538
+ --> junit.framework.ComparisonFailure: dateTime expected:<2009-10-16T[16]:42:16.000Z> but was:<2009-10-16T[08]:42:16.000Z>
+Modified: org.apache.commons.lang3.time.FastDateFormat
+
+Available API/signatures:
+[org.apache.commons.lang3.time.FastDateFormat | java]
+package org.apache.commons.lang3.time;
+public class FastDateFormat extends Format {
+public static final int FULL = DateFormat.FULL;
+public static final int LONG = DateFormat.LONG;
+public static final int MEDIUM = DateFormat.MEDIUM;
+public static final int SHORT = DateFormat.SHORT;
+private static String cDefaultPattern; // lazily initialised by getInstance()
+private static final Map<FastDateFormat, FastDateFormat> cInstanceCache = new HashMap<FastDateFormat, FastDateFormat>(7);
+private static final Map<Object, FastDateFormat> cDateInstanceCache = new HashMap<Object, FastDateFormat>(7);
+private static final Map<Object, FastDateFormat> cTimeInstanceCache = new HashMap<Object, FastDateFormat>(7);
+private static final Map<Object, FastDateFormat> cDateTimeInstanceCache = new HashMap<Object, FastDateFormat>(7);
+private static final Map<Object, String> cTimeZoneDisplayCache = new HashMap<Object, String>(7);
+public static FastDateFormat getInstance() {
+public static FastDateFormat getInstance(String pattern) {
+public static FastDateFormat getInstance(String pattern, TimeZone timeZone) {
+public static FastDateFormat getInstance(String pattern, Locale locale) {
+public static synchronized FastDateFormat getInstance(String pattern, TimeZone timeZone, Locale locale) {
+public static FastDateFormat getDateInstance(int style) {
+public static FastDateFormat getDateInstance(int style, Locale locale) {
+public static FastDateFormat getDateInstance(int style, TimeZone timeZone) {
+public static synchronized FastDateFormat getDateInstance(int style, TimeZone timeZone, Locale locale) {
+public static FastDateFo
+...[truncated deterministically]...
+le {
+private static class TwoDigitYearField implements NumberRule {
+static final TwoDigitYearField INSTANCE = new TwoDigitYearField();
+private static class TwoDigitMonthField implements NumberRule {
+static final TwoDigitMonthField INSTANCE = new TwoDigitMonthField();
+private static class TwelveHourField implements NumberRule {
+public void appendTo(StringBuffer buffer, int value) {
+private static class TwentyFourHourField implements NumberRule {
+private static class TimeZoneNameRule implements Rule {
+private static class TimeZoneNumberRule implements Rule {
+static final TimeZoneNumberRule INSTANCE_COLON = new TimeZoneNumberRule(true);
+static final TimeZoneNumberRule INSTANCE_NO_COLON = new TimeZoneNumberRule(false);
+private static class TimeZoneDisplayKey {
+private static class Pair {
+public Pair(Object obj1, Object obj2) {
+
+Generated JUnit Test:
+package org.apache.commons.lang3.time;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Test;
+
+public class FastDateFormatTest {
+
+ private static Calendar calendarIn(TimeZone timeZone, int year, int month, int day,
+         int hour, int minute, int second) {
+     Calendar calendar = new GregorianCalendar(timeZone);
+     calendar.set(year, month, day, hour, minute, second);
+     calendar.set(Calendar.MILLISECOND, 0);
+     return calendar;
+ }
+
+ @Test
+ public void testFormatCalendarUsesCalendarTimezoneInsteadOfForcedUtc() {
+     Calendar calendar = calendarIn(TimeZone.getTimeZone("UTC"), 2009, Calendar.OCTOBER,
+             16, 16, 42, 16);
+     calendar.set(Calendar.MILLISECOND, 500);
+
+     String pattern = "yyyy-MM-dd HH:mm:ss.SSS";
+     FastDateFormat format = FastDateFormat.getInstance(pattern,
+             TimeZone.getTimeZone("America/New_York"), Locale.US);
+
+     SimpleDateFormat oracle = new SimpleDateFormat(pattern, Locale.US);
+     oracle.setTimeZone(calendar.getTimeZone());
+
+     assertEquals(oracle.format(calendar.getTime()), format.format(calendar));
+ }
+
+ @Test
+ public void testFormatCalendarUsesCalendarTimezoneChicago() {
+     Calendar calendar = calendarIn(TimeZone.getTimeZone("UTC"), 2009, Calendar.NOVEMBER,
+             15, 9, 0, 0);
+
+     String pattern = "yyyy-MM-dd HH:mm:ss";
+     FastDateFormat format = FastDateFormat.getInstance(pattern,
+             TimeZone.getTimeZone("America/Chicago"), Locale.US);
+
+     SimpleDateFormat oracle = new SimpleDateFormat(pattern, Locale.US);
+     oracle.setTimeZone(calendar.getTimeZone());
+
+     assertEquals(oracle.format(calendar.getTime()), format.format(calendar));
+ }
+
+ @Test
+ public void testFormatCalendarUsesCalendarTimezoneIndiaHalfHour() {
+     Calendar calendar = calendarIn(TimeZone.getTimeZone("UTC"), 2009, Calendar.OCTOBER,
+             16, 16, 42, 16);
+
+     String pattern = "yyyy-MM-dd HH:mm:ss";
+     FastDateFormat format = FastDateFormat.getInstance(pattern,
+             TimeZone.getTimeZone("Asia/Kolkata"), Locale.US);
+
+     SimpleDateFormat oracle = new SimpleDateFormat(pattern, Locale.US);
+     oracle.setTimeZone(calendar.getTimeZone());
+
+     assertEquals(oracle.format(calendar.getTime()), format.format(calendar));
+ }
+
+ @Test
+ public void testFormatCalendarUsesCalendarTimezoneDuringDst() {
+     Calendar calendar = calendarIn(TimeZone.getTimeZone("America/New_York"), 2009,
+             Calendar.JULY, 10, 16, 42, 16);
+
+     String pattern = "yyyy-MM-dd HH:mm:ss";
+     FastDateFormat format = FastDateFormat.getInstance(pattern,
+             TimeZone.getTimeZone("UTC"), Locale.US);
+
+     SimpleDateFormat oracle = new SimpleDateFormat(pattern, Locale.US);
+     oracle.setTimeZone(calendar.getTimeZone());
+
+     assertEquals(oracle.format(calendar.getTime()), format.format(calendar));
+ }
+
+ @Test
+ public void testFormatCalendarWithoutExplicitTimezoneUsesCalendarTimezone() {
+     Calendar calendar = calendarIn(TimeZone.getTimeZone("Asia/Kolkata"), 2009,
+             Calendar.OCTOBER, 16, 16, 42, 16);
+
+     String pattern = "yyyy-MM-dd HH:mm:ss";
+     FastDateFormat format = FastDateFormat.getInstance(pattern, Locale.US);
+
+     SimpleDateFormat oracle = new SimpleDateFormat(pattern, Locale.US);
+     oracle.setTimeZone(calendar.getTimeZone());
+
+     assertEquals(oracle.format(calendar.getTime()), format.format(calendar));
+ }
+
+ @Test
+ public void testFormatCalendarSameInstantDifferentTimeZonesProduceDifferentStrings() {
+     Calendar utc = calendarIn(TimeZone.getTimeZone("UTC"), 2009, Calendar.OCTOBER, 16,
+             16, 42, 16);
+
+     Calendar newYork = new GregorianCalendar(TimeZone.getTimeZone("America/New_York"));
+     newYork.setTimeInMillis(utc.getTimeInMillis());
+
+     FastDateFormat format = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss", Locale.US);
+
+     assertFalse(format.format(utc).equals(format.format(newYork)));
+ }
+
+ @Test
+ public void testFormatLongUsesInstanceTimezone() {
+     Calendar utc = calendarIn(TimeZone.getTimeZone("UTC"), 2009, Calendar.OCTOBER, 16,
+             16, 42, 16);
+     long millis = utc.getTimeInMillis();
+
+     String pattern = "yyyy-MM-dd HH:mm:ss";
+     FastDateFormat format = FastDateFormat.getInstance(pattern,
+             TimeZone.getTimeZone("America/New_York"), Locale.US);
+
+     SimpleDateFormat oracle = new SimpleDateFormat(pattern, Locale.US);
+     oracle.setTimeZone(TimeZone.getTimeZone("America/New_York"));
+
+     assertEquals(oracle.format(new Date(millis)), format.format(millis));
+ }
+
+ @Test(expected = NullPointerException.class)
+ public void testFormatNullCalendarThrowsNullPointerException() {
+     FastDateFormat format = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss",
+             TimeZone.getTimeZone("UTC"), Locale.US);
+     format.format((Calendar) null);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneChicago
+ - org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneInsteadOfForcedUtc
+ - org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneDuringDst
+Failing generated tests: org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneChicago, org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneDuringDst, org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneIndiaHalfHour, org.apache.commons.lang3.time.FastDateFormatTest::testFormatCalendarUsesCalendarTimezoneInsteadOfForcedUtc

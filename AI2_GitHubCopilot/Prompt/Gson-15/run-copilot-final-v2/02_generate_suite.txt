@@ -1,0 +1,430 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Gson  Bug: 15  Version: Gson-15b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.google.gson.stream.JsonWriter
+Modified: com.google.gson.stream.JsonWriter
+Triggers: com.google.gson.stream.JsonWriterTest::testNonFiniteDoublesWhenLenient
+
+Bug/specification summary:
+Bug report: 1090
+Trigger failures:
+- com.google.gson.stream.JsonWriterTest::testNonFiniteDoublesWhenLenient
+ --> java.lang.IllegalArgumentException: Numeric values must be finite, but was NaN
+Modified: com.google.gson.stream.JsonWriter
+
+Prompt-01 test plan:
+TARGETS: JsonWriter.value(double) and value(Number) lenient/non-lenient paths.
+ORACLES: No IllegalArgumentException when lenient=true for NaN/±Infinity; throw when false.
+CASES: Normal doubles (0.0, ±1.0), Double.MIN/MAX, NaN, +Inf, −Inf with lenient true/false.
+CASES: Write non-finite values at root, after name, inside array/object; verify writer state valid.
+RISKS: Exact JSON text output for non-finite values is unspecified; only no-exception is known.
+ORACLES: Based on bug report and testNonFiniteDoublesWhenLenient intent.
+RISKS: Value may be output as string literal "NaN"/"Infinity"/"-Infinity" – format risk.
+CASES: Mixed sequences: finite, non-finite, then finite again with and without lenient toggle.
+RISKS: Flush/close after non-finite write may expose hidden state; ensure no NPE.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.gson.stream.JsonWriter (java) =====
+/* API SIGNATURES */
+package com.google.gson.stream;
+public class JsonWriter implements Closeable, Flushable {
+public JsonWriter(Writer out) {
+public final void setIndent(String indent) {
+public final void setLenient(boolean lenient) {
+public boolean isLenient() {
+public final void setHtmlSafe(boolean htmlSafe) {
+public final boolean isHtmlSafe() {
+public final void setSerializeNulls(boolean serializeNulls) {
+public final boolean getSerializeNulls() {
+public JsonWriter beginArray() throws IOException {
+public JsonWriter endArray() throws IOException {
+public JsonWriter beginObject() throws IOException {
+public JsonWriter endObject() throws IOException {
+private JsonWriter open(int empty, String openBracket) throws IOException {
+private JsonWriter close(int empty, int nonempty, String closeBracket)
+private void push(int newTop) {
+private int peek() {
+private void replaceTop(int topOfStack) {
+public JsonWriter name(String name) throws IOException {
+private void writeDeferredName() throws IOException {
+public JsonWriter value(String value) throws IOException {
+public JsonWriter jsonValue(String value) throws IOException {
+public JsonWriter nullValue() throws IOException {
+public JsonWriter value(boolean value) throws IOException {
+public JsonWriter value(Boolean value) throws IOException {
+public JsonWriter value(double value) throws IOException {
+public JsonWriter value(long value) throws IOException {
+public JsonWriter value(Number value) throws IOException {
+public void flush() throws IOException {
+public void close() throws IOException {
+private void string(String value) throws IOException {
+private void newline() throws IOException {
+private void beforeName() throws IOException {
+@SuppressWarnings("fallthrough")
+private void beforeValue() throws IOException {
+
+/* HEADER */
+package com.google.gson.stream;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.io.Writer;
+import static com.google.gson.stream.JsonScope.DANGLING_NAME;
+import static com.google.gson.stream.JsonScope.EMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.EMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.EMPTY_OBJECT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.NONEMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_OBJECT;
+
+/* METHOD JsonWriter */
+public JsonWriter(Writer out) {
+ if (out == null) {
+ throw new NullPointerException("out == null");
+ }
+ this.out = out;
+ }
+
+/* METHOD value */
+public JsonWriter value(Number value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+
+ writeDeferredName();
+ String string = value.toString();
+ if (!lenient
+ && (string.equals("-Infinity") || string.equals("Infinity") || string.equals("NaN"))) {
+ throw new IllegalArgumentException("Numeric values must be finite, but was " + value);
+ }
+ beforeValue();
+ out.append(string);
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(double value) throws IOException {
+ writeDeferredName();
+ if (Double.isNaN(value) || Double.isInfinite(value)) {
+ throw new IllegalArgumentException("Numeric values must be finite, but was " + value);
+ }
+ beforeValue();
+ out.append(Double.toString(value));
+ return this;
+ }
+
+/* METHOD beginArray */
+public JsonWriter beginArray() throws IOException {
+ writeDeferredName();
+ return open(EMPTY_ARRAY, "[");
+ }
+
+/* METHOD endArray */
+public JsonWriter endArray() throws IOException {
+ return close(EMPTY_ARRAY, NONEMPTY_ARRAY, "]");
+ }
+
+/* METHOD beginObject */
+public JsonWriter beginObject() throws IOException {
+ writeDeferredName();
+ return open(EMPTY_OBJECT, "{");
+ }
+
+/* METHOD endObject */
+public JsonWriter endObject() throws IOException {
+ return close(EMPTY_OBJECT, NONEMPTY_OBJECT, "}");
+ }
+
+/* METHOD name */
+public JsonWriter name(String name) throws IOException {
+ if (name == null) {
+ throw new NullPointerException("name == null");
+ }
+ if (deferredName != null) {
+ throw new IllegalStateException();
+ }
+ if (stackSize == 0) {
+ throw new IllegalStateException("JsonWriter is closed.");
+ }
+ deferredName = name;
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(String value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+ writeDeferredName();
+ beforeValue();
+ string(value);
+ return this;
+ }
+
+/* METHOD jsonValue */
+public JsonWriter jsonValue(String value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+ writeDeferredName();
+ beforeValue();
+ out.append(value);
+ return this;
+ }
+
+/* METHOD nullValue */
+public JsonWriter nullValue() throws IOException {
+ if (deferredName != null) {
+ if (serializeNulls) {
+ writeDeferredName();
+ } else {
+ deferredName = null;
+ return this; // skip the name and the value
+ }
+ }
+ beforeValue();
+ out.write("null");
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(boolean value) throws IOException {
+ writeDeferredName();
+ beforeValue();
+ out.write(value ? "true" : "false");
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(Boolean value) throws IOException {
+ if (value == null) {
+ return nullValue();
+ }
+ writeDeferredName();
+ beforeValue();
+ out.write(value ? "true" : "false");
+ return this;
+ }
+
+/* METHOD value */
+public JsonWriter value(long value) throws IOException {
+ writeDeferredName();
+ beforeValue();
+ out.write(Long.toString(value));
+ return this;
+ }
+
+/* METHOD flush */
+public void flush() throws IOException {
+ if (stackSize == 0) {
+ throw new IllegalStateException("JsonWriter is closed.");
+ }
+ out.flush();
+ }
+
+/* METHOD close */
+public void close() throws IOException {
+ out.close();
+
+ int size = stackSize;
+ if (size > 1 || size == 1 && stack[size - 1] != NONEMPTY_DOCUMENT) {
+ throw new IOException("Incomplete document");
+ }
+ stackSize = 0;
+ }
+
+/* METHOD setIndent */
+public final void setIndent(String indent) {
+ if (indent.length() == 0) {
+ this.indent = null;
+ this.separator = ":";
+ } else {
+ this.indent = indent;
+ this.separator = ": ";
+ }
+ }
+
+/* METHOD setLenient */
+public final void setLenient(boolean lenient) {
+ this.lenient = lenient;
+ }
+
+/* METHOD isLenient */
+public boolean isLenient() {
+ return lenient;
+ }
+
+/* METHOD setHtmlSafe */
+public final void setHtmlSafe(boolean htmlSafe) {
+ this.htmlSafe = htmlSafe;
+ }
+
+/* METHOD isHtmlSafe */
+public final boolean isHtmlSafe() {
+ return htmlSafe;
+ }
+
+/* METHOD setSerializeNulls */
+public final void setSerializeNulls(boolean serializeNulls) {
+ this.serializeNulls = serializeNulls;
+ }
+
+/* METHOD getSerializeNulls */
+public final boolean getSerializeNulls() {
+ return serializeNulls;
+ }
+
+/* METHOD open */
+private JsonWriter open(int empty, String openBracket) throws IOException {
+ beforeValue();
+ push(empty);
+ out.write(openBracket);
+ return this;
+ }
+
+/* METHOD close */
+private JsonWriter close(int empty, int nonempty, String closeBracket)
+ throws IOException {
+ int context = peek();
+ if (context != nonempty && context != empty) {
+ throw new IllegalStateException("Nesting problem.");
+ }
+ if (deferredName != null) {
+ throw new IllegalStateException("Dangling name: " + deferredName);
+ }
+
+ stackSize--;
+ if (context == nonempty) {
+ newline();
+ }
+ out.write(closeBracket);
+ return this;
+ }
+
+/* METHOD peek */
+private int peek() {
+ if (stackSize == 0) {
+ throw new IllegalStateException("JsonWriter is closed.");
+ }
+ return stack[stackSize - 1];
+ }
+
+/* METHOD beforeValue */
+@SuppressWarnings("fallthrough")
+ private void beforeValue() throws IOException {
+ switch (peek()) {
+ case NONEMPTY_DOCUMENT:
+ if (!lenient) {
+ throw new IllegalStateException(
+ "JSON must have only one top-level value.");
+ }
+ // fall-through
+ case EMPTY_DOCUMENT: // first in document
+ replaceTop(NONEMPTY_DOCUMENT);
+ break;
+
+ case EMPTY_ARRAY: // first in array
+ replaceTop(NONEMPTY_ARRAY);
+ newline();
+ break;
+
+ case NONEMPTY_ARRAY: // another in array
+ out.append(',');
+ newline();
+ break;
+
+ case DANGLING_NAME: // value for name
+ out.append(separator);
+ replaceTop(NONEMPTY_OBJECT);
+ break;
+
+ default:
+ throw new IllegalStateException("Nesting problem.");
+ }
+ }
+
+/* METHOD push */
+private void push(int newTop) {
+ if (stackSize == stack.length) {
+ int[] newStack = new int[stackSize * 2];
+ System.arraycopy(stack, 0, newStack, 0, stackSize);
+ stack = newStack;
+ }
+ stack[stackSize++] = newTop;
+ }
+
+/* METHOD replaceTop */
+private void replaceTop(int topOfStack) {
+ stack[stackSize - 1] = topOfStack;
+ }
+
+/* METHOD writeDeferredName */
+private void writeDeferredName() throws IOException {
+ if (deferredName != null) {
+ beforeName();
+ string(deferredName);
+ deferredName = null;
+ }
+ }
+
+/* METHOD string */
+private void string(String value) throws IOException {
+ String[] replacements = htmlSafe ? HTML_SAFE_REPLACEMENT_CHARS : REPLACEMENT_CHARS;
+ out.write("\"");
+ int last = 0;
+ int length = value.length();
+ for (int i = 0; i < length; i++) {
+ char c = value.charAt(i);
+ String replacement;
+ if (c < 128) {
+ replacement = replacements[c];
+ if (replacement == null) {
+ continue;
+ }
+ } else if (c == '\u2028') {
+ replacement = "\\u2028";
+ } else if (c == '\u2029') {
+ replacement = "\\u2029";
+ } else {
+ continue;
+ }
+ if (last < i) {
+ out.write(value, last, i - last);
+ }
+ out.write(replacement);
+ last = i + 1;
+ }
+ if (last < length) {
+ out.write(value, last, length - last);
+ }
+ out.write("\"");
+ }
+
+/* METHOD newline */
+private void newline() throws IOException {
+ if (indent == null) {
+ return;
+ }
+
+ out.write("\n");
+ for (int i = 1, size = stackSize; i < size; i++) {
+ out.write(indent);
+ }
+ }
+
+/* METHOD beforeName */
+private void beforeName() throws IOException {
+ int context = peek();
+ if (context == NONEMPTY_OBJECT) { // first in object
+ out.write(',');
+ } else if (context != EMPTY_OBJECT) { // not in an object!
+ throw new IllegalStateException("Nesting problem.");
+ }
+ newline();
+ replaceTop(DANGLING_NAME);
+ }

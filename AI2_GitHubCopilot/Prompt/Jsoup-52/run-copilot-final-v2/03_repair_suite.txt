@@ -1,0 +1,241 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 52  Version: Jsoup-52b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 701
+Trigger failures:
+- org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlNoCharset
+ --> junit.framework.AssertionFailedError: expected:<....0" encoding="UTF-8"[?]>
+ - org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlIso8859
+ --> junit.framework.AssertionFailedError: expected:<...ncoding="ISO-8859-1"[?]>
+ - org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlUtf8
+ --> junit.framework.AssertionFailedError: expected:<....0" encoding="UTF-8"[?]>
+ - org.jsoup.nodes.DocumentTest::testMetaCharsetUpdateXmlDisabledNoChanges
+ --> junit.framework.AssertionFailedError: expected:<...encoding="dontTouch"[?]>
+ - org.jsoup.parser.XmlTreeBuilderTest::handlesXmlDeclarationAsDeclaration
+ --> junit.framework.AssertionFailedError: expected:<<?xml encoding=["UTF-8"]?> <body> One </body...> but was:<<?xml encoding=['UTF-8' ]?> <body> One </body...>
+ - org.jsoup.parser.XmlTreeBuilderTest::testDetectCharsetEncodingDeclaration
+ --> junit.framework.AssertionFailedError: expected:<[ISO-8859-1]> but was:<[UTF-8]>
+ - org.jsoup.parser.XmlTreeBuilderTest::testParseDeclarationAttributes
+ --> junit.framework.AssertionFailedError: expected:<[1]> but was:<[]>
+Modified: org.jsoup.helper.DataUtil, org.jsoup.nodes.XmlDeclaration, org.jsoup.parser.XmlTreeBuilder
+
+Available API/signatures:
+[org.jsoup.helper.DataUtil | java]
+package org.jsoup.helper;
+public final class DataUtil {
+private static final Pattern charsetPattern = Pattern.compile("(?i)\\bcharset=\\s*(?:\"|')?([^\\s,;\"']*)");
+private DataUtil() {}
+public static Document load(File in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+static void crossStreams(final InputStream in, final OutputStream out) throws IOException {
+static Document parseByteData(ByteBuffer byteData, String charsetName, String baseUri, Parser parser) {
+static ByteBuffer readToByteBuffer(InputStream inStream, int maxSize) throws IOException {
+static ByteBuff
+...[truncated deterministically]...
+ffer(File file) throws IOException {
+static ByteBuffer emptyByteBuffer() {
+static String getCharsetFromContentType(String contentType) {
+private static String validateCharset(String cs) {
+static String mimeBoundary() {
+final StringBuilder mime = new StringBuilder(boundaryLength);
+final Random rand = new Random();
+private static String detectCharsetFromBom(ByteBuffer byteData, String charsetName) {
+
+[org.jsoup.nodes.XmlDeclaration | java]
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class XmlDeclaration extends Node {
+private final boolean isProcessingInstruction; // <! if true, <? if false, declaration (and last data char should be ?)
+@param name of declaration
+@param baseUri base uri
+@param isProcessingInstruction is processing instruction
+public XmlDeclaration(String name, String baseUri, boolean isProcessingInstruction) {
+public String nodeName() {
+public String name() {
+@return XML declaration
+public String getWholeDeclaration() {
+final String version = attributes.get("version");
+final String encoding = attributes.get("encoding");
+@Override
+public String toString() {
+
+[org.jsoup.parser.XmlTreeBuilder | java]
+package org.jsoup.parser;
+public class XmlTreeBuilder extends TreeBuilder {
+@Override
+protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private void popStackToClose(Token.EndTag endTag) {
+
+Generated JUnit Test:
+package org.jsoup.helper;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.XmlDeclaration;
+ import org.jsoup.parser.Parser;
+ import org.junit.Test;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.nio.charset.StandardCharsets;
+
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for Defects4J Jsoup bug 52b: XML declaration handling
+  * - missing "?>" in serialized declaration
+  * - attribute quoting normalization
+  * - charset detection from XML declaration
+  * - attribute parsing from bogus comments
+  */
+ public class Bug52Test {
+
+     // ---- XmlDeclaration serialization ----
+
+     @Test
+     public void testXmlDeclarationToStringEndsWithQuestionMark() {
+         // constructing a minimal xml declaration with attributes
+         XmlDeclaration decl = new XmlDeclaration("xml", "", false);
+         decl.attr("version", "1.0");
+         decl.attr("encoding", "UTF-8");
+
+         String outer = decl.toString();
+         // must end with "?>"
+         assertTrue("Serialized declaration must end with '?>'",
+                 outer.endsWith("?>"));
+     }
+
+     @Test
+     public void testXmlDeclarationGetWholeDeclarationEndsWithQuestion() {
+         XmlDeclaration decl = new XmlDeclaration("xml", "", false);
+         decl.attr("version", "1.0");
+         decl.attr("encoding", "UTF-8");
+
+         String whole = decl.getWholeDeclaration();
+         assertTrue("getWholeDeclaration() must end with '\"?'",
+                 whole.endsWith("\"?"));
+     }
+
+     @Test
+     public void testXmlDeclarationOutputUsesDoubleQuotes() throws IOException {
+         // parse xml with single-quoted attributes and check serialized uses double quotes
+         String xml = "<?xml version='1.0' encoding='UTF-8'?><root />";
+         Document doc = Jsoup.parse(xml, "", Parser.xmlParser());
+         String outer = doc.outerHtml();
+         assertTrue("Serialized declaration must use double quotes",
+                 outer.contains("version=\"1.0\"") && outer.contains("encoding=\"UTF-8\""));
+     }
+
+     // ---- Attribute parsing from token ----
+
+     @Test
+     public void testXmlDeclarationAttributesParsed() throws IOException {
+         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><root />";
+         Document doc = Jsoup.parse(xml, "", Parser.xmlParser());
+         XmlDeclaration decl = findXmlDeclaration(doc);
+         assertNotNull("Document must contain an XmlDeclaration", decl);
+         assertTrue("XmlDeclaration must have attributes parsed",
+                 decl.attributes().size() > 0);
+     }
+
+     @Test
+     public void testXmlDeclarationAttributeValues() throws IOException {
+         String xml = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\"?><root />";
+         Document doc = Jsoup.parse(xml, "", Parser.xmlParser());
+         XmlDeclaration decl = findXmlDeclaration(doc);
+         assertNotNull(decl);
+         assertEquals("version", "1.0", decl.attr("version"));
+         assertEquals("encoding", "ISO-8859-1", decl.attr("encoding"));
+         assertEquals("standalone", "yes", decl.attr("standalone"));
+     }
+
+     @Test
+     public void testXmlDeclarationEmptyAttributes() throws IOException {
+         // minimal declaration without any attributes
+         String xml = "<?xml?><root />";
+         Document doc = Jsoup.parse(xml, "", Parser.xmlParser());
+         XmlDeclaration decl = findXmlDeclaration(doc);
+         assertNotNull(decl);
+         // even empty declaration should have attributes size 0 (not fail)
+         assertEquals("Attributes should be empty", 0, decl.attributes().size());
+     }
+
+     // ---- Charset detection ----
+
+     @Test
+     public void testCharsetDetectionFromXmlDeclarationIso8859() throws IOException {
+         String xml = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><root />";
+         Document doc = parseWithDataUtil(xml);
+         assertEquals("charset must be detected from xml encoding",
+                 "ISO-8859-1", doc.outputSettings().charset().name());
+     }
+
+     @Test
+     public void testCharsetDetectionFromXmlDeclarationUtf8() throws IOException {
+         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><root />";
+         Document doc = parseWithDataUtil(xml);
+         assertEquals("charset must be detected as UTF-8",
+                 "UTF-8", doc.outputSettings().charset().name());
+     }
+
+     @Test
+     public void testCharsetDetectionFallbackWithoutDeclaration() throws IOException {
+         // no xml declaration – should default to UTF-8
+         String xml = "<root />";
+         Document doc = parseWithDataUtil(xml);
+         assertEquals("Fallback charset should be UTF-8",
+                 "UTF-8", doc.outputSettings().charset().name());
+     }
+
+     @Test
+     public void testCharsetDetectionWithBomAndXmlDeclaration() throws IOException {
+         // UTF-16BE BOM + XML encoding ISO-8859-1 → BOM wins, charset should be UTF-16BE
+         String xml = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><root />";
+         byte[] xmlBytes = xml.getBytes("UTF-16BE");
+         byte[] bom = new byte[] { (byte) 0xFE, (byte) 0xFF };
+         byte[] data = new byte[bom.length + xmlBytes.length];
+         System.arraycopy(bom, 0, data, 0, bom.length);
+         System.arraycopy(xmlBytes, 0, data, bom.length, xmlBytes.length);
+
+         InputStream in = new ByteArrayInputStream(data);
+         Document doc = DataUtil.load(in, null, "", Parser.xmlParser());
+         in.close();
+         assertEquals("BOM charset must override xml encoding",
+                 "UTF-16BE", doc.outputSettings().charset().name());
+     }
+
+     // ---- Helper methods ----
+
+     private XmlDeclaration findXmlDeclaration(Document doc) {
+         for (org.jsoup.nodes.Node node : doc.childNodes()) {
+             if (node instanceof XmlDeclaration) {
+                 return (XmlDeclaration) node;
+             }
+         }
+         return null;
+     }
+
+     private Document parseWithDataUtil(String xml) throws IOException {
+         byte[] bytes = xml.getBytes(StandardCharsets.UTF_8);
+         InputStream in = new ByteArrayInputStream(bytes);
+         Document doc = DataUtil.load(in, null, "", Parser.xmlParser());
+         in.close();
+         return doc;
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.helper.Bug52Test::testXmlDeclarationGetWholeDeclarationEndsWithQuestion
+ - org.jsoup.helper.Bug52Test::testCharsetDetectionWithBomAndXmlDeclaration
+
+Failing generated tests: org.jsoup.helper.Bug52Test::testCharsetDetectionWithBomAndXmlDeclaration, org.jsoup.helper.Bug52Test::testXmlDeclarationGetWholeDeclarationEndsWithQuestion

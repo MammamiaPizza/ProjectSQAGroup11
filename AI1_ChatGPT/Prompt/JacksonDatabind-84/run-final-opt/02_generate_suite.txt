@@ -1,0 +1,144 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 84  Version: JacksonDatabind-84b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.type.ResolvedRecursiveType
+Modified: com.fasterxml.jackson.databind.type.ResolvedRecursiveType
+Triggers: com.fasterxml.jackson.databind.type.TestTypeFactoryWithRecursiveTypes::testBasePropertiesIncludedWhenSerializingSubWhenSubTypeLoadedAfterBaseType
+
+Bug/specification summary:
+Bug report: 1647
+Trigger failures:
+- com.fasterxml.jackson.databind.type.TestTypeFactoryWithRecursiveTypes::testBasePropertiesIncludedWhenSerializingSubWhenSubTypeLoadedAfterBaseType
+ --> junit.framework.ComparisonFailure: expected:<{"[base":1,"]sub":2}> but was:<{"[]sub":2}>
+Modified: com.fasterxml.jackson.databind.type.ResolvedRecursiveType
+
+Prompt-01 test plan:
+TARGETS: ResolvedRecursiveType.setReference and getSelfReferencedType recursive-type linkage 
+TARGETS: Type transformation methods: withContentType/handlers/value handler/static typing 
+ORACLES: Trigger assertion: base-first, subtype-later serialization yields {"base":1,"sub":2} 
+CASES: Resolve base type before subtype, then serialize subtype with inherited base and subtype properties 
+CASES: Verify referenced JavaType remains available after applicable type transformation 
+RISKS: Missing recursive reference propagation can drop inherited properties during serializer construction 
+RISKS: Context lacks the patch/diff and full fixture type definitions; derive expectations only from trigger/report
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.type.ResolvedRecursiveType (java) =====
+package com.fasterxml.jackson.databind.type;
+
+import com.fasterxml.jackson.databind.JavaType;
+
+/**
+ * Internal placeholder type used for self-references.
+ *
+ * @since 2.7
+ */
+public class ResolvedRecursiveType extends TypeBase
+{
+ private static final long serialVersionUID = 1L;
+
+ protected JavaType _referencedType;
+
+ public ResolvedRecursiveType(Class<?> erasedType, TypeBindings bindings) {
+ super(erasedType, bindings, null, null, 0, null, null, false);
+ }
+
+ public void setReference(JavaType ref)
+ {
+ // sanity check; should not be called multiple times
+ if (_referencedType != null) {
+ throw new IllegalStateException("Trying to re-set self reference; old value = "+_referencedType+", new = "+ref);
+ }
+ _referencedType = ref;
+ }
+ 
+
+ public JavaType getSelfReferencedType() { return _referencedType; }
+
+ @Override
+ public StringBuilder getGenericSignature(StringBuilder sb) {
+ return _referencedType.getGenericSignature(sb);
+ }
+
+ @Override
+ public StringBuilder getErasedSignature(StringBuilder sb) {
+ return _referencedType.getErasedSignature(sb);
+ }
+
+ @Override
+ public JavaType withContentType(JavaType contentType) {
+ return this;
+ }
+ 
+ @Override
+ public JavaType withTypeHandler(Object h) {
+ return this;
+ }
+
+ @Override
+ public JavaType withContentTypeHandler(Object h) {
+ return this;
+ }
+
+ @Override
+ public JavaType withValueHandler(Object h) {
+ return this;
+ }
+
+ @Override
+ public JavaType withContentValueHandler(Object h) {
+ return this;
+ }
+
+ @Override
+ public JavaType withStaticTyping() {
+ return this;
+ }
+
+ @Deprecated // since 2.7
+ @Override
+ protected JavaType _narrow(Class<?> subclass) {
+ return this;
+ }
+
+ @Override
+ public JavaType refine(Class<?> rawType, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInterfaces) {
+ return null;
+ }
+
+ @Override
+ public boolean isContainerType() {
+ return false;
+ }
+
+ @Override
+ public String toString() {
+ StringBuilder sb = new StringBuilder(40)
+ .append("[recursive type; ");
+ if (_referencedType == null) {
+ sb.append("UNRESOLVED");
+ } else {
+ // [databind#1301]: Typically resolves to a loop so short-cut
+ // and only include type-erased class
+ sb.append(_referencedType.getRawClass().getName());
+ }
+ return sb.toString();
+ }
+
+ @Override
+ public boolean equals(Object o) {
+ if (o == this) return true;
+ if (o == null) return false;
+ // Do NOT ever match unresolved references
+ if (_referencedType == null) {
+ return false;
+ }
+ return (o.getClass() == getClass()
+ && _referencedType.equals(((ResolvedRecursiveType) o).getSelfReferencedType()));
+ }
+}

@@ -1,0 +1,207 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: JacksonDatabind  Bug: 107  Version: JacksonDatabind-107b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+Bug/specification summary:
+Bug report: 2221
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.filter.ProblemHandlerUnknownTypeId2221Test::testWithDeserializationProblemHandler
+ --> com.fasterxml.jackson.databind.JsonMappingException: (was java.lang.NullPointerException) (through reference chain: com.fasterxml.jackson.databind.deser.filter.ProblemHandlerUnknownTypeId2221Test$GenericContent["innerObjects"]->java.util.ArrayList[1])
+Modified: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase | java]
+package com.fasterxml.jackson.databind.jsontype.impl;
+public abstract class TypeDeserializerBase
+protected final TypeIdResolver _idResolver;
+protected final JavaType _baseType;
+protected final BeanProperty _property;
+protected final JavaType _defaultImpl;
+protected final String _typePropertyName;
+protected final boolean _typeIdVisible;
+protected final Map<String,JsonDeserializer<Object>> _deserializers;
+protected JsonDeserializer<Object> _defaultImplDeserializer;
+protected TypeDeserializerBase(TypeDeserializerBase src, BeanProperty property)
+@Override
+public abstract TypeDeserializer forProperty(BeanProperty prop);
+public abstract JsonTypeInfo.As getTypeInclusion();
+public String baseTypeName() { return _baseType.getRawClass().getName(); }
+public final String getPropertyName() { return _typePropertyName; }
+public TypeIdResolver getTypeIdResolver() { return _idResolver; }
+public Class<?> getDefaultImpl() {
+public JavaType baseType() {
+public String toString()
+protected final JsonDeserializer<Object> _findDefaultImplDeserializer(DeserializationContext ctxt) throws IOException
+synchronized (_defaultImpl) {
+@Deprecated
+protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt) throws IOException {
+protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt, Object typeId)
+"No (native) type id found when one was expected for polymorphic type handling");
+protected JavaType _handleUnknownTypeId(DeserializationContext ctxt, String typeId)
+protected JavaType _handleMissingTypeId(DeserializationContext ctxt, String extraDesc)
+
+Existing test summary (method names/assertions only):
+Test methods: unknownTypeHandledAsVoidProducesNullCollectionElement, unknownTypeHandlerCanResolveUnknownIdToConcreteType, unhandledUnknownTypeReportsCollectionPath
+Representative assertions:
+assertEquals(Content.class, baseType.getRawClass());
+assertEquals("unknown", subTypeId);
+assertEquals(1, calls[0]);
+assertEquals(2, result.innerObjects.size());
+assertEquals(KnownContent.class, result.innerObjects.get(0).getClass());
+assertEquals("first", result.innerObjects.get(0).name);
+assertNull(result.innerObjects.get(1));
+assertEquals(1, result.innerObjects.size());
+assertEquals(KnownContent.class, result.innerObjects.get(0).getClass());
+assertEquals("resolved", result.innerObjects.get(0).name);
+fail("Expected unknown type id to fail without a problem handler");
+assertEquals(2, e.getPath().size());
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+77,47,32,13
+
+Line/branch gaps:
+Class: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+Uncovered lines: 236, 249, 253, 254, 255, 259, 260, 262, 209, 213, 214, 215, 218, 219, 220, 223, 224, 300, 283, 126, 109, 119, 112, 115, 132, 133, 134, 135, 136, 137 ... (+30 more)
+Partially covered branch lines: 207 (50% (1/2)), 208 (50% (1/2)), 150 (50% (1/2)), 160 (50% (1/2)), 179 (50% (1/2)), 180 (50% (1/2)), 190 (50% (1/2)), 282 (50% (1/2)), 287 (50% (1/2)), 150 (50% (1/2)), 160 (50% (1/2)), 179 (50% (1/2)), 180 (50% (1/2)), 190 (50% (1/2)), 207 (50% (1/2)), 208 (50% (1/2)), 282 (50% (1/2)), 287 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase]
+234: @Deprecated
+235: protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt) throws IOException {
+236: return _deserializeWithNativeTypeId(jp, ctxt, jp.getTypeId());
+237: }
+238: 
+---
+247: {
+248: JsonDeserializer<Object> deser;
+249: if (typeId == null) {
+250: /* 04-May-2014, tatu: Should error be obligatory, or should there be another method
+251: * for "try to deserialize with native tpye id"?
+---
+251: * for "try to deserialize with native tpye id"?
+252: */
+253: deser = _findDefaultImplDeserializer(ctxt);
+254: if (deser == null) {
+255: return ctxt.reportInputMismatch(baseType(),
+---
+252: */
+253: deser = _findDefaultImplDeserializer(ctxt);
+254: if (deser == null) {
+255: return ctxt.reportInputMismatch(baseType(),
+256: "No (native) type id found when one was expected for polymorphic type handling");
+---
+253: deser = _findDefaultImplDeserializer(ctxt);
+254: if (deser == null) {
+255: return ctxt.reportInputMismatch(baseType(),
+256: "No (native) type id found when one was expected for polymorphic type handling");
+257: }
+---
+257: }
+258: } else {
+259: String typeIdStr = (typeId instanceof String) ? (String) typeId : String.valueOf(typeId);
+260: deser = _findDeserializer(ctxt, typeIdStr);
+261: }
+---
+258: } else {
+259: String typeIdStr = (typeId instanceof String) ? (String) typeId : String.valueOf(typeId);
+260: deser = _findDeserializer(ctxt, typeIdStr);
+261: }
+262: return deser.deserialize(jp, ctxt);
+---
+260: deser = _findDeserializer(ctxt, typeIdStr);
+261: }
+262: return deser.deserialize(jp, ctxt);
+263: }
+264: 
+---
+207: if (_defaultImpl == null) {
+208: if (!ctxt.isEnabled(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE)) {
+209: return NullifyingDeserializer.instance;
+210: }
+211: return null;
+---
+211: return null;
+212: }
+213: Class<?> raw = _defaultImpl.getRawClass();
+214: if (ClassUtil.isBogusClass(raw)) {
+215: return NullifyingDeserializer.instance;
+---
+212: }
+213: Class<?> raw = _defaultImpl.getRawClass();
+214: if (ClassUtil.isBogusClass(raw)) {
+215: return NullifyingDeserializer.instance;
+216: }
+---
+213: Class<?> raw = _defaultImpl.getRawClass();
+214: if (ClassUtil.isBogusClass(raw)) {
+215: return NullifyingDeserializer.instance;
+216: }
+217: 
+---
+216: }
+217: 
+218: synchronized (_defaultImpl) {
+21
+...[truncated deterministically]...
+xtualValueDeserializer(
+221: _defaultImpl, _property);
+222: }
+---
+221: _defaultImpl, _property);
+222: }
+223: return _defaultImplDeserializer;
+224: }
+225: }
+---
+222: }
+223: return _defaultImplDeserializer;
+224: }
+225: }
+226: 
+---
+298: throws IOException
+299: {
+300: return ctxt.handleMissingTypeId(_baseType, _idResolver, extraDesc);
+301: }
+302: }
+---
+281: String extraDesc = _idResolver.getDescForKnownTypeIds();
+282: if (extraDesc == null) {
+283: extraDesc = "type ids are not statically known";
+284: } else {
+285: extraDesc = "known type ids = " + extraDesc;
+---
+124: */
+125: public JavaType baseType() {
+126: return _baseType;
+127: }
+128: 
+---
+107: public abstract JsonTypeInfo.As getTypeInclusion();
+108: 
+109: public String baseTypeName() { return _baseType.getRawClass().getName(); }
+110: 
+111: @Override
+---
+117: @Override 
+118: public Class<?> getDefaultImpl() {
+119: return ClassUtil.rawClass(_defaultImpl);
+120: }
+121: 
+---
+110: 
+111: @Override
+112: public final String getPropertyName() { return _typePropertyName; }
+113: 
+114: @Override 
+---
+113: 
+114: @Override 
+115: public TypeIdResolver getTypeIdResolver() { return _idResolver; }
+116: 
+117: @Override

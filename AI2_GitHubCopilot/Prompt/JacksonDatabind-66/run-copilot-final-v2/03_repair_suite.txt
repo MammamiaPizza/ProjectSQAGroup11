@@ -1,0 +1,274 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 66  Version: JacksonDatabind-66b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1441
+Trigger failures:
+- com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer::testCustomEnumKeySerializerWithPolymorphic
+ --> com.fasterxml.jackson.databind.exc.InvalidFormatException: Can not deserialize Map key of type com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer$SuperTypeEnum from String "FOO": not a valid representation: No enum constant com.fasterxml.jackson.databind.module.TestCustomEnumKeyDeserializer.SuperTypeEnum.}
+Modified: com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class StdKeyDeserializer extends KeyDeserializer
+public final static int TYPE_BOOLEAN = 1;
+public final static int TYPE_BYTE = 2;
+public final static int TYPE_SHORT = 3;
+public final static int TYPE_CHAR = 4;
+public final static int TYPE_INT = 5;
+public final static int TYPE_LONG = 6;
+public final static int TYPE_FLOAT = 7;
+public final static int TYPE_DOUBLE = 8;
+public final static int TYPE_LOCALE = 9;
+public final static int TYPE_DATE = 10;
+public final static int TYPE_CALENDAR = 11;
+public final static int TYPE_UUID = 12;
+public final static int TYPE_URI = 13;
+public final static int TYPE_URL = 14;
+public final static int TYPE_CLASS = 15;
+public final static int TYPE_CURRENCY = 16;
+final protected int _kind;
+final protected Class<?> _keyClass;
+protected final FromStringDeserializer<?> _deser;
+protected StdKeyDeserializer(int kind, Class<?> cls) {
+protected StdKeyDeserializer(int kind, Class<?> cls, FromStringDeserializer<?> deser) {
+public static StdKeyDeserializer forType(Class<?> raw)
+if (raw == String.class || raw == Object.class) {
+} else if (raw == UUID.class) {
+} else if (raw == Integer.class) {
+} else if (raw == Long.class) {
+} else if (raw == Date.class) {
+} else if (raw == Calendar.class) {
+} else if (raw == Boolean.class) {
+} else if (raw == Byte.class) {
+} else if (raw == Character.class) {
+} else if (raw == Short.class) {
+} else if (raw == Float.class) {
+} else if (raw == Double.class) {
+} else if (raw == URI.class) {
+} else if (raw == URL.class) {
+} else if (raw == Class.class) {
+}
+...[truncated deterministically]...
+alizer
+protected final EnumResolver _byNameResolver;
+protected final AnnotatedMethod _factory;
+protected EnumResolver _byToStringResolver;
+protected EnumKD(EnumResolver er, AnnotatedMethod factory) {
+public Object _parse(String key, DeserializationContext ctxt) throws IOException
+return ctxt.handleWeirdKey(_keyClass, key, "not one of values excepted for Enum class: %s",
+private EnumResolver _getToStringResolver(DeserializationContext ctxt)
+synchronized (this) {
+final static class StringCtorKeyDeserializer extends StdKeyDeserializer
+protected final Constructor<?> _ctor;
+public StringCtorKeyDeserializer(Constructor<?> ctor) {
+public Object _parse(String key, DeserializationContext ctxt) throws Exception
+final static class StringFactoryKeyDeserializer extends StdKeyDeserializer
+public StringFactoryKeyDeserializer(Method fm) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.std;
+
+ import static org.junit.Assert.*;
+
+ import java.util.Map;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.annotation.JsonSubTypes;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ import com.fasterxml.jackson.annotation.JsonValue;
+ import com.fasterxml.jackson.databind.JavaType;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+
+ public class StdKeyDeserializerTest {
+
+     // ---- plain enum -------------------------------------------------------
+
+     enum SimpleEnum {
+         A, B, C
+     }
+
+     @Test
+     public void testSimpleEnumDeserialization() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, SimpleEnum.class, String.class);
+         Map<SimpleEnum, String> result = mapper.readValue("{\"A\":\"first\", \"B\":\"second\"}",
+mapType);
+         assertEquals("first", result.get(SimpleEnum.A));
+         assertEquals("second", result.get(SimpleEnum.B));
+         assertEquals(2, result.size());
+     }
+
+     // ---- polymorphic enum: without explicit type-id in key ------------------
+
+     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property =
+"type")
+     @JsonSubTypes(@JsonSubTypes.Type(value = SubEnum.class, name = "sub"))
+     interface SuperTypeEnum {}
+
+     enum SubEnum implements SuperTypeEnum {
+         FOO, BAR
+     }
+
+     /**
+      * Key without type-id should still resolve when a unique constant name exists across subtypes.
+      */
+     @Test
+     public void testPolymorphicEnumDeserializationWithoutTypeId() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, SuperTypeEnum.class, String.class);
+         Map<SuperTypeEnum, String> result = mapper.readValue("{\"FOO\":\"val1\"}", mapType);
+         assertEquals("val1", result.get(SubEnum.FOO));
+         assertEquals(1, result.size());
+     }
+
+     // ---- polymorphic enum: key contains type-id (WRAPPER_ARRAY) -------------
+
+     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+     @JsonSubTypes(@JsonSubTypes.Type(value = ArraySubEnum.class, name = "arrsub"))
+     interface ArraySuperEnum {}
+
+     enum ArraySubEnum implements ArraySuperEnum {
+         FOO, BAR
+     }
+
+     /**
+      * Key format: {@code ["arrsub","FOO"]}.
+      */
+     @Test
+     public void testPolymorphicEnumDeserializationWithTypeId() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, ArraySuperEnum.class, String.class);
+         Map<ArraySuperEnum, String> result =
+mapper.readValue("{\"[\"arrsub\",\"FOO\"]\":\"val2\"}", mapType);
+         assertEquals("val2", result.get(ArraySubEnum.FOO));
+         assertEquals(1, result.size());
+     }
+
+     @Test
+     public void testPolymorphicEnumDeserializationUnknownKey() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, SuperTypeEnum.class, String.class);
+         try {
+             mapper.readValue("{\"UNKNOWN\":\"val\"}", mapType);
+             fail("Expected InvalidFormatException");
+         } catch (InvalidFormatException e) {
+             // expected
+         }
+     }
+
+     // ---- ambiguous constant name across multiple subtypes --------------------
+
+     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property =
+"type")
+     @JsonSubTypes({
+             @JsonSubTypes.Type(value = Sub1.class, name = "s1"),
+             @JsonSubTypes.Type(value = Sub2.class, name = "s2")
+     })
+     interface AmbiguousSuper {}
+
+     enum Sub1 implements AmbiguousSuper { SAME, ONE }
+     enum Sub2 implements AmbiguousSuper { SAME, TWO }
+
+     @Test
+     public void testAmbiguousConstantNameShouldFail() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, AmbiguousSuper.class, String.class);
+         try {
+             mapper.readValue("{\"SAME\":\"val\"}", mapType);
+             fail("Expected InvalidFormatException or ambiguous resolution error");
+         } catch (InvalidFormatException e) {
+             // expected – cannot determine which subtype
+         }
+     }
+
+     // ---- @JsonValue custom representation -----------------------------------
+
+     enum ValueEnum {
+         ONE(1), TWO(2);
+         @JsonValue
+         public final int code;
+         ValueEnum(int code) { this.code = code; }
+     }
+
+     @Test
+     public void testEnumKeyWithJsonValue() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, ValueEnum.class, String.class);
+         Map<ValueEnum, String> result = mapper.readValue("{\"1\":\"one\"}", mapType);
+         assertEquals("one", result.get(ValueEnum.ONE));
+         assertEquals(1, result.size());
+     }
+
+     // ---- null / empty key ---------------------------------------------------
+
+     @Test
+     public void testNullKey() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, SimpleEnum.class, String.class);
+         // According to StdKeyDeserializer.deserializeKey: null key returns null.
+         // We cannot directly pass a null key through JSON; test via direct call.
+         StdKeyDeserializer deser = (StdKeyDeserializer)
+StdKeyDeserializer.forType(SimpleEnum.class);
+         Object result = deser.deserializeKey(null, null);
+         assertNull(result);
+     }
+
+     /**
+      * Empty string is not a valid enum constant – expects InvalidFormatException.
+      */
+     @Test
+     public void testEmptyKey() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         JavaType mapType = mapper.getTypeFactory()
+                 .constructMapType(Map.class, SimpleEnum.class, String.class);
+         try {
+             mapper.readValue("{\"\":\"val\"}", mapType);
+             fail("Expected InvalidFormatException");
+         } catch (InvalidFormatException e) {
+             // expected
+         }
+     }
+
+     // ---- forType returns a usable deserializer ---------------------------------
+
+     @Test
+     public void testForTypeReturnsDeserializerForEnum() {
+         StdKeyDeserializer deser = StdKeyDeserializer.forType(SimpleEnum.class);
+         assertNotNull(deser);
+         // internal kind for enum is -1 (EnumKD)
+         assertTrue(deser instanceof StdKeyDeserializer.EnumKD);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-66f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-66f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-66f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-66f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-66f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/std/StdKeyDeserializerTest.java:127: error: annotation type not applicable to this kind of declaration
+ [javac] @JsonValue
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 14 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

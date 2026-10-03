@@ -1,0 +1,307 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 67  Version: Math-67b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-393
+Trigger failures:
+- org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizerTest::testQuinticMin
+ --> junit.framework.AssertionFailedError: expected:<-0.27195612846834> but was:<-0.27194301946870036>
+Modified: org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizer
+
+Available API/signatures:
+[org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizer | java]
+package org.apache.commons.math.optimization;
+public class MultiStartUnivariateRealOptimizer implements UnivariateRealOptimizer {
+public double getFunctionValue() {
+public double getResult() {
+public double getAbsoluteAccuracy() {
+public int getIterationCount() {
+public int getMaximalIterationCount() {
+public int getMaxEvaluations() {
+public int getEvaluations() {
+public double getRelativeAccuracy() {
+public void resetAbsoluteAccuracy() {
+public void resetMaximalIterationCount() {
+public void resetRelativeAccuracy() {
+public void setAbsoluteAccuracy(double accuracy) {
+public void setMaximalIterationCount(int count) {
+public void setMaxEvaluations(int maxEvaluations) {
+public void setRelativeAccuracy(double accuracy) {
+public double[] getOptima() throws IllegalStateException {
+public double[] getOptimaValues() throws IllegalStateException {
+final double bound1 = (i == 0) ? min : min + generator.nextDouble() * (max - min);
+final double bound2 = (i == 0) ? max : min + generator.nextDouble() * (max - min);
+
+Generated JUnit Test:
+package org.apache.commons.math.optimization;
+
+ import static org.junit.Assert.*;
+
+ import org.apache.commons.math.FunctionEvaluationException;
+ import org.apache.commons.math.analysis.UnivariateRealFunction;
+ import org.apache.commons.math.random.JDKRandomGenerator;
+ import org.junit.Test;
+
+ /**
+  * Tests for MultiStartUnivariateRealOptimizer revealing bug MATH-393.
+  */
+ public class MultiStartUnivariateRealOptimizerTest {
+
+     /** Quintic function whose global minimum on [-1, 1] is known. */
+     private static final UnivariateRealFunction FF = new UnivariateRealFunction() {
+         public double value(double x) { return (x-1)*(x-0.5)*x*(x+0.5)*(x+1); }
+     };
+
+     /** Best known minimum x for F on [-1,1], from high-precision Brent. */
+     private static final double EXACT_MIN_X = -0.27195612846834;
+     /** Function value at EXACT_MIN_X */
+  private static final double EXACT_MIN_FX = ((1) ? Exact value computed: */ -0.27195612846834?
+actually compute: I'll compute: (-0.27195612846834-1)*...
+  But better to compute using another tool? We can define it as FF.value(EXACT_MIN_X). However that
+would be same as the buggy function? The function is just polynomial, it's fine. But I'd like to
+avoid hardcoding the value derived from the function. But we can compute it using the method itself,
+that is acceptable. The expected result x is exact; we can assert the function value is whatever
+the function returns, but the test will compare getResult() to EXACT_MIN_X. For the function value,
+we can assert getFunctionValue() equals FF.value(getResult()). That's independent of the bug.
+
+  However to compare getResult() against the true global minimum, we need a reference value. The bug
+report gives that value. I'll trust it. But we can also compute it via evaluating the function
+derivative, but not necessary.
+
+  Anyway I'll include EXACT_MIN_X = -0.27195612846834 and the function value computed via
+FF.value(EXACT_MIN_X) maybe prone to floating point rounding differences? The function is
+polynomial, so FF.value(EXACT_MIN_X) is a specific double. I'll just use it.
+
+  I'll define:
+  private static final double EXACT_MIN_X = -0.27195612846834;
+  private static final double EXACT_MIN_FX = -0.233240...? Actually let's compute the function value
+at that point: (x-1)*(x-0.5)*x*(x+0.5)*(x+1). We can approximate but it's okay to hardcode a value,
+but I'd rather compute dynamically to avoid mismatch due to floating point. So I'll compute in the
+test: double expectedFx = FF.value(EXACT_MIN_X). That way it's consistent.
+
+  So I'll store EXACT_MIN_X only, not the function value.
+
+     */
+
+     /** Tolerance for double comparisons */;
+     private static final double EPS = 1e-8;
+
+     /**
+      * Test that getResult returns the optimum with smallest function value
+      * across multiple random starts, not the last optimizer's result.
+      */
+     @Test
+  public void testGetResultReturnsBestMinimizer() throws Exception {
+         int starts = 10;
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         gen.setSeed(1234567890L);
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, starts, gen);
+         ms.setAbsoluteAccuracy(1e-12);
+         ms.setRelativeAccuracy(1e-12);
+         ms.setMaximalIterationCount(1000);
+         ms.setMaxEvaluations(1000000);
+
+         double result = ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+         // The result should be the global minimum with x near EXACT_MIN_X.
+         assertEquals(EXACT_MIN_X, result, 1e-6);
+         // getResult() must be the same as returned optimum.
+         assertEquals(result, ms.getResult(), 1e-15);
+     }
+
+     /**
+      * Test that getOptima() and getOptimaValues() return arrays of correct size,
+      * and the first elements correspond to the best optimum.
+      */
+     @Test
+  public void testGetOptimaBestFirst() throws Exception {
+         int starts = 8;
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         gen.setSeed(9876543210L);
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, starts, gen);
+         ms.setAbsoluteAccuracy(1e-12);
+         ms.setRelativeAccuracy(1e-12);
+
+         double result = ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+
+         double[] optima = ms.getOptima();
+         double[] values = ms.getOptimaValues();
+         assertEquals("optima length", starts, optima.length);
+         assertEquals("values length", starts, values.length);
+
+         // First element should be the best (lowest value) for minimization.
+         assertEquals(result, optima[0], 1e-10);
+         assertEquals(FF.value(result), values[0], 1e-8);
+     }
+
+     /**
+      * Test that getFunctionValue() returns the function value at getResult(),
+      * not the value at the last evaluated start point (buggy behavior would fail).
+      */
+     @Test
+  public void testGetFunctionValueConsistentWithResult() throws Exception {
+         int starts = 6;
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         gen.setSeed(55556666L);
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, starts, gen);
+         ms.setAbsoluteAccuracy(1e-10);
+         ms.setRelativeAccuracy(1e-10);
+
+         ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+
+         double result = ms.getResult();
+         double funcValue = ms.getFunctionValue();
+         // Should be exactly f(result), but buggy code delegates to last optimizer
+         assertEquals(FF.value(result), funcValue, 1e-8);
+     }
+
+     /**
+      * Test that for minimization, the function value at the returned optimum
+      * is the smallest among all starts.
+      */
+     @Test
+  public void testResultValueIsMinimumAmongStarts() throws Exception {
+         int starts = 7;
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         gen.setSeed(11112222L);
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, starts, gen);
+         ms.setAbsoluteAccuracy(1e-10);
+         ms.setRelativeAccuracy(1e-10);
+
+         ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+
+         double bestValue = ms.getOptimaValues()[0];
+         double resultValue = FF.value(ms.getResult());
+         // They should match: the best value is the value at the best point.
+         assertEquals(bestValue, resultValue, 1e-10);
+     }
+
+     /**
+      * Test that a single start returns the correct optimum and getResult()
+      * agrees with the optimizer's own result.
+      */
+     @Test
+  public void testSingleStart() throws Exception {
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         gen.setSeed(1L);
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, 1, gen);
+         ms.setAbsoluteAccuracy(1e-10);
+         ms.setRelativeAccuracy(1e-10);
+
+         double result = ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+         assertEquals(result, ms.getResult(), 1e-15);
+         assertEquals(1, ms.getOptima().length);
+         assertEquals(1, ms.getOptimaValues().length);
+         assertEquals(result, ms.getOptima()[0], 1e-15);
+     }
+
+     /**
+      * Zero starts should throw an OptimizationException (or other exception)
+      * because no optimum can be computed.
+      */
+     @Test(expected = IllegalArgumentException.class)
+  public void testZeroStartsThrows() throws Exception {
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, 0, gen);
+         ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+         // The current code does not validate starts > 0, leading to
+         // ArrayIndexOutOfBoundsException. After fix, it should throw
+         // IllegalArgumentException (or similar).
+     }
+
+     /**
+      * Test that iteration and evaluation counts are accumulated correctly
+      * across all starts.
+      */
+     @Test
+  public void testCountersAccumulating() throws Exception {
+         int starts = 3;
+         JDKRandomGenerator gen = new JDKRandomGenerator();
+         gen.setSeed(444555L);
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, starts, gen);
+         ms.setAbsoluteAccuracy(1e-10);
+         ms.setRelativeAccuracy(1e-10);
+         ms.setMaximalIterationCount(500);
+         ms.setMaxEvaluations(5000);
+
+         ms.optimize(FF, GoalType.MINIMIZE, -1.0, 1.0);
+
+         assertTrue("some iterations", ms.getIterationCount() > 0);
+         assertTrue("some evaluations", ms.getEvaluations() > 0);
+         assertTrue("iterations <= max", ms.getIterationCount() <= ms.getMaximalIterationCount());
+         assertTrue("evaluations <= max", ms.getEvaluations() <= ms.getMaxEvaluations());
+     }
+
+     /**
+      * Verify that setAbsoluteAccuracy / setRelativeAccuracy / setMaxEvaluations
+      * propagate through to the underlying optimizer or the multi-start wrapper.
+      */
+     @Test
+  public void testConfigurationMethods() {
+         BrentOptimizer brent = new BrentOptimizer();
+         MultiStartUnivariateRealOptimizer ms =
+             new MultiStartUnivariateRealOptimizer(brent, 2, new JDKRandomGenerator());
+
+         ms.setAbsoluteAccuracy(1e-9);
+         assertEquals(1e-9, ms.getAbsoluteAccuracy(), 0.);
+         ms.resetAbsoluteAccuracy();
+         // after reset, it returns the underlying default (Brent default)
+         assertTrue(ms.getAbsoluteAccuracy() > 0);
+
+         ms.setRelativeAccuracy(1e-12);
+         assertEquals(1e-12, ms.getRelativeAccuracy(), 0.);
+         ms.resetRelativeAccuracy();
+         assertTrue(ms.getRelativeAccuracy() > 0);
+
+         ms.setMaxEvaluations(1500);
+         assertEquals(1500, ms.getMaxEvaluations());
+
+         ms.setMaximalIterationCount(100);
+         assertEquals(100, ms.getMaximalIterationCount());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-67f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-67f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-67f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 2.2-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-67f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-67f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-67f-copilot/target/test-classes
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Math-67f-copilot/src/main/java/org/apache/commons/math/exception/NoDataException.java:41: warning: non-varargs call of varargs method with inexact argument type for last parameter;
+ [javac] super(specific, LocalizedFormats.NO_DATA, null);
+ [javac] ^
+ [javac] cast to Object for a varargs call
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-67f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-67f-copilot/.test_suite/org/apache/commons/math/optimization/MultiStartUnivariateRealOptimizerTest.java:23: error: : expected
+ [javac] private static final double EXACT_MIN_FX = ((1) ? Exact value computed: */ -0.27195612846834?
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

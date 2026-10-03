@@ -1,0 +1,233 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 46  Version: Jsoup-46b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 523
+Trigger failures:
+- org.jsoup.nodes.DocumentTest::testShiftJisRoundtrip
+ --> junit.framework.AssertionFailedError: Should not have contained a '?'.
+Modified: org.jsoup.nodes.Entities
+
+Available API/signatures:
+[org.jsoup.nodes.Entities | java]
+package org.jsoup.nodes;
+public class Entities {
+public enum EscapeMode {
+public Map<Character, String> getMap() {
+private Entities() {}
+public static boolean isNamedEntity(String name) {
+public static boolean isBaseNamedEntity(String name) {
+public static Character getCharacterByName(String name) {
+static String escape(String string, Document.OutputSettings out) {
+final EscapeMode escapeMode = out.escapeMode();
+final CharsetEncoder encoder = out.encoder();
+final CoreCharset coreCharset = CoreCharset.byName(encoder.charset().name());
+final Map<Character, String> map = escapeMode.getMap();
+final int length = string.length();
+final char c = (char) codePoint;
+final String c = new String(Character.toChars(codePoint));
+static String unescape(String string) {
+static String unescape(String string, boolean strict) {
+private static boolean canEncode(final CoreCharset charset, final char c, final CharsetEncoder fallback) {
+private enum CoreCharset {
+private static CoreCharset byName(String name) {
+private static Map<String, Character> loadEntities(String filename) {
+InputStream in = Entities.class.getResourceAsStream(filename);
+private static Map<Character, String> toCharacterKey(Map<String, Character> inMap) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import static org.junit.Assert.*;
+
+ import java.nio.charset.Charset;
+
+ import org.junit.Test;
+
+ public class EntitiesTest {
+
+     private Document.OutputSettings shiftJisSettings() {
+         Document doc = new Document("");
+         doc.outputSettings().charset(Charset.forName("Shift_JIS"));
+         return doc.outputSettings();
+     }
+
+     private Document.OutputSettings asciiSettings() {
+         Document doc = new Document("");
+         doc.outputSettings().charset(Charset.forName("US-ASCII"));
+         return doc.outputSettings();
+     }
+
+     private Document.OutputSettings utf8Settings() {
+         Document doc = new Document("");
+         doc.outputSettings().charset(Charset.forName("UTF-8"));
+         return doc.outputSettings();
+     }
+
+     // Escape under Shift_JIS must not introduce '?' for characters that should be encodable
+     @Test
+     public void testShiftJisEscapeNoQuestionMarks() {
+         Document.OutputSettings settings = shiftJisSettings();
+         // characters typical for Shift_JIS and known problematic in the bug
+         String input = "ABCabc123\u00A5\uFF5E\u2019\u201C\u2122";
+         String escaped = Entities.escape(input, settings);
+         assertFalse("Escaped string should not contain '?'", escaped.contains("?"));
+     }
+
+     // Escape followed by unescape must return original string under Shift_JIS
+     @Test
+     public void testShiftJisRoundtrip() {
+         Document.OutputSettings settings = shiftJisSettings();
+         String original = "Test \u00A5\uFF5E\u2122\u00B0";
+         String escaped = Entities.escape(original, settings);
+         assertFalse("Escaped string should not contain '?'", escaped.contains("?"));
+         String unescaped = Entities.unescape(escaped);
+         assertEquals("Roundtrip escape->unescape should preserve original", original, unescaped);
+     }
+
+     // Boundary characters specific to Shift_JIS (bug focus)
+     @Test
+     public void testShiftJisBoundaryCharacters() {
+         Document.OutputSettings settings = shiftJisSettings();
+         String input = "\u00A5\uFF5E\uFF0D\uFF02\uFF08\uFF09"; // ¥, ～, －, ", （, ）
+         String escaped = Entities.escape(input, settings);
+         assertFalse("Shift_JIS boundary chars must not produce '?'", escaped.contains("?"));
+         // The printable ASCII equivalent should be unchanged if they are encodable
+         assertTrue(escaped.contains("\u00A5"));
+     }
+
+     // ASCII-only string must be unchanged under any charset
+     @Test
+     public void testAsciiStringUnchanged() {
+         Document.OutputSettings settings = shiftJisSettings();
+         String input = "Hello, world! <html> & stuff";
+         String escaped = Entities.escape(input, settings);
+         // ASCII characters must not become '?'
+         assertFalse(escaped.contains("?"));
+         // But the escaping of HTML-sensitive characters depends on escape mode; we keep defaults.
+         // Don't check exact escape because that's mode-dependent.
+     }
+
+     // Under US-ASCII, non-ASCII chars must be numeric entities and no '?'
+     @Test
+     public void testAsciiEscapeNonAscii() {
+         Document.OutputSettings settings = asciiSettings();
+         String input = "Test \u00E9"; // e-acute
+         String escaped = Entities.escape(input, settings);
+         assertFalse(escaped.contains("?"));
+         assertTrue("Non-ASCII under ASCII should become entity", escaped.contains("&#x"));
+     }
+
+     // UTF-8 can encode everything, so output should not contain entities (except mandatory HTML
+escapes)
+     @Test
+     public void testUtf8PreservesCharacters() {
+         Document.OutputSettings settings = utf8Settings();
+         String input = "UTF supports \u00E4\u00F6\u00FC\u00A5\uFF5E\uD83D\uDE00"; // äöü¥～😀
+         String escaped = Entities.escape(input, settings);
+         assertFalse(escaped.contains("?"));
+         // UTF-8 fastpath preserves all characters directly (except HTML mandatory)
+         assertTrue(escaped.contains("\u00E4"));
+         assertTrue(escaped.contains("\uD83D\uDE00"));
+     }
+
+     // Empty string must return empty string
+     @Test
+     public void testEmptyString() {
+         Document.OutputSettings settings = shiftJisSettings();
+         assertEquals("", Entities.escape("", settings));
+     }
+
+     // Mixed named entities and raw text: ensure no '?' and entities are preserved
+     @Test
+     public void testMixedEntitiesAndRaw() {
+         Document.OutputSettings settings = shiftJisSettings();
+         // Input contains ampersand which must be escaped; raw text should pass
+         String input = "Price < 5 & > 3";
+         String escaped = Entities.escape(input, settings);
+         assertFalse(escaped.contains("?"));
+         assertTrue(escaped.contains("&amp;"));
+         // Rest of the ascii text should be present
+         assertTrue(escaped.contains("Price"));
+     }
+
+     // Escape with base mode: known named entities must be used when not encodable
+     @Test
+     public void testEscapeBaseMode() {
+         Document.OutputSettings settings = new Document("").outputSettings();
+         settings.escapeMode(Entities.EscapeMode.base);
+         settings.charset(Charset.forName("US-ASCII")); // force entities for non-ASCII
+         String input = "Copyright \u00A9"; // copyright sign
+         String escaped = Entities.escape(input, settings);
+         assertFalse(escaped.contains("?"));
+         assertTrue("Copyright sign should become &copy;", escaped.contains("&copy;"));
+     }
+
+     // Escape with xhtml mode: only amp, lt, gt, quot
+     @Test
+     public void testEscapeXhtmlMode() {
+         Document.OutputSettings settings = new Document("").outputSettings();
+         settings.escapeMode(Entities.EscapeMode.xhtml);
+         settings.charset(Charset.forName("US-ASCII"));
+         String input = "& < > \" \u00A0 test";
+         String escaped = Entities.escape(input, settings);
+         assertFalse(escaped.contains("?"));
+         // &lt; &gt; &quot; &amp; must be present
+         assertTrue(escaped.contains("&amp;"));
+         assertTrue(escaped.contains("&lt;"));
+         assertTrue(escaped.contains("&gt;"));
+         assertTrue(escaped.contains("&quot;"));
+         // non-breaking space should not become &nbsp; (xhtml does not include nbsp)
+         assertFalse(escaped.contains("&nbsp;"));
+         // The non-ASCII nbsp is encoded as numeric entity
+         assertTrue(escaped.contains("&#xa0;") || escaped.contains("&#xA0;"));
+     }
+
+     // Non-BMP supplementary characters: must be numeric entity under Shift_JIS
+     @Test
+     public void testNonBmpSupplementaryChars() {
+         Document.OutputSettings settings = shiftJisSettings();
+         String input = "Smile: \uD83D\uDE00"; // 😀
+         String escaped = Entities.escape(input, settings);
+         assertFalse(escaped.contains("?"));
+         // Under Shift_JIS, supplementary chars cannot be encoded; expect numeric entity
+         assertTrue(escaped.contains("&#x1f600;") || escaped.contains("&#x1F600;"));
+     }
+
+     // Verify that canEncode(Escape) does not leak '?' for many characters
+     @Test
+     public void testBulkCharacterScanNoQuestionMarks() {
+         Document.OutputSettings settings = shiftJisSettings();
+         StringBuilder sb = new StringBuilder();
+         // Cover a broad range: ASCII + Latin-1 Supplement + CJK compat + some symbols
+         for (int cp = 32; cp < 0xFFFF; cp++) {
+             if (Character.isDefined(cp) && !Character.isISOControl(cp)) {
+                 sb.appendCodePoint(cp);
+             }
+         }
+         String input = sb.toString();
+         String escaped = Entities.escape(input, settings);
+         assertFalse("Bulk escape under Shift_JIS must not produce '?'", escaped.contains("?"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-46f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-46f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-46f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-46f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-46f-copilot/.test_suite/org/jsoup/nodes/EntitiesTest.java:84: error: <identifier> expected
+ [javac] escapes)
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

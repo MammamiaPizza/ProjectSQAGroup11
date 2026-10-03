@@ -1,0 +1,373 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 18  Version: Compress-18b
+JUnit: junit-4.10.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+Triggers: org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamTest::testWriteNonAsciiDirectoryNamePosixMode
+
+Bug/specification summary:
+Bug report: COMPRESS-203
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamTest::testWriteNonAsciiDirectoryNamePosixMode
+ --> java.io.IOException: request to write '15' bytes exceeds size in header of '0' bytes for entry './PaxHeaders.X/fvv/'
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+
+Prompt-01 test plan:
+TARGETS: putArchiveEntry, closeArchiveEntry, write with POSIX long-file mode and non-ASCII directory names 
+ORACLES: Trigger expects no IOException for generated Pax header './PaxHeaders.X/fvv/' size 0 
+CASES: Non-ASCII directory entry, setLongFileMode(LONGFILE_POSIX), then put/close/finish 
+CASES: Verify zero-size directory/Pax entries accept no payload and archive output completes 
+CASES: Compare payload write enforcement: writing 15 bytes to declared size 0 must fail when applicable 
+RISKS: Only failure trace is available; exact generated header naming/content and archive-byte oracle are unspecified
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.tar.TarArchiveOutputStream (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveOutputStream extends ArchiveOutputStream {
+public static final int LONGFILE_ERROR = 0;
+public static final int LONGFILE_TRUNCATE = 1;
+public static final int LONGFILE_GNU = 2;
+public static final int LONGFILE_POSIX = 3;
+public static final int BIGNUMBER_ERROR = 0;
+public static final int BIGNUMBER_STAR = 1;
+public static final int BIGNUMBER_POSIX = 2;
+protected final TarBuffer buffer;
+public TarArchiveOutputStream(OutputStream os) {
+public TarArchiveOutputStream(OutputStream os, String encoding) {
+public TarArchiveOutputStream(OutputStream os, int blockSize) {
+public TarArchiveOutputStream(OutputStream os, int blockSize, int recordSize) {
+public void setLongFileMode(int longFileMode) {
+public void setBigNumberMode(int bigNumberMode) {
+public void setAddPaxHeadersForNonAsciiNames(boolean b) {
+@Deprecated
+@Override
+public int getCount() {
+public long getBytesWritten() {
+public void finish() throws IOException {
+public void close() throws IOException {
+public int getRecordSize() {
+public void putArchiveEntry(ArchiveEntry archiveEntry) throws IOException {
+final String entryName = entry.getName();
+final ByteBuffer encodedName = encoding.encode(entryName);
+final int nameLen = encodedName.limit() - encodedName.position();
+public void closeArchiveEntry() throws IOException {
+public void write(byte[] wBuf, int wOffset, int numToWrite) throws IOException {
+private String stripTo7Bits(String name) {
+final int length = name.length();
+private void writeEOFRecord() throws IOException {
+public void flush() throws IOException {
+public ArchiveEntry createArchiveEntry(File inputFile, String entryName)
+private void failForBigNumbers(TarArchiveEntry entry) {
+private void failForBigNumber(String field, long value, long maxValue) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.tar;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipEncoding;
+import org.apache.commons.compress.archivers.zip.ZipEncodingHelper;
+import org.apache.commons.compress.utils.CharsetNames;
+import org.apache.commons.compress.utils.CountingOutputStream;
+public class TarArchiveOutputStream extends ArchiveOutputStream {
+
+/* METHOD write */
+@Override
+ public void write(byte[] wBuf, int wOffset, int numToWrite) throws IOException {
+ if ((currBytes + numToWrite) > currSize) {
+ throw new IOException("request to write '" + numToWrite
+ + "' bytes exceeds size in header of '"
+ + currSize + "' bytes for entry '"
+ + currName + "'");
+
+ //
+ // We have to deal with assembly!!!
+ // The programmer can be writing little 32 byte chunks for all
+ // we know, and we must assemble complete records for writing.
+ // REVIEW Maybe this should be in TarBuffer? Could that help to
+ // eliminate some of the buffer copying.
+ //
+ }
+
+ if (assemLen > 0) {
+ if ((assemLen + numToWrite) >= recordBuf.length) {
+ int aLen = recordBuf.length - assemLen;
+
+ System.arraycopy(assemBuf, 0, recordBuf, 0,
+ assemLen);
+ System.arraycopy(wBuf, wOffset, recordBuf,
+ assemLen, aLen);
+ buffer.writeRecord(recordBuf);
+
+ currBytes += recordBuf.length;
+ wOffset += aLen;
+ numToWrite -= aLen;
+ assemLen = 0;
+ } else {
+ System.arraycopy(wBuf, wOffset, assemBuf, assemLen,
+ numToWrite);
+
+ wOffset += numToWrite;
+ assemLen += numToWrite;
+ numToWrite = 0;
+ }
+ }
+
+ //
+ // When we get here we have EITHER:
+ // o An empty "assemble" buffer.
+ // o No bytes to write (numToWrite == 0)
+ //
+ while (numToWrite > 0) {
+ if (numToWrite < recordBuf.length) {
+ System.arraycopy(wBuf, wOffset, assemBuf, assemLen,
+ numToWrite);
+
+ assemLen += numToWrite;
+
+ break;
+ }
+
+ buffer.writeRecord(wBuf, wOffset);
+
+ int num = recordBuf.length;
+
+ currBytes += num;
+ numToWrite -= num;
+ wOffset += num;
+ }
+ }
+
+/* METHOD TarArchiveOutputStream */
+public TarArchiveOutputStream(OutputStream os) {
+ this(os, TarBuffer.DEFAULT_BLKSIZE, TarBuffer.DEFAULT_RCDSIZE);
+ }
+
+/* METHOD TarArchiveOutputStream */
+public TarArchiveOutputStream(OutputStream os, String encoding) {
+ this(os, TarBuffer.DEFAULT_BLKSIZE, TarBuffer.DEFAULT_RCDSIZE, encoding);
+ }
+
+/* METHOD TarArchiveOutputStream */
+public TarArchiveOutputStream(OutputStream os, int blockSize) {
+ this(os, blockSize, TarBuffer.DEFAULT_RCDSIZE);
+ }
+
+/* METHOD TarArchiveOutputStream */
+public TarArchiveOutputStream(OutputStream os, int blockSize,
+ String encoding) {
+ this(os, blockSize, TarBuffer.DEFAULT_RCDSIZE, encoding);
+ }
+
+/* METHOD TarArchiveOutputStream */
+public TarArchiveOutputStream(OutputStream os, int blockSize, int recordSize) {
+ this(os, blockSize, recordSize, null);
+ }
+
+/* METHOD TarArchiveOutputStream */
+public TarArchiveOutputStream(OutputStream os, int blockSize,
+ int recordSize, String encoding) {
+ out = new CountingOutputStream(os);
+ this.encoding = ZipEncodingHelper.getZipEncoding(encoding);
+
+ this.buffer = new TarBuffer(out, blockSize, recordSize);
+ this.assemLen = 0;
+ this.assemBuf = new byte[recordSize];
+ this.recordBuf = new byte[recordSize];
+ }
+
+/* METHOD closeArchiveEntry */
+@Override
+ public void closeArchiveEntry() throws IOException {
+ if (finished) {
+ throw new IOException("Stream has already been finished");
+ }
+ if (!haveUnclosedEntry){
+ throw new IOException("No current entry to close");
+ }
+ if (assemLen > 0) {
+ for (int i = assemLen; i < assemBuf.length; ++i) {
+ assemBuf[i] = 0;
+ }
+
+ buffer.writeRecord(assemBuf);
+
+ currBytes += assemLen;
+ assemLen = 0;
+ }
+
+ if (currBytes < currSize) {
+ throw new IOException("entry '" + currName + "' closed at '"
+ + currBytes
+ + "' before the '" + currSize
+ + "' bytes specified in the header were written");
+ }
+ haveUnclosedEntry = false;
+ }
+
+/* METHOD createArchiveEntry */
+@Override
+ public ArchiveEntry createArchiveEntry(File inputFile, String entryName)
+ throws IOException {
+ if(finished) {
+ throw new IOException("Stream has already been finished");
+ }
+ return new TarArchiveEntry(inputFile, entryName);
+ }
+
+/* METHOD addPaxHeadersForBigNumbers */
+private void addPaxHeadersForBigNumbers(Map<String, String> paxHeaders,
+ TarArchiveEntry entry) {
+ addPaxHeaderForBigNumber(paxHeaders, "size", entry.getSize(),
+ TarConstants.MAXSIZE);
+ addPaxHeaderForBigNumber(paxHeaders, "gid", entry.getGroupId(),
+ TarConstants.MAXID);
+ addPaxHeaderForBigNumber(paxHeaders, "mtime",
+ entry.getModTime().getTime() / 1000,
+ TarConstants.MAXSIZE);
+ addPaxHeaderForBigNumber(paxHeaders, "uid", entry.getUserId(),
+ TarConstants.MAXID);
+ // star extensions by J\u00f6rg Schilling
+ addPaxHeaderForBigNumber(paxHeaders, "SCHILY.devmajor",
+ entry.getDevMajor(), TarConstants.MAXID);
+ addPaxHeaderForBigNumber(paxHeaders, "SCHILY.devminor",
+ entry.getDevMinor(), TarConstants.MAXID);
+ // there is no PAX header for file mode
+ failForBigNumber("mode", entry.getMode(), TarConstants.MAXID);
+ }
+
+/* METHOD finish */
+@Override
+ public void finish() throws IOException {
+ if (finished) {
+ throw new IOException("This archive has already been finished");
+ }
+
+ if (haveUnclosedEntry) {
+ throw new IOException("This archives contains unclosed entries.");
+ }
+ writeEOFRecord();
+ writeEOFRecord();
+ buffer.flushBlock();
+ finished = true;
+ }
+
+/* METHOD setAddPaxHeadersForNonAsciiNames */
+public void setAddPaxHeadersForNonAsciiNames(boolean b) {
+ addPaxHeadersForNonAsciiNames = b;
+ }
+
+/* METHOD setLongFileMode */
+public void setLongFileMode(int longFileMode) {
+ this.longFileMode = longFileMode;
+ }
+
+/* METHOD setBigNumberMode */
+public void setBigNumberMode(int bigNumberMode) {
+ this.bigNumberMode = bigNumberMode;
+ }
+
+/* METHOD getCount */
+@Deprecated
+ @Override
+ public int getCount() {
+ return (int) getBytesWritten();
+ }
+
+/* METHOD getBytesWritten */
+@Override
+ public long getBytesWritten() {
+ return ((CountingOutputStream) out).getBytesWritten();
+ }
+
+/* METHOD close */
+@Override
+ public void close() throws IOException {
+ if(!finished) {
+ finish();
+ }
+
+ if (!closed) {
+ buffer.close();
+ out.close();
+ closed = true;
+ }
+ }
+
+/* METHOD getRecordSize */
+public int getRecordSize() {
+ return buffer.getRecordSize();
+ }
+
+/* METHOD flush */
+@Override
+ public void flush() throws IOException {
+ out.flush();
+ }
+
+/* METHOD failForBigNumbers */
+private void failForBigNumbers(TarArchiveEntry entry) {
+ failForBigNumber("entry size", entry.getSize(), TarConstants.MAXSIZE);
+ failForBigNumber("group id", entry.getGroupId(), TarConstants.MAXID);
+ failForBigNumber("last modification time",
+ entry.getModTime().getTime() / 1000,
+ TarConstants.MAXSIZE);
+ failForBigNumber("user id", entry.getUserId(), TarConstants.MAXID);
+ failForBigNumber("mode", entry.getMode(), TarConstants.MAXID);
+ failForBigNumber("major device number", entry.getDevMajor(),
+ TarConstants.MAXID);
+ failForBigNumber("minor device number", entry.getDevMinor(),
+ TarConstants.MAXID);
+ }
+
+/* METHOD addPaxHeaderForBigNumber */
+private void addPaxHeaderForBigNumber(Map<String, String> paxHeaders,
+ String header, long value,
+ long maxValue) {
+ if (value < 0 || value > maxValue) {
+ paxHeaders.put(header, String.valueOf(value));
+ }
+ }
+
+/* METHOD writeEOFRecord */
+private void writeEOFRecord() throws IOException {
+ for (int i = 0; i < recordBuf.length; ++i) {
+ recordBuf[i] = 0;
+ }
+
+ buffer.writeRecord(recordBuf);
+ }
+
+/* METHOD failForBigNumber */
+private void failForBigNumber(String field, long value, long maxValue) {
+ if (value < 0 || value > maxValue) {
+ throw new RuntimeException(field + " '" + value
+ + "' is too big ( > "
+ + maxValue + " )");
+ }
+ }
+
+/* METHOD stripTo7Bits */
+private String stripTo7Bits(String name) {
+ final int length = name.length();
+ StringBuffer result = new StringBuffer(length);
+ for (int i = 0; i < length; i++) {
+ char stripped = (char) (name.charAt(i) & 0x7F);
+ if (stripped != 0) { // would be read as Trailing null
+ result.append(stripped);
+ }
+ }
+ return result.toString();
+ }

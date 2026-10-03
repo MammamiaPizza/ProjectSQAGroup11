@@ -1,0 +1,188 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 28  Version: Collections-28b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-586
+Trigger failures:
+- org.apache.commons.collections4.trie.PatriciaTrieTest::testPrefixMapClear
+ --> java.lang.NullPointerException
+Modified: org.apache.commons.collections4.trie.AbstractPatriciaTrie
+
+Available API/signatures:
+[org.apache.commons.collections4.trie.AbstractPatriciaTrie | java]
+package org.apache.commons.collections4.trie;
+abstract class AbstractPatriciaTrie<K, V> extends AbstractBitwiseTrie<K, V> {
+private transient TrieEntry<K, V> root = new TrieEntry<K, V>(null, null, -1);
+protected transient int modCount = 0;
+protected AbstractPatriciaTrie(final KeyAnalyzer<? super K> keyAnalyzer) {
+@Override
+public void clear() {
+public int size() {
+private void incrementModCount() {
+public V put(final K key, final V value) {
+final int lengthInBits = lengthInBits(key);
+final TrieEntry<K, V> found = getNearestEntryForKey(key, lengthInBits);
+final int bitIndex = bitIndex(key, found.key);
+final TrieEntry<K, V> t = new TrieEntry<K, V>(key, value, bitIndex);
+TrieEntry<K, V> addEntry(final TrieEntry<K, V> entry, final int lengthInBits) {
+public V get(final Object k) {
+final TrieEntry<K, V> entry = getEntry(k);
+TrieEntry<K,V> getEntry(final Object k) {
+final K key = castKey(k);
+final TrieEntry<K,V> entry = getNearestEntryForKey(key, lengthInBits);
+public Map.Entry<K, V> select(final K key) {
+final Reference<Map.Entry<K, V>> reference = new Reference<Map.Entry<K,V>>();
+public K selectKey(final K key) {
+final Map.Entry<K, V> entry = select(key);
+public V selectValue(final K key) {
+public boolean containsKey(final Object k) {
+final TrieEntry<K, V> entry = getNearestEntryForKey(key, lengthInBits);
+public Set<Map.Entry<K,V>> entrySet() {
+public Set<K> keySet() {
+public Collection<V> values() {
+public V remove(final Object k) {
+TrieEntry<K, V> getNearestEntryForKey(final K key, final int lengthInBits) {
+V removeEntry(final TrieEntry<K, V> h) {
+private void removeExternal
+...[truncated deterministically]...
+V>)entry);
+protected Set<Map.Entry<K, V>> createEntrySet() {
+private final class PrefixRangeEntrySet extends RangeEntrySet {
+public PrefixRangeEntrySet(final PrefixRangeMap delegate) {
+final Set<Map.Entry<K,V>> empty = Collections.emptySet();
+private final class SingletonIterator implements Iterator<Map.Entry<K, V>> {
+public SingletonIterator(final TrieEntry<K, V> entry) {
+public Map.Entry<K, V> next() {
+private final class EntryIterator extends TrieIterator<Map.Entry<K, V>> {
+final Map.Entry<K, V> entry = nextEntry();
+@SuppressWarnings("unchecked") // This will fail at runtime if the stream is incorrect
+private void readObject(final ObjectInputStream stream) throws IOException, ClassNotFoundException{
+private void writeObject(final ObjectOutputStream stream) throws IOException{
+for (final Entry<K, V> entry : entrySet()) {
+
+Generated JUnit Test:
+package org.apache.commons.collections4.trie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Iterator;
+import java.util.Map;
+import java.util.SortedMap;
+
+import org.junit.Test;
+
+public class AbstractPatriciaTriePrefixMapClearTest {
+
+    @Test
+    public void clearPrefixMapRemovesOnlyMatchingEntries() {
+        final PatriciaTrie<String> trie = new PatriciaTrie<String>();
+        trie.put("Anna", "anna");
+        trie.put("Anabel", "anabel");
+        trie.put("Anita", "anita");
+        trie.put("Andy", "andy");
+        trie.put("Bob", "bob");
+
+        final SortedMap<String, String> prefix = trie.prefixMap("An");
+        assertEquals(3, prefix.size());
+
+        prefix.clear();
+
+        assertTrue(prefix.isEmpty());
+        assertEquals(2, trie.size());
+        assertFalse(trie.containsKey("Anna"));
+        assertFalse(trie.containsKey("Anabel"));
+        assertFalse(trie.containsKey("Anita"));
+        assertEquals("andy", trie.get("Andy"));
+        assertEquals("bob", trie.get("Bob"));
+    }
+
+    @Test
+    public void clearPrefixMapLeavesEntriesWithSimilarButNonMatchingPrefix() {
+        final PatriciaTrie<Integer> trie = new PatriciaTrie<Integer>();
+        trie.put("app", Integer.valueOf(1));
+        trie.put("apple", Integer.valueOf(2));
+        trie.put("application", Integer.valueOf(3));
+        trie.put("apt", Integer.valueOf(4));
+        trie.put("banana", Integer.valueOf(5));
+
+        final SortedMap<String, Integer> prefix = trie.prefixMap("app");
+        prefix.clear();
+
+        assertEquals(2, trie.size());
+        assertFalse(trie.containsKey("app"));
+        assertFalse(trie.containsKey("apple"));
+        assertFalse(trie.containsKey("application"));
+        assertEquals(Integer.valueOf(4), trie.get("apt"));
+        assertEquals(Integer.valueOf(5), trie.get("banana"));
+        assertTrue(prefix.entrySet().isEmpty());
+    }
+
+    @Test
+    public void clearSingleEntryPrefixMapKeepsOtherEntriesAccessible() {
+        final PatriciaTrie<String> trie = new PatriciaTrie<String>();
+        trie.put("car", "car");
+        trie.put("cat", "cat");
+        trie.put("dog", "dog");
+
+        final SortedMap<String, String> prefix = trie.prefixMap("car");
+        assertEquals(1, prefix.size());
+        assertEquals("car", prefix.get("car"));
+
+        prefix.clear();
+
+        assertEquals(2, trie.size());
+        assertNull(trie.get("car"));
+        assertFalse(trie.containsKey("car"));
+        assertEquals("cat", trie.get("cat"));
+        assertEquals("dog", trie.get("dog"));
+        assertTrue(prefix.isEmpty());
+    }
+
+    @Test
+    public void clearEmptyPrefixMapDoesNotChangeParentTrie() {
+        final PatriciaTrie<String> trie = new PatriciaTrie<String>();
+        trie.put("alpha", "a");
+        trie.put("beta", "b");
+
+        final SortedMap<String, String> prefix = trie.prefixMap("z");
+        assertTrue(prefix.isEmpty());
+
+        prefix.clear();
+
+        assertEquals(2, trie.size());
+        assertEquals("a", trie.get("alpha"));
+        assertEquals("b", trie.get("beta"));
+        assertFalse(trie.containsKey("z"));
+        assertTrue(prefix.entrySet().isEmpty());
+    }
+
+    @Test
+    public void prefixEntrySetCanBeIteratedAfterClear() {
+        final PatriciaTrie<String> trie = new PatriciaTrie<String>();
+        trie.put("north", "n");
+        trie.put("northern", "nn");
+        trie.put("south", "s");
+
+        final SortedMap<String, String> prefix = trie.prefixMap("north");
+        prefix.clear();
+
+        final Iterator<Map.Entry<String, String>> iterator = prefix.entrySet().iterator();
+        assertFalse(iterator.hasNext());
+        assertEquals(1, trie.size());
+        assertEquals("s", trie.get("south"));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.collections4.trie.AbstractPatriciaTriePrefixMapClearTest::clearPrefixMapRemovesOnlyMatchingEntries
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.collections4.trie.AbstractPatriciaTriePrefixMapClearTest::clearPrefixMapRemovesOnlyMatchingEntries

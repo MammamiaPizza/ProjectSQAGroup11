@@ -1,0 +1,453 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 32  Version: Closure-32b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.parsing.JsDocInfoParser
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+Triggers: com.google.javascript.jscomp.IntegrationTest::testIssue701, com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicense, com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParsePreserve, com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicenseAscii
+
+Bug/specification summary:
+Bug report: 701
+Trigger failures:
+- com.google.javascript.jscomp.IntegrationTest::testIssue701
+ --> junit.framework.ComparisonFailure: expected:</*
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicense
+ --> junit.framework.ComparisonFailure: expected:< Foo
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParsePreserve
+ --> junit.framework.ComparisonFailure: expected:< Foo
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicenseAscii
+ --> junit.framework.ComparisonFailure: expected:< Foo
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+
+Prompt-01 test plan:
+TARGETS: extractMultilineTextualBlock – extracts @license/@preserve text
+TARGETS: extractSingleLineBlock – single-line comment text extraction
+TARGETS: extractBlockComment – handles multi-line block extraction
+ORACLES: testParseLicense/testParsePreserve expected outputs, no leading whitespace
+CASES: @license with newline, space-only, mixed indentation, empty content
+CASES: @preserve with ASCII/non-ASCII, leading/trailing line breaks
+CASES: boundary: exactly one newline, whitespace-only text block
+RISKS: No corrected code; rely on test failures to deduce expected behavior
+RISKS: Private helpers (like trimEnd) may need internal logic scrutiny
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.parsing.JsDocInfoParser (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.parsing;
+public final class JsDocInfoParser {
+private final ErrorReporterParser parser = new ErrorReporterParser();
+private class ErrorReporterParser {
+private enum State {
+private String getSourceName() {
+public static Node parseTypeString(String typeString) {
+parser.addTypeWarning("msg.jsdoc.interface.constructor",
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+private JsDocToken parseSuppressTag(JsDocToken token) {
+private JsDocToken parseModifiesTag(JsDocToken token) {
+private Node parseAndRecordTypeNode(JsDocToken token) {
+private Node parseAndRecordTypeNode(JsDocToken token, boolean matchingLC) {
+private Node parseAndRecordParamTypeNode(JsDocToken token) {
+private String toString(JsDocToken token) {
+private JSTypeExpression createJSTypeExpression(Node n) {
+private static class ExtractionInfo {
+public ExtractionInfo(String string, JsDocToken token) {
+private static class ExtendedTypeInfo {
+public ExtendedTypeInfo(JSTypeExpression type, int lineno, int charno) {
+private ExtractionInfo extractSingleLineBlock() {
+private ExtractionInfo extractMultilineTextualBlock(JsDocToken token) {
+private enum WhitespaceOption {
+@SuppressWarnings("fallthrough")
+private ExtractionInfo extractBlockComment(JsDocToken token) {
+private static String trimEnd(String s) {
+private Node parseTypeExpressionAnnotation(JsDocToken token) {
+private Node parseParamTypeExpressionAnnotation(JsDocToken token) {
+private Node parseTypeNameAnnotation(JsDocToken token) {
+private Node parseTopLevelTypeExpression(JsDocToken token) {
+private Node parseTypeExpressionList(JsDocToken token) {
+private Node parseTypeExpression(JsDocToken token) {
+private Node parseBasicTypeExpression(JsDocToken token) {
+private Node parseTypeName(JsDocToken token) {
+private Node parseFunctionType(JsDocToken token) {
+private Node parseParametersType(JsDocToken token) {
+private Node parseResultType(JsDocToken token) {
+private Node parseUnionType(JsDocToken token) {
+private Node parseUnionTypeWithAlternate(JsDocToken token, Node alternate) {
+private Node parseArrayType(JsDocToken token) {
+private Node parseRecordType(JsDocToken token) {
+private Node parseFieldTypeList(JsDocToken token) {
+private Node parseFieldType(JsDocToken token) {
+private Node parseFieldName(JsDocToken token) {
+private Node wrapNode(int type, Node n) {
+private Node newNode(int type) {
+private Node newStringNode(String s) {
+private Node newStringNode(String s, int lineno, int charno) {
+private Node createTemplateNode() {
+private Node reportTypeSyntaxWarning(String warning) {
+private Node reportGenericTypeSyntaxWarning() {
+private JsDocToken eatTokensUntilEOL() {
+private JsDocToken eatTokensUntilEOL(JsDocToken token) {
+private void restoreLookAhead(JsDocToken token) {
+private boolean match(JsDocToken token) {
+private boolean match(JsDocToken token1, JsDocToken token2) {
+private JsDocToken next() {
+private JsDocToken current() {
+private void skipEOLs() {
+private boolean hasParsedFileOverviewDocInfo() {
+private boolean lookAheadForTypeAnnotation() {
+
+/* HEADER */
+package com.google.javascript.jscomp.parsing;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.JSDocInfo.Visibility;
+import com.google.javascript.rhino.JSDocInfoBuilder;
+import com.google.javascript.rhino.JSTypeExpression;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.ScriptRuntime;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.head.ErrorReporter;
+import com.google.javascript.rhino.head.ast.Comment;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/* METHOD JsDocInfoParser */
+JsDocInfoParser(JsDocTokenStream stream,
+ Comment commentNode,
+ Node associatedNode,
+ Config config,
+ ErrorReporter errorReporter) {
+ this.stream = stream;
+ this.associatedNode = associatedNode;
+
+ // Sometimes this will be null in tests.
+ this.sourceFile = associatedNode == null
+ ? null : associatedNode.getStaticSourceFile();
+
+ this.jsdocBuilder = new JSDocInfoBuilder(config.parseJsDocDocumentation);
+ if (commentNode != null) {
+ this.jsdocBuilder.recordOriginalCommentString(commentNode.getValue());
+ }
+ this.annotationNames = config.annotationNames;
+ this.suppressionNames = config.suppressionNames;
+
+ this.errorReporter = errorReporter;
+ this.templateNode = this.createTemplateNode();
+ }
+
+/* METHOD parseTypeString */
+public static Node parseTypeString(String typeString) {
+ Config config = new Config(
+ Sets.<String>newHashSet(),
+ Sets.<String>newHashSet(),
+ false,
+ LanguageMode.ECMASCRIPT3,
+ false);
+ JsDocInfoParser parser = new JsDocInfoParser(
+ new JsDocTokenStream(typeString),
+ null,
+ null,
+ config,
+ NullErrorReporter.forNewRhino());
+
+ return parser.parseTopLevelTypeExpression(parser.next());
+ }
+
+/* METHOD checkExtendedTypes */
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+ for (ExtendedTypeInfo typeInfo : extendedTypes) {
+ // If interface, record the multiple extended interfaces
+ if (jsdocBuilder.isInterfaceRecorded()) {
+ if (!jsdocBuilder.recordExtendedInterface(typeInfo.type)) {
+ parser.addParserWarning("msg.jsdoc.extends.duplicate",
+ typeInfo.lineno, typeInfo.charno);
+ }
+ } else {
+ if (!jsdocBuilder.recordBaseType(typeInfo.type)) {
+ parser.addTypeWarning("msg.jsdoc.incompat.type",
+ typeInfo.lineno, typeInfo.charno);
+ }
+ }
+ }
+ }
+
+/* METHOD ExtractionInfo */
+public ExtractionInfo(String string, JsDocToken token) {
+ this.string = string;
+ this.token = token;
+ }
+
+/* METHOD ExtendedTypeInfo */
+public ExtendedTypeInfo(JSTypeExpression type, int lineno, int charno) {
+ this.type = type;
+ this.lineno = lineno;
+ this.charno = charno;
+ }
+
+/* METHOD extractMultilineTextualBlock */
+@SuppressWarnings("fallthrough")
+ private ExtractionInfo extractMultilineTextualBlock(JsDocToken token,
+ WhitespaceOption option) {
+
+ if (token == JsDocToken.EOC || token == JsDocToken.EOL ||
+ token == JsDocToken.EOF) {
+ return new ExtractionInfo("", token);
+ }
+
+ stream.update();
+ int startLineno = stream.getLineno();
+ int startCharno = stream.getCharno() + 1;
+
+ // Read the content from the first line.
+ String line = stream.getRemainingJSDocLine();
+ if (option != WhitespaceOption.PRESERVE) {
+ line = line.trim();
+ }
+
+ StringBuilder builder = new StringBuilder();
+ builder.append(line);
+
+ state = State.SEARCHING_ANNOTATION;
+ token = next();
+
+ boolean ignoreStar = false;
+
+ // Track the start of the line to count whitespace that
+ // the tokenizer skipped. Because this case is rare, it's easier
+ // to do this here than in the tokenizer.
+
+ do {
+ switch (token) {
+ case STAR:
+ if (ignoreStar) {
+ // Mark the position after the star as the new start of the line.
+ } else {
+ // The star is part of the comment.
+ if (builder.length() > 0) {
+ builder.append(' ');
+ }
+
+ builder.append('*');
+ }
+
+ token = next();
+ continue;
+
+ case EOL:
+ if (option != WhitespaceOption.SINGLE_LINE) {
+ builder.append("\n");
+ }
+
+ ignoreStar = true;
+ token = next();
+ continue;
+
+ default:
+ ignoreStar = false;
+ state = State.SEARCHING_ANNOTATION;
+
+ // All tokens must be separated by a space.
+
+ if (token == JsDocToken.EOC ||
+ token == JsDocToken.EOF ||
+ // When we're capturing a license block, annotations
+ // in the block are ok.
+ (token == JsDocToken.ANNOTATION &&
+ option != WhitespaceOption.PRESERVE)) {
+ String multilineText = builder.toString();
+
+ if (option != WhitespaceOption.PRESERVE) {
+ multilineText = multilineText.trim();
+ }
+
+ int endLineno = stream.getLineno();
+ int endCharno = stream.getCharno();
+
+ if (multilineText.length() > 0) {
+ jsdo
+...[truncated deterministically]...
+endCharno);
+ }
+
+ return new ExtractionInfo(multilineText, token);
+ }
+
+ if (builder.length() > 0) {
+ builder.append(' ');
+ }
+ builder.append(toString(token));
+
+ line = stream.getRemainingJSDocLine();
+
+ if (option != WhitespaceOption.PRESERVE) {
+ line = trimEnd(line);
+ }
+
+ builder.append(line);
+ token = next();
+ }
+
+/* METHOD parseParametersType */
+private Node parseParametersType(JsDocToken token) {
+ Node paramsType = newNode(Token.PARAM_LIST);
+ boolean isVarArgs = false;
+ Node paramType = null;
+ if (token != JsDocToken.RP) {
+ do {
+ if (paramType != null) {
+ // skip past the comma
+ next();
+ skipEOLs();
+ token = next();
+ }
+
+ if (token == JsDocToken.ELLIPSIS) {
+ // In the latest ES4 proposal, there are no type constraints allowed
+ // on variable arguments. We support the old syntax for backwards
+ // compatibility, but we should gradually tear it out.
+ skipEOLs();
+ if (match(JsDocToken.RP)) {
+ paramType = newNode(Token.ELLIPSIS);
+ } else {
+ skipEOLs();
+ if (!match(JsDocToken.LB)) {
+ return reportTypeSyntaxWarning("msg.jsdoc.missing.lb");
+ }
+
+ next();
+ skipEOLs();
+ paramType = wrapNode(Token.ELLIPSIS, parseTypeExpression(next()));
+ skipEOLs();
+ if (!match(JsDocToken.RB)) {
+ return reportTypeSyntaxWarning("msg.jsdoc.missing.rb");
+ }
+ skipEOLs();
+ next();
+ }
+
+ isVarArgs = true;
+ } else {
+ paramType = parseTypeExpression(token);
+ if (match(JsDocToken.EQUALS)) {
+ skipEOLs();
+ next();
+ paramType = wrapNode(Token.EQUALS, paramType);
+ }
+ }
+
+ if (paramType == null) {
+ return null;
+ }
+ paramsType.addChildToBack(paramType);
+ if (isVarArgs) {
+ break;
+ }
+ } while (match(JsDocToken.COMMA));
+ }
+
+ if (isVarArgs && match(JsDocToken.COMMA)) {
+ return reportTypeSyntaxWarning("msg.jsdoc.function.varargs");
+ }
+
+ // The right paren will be checked by parseFunctionType
+
+ return paramsType;
+ }
+
+/* METHOD addParserWarning */
+void addParserWarning(String messageId, String messageArg, int lineno,
+ int charno) {
+ errorReporter.warning(ScriptRuntime.getMessage1(messageId, messageArg),
+ getSourceName(), lineno, null, charno);
+ }
+
+/* METHOD addParserWarning */
+void addParserWarning(String messageId, int lineno, int charno) {
+ errorReporter.warning(ScriptRuntime.getMessage0(messageId),
+ getSourceName(), lineno, null, charno);
+ }
+
+/* METHOD addTypeWarning */
+void addTypeWarning(String messageId, String messageArg, int lineno,
+ int charno) {
+ errorReporter.warning(
+ "Bad type annotation. " +
+ ScriptRuntime.getMessage1(messageId, messageArg),
+ getSourceName(), lineno, null, charno);
+ }
+
+/* METHOD addTypeWarning */
+void addTypeWarning(String messageId, int lineno, int charno) {
+ errorReporter.warning(
+ "Bad type annotation. " +
+ ScriptRuntime.getMessage0(messageId),
+ getSourceName(), lineno, null, charno);
+ }
+
+/* METHOD extractSingleLineBlock */
+private ExtractionInfo extractSingleLineBlock() {
+
+ // Get the current starting point.
+ stream.update();
+ int lineno = stream.getLineno();
+ int charno = stream.getCharno() + 1;
+
+ String line = stream.getRemainingJSDocLine().trim();
+
+ // Record the textual description.
+ if (line.length() > 0) {
+ jsdocBuilder.markText(line, lineno, charno, lineno,
+ charno + line.length());
+ }
+
+ return new ExtractionInfo(line, next());
+ }
+
+/* METHOD parseTypeName */
+private Node parseTypeName(JsDocToken token) {
+ if (token != JsDocToken.STRING) {
+ return reportGenericTypeSyntaxWarning();
+ }
+
+ String typeName = stream.getString();
+ int lineno = stream.getLineno();
+ int charno = stream.getCharno();
+ while (match(JsDocToken.EOL) &&
+ typeName.charAt(typeName.length() - 1) == '.') {
+ skipEOLs();
+ if (match(JsDocToken.STRING)) {
+ next();
+ typeName += stream.getString();
+ }
+ }
+
+ Node typeNameNode = newStringNode(typeName, lineno, charno);
+
+ if (match(JsDocToken.LT)) {
+ next();
+ skipEOLs();
+ Node memberType = parseTypeExpressionList(next());
+ if (memberType != null) {
+ typeNameNode.addChildToFront(memberType);
+
+ skipEOLs();
+ if (!match(JsDocToken.GT)) {
+ return reportTypeSyntaxWarning("msg.jsdoc.missing.gt");
+ }
+
+ next();
+ }
+ }
+ return typeNameNode;
+ }

@@ -1,0 +1,210 @@
+package org.jfree.chart.renderer.category.junit;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Graphics;
+
+import javax.swing.Icon;
+
+import org.jfree.chart.renderer.category.MinMaxCategoryRenderer;
+import org.junit.Test;
+
+public class MinMaxCategoryRendererGeneratedTest {
+
+    private static final Icon OBJECT_ICON = new TestIcon(7, 5);
+    private static final Icon MAX_ICON = new TestIcon(8, 6);
+    private static final Icon MIN_ICON = new TestIcon(9, 4);
+
+    private MinMaxCategoryRenderer createComparableRenderer() {
+        MinMaxCategoryRenderer renderer = new MinMaxCategoryRenderer();
+        renderer.setObjectIcon(OBJECT_ICON);
+        renderer.setMaxIcon(MAX_ICON);
+        renderer.setMinIcon(MIN_ICON);
+        return renderer;
+    }
+
+    @Test
+    public void testDefaultInstancesAreEqual() {
+        MinMaxCategoryRenderer r1 = new MinMaxCategoryRenderer();
+        MinMaxCategoryRenderer r2 = new MinMaxCategoryRenderer();
+
+        assertTrue(r1.equals(r2));
+        assertTrue(r2.equals(r1));
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testEqualsReflectsDrawLinesSetting() {
+        MinMaxCategoryRenderer r1 = createComparableRenderer();
+        MinMaxCategoryRenderer r2 = createComparableRenderer();
+
+        assertEquals(r1, r2);
+
+        r1.setDrawLines(!r1.isDrawLines());
+        assertFalse(r1.equals(r2));
+
+        r2.setDrawLines(r1.isDrawLines());
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testEqualsReflectsGroupPaint() {
+        MinMaxCategoryRenderer r1 = createComparableRenderer();
+        MinMaxCategoryRenderer r2 = createComparableRenderer();
+
+        r1.setGroupPaint(Color.red);
+        assertFalse(r1.equals(r2));
+
+        r2.setGroupPaint(Color.red);
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testEqualsReflectsGroupStroke() {
+        MinMaxCategoryRenderer r1 = createComparableRenderer();
+        MinMaxCategoryRenderer r2 = createComparableRenderer();
+
+        BasicStroke stroke = new BasicStroke(2.0f);
+        r1.setGroupStroke(stroke);
+        assertFalse(r1.equals(r2));
+
+        r2.setGroupStroke(new BasicStroke(2.0f));
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testEqualsReflectsObjectIcon() {
+        MinMaxCategoryRenderer r1 = createComparableRenderer();
+        MinMaxCategoryRenderer r2 = createComparableRenderer();
+
+        Icon replacement = new TestIcon(3, 3);
+        r1.setObjectIcon(replacement);
+        assertFalse(r1.equals(r2));
+
+        r2.setObjectIcon(replacement);
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testEqualsReflectsMaxIcon() {
+        MinMaxCategoryRenderer r1 = createComparableRenderer();
+        MinMaxCategoryRenderer r2 = createComparableRenderer();
+
+        Icon replacement = new TestIcon(4, 4);
+        r1.setMaxIcon(replacement);
+        assertFalse(r1.equals(r2));
+
+        r2.setMaxIcon(replacement);
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testEqualsReflectsMinIcon() {
+        MinMaxCategoryRenderer r1 = createComparableRenderer();
+        MinMaxCategoryRenderer r2 = createComparableRenderer();
+
+        Icon replacement = new TestIcon(5, 5);
+        r1.setMinIcon(replacement);
+        assertFalse(r1.equals(r2));
+
+        r2.setMinIcon(replacement);
+        assertEquals(r1, r2);
+    }
+
+    @Test
+    public void testSettersExposeConfiguredValues() {
+        MinMaxCategoryRenderer renderer = new MinMaxCategoryRenderer();
+        BasicStroke stroke = new BasicStroke(3.0f);
+        Icon object = new TestIcon(2, 3);
+        Icon max = new TestIcon(3, 2);
+        Icon min = new TestIcon(4, 1);
+
+        renderer.setDrawLines(!renderer.isDrawLines());
+        renderer.setGroupPaint(Color.blue);
+        renderer.setGroupStroke(stroke);
+        renderer.setObjectIcon(object);
+        renderer.setMaxIcon(max);
+        renderer.setMinIcon(min);
+
+        assertEquals(Color.blue, renderer.getGroupPaint());
+        assertSame(stroke, renderer.getGroupStroke());
+        assertSame(object, renderer.getObjectIcon());
+        assertSame(max, renderer.getMaxIcon());
+        assertSame(min, renderer.getMinIcon());
+    }
+
+    @Test
+    public void testSettersRejectNullArguments() {
+        final MinMaxCategoryRenderer renderer = new MinMaxCategoryRenderer();
+
+        assertRejectsNull(new NullSetter() {
+            public void setNull() {
+                renderer.setGroupPaint(null);
+            }
+        });
+        assertRejectsNull(new NullSetter() {
+            public void setNull() {
+                renderer.setGroupStroke(null);
+            }
+        });
+        assertRejectsNull(new NullSetter() {
+            public void setNull() {
+                renderer.setObjectIcon(null);
+            }
+        });
+        assertRejectsNull(new NullSetter() {
+            public void setNull() {
+                renderer.setMaxIcon(null);
+            }
+        });
+        assertRejectsNull(new NullSetter() {
+            public void setNull() {
+                renderer.setMinIcon(null);
+            }
+        });
+    }
+
+    private void assertRejectsNull(NullSetter setter) {
+        try {
+            setter.setNull();
+            fail("Expected IllegalArgumentException for a null argument.");
+        }
+        catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().length() > 0);
+        }
+    }
+
+    private interface NullSetter {
+        void setNull();
+    }
+
+    private static class TestIcon implements Icon {
+
+        private final int width;
+        private final int height;
+
+        TestIcon(int width, int height) {
+            this.width = width;
+            this.height = height;
+        }
+
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            // No painting is needed for equality tests.
+        }
+
+        public int getIconWidth() {
+            return this.width;
+        }
+
+        public int getIconHeight() {
+            return this.height;
+        }
+    }
+}

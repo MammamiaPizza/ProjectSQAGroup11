@@ -1,0 +1,271 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Chart  Bug: 17  Version: Chart-17b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Bug/specification summary:
+Bug report: 803
+Trigger failures:
+- org.jfree.data.time.junit.TimeSeriesTests::testBug1832432
+ --> java.lang.IllegalArgumentException: Requires start <= end.
+Modified: org.jfree.data.time.TimeSeries
+
+Available API/signatures:
+[org.jfree.data.time.TimeSeries | java]
+package org.jfree.data.time;
+public class TimeSeries extends Series implements Cloneable, Serializable {
+protected static final String DEFAULT_DOMAIN_DESCRIPTION = "Time";
+protected static final String DEFAULT_RANGE_DESCRIPTION = "Value";
+protected Class timePeriodClass;
+protected List data;
+public TimeSeries(Comparable name) {
+Day.class);
+public TimeSeries(Comparable name, Class timePeriodClass) {
+public String getDomainDescription() {
+public void setDomainDescription(String description) {
+public String getRangeDescription() {
+public void setRangeDescription(String description) {
+public int getItemCount() {
+public List getItems() {
+public int getMaximumItemCount() {
+public void setMaximumItemCount(int maximum) {
+public long getMaximumItemAge() {
+public void setMaximumItemAge(long periods) {
+public Class getTimePeriodClass() {
+public TimeSeriesDataItem getDataItem(int index) {
+public TimeSeriesDataItem getDataItem(RegularTimePeriod period) {
+public RegularTimePeriod getTimePeriod(int index) {
+public RegularTimePeriod getNextTimePeriod() {
+public Collection getTimePeriods() {
+public Collection getTimePeriodsUniqueToOtherSeries(TimeSeries series) {
+public int getIndex(RegularTimePeriod period) {
+public Number getValue(int index) {
+public Number getValue(RegularTimePeriod period) {
+public void add(TimeSeriesDataItem item) {
+public void add(TimeSeriesDataItem item, boolean notify) {
+b.append("You are trying to add data where the time period class ");
+public void add(RegularTimePeriod period, double value) {
+public void add(RegularTimePeriod period, double value, boolean notify) {
+public void add(Regular
+...[truncated deterministically]...
+value) {
+public void add(RegularTimePeriod period, Number value, boolean notify) {
+public void update(RegularTimePeriod period, Number value) {
+public void update(int index, Number value) {
+public TimeSeries addAndOrUpdate(TimeSeries series) {
+public void removeAgedItems(boolean notify) {
+public void removeAgedItems(long latest, boolean notify) {
+Method m = RegularTimePeriod.class.getDeclaredMethod(
+"createInstance", new Class[] {Class.class, Date.class,
+TimeZone.class});
+public void clear() {
+public void delete(RegularTimePeriod period) {
+public void delete(int start, int end) {
+public Object clone() throws CloneNotSupportedException {
+public TimeSeries createCopy(int start, int end)
+public TimeSeries createCopy(RegularTimePeriod start, RegularTimePeriod end)
+public boolean equals(Object object) {
+public int hashCode() {
+
+Generated JUnit Test:
+package org.jfree.data.time.junit;
+
+ import org.jfree.data.time.Day;
+ import org.jfree.data.time.TimeSeries;
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for {@link TimeSeries} targeting createCopy and related methods,
+  * including reproduction of bug 1832432.
+  */
+ public class TimeSeriesTests {
+
+     /**
+      * Bug 1832432: createCopy(RegularTimePeriod, RegularTimePeriod)
+      * throws IllegalArgumentException "Requires start <= end." when
+      * both bounds map to the same insertion point between two
+      * existing data items. The expected result is an empty copy.
+      */
+     @Test
+     public void testBug1832432() throws Exception {
+         TimeSeries series = new TimeSeries("Bug1832432");
+         series.add(new Day(1, 1, 2000), 1.0);
+         series.add(new Day(4, 1, 2000), 4.0);
+         series.add(new Day(5, 1, 2000), 5.0);
+
+         // Both dates lie between Day 1 and Day 4 → same insertion point
+         Day start = new Day(2, 1, 2000);
+         Day end   = new Day(3, 1, 2000);
+
+         TimeSeries copy = series.createCopy(start, end);
+         assertNotNull("Copy must not be null", copy);
+         assertEquals("Copied series keeps original name",
+                 "Bug1832432", copy.getKey());
+         assertEquals("No data falls in [Day2, Day3]", 0, copy.getItemCount());
+     }
+
+     /** Copy a range where both endpoints match existing data items exactly. */
+     @Test
+     public void testCreateCopyNormalRange() throws Exception {
+         TimeSeries series = new TimeSeries("Normal");
+         series.add(new Day(1, 1, 2000), 1.0);
+         series.add(new Day(2, 1, 2000), 2.0);
+         series.add(new Day(3, 1, 2000), 3.0);
+         series.add(new Day(4, 1, 2000), 4.0);
+         series.add(new Day(5, 1, 2000), 5.0);
+
+         TimeSeries copy = series.createCopy(new Day(2, 1, 2000),
+                                             new Day(4, 1, 2000));
+         assertEquals(3, copy.getItemCount());
+         assertEquals(2.0, copy.getValue(0).doubleValue(), 0.001);
+         assertEquals(3.0, copy.getValue(1).doubleValue(), 0.001);
+         assertEquals(4.0, copy.getValue(2).doubleValue(), 0.001);
+     }
+
+     /** Equal start and end bounds produce a single-item copy. */
+     @Test
+     public void testCreateCopySingleItemEqualBounds() throws Exception {
+         TimeSeries series = new TimeSeries("Single");
+         series.add(new Day(1, 1, 2000), 1.0);
+         series.add(new Day(2, 1, 2000), 2.0);
+         series.add(new Day(3, 1, 2000), 3.0);
+
+         TimeSeries copy = series.createCopy(new Day(2, 1, 2000),
+                                             new Day(2, 1, 2000));
+         assertEquals(1, copy.getItemCount());
+         assertEquals(2.0, copy.getValue(0).doubleValue(), 0.001);
+     }
+
+     /** Start before the first data item; end matches an existing item. */
+     @Test
+     public void testCreateCopyStartBeforeFirstEndMatch() throws Exception {
+         TimeSeries series = new TimeSeries("BeforeFirst");
+         series.add(new Day(5, 1, 2000), 5.0);
+         series.add(new Day(6, 1, 2000), 6.0);
+         series.add(new Day(7, 1, 2000), 7.0);
+
+         TimeSeries copy = series.createCopy(new Day(1, 1, 2000),
+                                             new Day(6, 1, 2000));
+         assertEquals(2, copy.getItemCount());
+         assertEquals(5.0, copy.getValue(0).doubleValue(), 0.001);
+         assertEquals(6.0, copy.getValue(1).doubleValue(), 0.001);
+     }
+
+     /** Start matches an existing item; end after the last data item. */
+     @Test
+     public void testCreateCopyStartMatchEndAfterLast() throws Exception {
+         TimeSeries series = new TimeSeries("AfterLast");
+         series.add(new Day(5, 1, 2000), 5.0);
+         series.add(new Day(6, 1, 2000), 6.0);
+         series.add(new Day(7, 1, 2000), 7.0);
+
+         TimeSeries copy = series.createCopy(new Day(6, 1, 2000),
+                                             new Day(10, 1, 2000));
+         assertEquals(2, copy.getItemCount());
+         assertEquals(6.0, copy.getValue(0).doubleValue(), 0.001);
+         assertEquals(7.0, copy.getValue(1).doubleValue(), 0.001);
+     }
+
+     /** Both bounds unmatched, but in different gaps between data items. */
+     @Test
+     public void testCreateCopyBothUnmatchedDifferentGaps() throws Exception {
+         TimeSeries series = new TimeSeries("DiffGaps");
+         series.add(new Day(1, 1,2000),10.);
+         series.add(new Day(5,1,2000),50.0);
+         series.add(new Day(10,1,2000),100.0);
+
+         // Day 2 inserts after idx 0: Day 7 inserts after idx 1
+         TimeSeries copy = series.createCopy(new Day(2,1,2000),
+                                             new Day(7, 1,2000));
+         assertEquals(1, copy.getItemCount());
+         assertEquals(50.0, copy.getValue(0).doubleValue(),0.001);
+     }
+
+     /** Start chronologically after end must throw IllegalArgumentException. */
+     @Test
+     public void testCreateCopyStartAfterEndThrows() {
+         TimeSeries series = new TimeSeries("InvalidOrder");
+         series.add(new Day(1,1,2000),10.0);
+         series.add(new Day(5,1,2000),50.0);
+
+         try {
+             series.createCopy(new Day(5,1,2000),new Day(1,1,2000));
+             fail("Expected IllegalArgumentException");
+         } catch (IllegalArgumentException e) {
+             assertTrue(e.getMessage().contains("start on or before end"));
+         } catch (CloneNotSupportedException e) {
+             fail("Unexpected CloneNotSupportedException");
+         }
+     }
+
+     /** Copy from an empty series returns an empty copy with the same name. */
+     @Test
+     public void testCreateCopyEmptySeries() throws Exception {
+         TimeSeries series = new TimeSeries("Empty");
+
+         TimeSeries copy = series.createCopy(new Day(1,1,2000),
+                                             new Day(5,1,2000));
+         assertNotNull(copy);
+         assertEquals("Empty", copy.getKey());
+         assertEquals(0, copy.getItemCount());
+     }
+
+     /** Null start argument must throw IllegalArgumentException. */
+     @Test
+     public void testCreateCopyNullStartThrows() {
+         TimeSeries series = new TimeSeries("NullStart");
+         series.add(new Day(1,1,2000),1.0);
+
+         try {
+             series.createCopy(null, new Day(1,1,2000));
+             fail("Expected IllegalArgumentException");
+         } catch (IllegalArgumentException e) {
+             assertEquals("Null 'start' argument.", e.getMessage());
+         } catch (CloneNotSupportedException e) {
+             fail("Unexpected CloneNotSupportedException");
+         }
+     }
+
+     /** Null end argument must throw IllegalArgumentException. */
+     @Test
+     public void testCreateCopyNullEndThrows() {
+         TimeSeries series = new TimeSeries("NullEnd");
+         series.add(new Day(1,1,2000),1.0);
+
+         try {
+             series.createCopy(new Day(1,1,2000),null);
+             fail("Expected IllegalArgumentException");
+         } catch (IllegalArgumentException e) {
+             assertEquals("Null 'end' argument.",e.getMessage());
+         } catch (CloneNotSupportedException e) {
+             fail("Unexpected CloneNotSupportedException");
+         }
+     }
+
+     /** createCopy(int,int) with a negative start index must throw. */
+     @Test(expected = IllegalArgumentException.class)
+     public void testCreateCopyIntNegativeStart() throws Exception {
+         TimeSeries series = new TimeSeries("NegStart");
+         series.add(new Day(1,1,2000),1.0);
+         series.createCopy(-1,0);
+     }
+
+     /** createCopy(int,int) with start > end must throw. */
+     @Test(expected = IllegalArgumentException.class)
+     public void testCreateCopyIntStartGreaterThanEnd() throws Exception {
+         TimeSeries series = new TimeSeries("StartGtEnd");
+         series.add(new Day(1,1,2000),1.0);
+         series.add(new Day(2,1,2000),2.0);
+         series.createCopy(1,0);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jfree.data.time.junit.TimeSeriesTests::testBug1832432
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jfree.data.time.junit.TimeSeriesTests::testBug1832432

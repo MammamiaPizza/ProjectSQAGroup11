@@ -1,0 +1,184 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 11  Version: Compress-11b
+JUnit: junit-4.10.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-171
+Trigger failures:
+- org.apache.commons.compress.archivers.ArchiveStreamFactoryTest::shortTextFilesAreNoTARs
+ --> junit.framework.AssertionFailedError: created an input stream for a non-archive
+Modified: org.apache.commons.compress.archivers.ArchiveStreamFactory
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.ArchiveStreamFactory | java]
+package org.apache.commons.compress.archivers;
+public class ArchiveStreamFactory {
+public static final String AR = "ar";
+public static final String CPIO = "cpio";
+public static final String DUMP = "dump";
+public static final String JAR = "jar";
+public static final String TAR = "tar";
+public static final String ZIP = "zip";
+public ArchiveInputStream createArchiveInputStream(final InputStream in)
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers;
+
+ import static org.junit.Assert.*;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.InputStream;
+ import java.io.IOException;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ public class ArchiveStreamFactoryTest {
+
+     private ArchiveStreamFactory factory;
+
+     @Before
+     public void setUp() {
+         factory = new ArchiveStreamFactory();
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void nullStreamThrowsIllegalArgumentException() throws ArchiveException {
+         factory.createArchiveInputStream(null);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void streamWithoutMarkThrowsIllegalArgumentException() throws ArchiveException {
+         InputStream noMark = new ByteArrayInputStream(new byte[0]) {
+             @Override
+             public boolean markSupported() {
+                 return false;
+             }
+         };
+         factory.createArchiveInputStream(noMark);
+     }
+
+     @Test(expected = ArchiveException.class)
+     public void shortTextFileIsNoTAR() throws ArchiveException {
+         byte[] data = "a".getBytes();
+         InputStream in = new ByteArrayInputStream(data);
+         factory.createArchiveInputStream(in);
+     }
+
+     @Test(expected = ArchiveException.class)
+     public void emptyStreamThrowsArchiveException() throws ArchiveException {
+         byte[] data = new byte[0];
+         InputStream in = new ByteArrayInputStream(data);
+         factory.createArchiveInputStream(in);
+     }
+
+     @Test(expected = ArchiveException.class)
+     public void binaryGarbageThrowsArchiveException() throws ArchiveException {
+         byte[] data = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a };
+         InputStream in = new ByteArrayInputStream(data);
+         factory.createArchiveInputStream(in);
+     }
+
+     @Test(expected = ArchiveException.class)
+     public void truncatedZipSignatureThrowsArchiveException() throws ArchiveException {
+         byte[] data = new byte[] { 'P', 'K' };
+         InputStream in = new ByteArrayInputStream(data);
+         factory.createArchiveInputStream(in);
+     }
+
+     @Test(expected = ArchiveException.class)
+     public void truncatedArSignatureThrowsArchiveException() throws ArchiveException {
+         byte[] data = "!<arc".getBytes();
+         InputStream in = new ByteArrayInputStream(data);
+         factory.createArchiveInputStream(in);
+     }
+
+     @Test
+     public void validZipIsDetected() throws ArchiveException {
+         byte[] data = new byte[] { 'P', 'K', 0x03, 0x04 };
+         InputStream in = new ByteArrayInputStream(data);
+         ArchiveInputStream ais = factory.createArchiveInputStream(in);
+         assertTrue("Should be a ZipArchiveInputStream", ais instance of ZipArchiveInputStream);
+     }
+
+     @Test
+     public void validArIsDetected() throws ArchiveException {
+         byte[] data = new byte[] { 0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a }; // "!<arch>\n"
+         InputStream in = new ByteArrayInputStream(data);
+         ArchiveInputStream ais = factory.createArchiveInputStream(in);
+         assertTrue("Should be an ArArchiveInputStream", ais instance of ArArchiveInputStream);
+     }
+
+     @Test
+     public void validCpioIsDetected() throws ArchiveException {
+         byte[] data = new byte[] { '0', '7', '0', '7', '0', '7' };
+         InputStream in = new ByteArrayInputStream(data);
+         ArchiveInputStream ais = factory.createArchiveInputStream(in);
+         assertTrue("Should be a CpioArchiveInputStream", ais instance of CpioArchiveInputStream);
+     }
+
+     @Test
+     public void validTarIsDetected() throws ArchiveException {
+         byte[] header = new byte[512];
+         // name "test.txt"
+         byte[] name = "test.txt".getBytes();
+         System.arraycopy(name, 0, header, 0, name.length);
+         // mode "000644 "
+         byte[] mode = "000644 ".getBytes();
+         System.arraycopy(mode, 0, header, 100, mode.length);
+         // uid, gid left as zeros
+         // size "00000000000\0"
+         byte[] size = "00000000000\0".getBytes();
+         System.arraycopy(size, 0, header, 124, size.length);
+         // mtime "00000000000\0"
+         byte[] mtime = "00000000000\0".getBytes();
+         System.arraycopy(mtime, 0, header, 136, mtime.length);
+         // chksum placeholder: 8 spaces
+         for (int i = 0; i < 8; i++) {
+             header[148 + i] = ' ';
+         }
+         // typeflag '0'
+         header[156] = '0';
+         // magic "ustar\0"
+         byte[] magic = "ustar\0".getBytes();
+         System.arraycopy(magic, 0, header, 257, magic.length);
+         // version "00"
+         header[263] = '0';
+         header[264] = '0';
+         // compute checksum
+         long sum = 0;
+         for (int i = 0; i < 512; i++) {
+             sum += (header[i] & 0xff);
+         }
+         // format checksum as 6-digit octal, null, space
+         String octalSum = Long.toOctalString(sum);
+         while (octalSum.length() < 6) {
+             octalSum = "0" + octalSum;
+         }
+         byte[] chksum = (octalSum + "\0 ").getBytes();
+         System.arraycopy(chksum, 0, header, 148, chksum.length);
+         InputStream in = new ByteArrayInputStream(header);
+         ArchiveInputStream ais = factory.createArchiveInputStream(in);
+         assertTrue("Should be a TarArchiveInputStream", ais instance of TarArchiveInputStream);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Compress-11f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Compress-11f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Compress-11f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Compress-11f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Compress-11f-copilot/.test_suite/org/apache/commons/compress/archivers/ArchiveStreamFactoryTest.java:77: error: ')' expected
+ [javac] assertTrue("Should be a ZipArchiveInputStream", ais instance of ZipArchiveInputStream);
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

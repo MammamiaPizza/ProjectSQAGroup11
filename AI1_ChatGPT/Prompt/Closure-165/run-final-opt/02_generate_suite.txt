@@ -1,0 +1,352 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 165  Version: Closure-165b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.rhino.jstype.JSTypeRegistry, com.google.javascript.rhino.jstype.ObjectType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.RecordTypeBuilder
+Modified: com.google.javascript.rhino.jstype.JSTypeRegistry, com.google.javascript.rhino.jstype.ObjectType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.RecordTypeBuilder
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testIssue725
+
+Bug/specification summary:
+Bug report: 725
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue725
+ --> junit.framework.AssertionFailedError: expected a warning
+Modified: com.google.javascript.rhino.jstype.JSTypeRegistry, com.google.javascript.rhino.jstype.ObjectType, com.google.javascript.rhino.jstype.RecordType, com.google.javascript.rhino.jstype.RecordTypeBuilder
+
+Prompt-01 test plan:
+TARGETS: RecordType.isSubtype(ObjectType,RecordType) and RecordType.isEquivalentTo(JSType).
+TARGETS: RecordTypeBuilder.build and duplicate-record-field reporting path.
+TARGETS: JSTypeRegistry/ObjectType property and type-resolution behavior affected by Issue725.
+ORACLES: Existing TypeCheckTest.testIssue725 expects a warning.
+ORACLES: Record subtype/equivalence results and builder-reported duplicate-field diagnostic.
+CASES: Record with required property vs object/record lacking that property; expect non-subtype/warning.
+CASES: Matching property names/types; verify subtype/equivalence normal behavior.
+CASES: Duplicate record field through builder; verify documented "Duplicate record field" report.
+RISKS: Truncated APIs and absent Issue725 source limit exact construction and diagnostic assertions.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.rhino.jstype.JSTypeRegistry (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public class JSTypeRegistry implements Serializable {
+private final Set<String> namespaces = new HashSet<String>();
+private final Set<String> nonNullableTypeNames = new HashSet<String>();
+private final Set<String> forwardDeclaredTypes = new HashSet<String>();
+public static enum ResolveMode {
+public JSTypeRegistry(ErrorReporter reporter) {
+public void setResolveMode(ResolveMode mode) {
+public ErrorReporter getErrorReporter() {
+public boolean shouldTolerateUndefinedValues() {
+public void resetForTypeCheck() {
+private void initializeBuiltInTypes() {
+@Override public FunctionType getConstructor() {
+private void initial
+...[truncated deterministically]...
+Type createAnonymousObjectType() {
+public FunctionType createInterfaceType(String name, Node source) {
+@VisibleForTesting
+public void identifyNonNullableName(String name) {
+private boolean hasTypeName(Node n) {
+"Duplicate record field " + fieldName,
+public void setTemplateTypeName(String name) {
+public void clearTemplateTypeName() {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ALL_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ARRAY_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.VOID_TYPE;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.LinkedHashMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.ScriptRuntime;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.RecordTypeBuilder.RecordProperty;
+import java.io.Serializable;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+public class JSTypeRegistry implements Serializable {
+
+/* METHOD JSTypeRegistry */
+public JSTypeRegistry(ErrorReporter reporter) {
+ this(reporter, false);
+ }
+
+/* METHOD JSTypeRegistry */
+public JSTypeRegistry(
+ ErrorReporter reporter, boolean tolerateUndefinedValues) {
+ this.reporter = reporter;
+ nativeTypes = new JSType[JSTypeNative.values().length];
+ namesToTypes = new HashMap<String, JSType>();
+ resetForTypeCheck();
+ this.tolerateUndefinedValues = tolerateUndefinedValues;
+ }
+
+===== com.google.javascript.rhino.jstype.ObjectType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public abstract class ObjectType extends JSType implements StaticScope<JSType> {
+@Override
+public Node getRootNode() { return null; }
+public ObjectType getParentScope() {
+public abstract Property getSlot(String name);
+public Property getOwnSlot(String name) {
+public ObjectType getTypeOfThis() {
+public JSType getParameterType() {
+public JSType getIndexType() {
+public JSDocInfo getJSDocInfo() {
+public void setJSDocInfo(JSDocInfo info) {
+final boolean detectImplicitPrototypeCycle() {
+public abstract String getReferenceName();
+public String getNormalizedReferenceName() {
+public String getDisplayName() {
+public static S
+...[truncated deterministically]...
+aces() {
+public static final class Property
+public String getName() {
+public Node getNode() {
+public StaticSourceFile getSourceFile() {
+public Property getSymbol() {
+public Property getDeclaration() {
+public JSType getType() {
+public boolean isTypeInferred() {
+@Override public JSDocInfo getJSDocInfo() {
+public void setNode(Node n) {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.TernaryValue.FALSE;
+import static com.google.javascript.rhino.jstype.TernaryValue.UNKNOWN;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.StaticReference;
+import com.google.javascript.rhino.jstype.StaticSlot;
+import java.io.Serializable;
+import java.util.Set;
+
+/* METHOD ObjectType */
+ObjectType(JSTypeRegistry registry) {
+ super(registry);
+ }
+
+/* METHOD defineDeclaredProperty */
+public final boolean defineDeclaredProperty(String propertyName,
+ JSType type, Node propertyNode) {
+ boolean result = defineProperty(propertyName, type, false,
+ propertyNode);
+
+ // All property definitions go through this method
+ // or defineDeclaredProperty. Because the properties de
+...[truncated deterministically]...
+to register this after defining the property.
+ registry.registerPropertyOnType(propertyName, this);
+
+ return result;
+ }
+
+ /**
+ * Defines a property whose type is on a synthesized object. These objects
+ * don't actually exist in the user's program. They're just used for
+ * bookkeeping in the type system.
+ */
+
+ /**
+ * Defines a property whose type is inferred.
+ * @param propertyName the property's name
+ * @param type the type
+ * @param propertyNode the node corresponding to the inferred definition of
+ * property that
+...[truncated deterministically]...
+e == null ? type :
+ originalType.getLeastSupertype(type);
+ }
+
+ boolean result = defineProperty(propertyName, type, true,
+ propertyNode);
+
+ // All property definitions go through this method
+ // or defineDeclaredProperty. Because the properties defined an an
+ // object can affect subtyping, it's slightly more efficient
+ // to register this after defining the property.
+ registry.registerPropertyOnType(propertyName, this);
+
+ return result;
+ }
+
+===== com.google.javascript.rhino.jstype.RecordType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+class RecordType extends PrototypeObjectType {
+private final SortedMap<String, JSType> properties = Maps.newTreeMap();
+@Override
+public boolean isEquivalentTo(JSType other) {
+public ObjectType getImplicitPrototype() {
+public boolean isSubtype(JSType that) {
+static boolean isSubtype(ObjectType typeA, RecordType typeB) {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import com.google.common.collect.Maps;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.RecordTypeBuilder.RecordProperty;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+class RecordType extends PrototypeObjectType {
+
+/* METHOD RecordType */
+RecordType(JSTypeRegistry registry, Map<String, RecordProperty> properties) {
+ super(registry, null, null);
+ setPrettyPrint(true);
+
+ for (String property : properties.keySet()) {
+ RecordProperty prop = properties.get(property);
+ if (prop == null) {
+ throw new IllegalStateException(
+ "RecordProperty associated with a property should not be null!");
+ }
+ defineDeclaredProperty(
+ property, prop.getType(), prop.getPropertyNode());
+ }
+
+ // Freeze the record type.
+ isFrozen = true;
+ }
+
+/* METHOD isEquivalentTo */
+@Override
+ public boolean isEquivalentTo(JSType other) {
+ if (!other.isRecordType()) {
+ return false;
+ }
+
+ // Compare properties.
+ RecordType otherRecord = other.toMaybeRecordType();
+ if (otherRecord == this) {
+ return true;
+ }
+
+ Set<String> keySet = properties.keySet();
+ Map<String, JSType> otherProps = otherRecord.properties;
+ if (!otherProps.keySet().equals(keySet)) {
+ return false;
+ }
+ for (String key : keySet) {
+ if (!otherProps.get(key).isEquivalentTo(properties.get(key))) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+/* METHOD isSubtype */
+@Override
+ public boolean isSubtype(JSType that) {
+ if (JSType.isSubtypeHelper(this, that)) {
+ return true;
+ }
+
+ // Top of the record types is the empty record, or OBJECT_TYPE.
+ if (registry.getNativeObjectType(
+ JSTypeNative.OBJECT_TYPE).isSubtype(that)) {
+ return true;
+ }
+
+ // A type is a subtype of a record type if it itself is a record
+ // type and it has at least the same members as the parent record type
+ // with the same types.
+ if (!that.isRecordType()) {
+ return false;
+ }
+
+ return RecordType.isSubtype(this, that.toMaybeRecordType());
+ }
+
+/* METHOD getImplicitPrototype */
+@Override
+ public ObjectType getImplicitPrototype() {
+ return registry.getNativeObjectType(JSTypeNative.OBJECT_TYPE);
+ }
+
+===== com.google.javascript.rhino.jstype.RecordTypeBuilder (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public class RecordTypeBuilder {
+private final HashMap<String, RecordProperty> properties = Maps.newHashMap();
+public RecordTypeBuilder(JSTypeRegistry registry) {
+public JSType build() {
+static class RecordProperty {
+public JSType getType() {
+public Node getPropertyNode() {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import com.google.common.collect.Maps;
+import com.google.javascript.rhino.Node;
+import java.util.Collections;
+import java.util.HashMap;
+public class RecordTypeBuilder {
+
+/* METHOD RecordTypeBuilder */
+public RecordTypeBuilder(JSTypeRegistry registry) {
+ this.registry = registry;
+ }
+
+/* METHOD build */
+public JSType build() {
+ // If we have an empty record, simply return the object type.
+ if (isEmpty) {
+ return registry.getNativeObjectType(JSTypeNative.OBJECT_TYPE);
+ }
+
+ return new RecordType(
+ registry, Collections.unmodifiableMap(properties));
+ }
+
+/* METHOD addProperty */
+public RecordTypeBuilder addProperty(String name, JSType type, Node
+ propertyNode) {
+ isEmpty = false;
+ if (properties.containsKey(name)) {
+ return null;
+ }
+ properties.put(name, new RecordProperty(type, propertyNode));
+ return this;
+ }
+
+/* METHOD getType */
+public JSType getType() {
+ return type;
+ }
+
+/* METHOD getPropertyNode */
+public Node getPropertyNode() {
+ return propertyNode;
+ }
+
+/* METHOD RecordProperty */
+RecordProperty(JSType type, Node propertyNode) {
+ this.type = type;
+ this.propertyNode = propertyNode;
+ }

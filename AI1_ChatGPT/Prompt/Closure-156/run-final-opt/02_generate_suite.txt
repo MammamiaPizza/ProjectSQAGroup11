@@ -1,0 +1,422 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 156  Version: Closure-156b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CollapseProperties
+Modified: com.google.javascript.jscomp.CollapseProperties
+Triggers: com.google.javascript.jscomp.CollapsePropertiesTest::testAliasedTopLevelEnum, com.google.javascript.jscomp.CollapsePropertiesTest::testIssue389
+
+Bug/specification summary:
+Bug report: 389
+Trigger failures:
+- com.google.javascript.jscomp.CollapsePropertiesTest::testAliasedTopLevelEnum
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testIssue389
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.CollapseProperties
+
+Prompt-01 test plan:
+TARGETS: CollapseProperties.process; alias inlining and namespace/property collapsing paths. 
+ORACLES: Existing trigger assertions in CollapsePropertiesTest are the expected-result source. 
+CASES: Aliased top-level enum collapse, including references through the alias. 
+CASES: Issue389 scenario; preserve expected transformed output asserted by its existing test. 
+CASES: Normal namespace declarations with descendant properties and alias-prefix flattening. 
+RISKS: Private helpers require exercising via CompilerPass.process and compiler test harness. 
+RISKS: Context lacks test source/input-output details; do not infer additional transformations.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CollapseProperties (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CollapseProperties implements CompilerPass {
+@Override
+public void process(Node externs, Node root) {
+private void inlineAliases(GlobalNamespace namespace) {
+private boolean inlineAliasIfPossible(Ref alias, GlobalNamespace namespace) {
+private void checkNamespaces() {
+private void warnAboutNamespaceAliasing(Name nameObj, Ref ref) {
+private void warnAboutNamespaceRedefinition(Name nameObj, Ref ref) {
+private void flattenReferencesTo(Name n, String alias) {
+private void flattenPrefixes(String alias, Name n, int depth) {
+private void collapseDeclarationOfNameAndDescendants(Name n, String alias) {
+private void updateSimpleDeclaration(String alias, Name refName, Ref ref) {
+private void updateObjLitOrFunctionDeclaration(Name n, String alias) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void updateObjLitOrFunctionDeclarationAtVarNode(Name n) {
+private void updateFunctionDeclarationAtFunctionNode(Name n) {
+private static String appendPropForAlias(String root, String prop) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.GlobalNamespace.Name;
+import com.google.javascript.jscomp.GlobalNamespace.Ref;
+import com.google.javascript.jscomp.GlobalNamespace.Ref.Type;
+import com.google.javascript.jscomp.ReferenceCollectingCallback;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.ReferenceCollection;
+import com.google.javascript.jscomp.Scope;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import com.google.javascript.rhino.jstype.JSType;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class CollapseProperties implements CompilerPass {
+
+/* METHOD CollapseProperties */
+CollapseProperties(AbstractCompiler compiler,
+ boolean collapsePropertiesOnExternTypes, boolean inlineAliases) {
+ this.compiler = compiler;
+ this.collapsePropertiesOnExternTypes = collapsePropertiesOnExternTypes;
+ this.inlineAliases = inlineAliases;
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ GlobalNamespace namespace;
+ if (collapsePropertiesOnExternTypes) {
+ namespace = new GlobalNamespace(compiler, externs, root);
+ } else {
+ namespace = new GlobalNamespace(compiler, root);
+ }
+
+ if (inlineAliases) {
+ inlineAliases(namespace);
+ }
+ nameMap = namespace.getNameIndex();
+ globalNames = namespace.getNameForest();
+ checkNamespaces();
+
+ for (Name n : globalNames) {
+ flattenReferencesToCollapsibleDescendantNames(n, n.name);
+ }
+
+ // We collapse property definitions after collapsing property references
+ // because this step can alter the parse tree above property references,
+ // invalidating the node ancestry stored with each reference.
+ for (Name n : globalNames) {
+ collapseDeclarationOfNameAndDescendants(n, n.name);
+ }
+ }
+
+/* METHOD checkForHosedThisReferences */
+private void checkForHosedThisReferences(Node function, JSDocInfo docInfo,
+ final Name name) {
+ // A function is getting collapsed. Make sure that if it refers to
+ // "this", it must be a constructor or documented with @this.
+ if (docInfo == null ||
+ (!docInfo.isConstructor() && !docInfo.hasThisType())) {
+ NodeTraversal.traverse(compiler, function.getLastChild(),
+ new NodeTraversal.AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.THIS) {
+ compiler.report(
+ JSError.make(name.declaration.sourceName, n,
+ UNSAFE_THIS, name.fullName()));
+ }
+ }
+ });
+ }
+ }
+
+/* METHOD visit */
+public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.THIS) {
+ compiler.report(
+ JSError.make(name.declaration.sourceName, n,
+ UNSAFE_THIS, name.fullName()));
+ }
+ }
+
+/* METHOD flattenNameRef */
+private void flattenNameRef(String alias, Node n, Node parent,
+ String originalName) {
+ // BEFORE:
+ // getprop
+ // getprop
+ // name a
+ // string b
+ // string c
+ // AFTER:
+ // name a$b$c
+ Node ref = NodeUtil.newName(
+ compiler.getCodingConvention(), alias, n, originalName);
+ NodeUtil.copyNameAnnotations(n.getLastChild(), ref);
+ JSType type = n.getJSType();
+ if (type != null) {
+ ref.setJSType(type);
+ }
+ parent.replaceChild(n, ref);
+ compiler.reportCodeChange();
+ }
+
+/* METHOD warnAboutNamespaceAliasing */
+private void warnAboutNamespaceAliasing(Name nameObj, Ref ref) {
+ compiler.report(
+ JSError.make(ref.sourceName, ref.node,
+ UNSAFE_NAMESPACE_WARNING, nameObj.fullName()));
+ }
+
+/* METHOD warnAboutNamespaceRedefinition */
+private void warnAboutNamespaceRedefinition(Name nameObj, Ref ref) {
+ compiler.report(
+ JSError.make(ref.sourceName, ref.node,
+ NAMESPACE_REDEFINED_WARNING, nameObj.fullName()));
+ }
+
+/* METHOD updateObjLitOrFunctionDeclarationAtAssignNode */
+private void updateObjLitOrFunctionDeclarationAtAssignNode(
+ Name n, String alias) {
+ // NOTE: It's important that we don't add additional nodes
+ // (e.g. a var node before the exprstmt) because the exprstmt might be
+ // the child of an if statement that's not inside a block).
+
+ Ref ref = n.declaration;
+ Node rvalue = ref.node.getNext();
+ Node varNode = new Node(Token.VAR);
+ Node varParent = ref.node.getAncestor(3);
+ Node gramps = ref.node.getAncestor(2);
+ boolean isObjLit = rvalue.getType() == Token.OBJECTLIT;
+ boolean insertedVarNode = false;
+
+ if (isObjLit && n.canEliminate()) {
+ // Eliminate the object literal altogether.
+ varParent.replaceChild(gramps, varNode);
+ ref.node = null;
+ insertedVarNode = true;
+
+ } else if (!n.isSimpleName()) {
+ // Create a VAR node to declare the name.
+ if (rvalue.getType() == Token.FUNCTION) {
+ checkForHosedThisReferences(rvalue, n.docInfo, n);
+ }
+
+ ref.node.getParent().removeChild(rvalue);
+
+ Node nameNode = NodeUtil.newName(
+ compiler.getCodingConvention(),
+ alias, ref.node.getAncestor(2), n.fullName());
+
+ if (ref.node.getLastChild().getBooleanProp(Node.IS_CONSTANT_NAME)) {
+ nameNode.putBooleanProp(Node.IS_CONSTANT_NAME, true);
+ }
+
+ varNode.addChildToBack(nameNode);
+ nameNode.addChildToFront(rvalue);
+ varParent.replaceChild(gramps, varNode);
+
+ // Update the node ancestry stored in the reference.
+ ref.node = nameNode;
+ insertedVarNode = true;
+ }
+
+ if (isObjLit) {
+ declareVarsForObjLitValues(
+ n, alias, rvalue,
+ varNode, varParent.getChildBefore(varNode), varParent);
+
+ }
+ addStubsForUndeclaredProperties(n, alias, varParent, varNode);
+
+ if (insertedVarNode) {
+ if (!varNode.hasChildren()) {
+ varParent.removeChild(varNode);
+ }
+ compiler.reportCodeChange();
+ }
+ }
+
+ /**
+ * Warns about any references to "this" in the given FUNCTION. The function
+ * is getting collapsed, so the references will change.
+ */
+ private void checkForHosedThisReferences(Node function, JSDocInfo docInfo,
+ final Name name) {
+ // A function is getting collapsed. Make sure that if it refers to
+ // "this", it must be a constructor or documented with @this.
+ if (docInfo == null ||
+ (!docInfo.isConstructor() && !docInfo.hasThisType())) {
+ NodeTraversal.traverse(compiler, function.getLastChild(),
+ new NodeTraversal.AbstractShallowCallback() {
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.THIS) {
+ compiler.report(
+ JSError.make(name.declaration.sourceName, n,
+ UNSAFE_THIS, name.fullName()));
+ }
+ }
+ });
+ }
+ }
+
+ /**
+ * Updates the first initialization (a.k.a "declaration") of a global name
+ * that occurs at a VAR node. See comment for
+ * {@link #updateObjLitOrFunctionDeclaration}.
+ *
+ * @param n An object representing a global name (e.g. "a")
+ */
+ private void updateObjLitOrFunctionDeclarationAtVarNode(Name n) {
+
+ Ref ref = n.declaration;
+ String name = ref.node.getString(
+...[truncated deterministically]...
+BJECTLIT;
+ int numChanges = 0;
+
+ if (isObjLit) {
+ numChanges += declareVarsForObjLitValues(
+ n, name, rvalue, varNode, gramps.getChildBefore(varNode),
+ gramps);
+ }
+
+ numChanges += addStubsForUndeclaredProperties(n, name, gramps, varNode);
+
+ if (isObjLit && n.canEliminate()) {
+ varNode.removeChild(ref.node);
+ if (!varNode.hasChildren()) {
+ gramps.removeChild(varNode);
+ }
+ numChanges++;
+
+ // Clear out the object reference, since we've eliminated it from the
+ // parse tree.
+ ref.node = null;
+ }
+
+/* METHOD updateSimpleDeclaration */
+private void updateSimpleDeclaration(String alias, Name refName, Ref ref) {
+ Node rvalue = ref.node.getNext();
+ Node parent = ref.node.getParent();
+ Node gramps = parent.getParent();
+ Node greatGramps = gramps.getParent();
+ Node greatGreatGramps = greatGramps.getParent();
+
+ if (rvalue != null && rvalue.getType() == Token.FUNCTION) {
+ checkForHosedThisReferences(rvalue, refName.docInfo, refName);
+ }
+
+ // Create the new alias node.
+ Node nameNode = NodeUtil.newName(
+ compiler.getCodingConvention(), alias, gramps.getFirstChild(),
+ refName.fullName());
+ NodeUtil.copyNameAnnotations(ref.node.getLastChild(), nameNode);
+
+ if (gramps.getType() == Token.EXPR_RESULT) {
+ // BEFORE: a.b.c = ...;
+ // exprstmt
+ // assign
+ // getprop
+ // getprop
+ // name a
+ // string b
+ // string c
+ // NODE
+ // AFTER: var a$b$c = ...;
+ // var
+ // name a$b$c
+ // NODE
+
+ // Remove the rvalue (NODE).
+ parent.removeChild(rvalue);
+ nameNode.addChildToFront(rvalue);
+
+ Node varNode = new Node(Token.VAR, nameNode);
+ greatGramps.replaceChild(gramps, varNode);
+ } else {
+ // This must be a complex assignment.
+ Preconditions.checkNotNull(ref.getTwin());
+
+ // BEFORE:
+ // ... (x.y = 3);
+ //
+ // AFTER:
+ // var x$y;
+ // ... (x$y = 3);
+
+ Node current = gramps;
+ Node currentParent = gramps.getParent();
+ for (; currentParent.getType() != Token.SCRIPT &&
+ currentParent.getType() != Token.BLOCK;
+ current = currentParent,
+ currentParent = currentParent.getParent()) {}
+
+ // Create a stub variable declaration right
+ // before the current statement.
+ Node stubVar = new Node(Token.VAR, nameNode.cloneTree())
+ .copyInformationFrom(nameNode);
+ currentParent.addChildBefore(stubVar, current);
+
+ parent.replaceChild(ref.node, nameNode);
+ }
+
+ compiler.reportCodeChange();
+ }
+
+/* METHOD declareVarsForObjLitValues */
+private int declareVarsForObjLitValues(
+ Name objlitName, String alias, Node objlit, Node varNode,
+ Node nameToAddAfter, Node varParent) {
+ int numVars = 0;
+ int arbitraryNameCounter = 0;
+ boolean discardKeys = !objlitName.shouldKeepKeys();
+
+ for (Node key = objlit.getFirstChild(), nextKey; key != null;
+ key = nextKey) {
+ Node value = key.getFirstChild();
+ nextKey = key.getNext();
+
+ // A get or a set can not be rewritten as a VAR.
+ if (key.getType() == Token.GET || key.getType() == Token.SET) {
+ continue;
+ }
+
+ // We generate arbitrary names for keys that aren't valid JavaScript
+ // identifiers, since those keys are never referenced. (If they were,
+ // this object literal's child names wouldn't be collapsible.) The only
+ // reason that we don't eliminate them entirely is the off chance that
+ // their values are expressions that have side effects.
+ boolean isJsIdentifier = key.getType() != Token.NUMBER &&
+ TokenStream.isJSIdentifier(key.getString());
+ String propName = isJsIdentifier ?
+ key.getString() : String.valueOf(++arbitraryNameCounter);
+ String propAlias = appendPropForAlias(al
+...[truncated deterministically]...
+) {
+ // Update the global name's node ancestry if it hasn't already been
+ // done. (Duplicate keys in an object literal can bring us here twice
+ // for the same global name.)
+ Name p = nameMap.get(qName);
+ if (p != null) {
+ if (!discardKeys) {
+ Ref newAlias =
+ p.declaration.cloneAndReclassify(Ref.Type.ALIASING_GET);
+ newAlias.node = refNode;
+ p.addRef(newAlias);
+ }
+
+ p.declaration.node = nameNode;
+
+ if (value.getType() == Token.FUNCTION) {
+ checkForHosedThisReferences(value, value.getJSDocInfo(), p);
+ }
+ }
+ }
+
+ numVars++;
+ }
+ return numVars;
+ }

@@ -1,0 +1,409 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 25  Version: JacksonCore-25b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.json.ReaderBasedJsonParser
+Modified: com.fasterxml.jackson.core.json.ReaderBasedJsonParser
+Triggers: com.fasterxml.jackson.core.read.NonStandardUnquotedNamesTest::testUnquotedIssue510
+
+Bug/specification summary:
+Bug report: 510
+Trigger failures:
+- com.fasterxml.jackson.core.read.NonStandardUnquotedNamesTest::testUnquotedIssue510
+ --> java.lang.ArrayIndexOutOfBoundsException: 256
+Modified: com.fasterxml.jackson.core.json.ReaderBasedJsonParser
+
+Prompt-01 test plan:
+TARGETS: ReaderBasedJsonParser parsing of unquoted field names with non-ASCII characters (issue 510).
+ORACLES: Existing trigger NonStandardUnquotedNamesTest::testUnquotedIssue510; token/name results and no AIOOBE.
+CASES: Enable ALLOW_UNQUOTED_FIELD_NAMES; parse object with an unquoted name containing character code 256.
+CASES: Verify START_OBJECT, FIELD_NAME, expected field name/value token, and END_OBJECT sequence.
+CASES: Boundary names around Latin-1 table limit: code 255 versus code 256, if supported by trigger input.
+RISKS: Parser construction/factory configuration APIs and exact expected input are not included in provided context.
+RISKS: Do not directly test protected/private parser helpers; exercise via public parsing API.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.json.ReaderBasedJsonParser (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json;
+public class ReaderBasedJsonParser // final in 2.3, earlier
+protected final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+protected Reader _reader;
+protected char[] _inputBuffer;
+protected boolean _bufferRecyclable;
+protected ObjectCodec _objectCodec;
+final protected CharsToNameCanonicalizer _symbols;
+final protected int _hashSeed;
+protected boolean _tokenIncomplete;
+protected long _nameStartOffset;
+protected int _nameStartRow;
+protected int _nameStartCol;
+@Override public ObjectCodec getCodec() { return _objectCodec; }
+@Override public void setCodec(ObjectCodec c) { _objectCodec = c; }
+@Override
+public int releaseBuffered(Writer w) throws IOException {
+@Override public Object getInputSource() { return _reader; }
+@Deprecated // since 2.8
+protected char getNextChar(String eofMsg) throws IOException {
+protected char getNextChar(String eofMsg, JsonToken forToken) throws IOException {
+protected void _closeInput() throws IOException {
+protected void _releaseBuffers() throws IOException {
+protected void _loadMoreGuaranteed() throws IOException {
+protected boolean _loadMore() throws IOException
+public final String getText() throws IOException
+@Override // since 2.8
+public int getText(Writer writer) throws IOException
+public final String getValueAsString() throws IOException
+public final String getValueAsString(String defValue) throws IOException {
+protected final String _getText2(JsonToken t) {
+public final char[] getTextCharacters() throws IOException
+public final int getTextLength() throws IOException
+public final int getTextOffset() throws IOException
+public byte[] getBinaryValue(Base64Variant b64variant) throws IOException
+@SuppressWarnings("resource")
+public int readBinaryValue(Base64Variant b64variant, OutputStream out) throws IOException
+protected int _readBinary(Base64Variant b64variant, OutputStream out, byte[] buffer) throws IOException
+public final JsonToken nextToken() throws IOException
+private final JsonToken _nextAfterName()
+public void finishToken() throws IOException {
+public boolean nextFieldName(SerializableString sstr) throws IOException
+public String nextFieldName() throws IOException
+private final void _isNextTokenNameYes(int i) throws IOException
+protected boolean _isNextTokenNameMaybe(int i, String nameToMatch) throws IOException
+private final JsonToken _nextTokenNotInObject(int i) throws IOException
+public final String nextTextValue() throws IOException
+public final int nextIntValue(int defaultValue) throws IOException
+public final long nextLongValue(long de
+...[truncated deterministically]...
+inal int _skipComma(int i) throws IOException
+private final int _skipAfterComma2() throws IOException
+private final int _skipWSOrEnd() throws IOException
+private int _skipWSOrEnd2() throws IOException
+private void _skipComment() throws IOException
+private void _skipCComment() throws IOException
+private boolean _skipYAMLComment() throws IOException
+private void _skipLine() throws IOException
+protected char _decodeEscaped() throws IOException
+private final void _matchTrue() throws IOException {
+private final void _matchFalse() throws IOException {
+private final void _matchNull() throws IOException {
+protected final void _matchToken(String matchStr, int i) throws IOException
+final int len = matchStr.length();
+private final void _matchToken2(String matchStr, int i) throws IOException
+private final void _checkMatchEnd(String matchStr, int i, int c) throws IOException {
+protected byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+public JsonLocation getTokenLocation()
+public JsonLocation getCurrentLocation() {
+private final void _updateLocation()
+private final void _updateNameLocation()
+protected void _reportInvalidToken(String matchedPart) throws IOException {
+protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
+private void _closeScope(int i) throws JsonParseException {
+
+/* HEADER */
+package com.fasterxml.jackson.core.json;
+import java.io.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.base.ParserBase;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.CharsToNameCanonicalizer;
+import com.fasterxml.jackson.core.util.*;
+import static com.fasterxml.jackson.core.JsonTokenId.*;
+public class ReaderBasedJsonParser // final in 2.3, earlier
+
+/* METHOD ReaderBasedJsonParser */
+public ReaderBasedJsonParser(IOContext ctxt, int features, Reader r,
+ ObjectCodec codec, CharsToNameCanonicalizer st,
+ char[] inputBuffer, int start, int end,
+ boolean bufferRecyclable)
+ {
+ super(ctxt, features);
+ _reader = r;
+ _inputBuffer = inputBuffer;
+ _inputPtr = start;
+ _inputEnd = end;
+ _objectCodec = codec;
+ _symbols = st;
+ _hashSeed = st.hashSeed();
+ _bufferRecyclable = bufferRecyclable;
+ }
+
+/* METHOD ReaderBasedJsonParser */
+public ReaderBasedJsonParser(IOContext ctxt, int features, Reader r,
+ ObjectCodec codec, CharsToNameCanonicalizer st)
+ {
+ super(ctxt, features);
+ _reader = r;
+ _inputBuffer = ctxt.allocTokenBuffer();
+ _inputPtr = 0;
+ _inputEnd = 0;
+ _objectCodec = codec;
+ _symbols = st;
+ _hashSeed = st.hashSeed();
+ _bufferRecyclable = true;
+ }
+
+/* METHOD releaseBuffered */
+@Override
+ public int releaseBuffered(Writer w) throws IOException {
+ int count = _inputEnd - _inputPtr;
+ if (count < 1) { return 0; }
+ // let's just advance ptr to end
+ int origPtr = _inputPtr;
+ w.write(_inputBuffer, origPtr, count);
+ return count;
+ }
+
+ @Override public Object getInputSource() { return _reader; }
+
+ @Deprecated // since 2.8
+ protected char getNextChar(String eofMsg) throws IOException {
+ return getNextChar(eofMsg, null);
+ }
+ 
+ protected char getNextChar(String eofMsg, JsonToken forToken) throws IOException {
+ if (_inputPtr >= _inputEnd) {
+ if (!_loadMore()) {
+ _reportInvalidEOF(eofMsg, forToken);
+ }
+ }
+ return _inputBuffer[_inputPtr++];
+ }
+
+ @Override
+ protected void _closeInput() throws IOException {
+ /* 25-Nov-2008, tatus: As per [JACKSON-16] we are not to call close()
+ * on the underlying Reader, unless we "own" it, or auto-closing
+ * feature is enabled.
+ * One downside is that when using our optimized
+ * Reader (granted, we only do that for UTF-32...) this
+ * means that buffer recycling won't work correctly.
+ */
+ if (_reader != null) {
+ if (_ioContext.isResourceManaged() || isEnabled(Feature.AUTO_CLOSE_SOURCE)) {
+ _reader.close();
+ }
+ _reader = null;
+ }
+ }
+
+/* METHOD getBinaryValue */
+@Override
+ public byte[] getBinaryValue(Base64Variant b64variant) throws IOException
+ {
+ if ((_currToken == JsonToken.VALUE_EMBEDDED_OBJECT) && (_binaryValue != null)) {
+ return _binaryValue;
+ }
+ if (_currToken != JsonToken.VALUE_STRING) {
+ _reportError("Current token ("+_currToken+") not VALUE_STRING or VALUE_EMBEDDED_OBJECT, can not access as binary");
+ }
+ // To ensure that we won't see inconsistent data, better clear up state
+ if (_tokenIncomplete) {
+ try {
+ _binaryValue = _decodeBase64(b64variant);
+ } catch (IllegalArgumentException iae) {
+ throw _constructError("Failed to decode VALUE_STRING as base64 ("+b64variant+"): "+iae.getMessage());
+ }
+ /* let's clear incomplete only now; allows for accessing other
+ * textual content in error cases
+ */
+ _tokenIncomplete = false;
+ }
+
+/* METHOD nextToken */
+@Override
+ public final JsonToken nextToken() throws IOException
+ {
+ /* First: field names are special -- we will always tokenize
+ * (part of) value along with field name to simplify
+ * state handling. If so, can and need to use secondary token:
+ */
+ if (_currToken == JsonToken.FIELD_NAME) {
+ return _nextAfterName();
+ }
+ // But if we didn't already have a name, and (partially?) decode number,
+ // need to ensure no numeric information is leaked
+ _numTypesValid = NR_UNKNOWN;
+ if (_tokenIncomplete) {
+ _skipString();
+...[truncated deterministically]...
+source, symbol table and recyclable buffers now.
+ close();
+ return (_currToken = null);
+ }
+ // clear any data retained so far
+ _binaryValue = null;
+
+ // Closing scope?
+ if (i == INT_RBRACKET || i == INT_RCURLY) {
+ _closeScope(i);
+ return _currToken;
+ }
+
+ // Nope: do we then expect a comma?
+ if (_parsingContext.expectComma()) {
+ i = _skipComma(i);
+
+ // Was that a trailing comma?
+ if ((_features & FEAT_MASK_TRAILING_COMMA) != 0) {
+ if ((i == INT_RBRACKET) || (i == INT_RCURLY)) {
+ _closeScope(i);
+ return _currToken;
+ }
+ }
+ }
+
+ /* And should we now have a name? Always true for Object contexts, since
+ * the intermediate 'expect-value' state is never retained.
+ */
+ boolean inObject = _parsingContext.inObject();
+ if (inObject) {
+ // First, field name itself:
+ _updateNameLocation();
+ String name = (i == INT_QUOTE) ? _parseName() : _handleOddName(i);
+ _parsingContext.setCurrentName(name);
+ _currToken = JsonToken.FIELD_NAME;
+ i = _skipColon();
+ }
+ _updateLocation();
+
+ // Ok: we must have a value... what is it?
+
+ JsonToken t;
+
+ switch (i) {
+ case '"':
+ _tokenIncomplete = true;
+ t = JsonToken.VALUE_STRING;
+ break;
+ case '[':
+ if (!inObject) {
+ _parsingContext = _parsingContext.createChildArrayContext(_tokenInputRow, _tokenInputCol);
+ }
+ t = JsonToken.START_ARRAY;
+ break;
+ case '{':
+ if (!inObject) {
+ _parsingContext = _parsingContext.createChildObjectContext(_tokenInputRow, _tokenInputCol);
+ }
+ t = JsonToken.START_OBJECT;
+ break;
+ case '}':
+ // Error: } is not valid at this point; valid closers have
+ // been handled earlier
+ _reportUnexpectedChar(i, "expected a value");
+ case 't':
+ _matchTrue();
+ t = JsonToken.VALUE_TRUE;
+ break;
+ case 'f':
+ _matchFalse();
+ t = JsonToken.VALUE_FALSE;
+ break;
+ case 'n':
+ _matchNull();
+ t = JsonToken.VALUE_NULL;
+ break;
+
+ case '-':
+ /* Should we have separate handling for plus? Although
+ * it is not allowed per se, it may be erroneously used,
+ * and could be indicate by a more specific error message.
+ */
+ t = _parseNegNumber();
+ break;
+ case '0':
+ case '1':
+ case '2':
+ case '3':
+ case '4':
+ case '5':
+ case '6':
+ case '7':
+ case '8':
+ case '9':
+ t = _parsePosNumber(i);
+ break;
+ default:
+ t = _handleOddValue(i);
+ break;
+ }
+
+ if (inObject) {
+ _nextToken = t;
+ return _currToken;
+ }
+ _currToken = t;
+ return t;
+ }
+
+ private final JsonToken _nextAfterName()
+ {
+ _nameCopied = false; // need to invalidate if it was copied
+ JsonToken t = _nextToken;
+ _nextToken = null
+...[truncated deterministically]...
+e a simple name: one that does
+ // not cross input buffer boundary, and does not contain escape sequences.
+ int ptr = _inputPtr;
+ int hash = _hashSeed;
+ final int[] codes = _icLatin1;
+
+ while (ptr < _inputEnd) {
+ int ch = _inputBuffer[ptr];
+ if (ch < codes.length && codes[ch] != 0) {
+ if (ch == '"') {
+ int start = _inputPtr;
+ _inputPtr = ptr+1; // to skip the quote
+ return _symbols.findSymbol(_inputBuffer, start, ptr - start, hash);
+ }
+ break;
+ }
+ hash = (hash * CharsToNameCanonicalizer.HASH_MULT) + ch;
+ ++ptr;
+ }
+ int start = _inputPtr;
+ _inputPtr = ptr;
+ return _parseName2(start, hash, INT_QUOTE);
+ }
+
+ private String _parseName2(int startPtr, int hash, int endChar) throws IOException
+ {
+ _textBuffer.resetWithShared(_inputBuffer, startPtr, (_inputPtr - startPtr));
+
+ /* Output pointers; calls will also ensure that the buffer is
+ * not shared and has room for at least one more char.
+ */
+ char[] outBuf = _textBuffer.getCurrentSegment();
+ int outPtr = _textBuffer.getCurrentSegmentSize();
+
+ while (true) {
+ if (_inputPtr >= _inputEnd) {
+ if (!_loadMore()) {
+ _reportInvalidEOF(" in field name", JsonToken.FIELD_NAME);
+ }
+ }
+ char c = _inputBuffer[_inputPtr++];
+ int i = (int) c;
+ if (i <= INT_BACKSLASH) {
+ if (i == INT_BACKSLASH) {
+ /* Although chars outside of BMP are to be escaped as
+ * an UTF-16 surrogate pair, does that affect decoding?
+ * For now let's assume it does not.
+ */
+ c = _decodeEscaped();
+ } else if (i <= endChar) {
+ if (i == endChar) {
+ break;
+ }
+ if (i < INT_SPACE) {
+ _throwUnquotedSpace(i, "name");
+ }
+ }
+ }

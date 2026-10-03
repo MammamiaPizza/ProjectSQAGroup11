@@ -1,0 +1,102 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 23  Version: Compress-23b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-256
+Trigger failures:
+- org.apache.commons.compress.archivers.sevenz.SevenZFileTest::testCompressedHeaderWithNonDefaultDictionarySize
+ --> org.tukaani.xz.UnsupportedOptionsException: LZMA dictionary is too big for this implementation
+Modified: org.apache.commons.compress.archivers.sevenz.Coders
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.sevenz.Coders | java]
+package org.apache.commons.compress.archivers.sevenz;
+class Coders {
+for (final CoderId coderId : coderTable) {
+static class CoderId {
+CoderId(SevenZMethod method, final CoderBase coder) {
+static abstract class CoderBase {
+OutputStream encode(final OutputStream out, final byte[] password)
+static class CopyDecoder extends CoderBase {
+@Override
+OutputStream encode(final OutputStream out, final byte[] password) {
+static class LZMADecoder extends CoderBase {
+static class DeflateDecoder extends CoderBase {
+InputStream decode(final InputStream in, final Coder coder, final byte[] password)
+static class BZIP2Decoder extends CoderBase {
+static class AES256SHA256Decoder extends CoderBase {
+private CipherInputStream init() throws IOException {
+final int ivSize = ((byte0 >> 6) & 1) + (byte1 & 0x0f);
+final int saltSize = ((byte0 >> 7) & 1) + (byte1 >> 4);
+final SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
+final Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
+public int read() throws IOException {
+public int read(byte[] b, int off, int len) throws IOException {
+public void close() {
+private static class DummyByteAddingInputStream extends FilterInputStream {
+private DummyByteAddingInputStream(InputStream in) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.sevenz;
+
+import static org.junit.Assert.assertNotNull;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import org.junit.Test;
+
+public class CodersLZMADecoderRegressionTest {
+
+    @Test
+    public void decodesWithStandardDictionarySize() throws Exception {
+        InputStream decoded = new Coders.LZMADecoder().decode(
+                new ByteArrayInputStream(new byte[0]),
+                lzmaCoder(new byte[] { (byte) 0x5d, 0, 0, 16, 0 }),
+                null);
+
+        assertNotNull(decoded);
+        decoded.close();
+    }
+
+    @Test
+    public void acceptsNonDefaultDictionarySizeWhoseThirdByteHasHighBitSet() throws Exception {
+        InputStream decoded = new Coders.LZMADecoder().decode(
+                new ByteArrayInputStream(new byte[0]),
+                lzmaCoder(new byte[] { (byte) 0x5d, 0, 0, (byte) 0x80, 0 }),
+                null);
+
+        assertNotNull(decoded);
+        decoded.close();
+    }
+
+    @Test(expected = IOException.class)
+    public void rejectsDictionaryLargerThanSupportedMaximum() throws Exception {
+        new Coders.LZMADecoder().decode(
+                new ByteArrayInputStream(new byte[0]),
+                lzmaCoder(new byte[] {
+                    (byte) 0x5d, (byte) 0xff, (byte) 0xff,
+                    (byte) 0xff, (byte) 0xff
+                }),
+                null);
+    }
+
+    private Coder lzmaCoder(byte[] properties) {
+        Coder coder = new Coder();
+        coder.decompressionMethodId = SevenZMethod.LZMA.getId();
+        coder.properties = properties;
+        return coder;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.compress.archivers.sevenz.CodersLZMADecoderRegressionTest::decodesWithStandardDictionarySize
+ - org.apache.commons.compress.archivers.sevenz.CodersLZMADecoderRegressionTest::acceptsNonDefaultDictionarySizeWhoseThirdByteHasHighBitSet
+
+Failing generated tests: org.apache.commons.compress.archivers.sevenz.CodersLZMADecoderRegressionTest::acceptsNonDefaultDictionarySizeWhoseThirdByteHasHighBitSet, org.apache.commons.compress.archivers.sevenz.CodersLZMADecoderRegressionTest::decodesWithStandardDictionarySize

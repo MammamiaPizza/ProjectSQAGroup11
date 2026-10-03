@@ -1,0 +1,132 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 51  Version: JacksonDatabind-51b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1270
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestCustomTypeIdResolver::testPolymorphicTypeViaCustom
+ --> com.fasterxml.jackson.databind.JsonMappingException: Problem deserializing property 'options' (expected type: [simple type, class java.lang.Object]; actual type: java.util.LinkedHashMap), problem: Can not set com.fasterxml.jackson.databind.jsontype.TestCustomTypeIdResolver$Poly1Base field com.fasterxml.jackson.databind.jsontype.TestCustomTypeIdResolver$Base1270.options to java.util.LinkedHashMap
+Modified: com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.jsontype.impl.TypeDeserializerBase | java]
+package com.fasterxml.jackson.databind.jsontype.impl;
+public abstract class TypeDeserializerBase
+protected final TypeIdResolver _idResolver;
+protected final JavaType _baseType;
+protected final BeanProperty _property;
+protected final JavaType _defaultImpl;
+protected final String _typePropertyName;
+protected final boolean _typeIdVisible;
+protected final Map<String,JsonDeserializer<Object>> _deserializers;
+protected JsonDeserializer<Object> _defaultImplDeserializer;
+protected TypeDeserializerBase(TypeDeserializerBase src, BeanProperty property)
+@Override
+public abstract TypeDeserializer forProperty(BeanProperty prop);
+public abstract JsonTypeInfo.As getTypeInclusion();
+public String baseTypeName() { return _baseType.getRawClass().getName(); }
+public final String getPropertyName() { return _typePropertyName; }
+public TypeIdResolver getTypeIdResolver() { return _idResolver; }
+public Class<?> getDefaultImpl() {
+public String toString()
+protected final JsonDeserializer<Object> _findDefaultImplDeserializer(DeserializationContext ctxt) throws IOException
+synchronized (_defaultImpl) {
+@Deprecated
+protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt) throws IOException {
+protected Object _deserializeWithNativeTypeId(JsonParser jp, DeserializationContext ctxt, Object typeId)
+ctxt.reportMappingException("No (native) type id found when one was expected for polymorphic type handling");
+
+Generated JUnit Test:
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonTypeIdResolver;
+import com.fasterxml.jackson.databind.jsontype.impl.TypeIdResolverBase;
+
+public class TypeDeserializerBaseBug51Test
+{
+    @Test
+    public void customTypeIdResolverMustDeserializeObjectPropertyAsResolvedSubtype()
+            throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Container result = mapper.readValue(
+                "{\"options\":{\"type\":\"poly1\",\"name\":\"custom value\",\"number\":13}}",
+                Container.class);
+
+        assertTrue(result.options instanceof Poly1Base);
+        Poly1Base value = (Poly1Base) result.options;
+        assertEquals("custom value", value.name);
+        assertEquals(13, value.number);
+    }
+
+    public static class Container {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.CUSTOM,
+                include = JsonTypeInfo.As.PROPERTY,
+                property = "type")
+        @JsonTypeIdResolver(PolyResolver.class)
+        public Object options;
+    }
+
+    public static class Poly1Base {
+        public String name;
+        public int number;
+    }
+
+    public static class PolyResolver extends TypeIdResolverBase {
+        @Override
+        public String idFromValue(Object value) {
+            return "poly1";
+        }
+
+        @Override
+        public String idFromValueAndType(Object value, Class<?> suggestedType) {
+            return "poly1";
+        }
+
+        @Override
+        public JavaType typeFromId(DeserializationContext context, String id)
+                throws IOException, JsonProcessingException {
+            if ("poly1".equals(id)) {
+                return context.getTypeFactory().constructType(Poly1Base.class);
+            }
+            return null;
+        }
+
+        @Override
+        public JsonTypeInfo.Id getMechanism() {
+            return JsonTypeInfo.Id.CUSTOM;
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-51f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-51f-ai -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-51f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-51f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-51f-ai/.test_suite/TypeDeserializerBaseBug51Test.java:58: error: method does not override or implement a method from a supertype
+ [javac] @Override
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 32 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

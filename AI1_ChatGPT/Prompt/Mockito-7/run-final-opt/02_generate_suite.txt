@@ -1,0 +1,346 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 7  Version: Mockito-7b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.util.reflection.GenericMetadataSupport
+Modified: org.mockito.internal.util.reflection.GenericMetadataSupport
+Triggers: org.mockitousage.bugs.deepstubs.DeepStubFailingWhenGenricNestedAsRawTypeTest::discoverDeepMockingOfGenerics
+
+Bug/specification summary:
+Bug report: 128
+Trigger failures:
+- org.mockitousage.bugs.deepstubs.DeepStubFailingWhenGenricNestedAsRawTypeTest::discoverDeepMockingOfGenerics
+ --> org.mockito.exceptions.base.MockitoException: Raw extraction not supported for : 'null'
+Modified: org.mockito.internal.util.reflection.GenericMetadataSupport
+
+Prompt-01 test plan:
+TARGETS: GenericMetadataSupport.inferFrom and resolveGenericReturnType for nested generic types used by deep stubs 
+TARGETS: TypeVariableReturnType raw-type/bounded-type extraction when nested generic metadata is raw 
+ORACLES: Trigger test discoverDeepMockingOfGenerics must not throw “Raw extraction not supported for : 'null'” 
+CASES: Deep-stub a nested generic return whose enclosing/inner generic type is used as a raw type 
+CASES: Resolve a method return involving TypeVariable and ParameterizedType metadata 
+CASES: Preserve existing handling for non-generic returns and directly parameterized return types 
+RISKS: Raw Type metadata can lack actual type arguments, producing null during bound/raw-type extraction 
+RISKS: Context only identifies the failing trigger and signatures; no independent expected type details are supplied
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.util.reflection.GenericMetadataSupport (java) =====
+/* API SIGNATURES */
+package org.mockito.internal.util.reflection;
+public abstract class GenericMetadataSupport {
+protected Map<TypeVariable, Type> contextualActualTypeParameters = new HashMap<TypeVariable, Type>();
+protected void registerTypeVariablesOn(Type classType) {
+protected void registerTypeParametersOn(TypeVariable[] typeParameters) {
+private void registerTypeVariableIfNotPresent(TypeVariable typeVariable) {
+private BoundedType boundsOf(TypeVariable typeParameter) {
+private BoundedType boundsOf(WildcardType wildCard) {
+public abstract Class<?> rawType();
+public List<Type> extraInterfaces() {
+public Class<?>[] rawExtraInterfaces() {
+public boolean hasRawExtraInterfaces() {
+public Map<TypeVariable, Type> actualTypeArguments() {
+protected Type getActualTypeArgumentFor(TypeVariable typeParameter) {
+public GenericMetadataSupport resolveGenericReturnType(Method method) {
+public static GenericMetadataSupport inferFrom(Type type) {
+private static class FromClassGenericMetadataSupport extends GenericMetadataSupport {
+public FromClassGenericMetadataSupport(Class<?> clazz) {
+currentExploredClass != null && currentExploredClass != Object.class;
+private Class superClassOf(Class currentExploredClass) {
+private void readActualTypeParametersOnDeclaringClass(Class<?> clazz) {
+@Override
+public Class<?> rawType() {
+private static class FromParameterizedTypeGenericMetadataSupport extends GenericMetadataSupport {
+public FromParameterizedTypeGenericMetadataSupport(ParameterizedType parameterizedType) {
+private void readActualTypeParameters() {
+private static class ParameterizedReturnType extends GenericMetadataSupport {
+public ParameterizedReturnType(GenericMetadataSupport source, TypeVariable[] typeParameters, ParameterizedType parameterizedType) {
+private void readTypeParameters() {
+private void readTypeVariables() {
+private static class TypeVariableReturnType extends GenericMetadataSupport {
+public TypeVariableReturnType(GenericMetadataSupport source, TypeVariable[] typeParameters, TypeVariable typeVariable) {
+private Class<?> extractRawTypeOf(Type type) {
+private Type extractActualBoundedTypeOf(Type type) {
+on the class definition, such as such as List<E>.
+private static class NotGenericReturnTypeSupport extends GenericMetadataSupport {
+public NotGenericReturnTypeSupport(Type genericReturnType) {
+public interface BoundedType extends Type {
+public static class TypeVarBoundedType implements BoundedType {
+public TypeVarBoundedType(TypeVariable typeVariable) {
+public Type firstBound() {
+public Type[] interfaceBounds() {
+public boolean equals(Object o) {
+public int hashCode() {
+public String toString() {
+public TypeVariable typeVariable() {
+public static class WildCardBoundedType implements BoundedType {
+public WildCardBoundedType(WildcardType wildcard) {
+public WildcardType wildCard() {
+
+/* HEADER */
+package org.mockito.internal.util.reflection;
+import org.mockito.exceptions.base.MockitoException;
+import org.mockito.internal.util.Checks;
+import java.lang.reflect.*;
+import java.util.*;
+
+/* METHOD inferFrom */
+public static GenericMetadataSupport inferFrom(Type type) {
+ Checks.checkNotNull(type, "type");
+ if (type instanceof Class) {
+ return new FromClassGenericMetadataSupport((Class<?>) type);
+ }
+ if (type instanceof ParameterizedType) {
+ return new FromParameterizedTypeGenericMetadataSupport((ParameterizedType) type);
+ }
+
+ throw new MockitoException("Type meta-data for this Type (" + type.getClass().getCanonicalName() + ") is not supported : " + type);
+ }
+
+/* METHOD resolveGenericReturnType */
+public GenericMetadataSupport resolveGenericReturnType(Method method) {
+ Type genericReturnType = method.getGenericReturnType();
+ // logger.log("Method '" + method.toGenericString() + "' has return type : " + genericReturnType.getClass().getInterfaces()[0].getSimpleName() + " : " + genericReturnType);
+
+ if (genericReturnType instanceof Class) {
+ return new NotGenericReturnTypeSupport(genericReturnType);
+ }
+ if (genericReturnType instanceof ParameterizedType) {
+ return new ParameterizedReturnType(this, method.getTypeParameters(), (ParameterizedType) method.getGenericReturnType());
+ }
+ if (genericReturnType instanceof TypeVariable) {
+ return new TypeVariableReturnType(this, method.getTypeParameters(), (TypeVariable) genericReturnType);
+ }
+
+ throw new MockitoException("Ouch, it shouldn't happen, type '" + genericReturnType.getClass().getCanonicalName() + "' on method : '" + method.toGenericString() + "' is not supported : " + genericReturnType);
+ }
+
+/* METHOD extraInterfaces */
+@Override
+ public List<Type> extraInterfaces() {
+ Type type = extractActualBoundedTypeOf(typeVariable);
+ if (type instanceof BoundedType) {
+ return Arrays.asList(((BoundedType) type).interfaceBounds());
+ }
+ if (type instanceof ParameterizedType) {
+ return Collections.singletonList(type);
+ }
+ if (type instanceof Class) {
+ return Collections.emptyList();
+ }
+ throw new MockitoException("Cannot extract extra-interfaces from '" + typeVariable + "' : '" + type + "'");
+ }
+
+/* METHOD extractRawTypeOf */
+private Class<?> extractRawTypeOf(Type type) {
+ if (type instanceof Class) {
+ return (Class<?>) type;
+ }
+ if (type instanceof ParameterizedType) {
+ return (Class<?>) ((ParameterizedType) type).getRawType();
+ }
+ if (type instanceof BoundedType) {
+ return extractRawTypeOf(((BoundedType) type).firstBound());
+ }
+ if (type instanceof TypeVariable) {
+ /*
+ * If type is a TypeVariable, then it is needed to gather data elsewhere. Usually TypeVariables are declared
+ * on the class definition, such as such as List<E>.
+ */
+ return extractRawTypeOf(contextualActualTypeParameters.get(type));
+ }
+ throw new MockitoException("Raw extraction not supported for : '" + type + "'");
+ }
+
+/* METHOD FromClassGenericMetadataSupport */
+public FromClassGenericMetadataSupport(Class<?> clazz) {
+ this.clazz = clazz;
+
+ for (Class currentExploredClass = clazz;
+ currentExploredClass != null && currentExploredClass != Object.class;
+ currentExploredClass = superClassOf(currentExploredClass)
+ ) {
+ readActualTypeParametersOnDeclaringClass(currentExploredClass);
+ }
+ }
+
+/* METHOD rawType */
+@Override
+ public Class<?> rawType() {
+ if (rawType == null) {
+ rawType = extractRawTypeOf(typeVariable);
+ }
+ return rawType;
+ }
+
+/* METHOD rawExtraInterfaces */
+public Class<?>[] rawExtraInterfaces() {
+ List<Type> extraInterfaces = extraInterfaces();
+ List<Class<?>> rawExtraInterfaces = new ArrayList<Class<?>>();
+ for (Type extraInterface : extraInterfaces) {
+ Class<?> rawInterface = extractRawTypeOf(extraInterface);
+ // avoid interface collision with actual raw type (with typevariables, resolution ca be quite aggressive)
+ if(!rawType().equals(rawInterface)) {
+ rawExtraInterfaces.add(rawInterface);
+ }
+ }
+ return rawExtraInterfaces.toArray(new Class[rawExtraInterfaces.size()]);
+ }
+
+/* METHOD registerTypeVariablesOn */
+protected void registerTypeVariablesOn(Type classType) {
+ if (!(classType instanceof ParameterizedType)) {
+ return;
+ }
+ ParameterizedType parameterizedType = (ParameterizedType) classType;
+ TypeVariable[] typeParameters = ((Class<?>) parameterizedType.getRawType()).getTypeParameters();
+ Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
+ for (int i = 0; i < actualTypeArguments.length; i++) {
+ TypeVariable typeParameter = typeParameters[i];
+ Type actualTypeArgument = actualTypeArguments[i];
+
+ if (actualTypeArgument instanceof WildcardType) {
+ contextualActualTypeParameters.put(typeParameter, boundsOf((WildcardType) actualTypeArgument));
+ } else if (typeParameter != actualTypeArgument) {
+ contextualActualTypeParameters.put(typeParameter, actualTypeArgument);
+ }
+ // logger.log("For '" + parameterizedType + "' found type variable : { '" + typeParameter + "(" + System.identityHashCode(typeParameter) + ")" + "' : '" + actualTypeArgument + "(" + System.identityHashCode(typeParameter) + ")" + "' }");
+ }
+ }
+
+/* METHOD registerTypeParametersOn */
+protected void registerTypeParametersOn(TypeVariable[] typeParameters) {
+ for (TypeVariable type : typeParameters) {
+ registerTypeVariableIfNotPresent(type);
+ }
+ }
+
+/* METHOD extraInterfaces */
+public List<Type> extraInterfaces() {
+ return Collections.emptyList();
+ }
+
+/* METHOD rawExtraInterfaces */
+public Class<?>[] rawExtraInterfaces() {
+ return new Class[0];
+ }
+
+/* METHOD hasRawExtraInterfaces */
+public boolean hasRawExtraInterfaces() {
+ return rawExtraInterfaces().length > 0;
+ }
+
+/* METHOD actualTypeArguments */
+public Map<TypeVariable, Type> actualTypeArguments() {
+ TypeVariable[] typeParameters = rawType().getTypeParameters();
+ LinkedHashMap<TypeVariable, Type> actualTypeArguments = new LinkedHashMap<TypeVariable, Type>();
+
+ for (TypeVariable typeParameter : typeParameters) {
+
+ Type actualType = getActualTypeArgumentFor(typeParameter);
+
+ actualTypeArguments.put(typeParameter, actualType);
+ // logger.log("For '" + rawType().getCanonicalName() + "' returning explicit TypeVariable : { '" + typeParameter + "(" + System.identityHashCode(typeParameter) + ")" + "' : '" + actualType +"' }");
+ }
+
+ return actualTypeArguments;
+ }
+
+/* METHOD rawType */
+@Override
+ public Class<?> rawType() {
+ return clazz;
+ }
+
+/* METHOD FromParameterizedTypeGenericMetadataSupport */
+public FromParameterizedTypeGenericMetadataSupport(ParameterizedType parameterizedType) {
+ this.parameterizedType = parameterizedType;
+ readActualTypeParameters();
+ }
+
+/* METHOD rawType */
+@Override
+ public Class<?> rawType() {
+ return (Class<?>) parameterizedType.getRawType();
+ }
+
+/* METHOD ParameterizedReturnType */
+public ParameterizedReturnType(GenericMetadataSupport source, TypeVariable[] typeParameters, ParameterizedType parameterizedType) {
+ this.parameterizedType = parameterizedType;
+ this.typeParameters = typeParameters;
+ this.contextualActualTypeParameters = source.contextualActualTypeParameters;
+
+ readTypeParameters();
+ readTypeVariables();
+ }
+
+/* METHOD rawType */
+@Override
+ public Class<?> rawType() {
+ return (Class<?>) parameterizedType.getRawType();
+ }
+
+/* METHOD TypeVariableReturnType */
+public TypeVariableReturnType(GenericMetadataSupport source, TypeVariable[] typeParameters, TypeVariable typeVariable) {
+ this.typeParameters = typeParameters;
+ this.typeVariable = typeVariable;
+ this.contextualActualTypeParameters = source.contextualActualTypeParameters;
+
+ readTypeParameters();
+ readTypeVariables();
+ }
+
+/* METHOD NotGenericReturnTypeSupport */
+public NotGenericReturnTypeSupport(Type genericReturnType) {
+ returnType = (Class<?>) genericReturnType;
+ }
+
+/* METHOD rawType */
+@Override
+ public Class<?> rawType() {
+ return returnType;
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object o) {
+ if (this == o) return true;
+ if (o == null || getClass() != o.getClass()) return false;
+
+ return typeVariable.equals(((TypeVarBoundedType) o).typeVariable);
+
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object o) {
+ if (this == o) return true;
+ if (o == null || getClass() != o.getClass()) return false;
+
+ return wildcard.equals(((TypeVarBoundedType) o).typeVariable);
+
+ }
+
+/* METHOD getActualTypeArgumentFor */
+protected Type getActualTypeArgumentFor(TypeVariable typeParameter) {
+ Type type = this.contextualActualTypeParameters.get(typeParameter);
+ if (type instanceof TypeVariable) {
+ TypeVariable typeVariable = (TypeVariable) type;
+ return getActualTypeArgumentFor(typeVariable);
+ }
+
+ return type;
+ }
+
+/* METHOD TypeVarBoundedType */
+public TypeVarBoundedType(TypeVariable typeVariable) {
+ this.typeVariable = typeVariable;
+ }
+
+/* METHOD firstBound */
+public Type firstBound() {
+ return typeVariable.getBounds()[0]; //
+ }

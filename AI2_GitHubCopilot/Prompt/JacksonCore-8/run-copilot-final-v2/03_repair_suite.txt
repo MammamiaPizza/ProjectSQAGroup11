@@ -1,0 +1,171 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 8  Version: JacksonCore-8b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 182
+Trigger failures:
+- com.fasterxml.jackson.core.util.TestTextBuffer::testEmpty
+ --> java.lang.NullPointerException
+Modified: com.fasterxml.jackson.core.util.TextBuffer
+
+Available API/signatures:
+[com.fasterxml.jackson.core.util.TextBuffer | java]
+package com.fasterxml.jackson.core.util;
+public final class TextBuffer
+public TextBuffer(BufferRecycler allocator) {
+public void releaseBuffers()
+public void resetWithEmpty()
+public void resetWithShared(char[] buf, int start, int len)
+public void resetWithCopy(char[] buf, int start, int len)
+public void resetWithString(String value)
+private char[] buf(int needed)
+private void clearSegments()
+/* Accessors for implementing public interface
+public int size() {
+public int getTextOffset() {
+public boolean hasTextAsCharacters()
+public char[] getTextBuffer()
+public String contentsAsString()
+public char[] contentsAsArray() {
+public BigDecimal contentsAsDecimal() throws NumberFormatException
+public double contentsAsDouble() throws NumberFormatException {
+public void ensureNotShared() {
+public void append(char c) {
+public void append(char[] c, int start, int len)
+public void append(String str, int offset, int len)
+public char[] getCurrentSegment()
+public char[] emptyAndGetCurrentSegment()
+public int getCurrentSegmentSize() { return _currentSize; }
+public void setCurrentLength(int len) { _currentSize = len; }
+public String setCurrentAndReturn(int len) {
+public char[] finishCurrentSegment() {
+public char[] expandCurrentSegment()
+public char[] expandCurrentSegment(int minSize) {
+@Override public String toString() { return contentsAsString(); }
+private void unshare(int needExtra)
+private void expand(int minNewSegmentSize)
+private char[] resultArray()
+final char[] result = carr(size);
+private char[] carr(int len) { return new char[len]; }
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.util;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ public class TestTextBuffer {
+
+     private TextBuffer createBuffer() {
+         return new TextBuffer(new BufferRecycler());
+     }
+
+     @Test
+     public void testEmptyContentsAsStringAfterResetWithEmpty() {
+         TextBuffer tb = createBuffer();
+         tb.resetWithEmpty();
+         assertEquals("", tb.contentsAsString());
+     }
+
+     @Test
+     public void testEmptySizeAfterResetWithEmpty() {
+         TextBuffer tb = createBuffer();
+         tb.resetWithEmpty();
+         assertEquals(0, tb.size());
+     }
+
+     @Test
+     public void testEmptyGetTextOffsetAfterResetWithEmpty() {
+         TextBuffer tb = createBuffer();
+         tb.resetWithEmpty();
+         assertEquals(0, tb.getTextOffset());
+     }
+
+     @Test
+     public void testEmptyHasTextAsCharactersAfterResetWithEmpty() {
+         TextBuffer tb = createBuffer();
+         tb.resetWithEmpty();
+         assertFalse(tb.hasTextAsCharacters());
+     }
+
+     @Test
+     public void testEmptyGetTextBufferAfterResetWithEmpty() {
+         TextBuffer tb = createBuffer();
+         tb.resetWithEmpty();
+         assertNotNull(tb.getTextBuffer());
+     }
+
+     @Test
+     public void testContentsAsStringAfterAppendSingleChar() {
+         TextBuffer tb = createBuffer();
+         tb.append('A');
+         assertEquals("A", tb.contentsAsString());
+     }
+
+     @Test
+     public void testContentsAsStringAfterAppendChars() {
+         TextBuffer tb = createBuffer();
+         tb.append("xyz".toCharArray(), 0, 3);
+         assertEquals("xyz", tb.contentsAsString());
+     }
+
+     @Test
+     public void testResetWithEmptyBeforeAppend() {
+         TextBuffer tb = createBuffer();
+         tb.append('X');
+         assertEquals("X", tb.contentsAsString());
+         tb.resetWithEmpty();
+         assertEquals("", tb.contentsAsString());
+         tb.append('Y');
+         assertEquals("Y", tb.contentsAsString());
+     }
+
+     @Test
+     public void testResetWithSharedNullBuffer() {
+         TextBuffer tb = createBuffer();
+         try {
+             tb.resetWithShared(null, 0, 0);
+             // No immediate exception; contents access may fail later but not tested here.
+         } catch (NullPointerException ok) {
+             // Acceptable if null argument triggers immediate NPE.
+         }
+     }
+
+     @Test
+     public void testResetWithCopyNullBuffer() {
+         TextBuffer tb = createBuffer();
+         try {
+             tb.resetWithCopy(null, 0, 0);
+         } catch (NullPointerException ok) {
+             // Acceptable immediate rejection.
+         }
+     }
+
+     @Test
+     public void testResetWithStringNull() {
+         TextBuffer tb = createBuffer();
+         tb.resetWithString(null);
+         String s = tb.contentsAsString();
+         assertTrue(s == null || s.isEmpty());
+     }
+
+     @Test
+     public void testResetWithSharedValid() {
+         TextBuffer tb = createBuffer();
+         char[] arr = "abc".toCharArray();
+         tb.resetWithShared(arr, 0, 3);
+         assertEquals("abc", tb.contentsAsString());
+         assertSame(arr, tb.getTextBuffer());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.core.util.TestTextBuffer::testEmptyHasTextAsCharactersAfterResetWithEmpty
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.core.util.TestTextBuffer::testEmptyHasTextAsCharactersAfterResetWithEmpty

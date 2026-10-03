@@ -1,0 +1,166 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 89  Version: Jsoup-89b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1107
+Trigger failures:
+- org.jsoup.nodes.AttributeTest::settersOnOrphanAttribute
+ --> java.lang.NullPointerException
+Modified: org.jsoup.nodes.Attribute
+
+Available API/signatures:
+[org.jsoup.nodes.Attribute | java]
+package org.jsoup.nodes;
+public class Attribute implements Map.Entry<String, String>, Cloneable {
+Attributes parent; // used to update the holding Attributes when the key / value is changed via this interface
+public Attribute(String key, String value) {
+public Attribute(String key, String val, Attributes parent) {
+@return the attribute key
+public String getKey() {
+@param key the new key; must not be null
+public void setKey(String key) {
+@return the attribute value
+public String getValue() {
+@param val the new attribute value; must not be null
+public String setValue(String val) {
+@return HTML
+public String html() {
+protected static void html(String key, String val, Appendable accum, Document.OutputSettings out) throws IOException {
+protected void html(Appendable accum, Document.OutputSettings out) throws IOException {
+@return string
+@Override
+public String toString() {
+public static Attribute createFromEncoded(String unencodedKey, String encodedValue) {
+protected boolean isDataAttribute() {
+protected static boolean isDataAttribute(String key) {
+protected final boolean shouldCollapseAttribute(Document.OutputSettings out) {
+protected static boolean shouldCollapseAttribute(final String key, final String val, final Document.OutputSettings out) {
+protected boolean isBooleanAttribute() {
+protected static boolean isBooleanAttribute(final String key) {
+public boolean equals(Object o) { // note parent not considered
+public int hashCode() { // note parent not considered
+public Attribute clone() {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ public class AttributeTest {
+
+     @Test
+     public void testSetKeyOnOrphan() {
+         Attribute attr = new Attribute("original", "value", null);
+         attr.setKey("newKey");
+         assertEquals("newKey", attr.getKey());
+         assertNull(attr.parent);
+     }
+
+     @Test
+     public void testSetValueOnOrphanNoExceptionAndReturnsOldValue() {
+         Attribute attr = new Attribute("key", "oldVal", null);
+         String oldVal = attr.setValue("newVal");
+         assertEquals("oldVal", oldVal);
+         assertEquals("newVal", attr.getValue());
+         assertNull(attr.parent);
+     }
+
+     @Test
+     public void testSetKeyThenSetValueOnOrphan() {
+         Attribute attr = new Attribute("k", "v", null);
+         attr.setKey("k2");
+         attr.setValue("v2");
+         assertEquals("k2", attr.getKey());
+         assertEquals("v2", attr.getValue());
+     }
+
+     @Test
+     public void testSetKeyOnNonOrphanUpdatesParent() {
+         Attributes attrs = new Attributes();
+         Attribute attr = new Attribute("oldKey", "val");
+         attrs.put(attr); // sets parent and inserts into internal arrays
+         attr.setKey("newKey");
+         assertEquals("newKey", attr.getKey());
+         assertNull(attrs.get("oldKey"));
+         assertEquals("val", attrs.get("newKey"));
+     }
+
+     @Test
+     public void testSetValueOnNonOrphanUpdatesParent() {
+         Attributes attrs = new Attributes();
+         Attribute attr = new Attribute("key", "oldVal");
+         attrs.put(attr);
+         attr.setValue("newVal");
+         assertEquals("newVal", attr.getValue());
+         assertEquals("newVal", attrs.get("key"));
+     }
+
+     @Test
+     public void testSetValueReturnsOldValueNonOrphan() {
+         Attributes attrs = new Attributes();
+         Attribute attr = new Attribute("key", "oldVal");
+         attrs.put(attr);
+         String oldVal = attr.setValue("newVal");
+         assertEquals("oldVal", oldVal);
+     }
+
+     @Test
+     public void testHtmlOnOrphanDoesNotThrow() {
+         Attribute attr = new Attribute("href", "index.html", null);
+         String html = attr.html();
+         assertNotNull(html);
+         assertTrue(html.contains("href"));
+     }
+
+     @Test
+     public void testIsBooleanAttributeOnOrphan() {
+         Attribute boolAttr = new Attribute("checked", "", null);
+         Attribute nonBool = new Attribute("href", "value", null);
+         assertTrue(boolAttr.isBooleanAttribute());
+         assertFalse(nonBool.isBooleanAttribute());
+     }
+
+     @Test
+     public void testCloneOrphan() {
+         Attribute original = new Attribute("key", "val", null);
+         Attribute clone = original.clone();
+         assertNotSame(original, clone);
+         assertEquals(original, clone);
+         assertEquals(original.getKey(), clone.getKey());
+         assertEquals(original.getValue(), clone.getValue());
+         assertNull(clone.parent);
+     }
+
+     @Test
+     public void testEqualsOrphan() {
+         Attribute a1 = new Attribute("key", "val");
+         Attribute a2 = new Attribute("key", "val");
+         Attribute a3 = new Attribute("other", "val");
+         assertEquals(a1, a2);
+         assertNotEquals(a1, a3);
+         assertNotEquals(a1, null);
+         assertNotEquals(a1, "notAnAttribute");
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testSetKeyNullThrows() {
+         new Attribute("valid", "val", null).setKey(null);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testSetKeyEmptyThrows() {
+         new Attribute("valid", "val", null).setKey("   ");
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.AttributeTest::testSetKeyOnNonOrphanUpdatesParent
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.AttributeTest::testSetKeyOnNonOrphanUpdatesParent

@@ -1,0 +1,100 @@
+package org.apache.commons.lang.text;
+
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
+public class StrBuilderLang294RegressionTest {
+
+    @Test
+    public void testIndexOfDoesNotFindRemovedSuffixInUnusedBuffer() {
+        StrBuilder builder = new StrBuilder("onetwothree");
+
+        builder.delete(6, 11);
+
+        assertEquals("onetwo", builder.toString());
+        assertEquals(-1, builder.indexOf("three"));
+    }
+
+    @Test
+    public void testIndexOfFromLogicalEndDoesNotSearchUnusedBuffer() {
+        StrBuilder builder = new StrBuilder("onetwothree");
+
+        builder.delete(6, 11);
+
+        assertEquals(-1, builder.indexOf("three", builder.length()));
+    }
+
+    @Test
+    public void testIndexOfFindsSuffixBeforeItIsRemoved() {
+        StrBuilder builder = new StrBuilder("onetwothree");
+
+        assertEquals(6, builder.indexOf("three", 0));
+    }
+
+    @Test
+    public void testReplaceAllDeletingTerminalMatchDoesNotRescanUnusedBuffer() {
+        StrBuilder builder = new StrBuilder("onetwothree");
+
+        builder.replaceAll("three", "");
+
+        assertEquals("onetwo", builder.toString());
+    }
+
+    @Test
+    public void testReplaceAllDeletesMultipleMatchesIncludingTerminalMatch() {
+        StrBuilder builder = new StrBuilder("threeXthree");
+
+        builder.replaceAll("three", "");
+
+        assertEquals("X", builder.toString());
+    }
+
+    @Test
+    public void testReplaceAllWithNoMatchLeavesContentUnchanged() {
+        StrBuilder builder = new StrBuilder("onetwothree");
+
+        builder.replaceAll("four", "");
+
+        assertEquals("onetwothree", builder.toString());
+    }
+
+@Test
+public void testNonPositiveInitialCapacityUsesDefaultCapacity() {
+    StrBuilder defaultBuilder = new StrBuilder();
+    assertEquals(defaultBuilder.capacity(), new StrBuilder(0).capacity());
+    assertEquals(defaultBuilder.capacity(), new StrBuilder(-1).capacity());
+}
+
+@Test
+public void testNullStringConstructorCreatesEmptyBuilder() {
+    StrBuilder builder = new StrBuilder((String) null);
+    assertEquals(0, builder.length());
+    assertEquals("", builder.toString());
+}
+
+@Test
+public void testAppendNullTextAndPrimitiveOverloads() {
+    StrBuilder builder = new StrBuilder();
+    builder.setNullText("<null>");
+    builder.append((Object) null);
+    builder.append((String) null);
+    builder.append((String) null, 0, 0);
+    builder.append('!');
+    builder.append(12);
+    builder.append(34L);
+    builder.append(1.5f);
+    builder.append(2.5d);
+
+    assertEquals("<null><null><null>!12341.52.5", builder.toString());
+}
+
+@Test
+public void testIndexOfDoesNotFindStaleContentAfterClearAndAppend() {
+    StrBuilder builder = new StrBuilder("prefixthree");
+    builder.clear();
+    builder.append("prefix");
+
+    assertEquals(-1, builder.indexOf("three"));
+}
+}

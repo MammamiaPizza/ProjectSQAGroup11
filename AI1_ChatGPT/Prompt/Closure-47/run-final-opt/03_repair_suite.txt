@@ -1,0 +1,198 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 47  Version: Closure-47b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 575
+Trigger failures:
+- com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testParseSourceMetaMap
+ --> junit.framework.AssertionFailedError: expected:<5> but was:<4>
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput0a
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testMultilineMapping
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<9>
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testMultiFunctionMapping
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<9>
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testLiteralMappingsGoldenOutput
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testMultilineMapping2
+ --> junit.framework.AssertionFailedError
+...[truncated deterministically]...
+nFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput3
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput4
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput5
+ --> junit.framework.ComparisonFailure: expected:<...
+Modified: com.google.debugging.sourcemap.SourceMapConsumerV3, com.google.javascript.jscomp.SourceMap
+
+Available API/signatures:
+[com.google.debugging.sourcemap.SourceMapConsumerV3 | java]
+package com.google.debugging.sourcemap;
+public class SourceMapConsumerV3 implements SourceMapConsumer,
+public SourceMapConsumerV3() {
+static class DefaultSourceMapSupplier implements SourceMapSupplier {
+@Override
+public String getSourceMap(String url) {
+public void parse(String contents) throws SourceMapParseException {
+public void parse(String contents, SourceMapSupplier sectionSupplier)
+public void parse(JSONObject sourceMapRoot) throws SourceMapParseException {
+public void parse(JSONObject sourceMapRoot, SourceMapSupplier sectionSupplier)
+public OriginalMapping getMappingForLine(int lineNumber, int column) {
+public Collection<String> getOriginalSources() {
+private String[] getJavaStringArray(JSONArray array) throws JSONException {
+private class MappingBuilder {
+private void validateEntry(Entry entry) {
+private Entry de
+...[truncated deterministically]...
+public int getGeneratedColumn() {
+public int getSourceFileId() {
+public int getSourceLine() {
+public int getSourceColumn() {
+public int getNameId() {
+private static class UnnamedEntry extends UnmappedEntry {
+private static class NamedEntry extends UnnamedEntry {
+static interface EntryVisitor {
+public void visitMappings(EntryVisitor visitor) {
+final int lineCount = lines.size();
+final int entryCount = line.size();
+
+[com.google.javascript.jscomp.SourceMap | java]
+package com.google.javascript.jscomp;
+public class SourceMap {
+public static enum Format {
+@Override SourceMap getInstance() {
+abstract SourceMap getInstance();
+public static enum DetailLevel implements Predicate<Node> {
+@Override public boolean apply(Node node) {
+public static class LocationMapping {
+public LocationMapping(String prefix, String replacement) {
+private List<LocationMapping> prefixMappings = Collections.emptyList();
+private SourceMap(SourceMapGenerator generator) {
+private String fixupSourceLocation(String sourceFile) {
+public void appendTo(Appendable out, String name) throws IOException {
+public void reset() {
+public void setStartingPosition(int offsetLine, int offsetIndex) {
+public void setWrapperPrefix(String prefix) {
+public void validate(boolean validate) {
+public void setPrefixMappings(List<LocationMapping> sourceMapLocationMappings) {
+
+Generated JUnit Test:
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import com.google.debugging.sourcemap.proto.Mapping.OriginalMapping;
+import org.junit.Test;
+
+public class SourceMapConsumerV3FinalLineTest {
+
+  private SourceMapConsumerV3 parse(String mappings, int lineCount, String[] sources,
+      String[] names) throws SourceMapParseException {
+    StringBuilder json = new StringBuilder();
+    json.append("{\"version\":3,\"file\":\"out.js\",\"lineCount\":")
+        .append(lineCount)
+        .append(",\"mappings\":\"")
+        .append(mappings)
+        .append("\",\"sources\":[");
+    for (int i = 0; i < sources.length; i++) {
+      if (i > 0) {
+        json.append(',');
+      }
+      json.append('"').append(sources[i]).append('"');
+    }
+    json.append("],\"names\":[");
+    for (int i = 0; i < names.length; i++) {
+      if (i > 0) {
+        json.append(',');
+      }
+      json.append('"').append(names[i]).append('"');
+    }
+    json.append("]}");
+
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    consumer.parse(json.toString());
+    return consumer;
+  }
+
+  @Test
+  public void testFinalLineMappingsAreAvailableWithoutTrailingSemicolon()
+      throws SourceMapParseException {
+    SourceMapConsumerV3 consumer =
+        parse("EAAA,CAAC", 1, new String[] {"input.js"}, new String[0]);
+
+    assertNull(consumer.getMappingForLine(0, 1));
+
+    OriginalMapping first = consumer.getMappingForLine(0, 2);
+    assertEquals("input.js", first.getOriginalFile());
+    assertEquals(0, first.getLineNumber());
+    assertEquals(0, first.getColumnPosition());
+
+    OriginalMapping last = consumer.getMappingForLine(0, 100);
+    assertEquals("input.js", last.getOriginalFile());
+    assertEquals(0, last.getLineNumber());
+    assertEquals(1, last.getColumnPosition());
+  }
+
+  @Test
+  public void testFinalGeneratedLineIsRetainedAfterEarlierLineSeparator()
+      throws SourceMapParseException {
+    SourceMapConsumerV3 consumer =
+        parse("AAAA;AACA", 2, new String[] {"original.js"}, new String[0]);
+
+    OriginalMapping firstLine = consumer.getMappingForLine(0, 0);
+    assertEquals("original.js", firstLine.getOriginalFile());
+    assertEquals(0, firstLine.getLineNumber());
+    assertEquals(0, firstLine.getColumnPosition());
+
+    OriginalMapping finalLine = consumer.getMappingForLine(1, 0);
+    assertEquals("original.js", finalLine.getOriginalFile());
+    assertEquals(1, finalLine.getLineNumber());
+    assertEquals(0, finalLine.getColumnPosition());
+  }
+
+  @Test
+  public void testNamedMappingOnFinalLineRetainsIdentifier()
+      throws SourceMapParseException {
+    SourceMapConsumerV3 consumer =
+        parse("AAAAA", 1, new String[] {"source.js"}, new String[] {"symbol"});
+
+    OriginalMapping mapping = consumer.getMappingForLine(0, 0);
+
+    assertEquals("source.js", mapping.getOriginalFile());
+    assertEquals(0, mapping.getLineNumber());
+    assertEquals(0, mapping.getColumnPosition());
+    assertEquals("symbol", mapping.getIdentifier());
+  }
+
+  @Test(expected = SourceMapParseException.class)
+  public void testRejectsUnsupportedSourceMapVersion() throws SourceMapParseException {
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    consumer.parse(
+        "{\"version\":2,\"file\":\"out.js\",\"lineCount\":1,"
+            + "\"mappings\":\"AAAA\",\"sources\":[\"input.js\"],\"names\":[]}");
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-47f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-47f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-47f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-47f-ai/.test_suite/SourceMapConsumerV3FinalLineTest.java:9: error: cannot find symbol
+ [javac] private SourceMapConsumerV3 parse(String mappings, int lineCount, String[] sources,
+ [javac] ^
+ [javac] symbol: class SourceMapConsumerV3
+ [javac] location: class SourceMapConsumerV3FinalLineTest
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 17 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

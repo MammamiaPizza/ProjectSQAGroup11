@@ -1,0 +1,239 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 44  Version: JacksonDatabind-44b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1125
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestSubtypes::testIssue1125WithDefault
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "b" (class com.fasterxml.jackson.databind.jsontype.TestSubtypes$Default1125), not marked as ignorable (2 known properties: "a", "def"])
+Modified: com.fasterxml.jackson.databind.type.SimpleType
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.SimpleType | java]
+package com.fasterxml.jackson.databind.type;
+public class SimpleType // note: until 2.6 was final
+protected SimpleType(Class<?> cls) {
+protected SimpleType(TypeBase base) {
+public static SimpleType constructUnsafe(Class<?> raw) {
+@Deprecated
+public static SimpleType construct(Class<?> cls)
+if (Map.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Map (class: "+cls.getName()+")");
+if (Collection.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Collection (class: "+cls.getName()+")");
+throw new IllegalArgumentException("Can not construct SimpleType for an array (class: "+cls.getName()+")");
+@Override
+protected JavaType _narrow(Class<?> subclass)
+public JavaType withContentType(JavaType contentType) {
+public SimpleType withTypeHandler(Object h) {
+public JavaType withContentTypeHandler(Object h) {
+public SimpleType withValueHandler(Object h) {
+public SimpleType withContentValueHandler(Object h) {
+public SimpleType withStaticTyping() {
+protected String buildCanonicalName()
+final int count = _bindings.size();
+public boolean isContainerType() { return false; }
+public StringBuilder getErasedSignature(StringBuilder sb) {
+public StringBuilder getGenericSignature(StringBuilder sb)
+private static JavaType _buildSuperClass(Class<?> superClass, TypeBindings b)
+if (superClass == Object.class) {
+public String toString()
+sb.append("[simple type, class ").append(buildCanonicalName()).append(']');
+public boolean equals(Object o)
+
+Generated JUnit Test:
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.type.SimpleType;
+
+public class SimpleTypeBug44Test
+{
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY,
+            property = "type", defaultImpl = Default1125.class)
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = Named1125.class, name = "named")
+    })
+    public static class Base1125 {
+        public int a;
+    }
+
+    public static class Default1125 extends Base1125 {
+        public int b;
+    }
+
+    public static class Named1125 extends Base1125 {
+        public String name;
+    }
+
+    @Test
+    public void defaultSubtypeMustRetainItsOwnProperties() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Base1125 result = mapper.readValue("{\"a\":3,\"b\":7}", Base1125.class);
+
+        assertTrue(result instanceof Default1125);
+        assertEquals(3, result.a);
+        assertEquals(7, ((Default1125) result).b);
+    }
+
+    @Test
+    public void constructRejectsMapTypes() {
+        try {
+            SimpleType.construct(HashMap.class);
+            fail("Map classes must not be constructible as SimpleType");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("Map"));
+        }
+    }
+
+    @Test
+    public void constructRejectsCollectionTypes() {
+        try {
+            SimpleType.construct(ArrayList.class);
+            fail("Collection classes must not be constructible as SimpleType");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("Collection"));
+        }
+    }
+
+    @Test
+    public void constructRejectsArrayTypes() {
+        try {
+            SimpleType.construct(String[].class);
+            fail("Array classes must not be constructible as SimpleType");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("array"));
+        }
+    }
+
+    @Test
+    public void safeAndUnsafeScalarConstructionHaveConsistentIdentity() {
+        SimpleType safe = SimpleType.construct(String.class);
+        SimpleType unsafe = SimpleType.constructUnsafe(String.class);
+
+        assertEquals(String.class, safe.getRawClass());
+        assertEquals(String.class, unsafe.getRawClass());
+        assertEquals(safe, unsafe);
+        assertEquals(safe.hashCode(), unsafe.hashCode());
+    }
+
+    @Test
+    public void scalarCanonicalNamesAndSignaturesAreCorrect() {
+        SimpleType type = SimpleType.constructUnsafe(String.class);
+
+        assertEquals("java.lang.String", type.toCanonical());
+        assertEquals("[simple type, class java.lang.String]", type.toString());
+        assertEquals("Ljava/lang/String;", type.getErasedSignature(new StringBuilder()).toString());
+        assertEquals("Ljava/lang/String;", type.getGenericSignature(new StringBuilder()).toString());
+        assertFalse(type.isContainerType());
+    }
+
+    @Test
+    public void handlersAndStaticTypingProduceIndependentAdjustedTypes() {
+        SimpleType original = SimpleType.constructUnsafe(Integer.class);
+        Object valueHandler = new Object();
+        Object typeHandler = new Object();
+
+        SimpleType adjusted = original.withValueHandler(valueHandler)
+                .withTypeHandler(typeHandler)
+                .withStaticTyping();
+
+        assertSame(valueHandler, adjusted.getValueHandler());
+        assertSame(typeHandler, adjusted.getTypeHandler());
+        assertTrue(adjusted.useStaticType());
+        assertFalse(original.useStaticType());
+        assertNull(original.getValueHandler());
+        assertNull(original.getTypeHandler());
+        assertSame(adjusted, adjusted.withValueHandler(valueHandler));
+        assertSame(adjusted, adjusted.withTypeHandler(typeHandler));
+        assertSame(adjusted, adjusted.withStaticTyping());
+    }
+
+    @Test
+    public void simpleTypesRejectContentTypeOperations() {
+        JavaType type = SimpleType.constructUnsafe(Integer.class);
+
+        try {
+            type.withContentType(SimpleType.constructUnsafe(String.class));
+            fail("Simple types do not have content types");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("no content types"));
+        }
+
+        try {
+            type.withContentTypeHandler(new Object());
+            fail("Simple types do not have content type handlers");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("no content types"));
+        }
+
+        try {
+            type.withContentValueHandler(new Object());
+            fail("Simple types do not have content value handlers");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("no content types"));
+        }
+    }
+
+    @Test
+    public void narrowingCreatesTheRequestedSimpleRawType() {
+        SimpleType base = SimpleType.constructUnsafe(Number.class);
+
+        JavaType narrowed = base.narrowBy(Integer.class);
+
+        assertEquals(Integer.class, narrowed.getRawClass());
+        assertSame(base, base.narrowBy(Number.class));
+        assertEquals(Number.class, narrowed.getSuperClass().getRawClass());
+    }
+
+    @Test
+    public void constructScalarBuildsSuperclassInformation() {
+        SimpleType type = SimpleType.construct(Integer.class);
+
+        assertNotNull(type.getSuperClass());
+        assertEquals(Number.class, type.getSuperClass().getRawClass());
+    }
+
+    @Test
+    public void constructUnsafeAllowsSimpleNonContainerRawTypes() {
+        SimpleType type = SimpleType.constructUnsafe(Map.Entry.class);
+
+        assertEquals(Map.Entry.class, type.getRawClass());
+        assertEquals("java.util.Map$Entry", type.toCanonical());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-44f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-44f-ai -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-44f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-44f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-44f-ai/.test_suite/SimpleTypeBug44Test.java:148: error: cannot find symbol
+ [javac] JavaType narrowed = base.narrowBy(Integer.class);
+ [javac] ^
+ [javac] symbol: method narrowBy(Class<Integer>)
+ [javac] location: variable base of type SimpleType
+ [javac] Note: /root/sqa-workspaces/JacksonDatabind-44f-ai/.test_suite/SimpleTypeBug44Test.java uses or overrides a deprecated API.
+ [javac] Note: Recompile with -Xlint:deprecation for details.
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

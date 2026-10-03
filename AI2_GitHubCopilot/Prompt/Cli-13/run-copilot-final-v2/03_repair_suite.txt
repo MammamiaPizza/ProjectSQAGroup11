@@ -1,0 +1,288 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 13  Version: Cli-13b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-61
+Trigger failures:
+- org.apache.commons.cli2.bug.BugLoopingOptionLookAlikeTest::testLoopingOptionLookAlike2
+ --> junit.framework.ComparisonFailure: expected:<Unexpected [testfile.txt while processing ]> but was:<Unexpected [value "testfile.txt" found while processing input]>
+Modified: org.apache.commons.cli2.WriteableCommandLine, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.ArgumentImpl
+
+Available API/signatures:
+[org.apache.commons.cli2.WriteableCommandLine | java]
+package org.apache.commons.cli2;
+public interface WriteableCommandLine extends CommandLine {
+void addOption(final Option option);
+void addValue(final Option option, final Object value);
+void setDefaultValues(final Option option, final List defaultValues);
+void addSwitch(final Option option, final boolean value) throws IllegalStateException;
+void setDefaultSwitch(final Option option, final Boolean defaultSwitch);
+void addProperty(final String property, final String value);
+boolean looksLikeOption(final String argument);
+
+[org.apache.commons.cli2.commandline.WriteableCommandLineImpl | java]
+package org.apache.commons.cli2.commandline;
+public class WriteableCommandLineImpl
+private final Properties properties = new Properties();
+private final List options = new ArrayList();
+private final Map nameToOption = new HashMap();
+private final Map values = new HashMap();
+private final Map switches = new HashMap();
+private final Map defaultValues = new HashMap();
+private final Map defaultSwitches = new HashMap();
+public void addOption(Option option) {
+public boolean hasOption(final Option option) {
+final boolean present = options.contains(option);
+public Option getOption(final String trigger) {
+public Set getProperties() {
+public boolean looksLikeOption(final String trigger) {
+for (final Iterator i = prefixes.iterator(); i.hasNext();) {
+final String prefix = (String) i.next();
+public String toString() {
+final StringBuffer buffer = new StringBuffer();
+for (final Iterator i = normalised.iterator(); i.hasNext();) {
+final String arg = (String) i.next();
+public List getOptions() {
+public Set getOptionTri
+...[truncated deterministically]...
+ents.next();
+final String allValues = stripBoundaryQuotes(allValuesQuoted);
+final String token = values.nextToken();
+public Set getPrefixes() {
+public char getInitialSeparator() {
+public char getSubsequentSeparator() {
+public Set getTriggers() {
+public String getConsumeRemaining() {
+public List getDefaultValues() {
+public Validator getValidator() {
+public void validate(final WriteableCommandLin
+...[truncated deterministically]...
+.contains(DisplaySetting.DISPLAY_ARGUMENT_BRACKETED);
+final int max = (maximum == Integer.MAX_VALUE) ? 2 : maximum;
+public String getDescription() {
+final HelpLine helpLine = new HelpLineImpl(this, depth);
+public int getMaximum() {
+public int getMinimum() {
+public String stripBoundaryQuotes(String token) {
+public boolean isRequired() {
+public void defaults(final WriteableCommandLine commandLine) {
+
+Generated JUnit Test:
+package org.apache.commons.cli2.bug;
+
+ import junit.framework.TestCase;
+
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+
+ import org.apache.commons.cli2.Argument;
+ import org.apache.commons.cli2.Option;
+ import org.apache.commons.cli2.OptionException;
+ import org.apache.commons.cli2.WriteableCommandLine;
+ import org.apache.commons.cli2.commandline.WriteableCommandLineImpl;
+ import org.apache.commons.cli2.option.ArgumentImpl;
+ import org.apache.commons.cli2.validation.InvalidArgumentException;
+ import org.apache.commons.cli2.validation.Validator;
+
+ /**
+  * Tests for the CLI-61 bug: incorrect quoting of the unexpected token in
+  * ArgumentImpl validation error messages, and prevention of looksLikeOption
+  * loops by ensuring option‑like tokens are reported without quotes.
+  */
+ public class BugCLI61Test extends TestCase {
+
+     private WriteableCommandLine commandLine;
+
+     public void setUp() {
+         // A minimal root option is required to instantiate WriteableCommandLineImpl.
+         // The root option supplies the option prefixes used for look‑alike detection.
+         Argument rootOption = new ArgumentImpl(
+                 "root", "root option", 0, 0, '\0', '\0', null, null, null, 0);
+         this.commandLine = new WriteableCommandLineImpl(rootOption, new ArrayList());
+     }
+
+     // -------------------------------------------------------------------------
+     // Valid state tests
+     // -------------------------------------------------------------------------
+
+     public void testValidValuesNoException() {
+         ArgumentImpl arg = createArg(1, 2);
+         commandLine.addValue(arg, "value1");
+         commandLine.addValue(arg, "value2");
+         try {
+             arg.validate(commandLine, arg);
+         } catch (OptionException e) {
+             fail("Should not have thrown an exception, but got: " + e.getMessage());
+         }
+     }
+
+     public void testMaximumValuesExactly() {
+         ArgumentImpl arg = createArg(1, 2);
+         commandLine.addValue(arg, "a");
+         commandLine.addValue(arg, "b");
+         try {
+             arg.validate(commandLine, arg);
+         } catch (OptionException e) {
+             fail("Should not throw with exactly maximum values: " + e.getMessage());
+         }
+     }
+
+     public void testMinimumValuesExactly() {
+         ArgumentImpl arg = createArg(2, 3);
+         commandLine.addValue(arg, "a");
+         commandLine.addValue(arg, "b");
+         try {
+             arg.validate(commandLine, arg);
+         } catch (OptionException e) {
+             fail("Should not throw with exactly minimum values: " + e.getMessage());
+         }
+     }
+
+     public void testDefaultValuesSatisfyMinimum() {
+         List defaults = Arrays.asList(new String[] { "default1" });
+         ArgumentImpl arg = new ArgumentImpl(
+                 "arg", "desc", 1, 2, '\0', '\0', null, null, defaults, 1);
+         commandLine.setDefaultValues(arg, defaults); // provide defaults via the command line
+         try {
+             arg.validate(commandLine, arg);
+         } catch (OptionException e) {
+             fail("Should not throw with defaults: " + e.getMessage());
+         }
+     }
+
+     // -------------------------------------------------------------------------
+     // Missing / excess value tests
+     // -------------------------------------------------------------------------
+
+     public void testMissingRequiredValues() {
+         ArgumentImpl arg = createArg(1, 2); // requires at least 1 value
+         try {
+             arg.validate(commandLine, arg);
+             fail("Expected OptionException for missing values");
+         } catch (OptionException e) {
+             assertTrue("Message should indicate missing values, was: " + e.getMessage(),
+                     e.getMessage().toLowerCase().contains("missing"));
+         }
+     }
+
+     public void testTooManyValuesExceptionMessagePattern() {
+         ArgumentImpl arg = createArg(0, 1);
+         commandLine.addValue(arg, "testfile.txt");
+         commandLine.addValue(arg, "extra");
+         try {
+             arg.validate(commandLine, arg);
+             fail("Expected OptionException for too many values");
+         } catch (OptionException e) {
+             String msg = e.getMessage();
+             assertTrue("Message should start with 'Unexpected ' but was: " + msg,
+                     msg.startsWith("Unexpected "));
+             assertTrue("Message should contain ' while processing ' but was: " + msg,
+                     msg.contains(" while processing "));
+         }
+     }
+
+     public void testTooManyValuesTokenNotQuoted() {
+         ArgumentImpl arg = createArg(0, 1);
+         String token = "testfile.txt";
+         commandLine.addValue(arg, token);
+         commandLine.addValue(arg, "extra");
+         try {
+             arg.validate(commandLine, arg);
+             fail("Expected OptionException");
+         } catch (OptionException e) {
+             String msg = e.getMessage();
+             // Bug CLI-61: the token must NOT be enclosed in quotes
+             assertFalse("Token should not be quoted: " + msg,
+                     msg.contains("\"" + token + "\""));
+             assertTrue("Message should contain the unquoted token: " + msg,
+                     msg.contains(token));
+             assertTrue("Message should match 'Unexpected token while processing' pattern",
+                     msg.matches("Unexpected " + token + " while processing .*"));
+         }
+     }
+
+     public void testOptionLikeTokenInErrorMessage() {
+         ArgumentImpl arg = createArg(0, 1);
+         String token = "-v"; // looks like an option trigger
+         commandLine.addValue(arg, token);
+         commandLine.addValue(arg, "extra");
+         try {
+             arg.validate(commandLine, arg);
+             fail("Expected OptionException");
+         } catch (OptionException e) {
+             String msg = e.getMessage();
+             assertTrue("Message should start with 'Unexpected '", msg.startsWith("Unexpected "));
+             assertTrue("Message should contain the token", msg.contains(token));
+             assertFalse("Token should not be quoted, even when it looks like an option",
+                     msg.contains("\"" + token + "\""));
+         }
+     }
+
+     public void testMultipleExcessValues() {
+         ArgumentImpl arg = createArg(0, 2);
+         commandLine.addValue(arg, "a");
+         commandLine.addValue(arg, "b");
+         commandLine.addValue(arg, "c"); // first excess (index == maximum)
+         commandLine.addValue(arg, "d");
+         try {
+             arg.validate(commandLine, arg);
+             fail("Expected OptionException");
+         } catch (OptionException e) {
+             String msg = e.getMessage();
+             assertTrue("Should report first excess value 'c', got: " + msg,
+                     msg.contains("c"));
+             assertFalse("First excess should not be quoted", msg.contains("\"c\""));
+         }
+     }
+
+     // -------------------------------------------------------------------------
+     // Validator rejection
+     // -------------------------------------------------------------------------
+
+     public void testValidatorRejectionMessage() {
+         Validator failingValidator = new Validator() {
+             public void validate(List values) throws InvalidArgumentException {
+                 throw new InvalidArgumentException("bad value");
+             }
+         };
+         ArgumentImpl arg = new ArgumentImpl(
+                 "arg", "desc", 1, 1, '\0', '\0', failingValidator, null, null, 2);
+         commandLine.addValue(arg, "somevalue");
+         try {
+             arg.validate(commandLine, arg);
+             fail("Expected OptionException from validator");
+         } catch (OptionException e) {
+             String msg = e.getMessage();
+             // The validator's message should be included verbatim (no extra quoting)
+             assertTrue("Message should contain validator message: " + msg,
+                     msg.contains("bad value"));
+             assertFalse("Validator message should not be quoted: " + msg,
+                     msg.contains("\"bad value\""));
+         }
+     }
+
+     // -------------------------------------------------------------------------
+     // Helper
+     // -------------------------------------------------------------------------
+
+     private ArgumentImpl createArg(int min, int max) {
+         return new ArgumentImpl(
+                 "arg", "description", min, max,
+                 '\0', '\0', null, null, null,
+                 min * 100 + max);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.cli2.bug.BugCLI61Test::testMultipleExcessValues
+ - org.apache.commons.cli2.bug.BugCLI61Test::testOptionLikeTokenInErrorMessage
+ - org.apache.commons.cli2.bug.BugCLI61Test::testTooManyValuesTokenNotQuoted
+ - org.apache.commons.cli2.bug.BugCLI61Test::testValidatorRejectionMessage
+
+Failing generated tests: org.apache.commons.cli2.bug.BugCLI61Test::testMultipleExcessValues, org.apache.commons.cli2.bug.BugCLI61Test::testOptionLikeTokenInErrorMessage, org.apache.commons.cli2.bug.BugCLI61Test::testTooManyValuesTokenNotQuoted, org.apache.commons.cli2.bug.BugCLI61Test::testValidatorRejectionMessage

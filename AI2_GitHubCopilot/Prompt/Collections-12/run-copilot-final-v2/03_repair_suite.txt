@@ -1,0 +1,303 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 12  Version: Collections-12b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-271
+Trigger failures:
+- org.apache.commons.collections.TestExtendedProperties::testCollections271
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.collections.ExtendedProperties
+
+Available API/signatures:
+[org.apache.commons.collections.ExtendedProperties | java]
+package org.apache.commons.collections;
+public class ExtendedProperties extends Hashtable {
+protected String file;
+protected String basePath;
+protected String fileSeparator = System.getProperty("file.separator");
+protected boolean isInitialized = false;
+protected static String include = "include";
+protected ArrayList keysAsListed = new ArrayList();
+protected final static String START_TOKEN="${";
+protected final static String END_TOKEN="}";
+protected String interpolate(String base) {
+protected String interpolateHelper(String base, List priorVariables) {
+private static String escape(String s) {
+private static String unescape(String s) {
+private static int countPreceding(String line, int index, char ch) {
+private static boolean endsWithSlash(String line) {
+static class PropertiesReader extends LineNumberReader {
+public PropertiesReader(Reader reader) {
+public String readProperty() throws IOException {
+static class PropertiesTokenizer extends StringTokenizer {
+public PropertiesTokenizer(String string) {
+public boolean hasMoreTokens() {
+public String nextToken() {
+public ExtendedProperties() {
+public ExtendedProperties(String file) throws IOException {
+public ExtendedProperties(String file, String defaultFile) throws IOException {
+public boolean isInitialized() {
+public String getInclude() {
+public void setInclude(String inc) {
+public void load(InputStream input) throws IOException {
+public synchronized void load(InputStream input, String enc) throws IOException {
+public Object getProperty(String key) {
+public void addProperty(String key, Object value) {
+private void addPropertyDirect(
+...[truncated deterministically]...
+String name) {
+public int getInt(String name, int def) {
+public int getInteger(String key) {
+public int getInteger(String key, int defaultValue) {
+public Integer getInteger(String key, Integer defaultValue) {
+public long getLong(String key) {
+public long getLong(String key, long defaultValue) {
+public Long getLong(String key, Long defaultValue) {
+public float getFloat(String key) {
+public float getFloat(String key, float defaultValue) {
+public Float getFloat(String key, Float defaultValue) {
+public double getDouble(String key) {
+public double getDouble(String key, double defaultValue) {
+public Double getDouble(String key, Double defaultValue) {
+public static ExtendedProperties convertProperties(Properties props) {
+public Object put(Object key, Object value) {
+public void putAll(Map map) {
+public Object remove(Object key) {
+
+Generated JUnit Test:
+package org.apache.commons.collections;
+
+import static org.junit.Assert.*;
+
+import java.io.;
+import java.util.;
+
+import org.junit.*;
+
+/**
+
+ - Tests targeting the bug described in COLLECTIONS-271
+ - and related interpolation / escaping behaviours.
+  */
+ public class TestExtendedPropertiesBug12 {
+  private File tempDir;
+  @Before
+  public void setUp() throws IOException {
+  tempDir = createTempDirectory();
+  }
+  @After
+  public void tearDown() {
+  deleteDirectory(tempDir);
+  }
+  // Helper to write a temporary .properties file.
+  private File writeFile(String name, String content) throws IOException {
+  File file = new File(tempDir, name);
+  PrintWriter pw = new PrintWriter(new FileWriter(file));
+  pw.print(content);
+  pw.close();
+  return file;
+  }
+  private static File createTempDirectory() throws IOException {
+  File dir = File.createTempFile("extprop", ".tmp");
+  dir.delete();
+  dir.mkdir();
+  return dir;
+  }
+  private static void deleteDirectory(File dir) {
+  if (dir.isDirectory()) {
+      for (File f : dir.listFiles()) {
+          deleteDirectory(f);
+      }
+  }
+  dir.delete();
+  }
+  // ---------------------------------------------------------------
+  // COLLECTIONS-271: repeated undefined variable falsely triggers
+  // infinite loop detection
+  // ---------------------------------------------------------------
+  @Test
+  public void testMultipleUndefinedSameTokenIsNotACycle() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("key", "${missing}/${missing}");
+  String result = props.getString("key");
+  assertEquals("${missing}/${missing}", result);
+  }
+  // ---------------------------------------------------------------
+  // Self-referential property must throw IllegalStateException
+  // ---------------------------------------------------------------
+  @Test(expected = IllegalStateException.class)
+  public void testSelfReferenceThrowsLoopException() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("loop", "${loop}");
+  props.getString("loop"); // should throw
+  }
+  // ---------------------------------------------------------------
+  // Two-key cycle must also throw
+  // ---------------------------------------------------------------
+  @Test(expected = IllegalStateException.class)
+  public void testTwoKeyCycleThrowsLoopException() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("a", "${b}");
+  props.setProperty("b", "${a}");
+  props.getString("a"); // should throw
+  }
+  // ---------------------------------------------------------------
+  // Normal interpolation
+  // ---------------------------------------------------------------
+  @Test
+  public void testSimpleInterpolation() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("greeting", "hello");
+  props.setProperty("msg", "${greeting} world");
+  assertEquals("hello world", props.getString("msg"));
+  }
+  // ---------------------------------------------------------------
+  // Interpolation with defaults (single level)
+  // ---------------------------------------------------------------
+  @Test
+  public void testInterpolationFromDefaultsSingleLevel() throws Exception {
+  File mainFile = writeFile("main.properties", "a = ${b}\n");
+  File defaultFile = writeFile("default.properties", "b = world\n");
+  ExtendedProperties props = new ExtendedProperties(
+          mainFile.getAbsolutePath(),
+          defaultFile.getAbsolutePath());
+  assertEquals("world", props.getString("a"));
+  }
+  // ---------------------------------------------------------------
+  // Interpolation with defaults (two levels – COLLECTIONS-271 chain)
+  // ---------------------------------------------------------------
+  @Test
+  public void testInterpolationFromDefaultsChained() throws Exception {
+  File mainFile = writeFile("main.properties", "a = ${b}\n");
+  File defaultFile = writeFile("default.properties",
+          "b = ${c}\nc = world\n");
+  ExtendedProperties props = new ExtendedProperties(
+          mainFile.getAbsolutePath(),
+          defaultFile.getAbsolutePath());
+  assertEquals("world", props.getString("a"));
+  }
+  // ---------------------------------------------------------------
+  // Missing variable kept as-is
+  // ---------------------------------------------------------------
+  @Test
+  public void testMissingVariableLeftUnresolved() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("item", "${noSuch}");
+  assertEquals("${noSuch}", props.getString("item"));
+  }
+  // ---------------------------------------------------------------
+  // getStringArray basics
+  // ---------------------------------------------------------------
+  @Test
+  public void testGetStringArraySimple() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("list", "a,b,c");
+  assertArrayEquals(new String[]{"a", "b", "c"}, props.getStringArray("list"));
+  }
+  // ---------------------------------------------------------------
+  // getStringArray with escaped comma (via escape/unescape)
+  // ---------------------------------------------------------------
+  @Test
+  public void testGetStringArrayEscapedComma() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.addProperty("escaped", "a\,b");  // literal backslash-comma
+  String[] arr = props.getStringArray("escaped");
+  // After unescaping the value is "a,b" as one element
+  assertArrayEquals(new String[]{"a,b"}, arr);
+  }
+  // ---------------------------------------------------------------
+  // Boolean parsing
+  // ---------------------------------------------------------------
+  @Test
+  public void testGetBoolean() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("b1", "true");
+  props.setProperty("b0", "false");
+  props.setProperty("b2", "yes");
+  assertTrue(props.getBoolean("b1"));
+  assertFalse(props.getBoolean("b0"));
+  // "yes" should be false according to testBoolean default?
+  // public contract: testBoolean returns Boolean.TRUE only for "true",
+  // everything else is Boolean.FALSE.
+  assertFalse(props.getBoolean("b2"));
+  }
+  // ---------------------------------------------------------------
+  // Combine two ExtendedProperties
+  // ---------------------------------------------------------------
+  @Test
+  public void testCombine() {
+  ExtendedProperties base = new ExtendedProperties();
+  base.setProperty("a", "1");
+  ExtendedProperties other = new ExtendedProperties();
+  other.setProperty("b", "2");
+  base.combine(other);
+  assertEquals("1", base.getString("a"));
+  assertEquals("2", base.getString("b"));
+  }
+  // ---------------------------------------------------------------
+  // Subset (prefix selection)
+  // ---------------------------------------------------------------
+  @Test
+  public void testSubset() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("server.name", "main");
+  props.setProperty("server.port", "8080");
+  props.setProperty("client.name", "app");
+  ExtendedProperties subset = props.subset("server");
+  assertEquals(2, subset.size());
+  assertEquals("main", subset.getString("name"));
+  assertEquals("8080", subset.getString("port"));
+  }
+  // ---------------------------------------------------------------
+  // Clear property
+  // ---------------------------------------------------------------
+  @Test
+  public void testClearProperty() {
+  ExtendedProperties props = new ExtendedProperties();
+  props.setProperty("x", "1");
+  assertNotNull(props.getProperty("x"));
+  props.clearProperty("x");
+  assertNull(props.getString("x")); // getString returns null for missing
+  }
+  // ---------------------------------------------------------------
+  // load + save roundtrip
+  // ---------------------------------------------------------------
+  @Test
+  public void testLoadSaveRoundtrip() throws Exception {
+  File orig = writeFile("orig.properties", "key = value\n");
+  ExtendedProperties props = new ExtendedProperties(orig.getAbsolutePath());
+  assertEquals("value", props.getString("key"));
+  File saved = new File(tempDir, "saved.properties");
+  OutputStream fos = new FileOutputStream(saved);
+  props.save(fos, "header");
+  fos.close();
+  ExtendedProperties reloaded = new ExtendedProperties(saved.getAbsolutePath());
+  assertEquals("value", reloaded.getString("key"));
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Collections-12f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Collections-12f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Collections-12f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- commons-collections 3.3-SNAPSHOT --------
+prepare:
+ [mkdir] Created dir: /root/sqa-workspaces/Collections-12f-copilot/build
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Collections-12f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Collections-12f-copilot/.test_suite/org/apache/commons/collections/TestExtendedPropertiesBug12.java:5: error: <identifier> expected
+ [javac] import java.io.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 3 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

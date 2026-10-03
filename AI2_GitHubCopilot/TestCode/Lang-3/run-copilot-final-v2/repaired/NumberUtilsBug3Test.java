@@ -1,0 +1,130 @@
+package org.apache.commons.lang3.math;
+
+ import static org.junit.Assert.*;
+
+ import java.math.BigDecimal;
+ import java.math.BigInteger;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for {@link NumberUtils#createNumber(String)} focusing on precision
+  * preservation (LANG-693) and related type-selection paths.
+  */
+ public class NumberUtilsBug3Test {
+
+     // ---- Exception‑on‑invalid paths ----
+
+     @Test(expected = NumberFormatException.class)
+     public void testCreateNumber_EmptyString() {
+         NumberUtils.createNumber("");
+     }
+
+     @Test(expected = NumberFormatException.class)
+     public void testCreateNumber_BlankString() {
+         NumberUtils.createNumber("   ");
+     }
+
+     @Test(expected = NumberFormatException.class)
+     public void testCreateNumber_Malformed() {
+         NumberUtils.createNumber("abc");
+     }
+
+     // ---- Integer / Long / BigInteger paths ----
+
+     @Test
+     public void testCreateNumber_PureInteger() {
+         Number n = NumberUtils.createNumber("123");
+         assertTrue("Expected Integer for pure integer", n instanceof Integer);
+         assertEquals(123, n.intValue());
+     }
+
+     @Test
+     public void testCreateNumber_LongSuffix() {
+         Number n = NumberUtils.createNumber("123L");
+         assertTrue("Expected Long for 'L' suffix", n instanceof Long);
+         assertEquals(123L, n.longValue());
+     }
+
+     // ---- Suffix‑driven floating‑point ----
+
+     @Test
+     public void testCreateNumber_FloatSuffix() {
+         Number n = NumberUtils.createNumber("12.34f");
+         assertTrue("Expected Float for 'f' suffix", n instanceof Float);
+         assertEquals(12.34f, n.floatValue(), 0.0f);
+     }
+
+     @Test
+     public void testCreateNumber_DoubleSuffix() {
+         Number n = NumberUtils.createNumber("12.34d");
+         assertTrue("Expected Double for 'd' suffix", n instanceof Double);
+         assertEquals(12.34d, n.doubleValue(), 0.0d);
+     }
+
+     // ---- No‑suffix decimal: precision‑driven type selection ----
+
+     @Test
+     public void testDecimalNoPrecisionLossReturnsFloat() {
+         // 0.5 is exactly representable in single precision
+         Number n = NumberUtils.createNumber("0.5");
+         assertTrue("Expected Float for lossless decimal", n instanceof Float);
+         assertEquals(0.5f, n.floatValue(), 0.0f);
+     }
+
+     @Test
+     public void testDecimalPrecisionLossReturnsDouble() {
+         // value that Float cannot represent without rounding
+         String s = "123456789.123456789";
+         Number n = NumberUtils.createNumber(s);
+         assertTrue("Expected Double when Float would lose precision, got " +
+                 n.getClass().getName(),
+                 n instanceof Double);
+         assertEquals(Double.parseDouble(s), n.doubleValue(), 0.0d);
+     }
+
+     // ---- Exponential notation ----
+
+     @Test
+     public void testExponentialNoPrecisionLossReturnsFloat() {
+         // 1.5e2 = 150, exactly representable as float
+         Number n = NumberUtils.createNumber("1.5e2");
+         assertTrue("Expected Float for lossless exponential", n instanceof Float);
+         assertEquals(1.5e2f, n.floatValue(), 1e-30f);
+     }
+
+     @Test
+     public void testExponentialPrecisionLossReturnsDouble() {
+         // many mantissa digits that exceed float precision
+         String s = "1.2345678900000001e20";
+         Number n = NumberUtils.createNumber(s);
+         assertTrue("Expected Double for exponent with precision loss, got " +
+                 n.getClass().getName(),
+                 n instanceof Double);
+         assertEquals(Double.parseDouble(s), n.doubleValue(), 0.0d);
+     }
+
+     // ---- Direct reproduction of the failing trigger (LANG-693) ----
+
+     @Test
+     public void testStringCreateNumberEnsureNoPrecisionLoss() {
+         // This string cannot be represented exactly as float; the original
+         // buggy version erroneously returned a Float.
+         String s = "1.1999999999999999";
+         Number n = NumberUtils.createNumber(s);
+         assertTrue("Must preserve precision -> Double, not " + n.getClass().getName(),
+                 n instanceof Double);
+         assertEquals(Double.parseDouble(s), n.doubleValue(), .0d;
+     }
+
+     // ---- Boundary / signed ----
+
+     @Test
+    public void testNegativeDecimal() {
+         String s = "-99.99";
+         Number n = NumberUtils.createNumber(s);
+         assertTrue("Signed decimal should yield Float, got " + n.getClass().getName(),
+                   n instanceof Float);
+         assertEquals(Float.parseFloat(s), n.floatValue(), 0.0f);
+     }
+ }

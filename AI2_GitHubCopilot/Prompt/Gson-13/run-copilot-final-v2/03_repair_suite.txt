@@ -1,0 +1,206 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 13  Version: Gson-13b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1053
+Trigger failures:
+- com.google.gson.stream.JsonReaderTest::testNegativeZero
+ --> junit.framework.ComparisonFailure: expected:<[-]0> but was:<[]0>
+Modified: com.google.gson.stream.JsonReader
+
+Available API/signatures:
+[com.google.gson.stream.JsonReader | java]
+package com.google.gson.stream;
+public class JsonReader implements Closeable {
+private static final char[] NON_EXECUTE_PREFIX = ")]}'\n".toCharArray();
+public JsonReader(Reader in) {
+public final void setLenient(boolean lenient) {
+public final boolean isLenient() {
+public void beginArray() throws IOException {
+public void endArray() throws IOException {
+public void beginObject() throws IOException {
+public void endObject() throws IOException {
+public boolean hasNext() throws IOException {
+public JsonToken peek() throws IOException {
+private int peekKeyword() throws IOException {
+private int peekNumber() throws IOException {
+private boolean isLiteral(char c) throws IOException {
+public String nextName() throws IOException {
+public String nextString() throws IOException {
+public boolean nextBoolean() throws IOException {
+public void nextNull() throws IOException {
+public double nextDouble() throws IOException {
+public long nextLong() throws IOException {
+private String nextQuotedValue(char quote) throws IOException {
+@SuppressWarnings("fallthrough")
+private String nextUnquotedValue() throws IOException {
+private void skipQuotedValue(char quote) throws IOException {
+private void skipUnquotedValue() throws IOException {
+public int nextInt() throws IOException {
+public void close() throws IOException {
+public void skipValue() throws IOException {
+private void push(int newTop) {
+private boolean fillBuffer(int minimum) throws IOException {
+private int nextNonWhitespace(boolean throwOnEof) throws IOException {
+private void checkLenient() throws IOException {
+private void skipToEndOfLine() throws IOException {
+private boolean skipTo(String toFind) throws IOException {
+@Override public String toString() {
+private String locationString() {
+public String getPath() {
+private char readEscapeCharacter() throws IOException {
+private IOException syntaxError(String message) throws IOException {
+private void consumeNonExecutePrefix() throws IOException {
+@Override public void promoteNameToValue(JsonReader reader) throws IOException {
+
+Generated JUnit Test:
+package com.google.gson.stream;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.assertFalse;
+
+ import java.io.IOException;
+ import java.io.StringReader;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for Gson bug #1053: JsonReader.nextDouble() loses the negative sign
+  * when parsing negative zero (-0, -0.0, -0e0, etc.), returning 0.0 instead
+  * of -0.0.
+  */
+ public class NegativeZeroTest {
+
+     // -----------------------------------------------------------------------
+     // Negative-zero core cases
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testNegativeZero() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0"));
+         double d = reader.next Double();
+         assertEquals("Negative zero must be -0.0", 0x8000000000000000L,
+                 Double.doubleToRawLongBits(d));
+     }
+
+     @Test
+     public void testNegativeZeroPointZero() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0.0"));
+         double d = reader.next Double();
+         assertEquals("Negative zero point zero must be -0.0", 0x80000000000000L,
+                 Double.doubleToRawLongBits(d));
+     }
+
+     @Test
+     public void testNegativeZeroExponent() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0e0"));
+         double d = reader.next Double();
+         assertEquals("Negative zero with exponent must be -0.0", 0x80000000000000L,
+                 Double.doubleToRawLongBits(d));
+     }
+
+     @Test
+     public void testNegativeZeroCapitalExponent() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0E0"));
+         double d = reader.next Double();
+         assertEquals("Negative zero with capital E must be -0.0", 0x80000000000000L,
+                 Double.doubleToRawLongBits(d));
+     }
+
+     @Test
+     public void testNegativeZeroNegativeExponent() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0.0e-0"));
+         double d = reader.next Double();
+         assertEquals("Negative zero with negative exponent must be -0.0", 0x8000000000000000L,
+                 Double.doubleToRawLongBits(d));
+     }
+
+     // -----------------------------------------------------------------------
+     // Positive-zero counter-cases
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testPositiveZero() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("0"));
+         double d = reader.next Double();
+         assertEquals("Positive zero must be 0.0", 0L, Double.doubleToRawLongBits(d));
+  }
+
+     @Test
+     public void testPositiveZeroPointZero() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("0.0"));
+         double d = reader.next Double();
+         assertEquals("0.0 must be 0.0", 0L, Double.doubleToRawLongBits(d));
+     }
+
+     @Test
+     public void testPositiveZeroExponent() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("0e0"));
+         double d = reader.next Double();
+         assertEquals("0e0 must be 0.0", 0L, Double.doubleToRawLongBits(d));
+     }
+
+     // -----------------------------------------------------------------------
+     // Integral negative zero: nextInt / nextLong must return 0, not -0
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testNextIntNegativeZero() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0"));
+         int i = reader.nextInt();
+         assertEquals("nextInt(-0) must return 0", 0, i);
+     }
+
+     @Test
+     public void testNextLongNegativeZero() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0"));
+         long l = reader.nextLong();
+         assertEquals("nextLong(-0) must return 0", 0L, l);
+     }
+
+     // -----------------------------------------------------------------------
+     // Non-zero negative numbers are unaffected
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testNegativeDoubleUnaffected() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-1.2"));
+         double d = reader.next Double();
+         assertEquals(-1.2, d, 0.0);
+     }
+
+     // -----------------------------------------------------------------------
+     // Lenient mode does not help, bug exists there too
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testNegativeZeroLenient() throws IOException {
+         JsonReader reader = new JsonReader(new StringReader("-0"));
+         reader.setLenient(true);
+         double d = reader.next Double();
+         assertEquals("Lenient -0 must still be -0.0", 0x8000000000000000L,
+                 Double.doubleToRawLongBits(d));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Gson-13f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Gson-13f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Gson-13f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Gson-13f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Gson-13f-copilot/.test_suite/com/google/gson/stream/NegativeZeroTest.java:26: error: ';' expected
+ [javac] double d = reader.next Double();
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 27 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

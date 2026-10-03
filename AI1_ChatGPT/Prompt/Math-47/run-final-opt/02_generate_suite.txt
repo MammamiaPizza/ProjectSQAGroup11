@@ -1,0 +1,529 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 47  Version: Math-47b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.complex.Complex
+Modified: org.apache.commons.math.complex.Complex
+Triggers: org.apache.commons.math.complex.ComplexTest::testAtanI, org.apache.commons.math.complex.ComplexTest::testDivideZero
+
+Bug/specification summary:
+Bug report: MATH-657
+Trigger failures:
+- org.apache.commons.math.complex.ComplexTest::testAtanI
+ --> junit.framework.AssertionFailedError
+ - org.apache.commons.math.complex.ComplexTest::testDivideZero
+ --> junit.framework.AssertionFailedError: expected:<(NaN, NaN)> but was:<(Infinity, Infinity)>
+Modified: org.apache.commons.math.complex.Complex
+
+Prompt-01 test plan:
+TARGETS: Complex.atan() at input I; Complex.divide(Complex) with zero divisor. 
+ORACLES: Trigger assertions; divide-by-zero expected Complex.NaN, not (Infinity, Infinity). 
+CASES: I.atan() expected result per existing test; verify real and imaginary components. 
+CASES: finite complex / ZERO, including nonzero real and/or imaginary numerator, yields NaN. 
+CASES: ZERO / ZERO boundary yields NaN; verify isNaN() rather than object identity. 
+RISKS: atan expected numeric value/tolerance is not supplied; derive only from existing test context.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.complex.Complex (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.complex;
+public class Complex implements FieldElement<Complex>, Serializable {
+public static final Complex I = new Complex(0.0, 1.0);
+public static final Complex NaN = new Complex(Double.NaN, Double.NaN);
+public static final Complex INF = new Complex(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+public static final Complex ONE = new Complex(1.0, 0.0);
+public static final Complex ZERO = new Complex(0.0, 0.0);
+public Complex(double real) {
+public Complex(double real, double imaginary) {
+public double abs() {
+public Complex add(Complex addend) throws NullArgumentException {
+public Complex add(double addend) {
+public Complex conjugate() {
+public Complex divide(Complex divisor)
+final double c = divisor.getReal();
+final double d = divisor.getImaginary();
+public Complex divide(double divisor) {
+@Override
+public boolean equals(Object other) {
+public int hashCode() {
+public double getImaginary() {
+public double getReal() {
+public boolean isNaN() {
+public boolean isInfinite() {
+public Complex multiply(Complex factor)
+public Complex multiply(double factor) {
+public Complex negate() {
+public Complex subtract(Complex subtrahend)
+public Complex subtract(double subtrahend) {
+public Complex acos() {
+public Complex asin() {
+public Complex atan() {
+public Complex cos() {
+public Complex cosh() {
+public Complex exp() {
+public Complex log() {
+public Complex pow(Complex x)
+public Complex pow(double x) {
+public Complex sin() {
+public Complex sinh() {
+public Complex sqrt() {
+public Complex sqrt1z() {
+public Complex tan() {
+public Complex tanh() {
+public double getArgument() {
+public List<Complex> nthRoot(int n) {
+final List<Complex> result = new ArrayList<Complex>();
+final double nthRootOfAbs = FastMath.pow(abs(), 1.0 / n);
+final double nthPhi = getArgument() / n;
+final double realPart = nthRootOfAbs * FastMath.cos(innerPart);
+final double imaginaryPart = nthRootOfAbs * FastMath.sin(innerPart);
+public static Complex valueOf(double realPart) {
+protected final Object readResolve() {
+public ComplexField getField() {
+public String toString() {
+
+/* HEADER */
+package org.apache.commons.math.complex;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+import org.apache.commons.math.FieldElement;
+import org.apache.commons.math.exception.NullArgumentException;
+import org.apache.commons.math.exception.NotPositiveException;
+import org.apache.commons.math.exception.util.LocalizedFormats;
+import org.apache.commons.math.util.MathUtils;
+import org.apache.commons.math.util.FastMath;
+public class Complex implements FieldElement<Complex>, Serializable {
+
+/* METHOD Complex */
+public Complex(double real, double imaginary) {
+ this.real = real;
+ this.imaginary = imaginary;
+
+ isNaN = Double.isNaN(real) || Double.isNaN(imaginary);
+ isInfinite = !isNaN &&
+ (Double.isInfinite(real) || Double.isInfinite(imaginary));
+ }
+
+/* METHOD Complex */
+public Complex(double real) {
+ this(real, 0.0);
+ }
+
+/* METHOD nthRoot */
+public List<Complex> nthRoot(int n) {
+
+ if (n <= 0) {
+ throw new NotPositiveException(LocalizedFormats.CANNOT_COMPUTE_NTH_ROOT_FOR_NEGATIVE_N,
+ n);
+ }
+
+ final List<Complex> result = new ArrayList<Complex>();
+
+ if (isNaN) {
+ result.add(NaN);
+ return result;
+ }
+ if (isInfinite()) {
+ result.add(INF);
+ return result;
+ }
+
+ // nth root of abs -- faster / more accurate to use a solver here?
+ final double nthRootOfAbs = FastMath.pow(abs(), 1.0 / n);
+
+ // Compute nth roots of complex number with k = 0, 1, ... n-1
+ final double nthPhi = getArgument() / n;
+ final double slice = 2 * FastMath.PI / n;
+ double innerPart = nthPhi;
+ for (int k = 0; k < n ; k++) {
+ // inner part
+ final double realPart = nthRootOfAbs * FastMath.cos(innerPart);
+ final double imaginaryPart = nthRootOfAbs * FastMath.sin(innerPart);
+ result.add(createComplex(realPart, imaginaryPart));
+ innerPart += slice;
+ }
+
+ return result;
+ }
+
+/* METHOD multiply */
+public Complex multiply(Complex factor)
+ throws NullArgumentException {
+ MathUtils.checkNotNull(factor);
+ if (isNaN || factor.isNaN) {
+ return NaN;
+ }
+ if (Double.isInfinite(real) ||
+ Double.isInfinite(imaginary) ||
+ Double.isInfinite(factor.real) ||
+ Double.isInfinite(factor.imaginary)) {
+ // we don't use isInfinite() to avoid testing for NaN again
+ return INF;
+ }
+ return createComplex(real * factor.real - imaginary * factor.imaginary,
+ real * factor.imaginary + imaginary * factor.real);
+ }
+
+ /**
+ * Returns a {@code Complex} whose value is {@code this * factor}, with {@code factor}
+ * interpreted as a real number.
+ *
+ * @param factor value to be multiplied by this {@code Complex}.
+ * @return {@code this * factor}.
+ * @see #multiply(Complex)
+ */
+ public Complex multiply(double factor) {
+ if (isNaN || Double.isNaN(factor)) {
+ return NaN;
+ }
+ if (Double.isInfinite(real) ||
+ Double.isInfinite(imaginary) ||
+ Double.isInfinite(factor)) {
+ // we don't use isInfinite() to avoid testing for NaN again
+ return INF;
+ }
+ return createComplex(real * factor, imaginary * factor);
+ }
+
+/* METHOD abs */
+public double abs() {
+ if (isNaN) {
+ return Double.NaN;
+ }
+ if (isInfinite()) {
+ return Double.POSITIVE_INFINITY;
+ }
+ if (FastMath.abs(real) < FastMath.abs(imaginary)) {
+ if (imaginary == 0.0) {
+ return FastMath.abs(real);
+ }
+ double q = real / imaginary;
+ return FastMath.abs(imaginary) * FastMath.sqrt(1 + q * q);
+ } else {
+ if (real == 0.0) {
+ return FastMath.abs(imaginary);
+ }
+ double q = imaginary / real;
+ return FastMath.abs(real) * FastMath.sqrt(1 + q * q);
+ }
+ }
+
+/* METHOD add */
+public Complex add(Complex addend) throws NullArgumentException {
+ MathUtils.checkNotNull(addend);
+ if (isNaN || addend.isNaN) {
+ return NaN;
+ }
+
+ return createComplex(real + addend.getReal(),
+ imaginary + addend.getImaginary());
+ }
+
+/* METHOD divide */
+public Complex divide(Complex divisor)
+ throws NullArgumentException {
+ MathUtils.checkNotNull(divisor);
+ if (isNaN || divisor.isNaN) {
+ return NaN;
+ }
+
+ if (divisor.getReal() == 0.0 && divisor.getImaginary() == 0.0) {
+ return NaN;
+ }
+
+ if (divisor.isInfinite() && !isInfinite()) {
+ return ZERO;
+ }
+
+ final double c = divisor.getReal();
+ final double d = divisor.getImaginary();
+
+ if (FastMath.abs(c) < FastMath.abs(d)) {
+ double q = c / d;
+ double denominator = c * q + d;
+ return createComplex((real * q + imaginary) / denominator,
+ (imaginary * q - real) / denominator);
+ } else {
+ double q = d / c;
+ double denominator = d * q + c;
+ return createComplex((imaginary * q + real) / denominator,
+ (imaginary - real * q) / denominator);
+ }
+ }
+
+/* METHOD subtract */
+public Complex subtract(Complex subtrahend)
+ throws NullArgumentException {
+ MathUtils.checkNotNull(subtrahend);
+ if (isNaN || subtrahend.isNaN) {
+ return NaN;
+ }
+
+ return createComplex(real - subtrahend.getReal(),
+ imaginary - subtrahend.getImaginary());
+ }
+
+/* METHOD cos */
+public Complex cos() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(FastMath.cos(real) * MathUtils.cosh(imaginary),
+ -FastMath.sin(real) * MathUtils.sinh(imaginary));
+ }
+
+/* METHOD cosh */
+public Complex cosh() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(MathUtils.cosh(real) * FastMath.cos(imaginary),
+ MathUtils.sinh(real) * FastMath.sin(imaginary));
+ }
+
+/* METHOD exp */
+public Complex exp() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ double expReal = FastMath.exp(real);
+ return createComplex(expReal * FastMath.cos(imaginary),
+ expReal * FastMath.sin(imaginary));
+ }
+
+/* METHOD log */
+public Complex log() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(FastMath.log(abs()),
+ FastMath.atan2(imaginary, real));
+ }
+
+/* METHOD sin */
+public Complex sin() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(FastMath.sin(real) * MathUtils.cosh(imaginary),
+ FastMath.cos(real) * MathUtils.sinh(imaginary));
+ }
+
+/* METHOD sinh */
+public Complex sinh() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(MathUtils.sinh(real) * FastMath.cos(imaginary),
+ MathUtils.cosh(real) * FastMath.sin(imaginary));
+ }
+
+/* METHOD sqrt */
+public Complex sqrt() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ if (real == 0.0 && imaginary == 0.0) {
+ return createComplex(0.0, 0.0);
+ }
+
+ double t = FastMath.sqrt((FastMath.abs(real) + abs()) / 2.0);
+ if (real >= 0.0) {
+ return createComplex(t, imaginary / (2.0 * t));
+ } else {
+ return createComplex(FastMath.abs(imaginary) / (2.0 * t),
+ MathUtils.indicator(imaginary) * t);
+ }
+ }
+
+/* METHOD tan */
+public Complex tan() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ double real2 = 2.0 * real;
+ double imaginary2 = 2.0 * imaginary;
+ double d = FastMath.cos(real2) + MathUtils.cosh(imaginary2);
+
+ return createComplex(FastMath.sin(real2) / d,
+ MathUtils.sinh(imaginary2) / d);
+ }
+
+/* METHOD tanh */
+public Complex tanh() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ double real2 = 2.0 * real;
+ double imaginary2 = 2.0 * imaginary;
+ double d = MathUtils.cosh(real2) + FastMath.cos(imaginary2);
+
+ return createComplex(MathUtils.sinh(real2) / d,
+ FastMath.sin(imaginary2) / d);
+ }
+
+/* METHOD add */
+public Complex add(double addend) {
+ if (isNaN || Double.isNaN(addend)) {
+ return NaN;
+ }
+
+ return createComplex(real + addend, imaginary);
+ }
+
+/* METHOD conjugate */
+public Complex conjugate() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(real, -imaginary);
+ }
+
+/* METHOD divide */
+public Complex divide(double divisor) {
+ if (isNaN || Double.isNaN(divisor)) {
+ return NaN;
+ }
+ if (divisor == 0d) {
+ return NaN;
+ }
+ if (Double.isInfinite(divisor)) {
+ return !isInfinite() ? ZERO : NaN;
+ }
+ return createComplex(real / divisor,
+ imaginary / divisor);
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object other) {
+ if (this == other) {
+ return true;
+ }
+ if (other instanceof Complex){
+ Complex c = (Complex)other;
+ if (c.isNaN) {
+ return isNaN;
+ } else {
+ return (real == c.real) && (imaginary == c.imaginary);
+ }
+ }
+ return false;
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ if (isNaN) {
+ return 7;
+ }
+ return 37 * (17 * MathUtils.hash(imaginary) +
+ MathUtils.hash(real));
+ }
+
+/* METHOD negate */
+public Complex negate() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return createComplex(-real, -imaginary);
+ }
+
+/* METHOD subtract */
+public Complex subtract(double subtrahend) {
+ if (isNaN || Double.isNaN(subtrahend)) {
+ return NaN;
+ }
+ return createComplex(real - subtrahend, imaginary);
+ }
+
+/* METHOD acos */
+public Complex acos() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return this.add(this.sqrt1z().multiply(I)).log()
+ .multiply(I.negate());
+ }
+
+/* METHOD asin */
+public Complex asin() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return sqrt1z().add(this.multiply(I)).log()
+ .multiply(I.negate());
+ }
+
+/* METHOD atan */
+public Complex atan() {
+ if (isNaN) {
+ return NaN;
+ }
+
+ return this.add(I).divide(I.subtract(this)).log()
+ .multiply(I.divide(createComplex(2.0, 0.0)));
+ }
+
+/* METHOD pow */
+public Complex pow(Complex x)
+ throws NullArgumentException {
+ MathUtils.checkNotNull(x);
+ return this.log().multiply(x).exp();
+ }
+
+/* METHOD valueOf */
+public static Complex valueOf(double realPart,
+ double imaginaryPart) {
+ if (Double.isNaN(realPart) ||
+ Double.isNaN(imaginaryPart)) {
+ return NaN;
+ }
+ return new Complex(realPart, imaginaryPart);
+ }
+
+/* METHOD valueOf */
+public static Complex valueOf(double realPart) {
+ if (Double.isNaN(realPart)) {
+ return NaN;
+ }
+ return new Complex(realPart);
+ }
+
+/* METHOD isNaN */
+public boolean isNaN() {
+ return isNaN;
+ }
+
+/* METHOD pow */
+public Complex pow(double x) {
+ return this.log().multiply(x).exp();
+ }
+
+/* METHOD sqrt1z */
+public Complex sqrt1z() {
+ return createComplex(1.0, 0.0).subtract(this.multiply(this)).sqrt();
+ }
+
+/* METHOD getArgument */
+public double getArgument() {
+ return FastMath.atan2(getImaginary(), getReal());
+ }

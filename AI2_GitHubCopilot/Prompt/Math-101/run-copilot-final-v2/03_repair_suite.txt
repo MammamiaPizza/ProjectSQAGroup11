@@ -1,0 +1,167 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 101  Version: Math-101b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-198
+Trigger failures:
+- org.apache.commons.math.complex.ComplexFormatTest::testForgottenImaginaryCharacter
+ --> java.lang.StringIndexOutOfBoundsException: String index out of range: 6
+ - org.apache.commons.math.complex.FrenchComplexFormatTest::testForgottenImaginaryCharacter
+ --> java.lang.StringIndexOutOfBoundsException: String index out of range: 6
+Modified: org.apache.commons.math.complex.ComplexFormat
+
+Available API/signatures:
+[org.apache.commons.math.complex.ComplexFormat | java]
+package org.apache.commons.math.complex;
+public class ComplexFormat extends Format implements Serializable {
+public ComplexFormat() {
+public ComplexFormat(NumberFormat format) {
+public ComplexFormat(String imaginaryCharacter) {
+public ComplexFormat(String imaginaryCharacter, NumberFormat format) {
+public static String formatComplex( Complex c ) {
+public static Locale[] getAvailableLocales() {
+private static NumberFormat getDefaultNumberFormat() {
+private static NumberFormat getDefaultNumberFormat(Locale locale) {
+public String getImaginaryCharacter() {
+public NumberFormat getImaginaryFormat() {
+public static ComplexFormat getInstance() {
+public static ComplexFormat getInstance(Locale locale) {
+public NumberFormat getRealFormat() {
+public Complex parse(String source) throws ParseException {
+public Complex parse(String source, ParsePosition pos) {
+private void parseAndIgnoreWhitespace(String source, ParsePosition pos) {
+private char parseNextCharacter(String source, ParsePosition pos) {
+private Number parseNumber(String source, double value, ParsePosition pos) {
+private Number parseNumber(String source, NumberFormat format, ParsePosition pos) {
+public Object parseObject(String source, ParsePosition pos) {
+public void setImaginaryCharacter(String imaginaryCharacter) {
+public void setImaginaryFormat(NumberFormat imaginaryFormat) {
+public void setRealFormat(NumberFormat realFormat) {
+
+Generated JUnit Test:
+import static org.junit.Assert.*;
+ import org.apache.commons.math.complex.Complex;
+ import org.apache.commons.math.complex.ComplexFormat;
+ import java.text.ParseException;
+ import org.junit.Test;
+
+ /**
+  * Tests for ComplexFormat.parse focusing on bug MATH-198: StringIndexOutOfBoundsException
+  * when the imaginary character is missing from the end of the input string.
+  */
+ public class ComplexFormatTest {
+
+     @Test
+     public void testParseNormal() throws ParseException {
+         ComplexFormat fmt = new ComplexFormat();
+         Complex c = fmt.parse("1+2i");
+         assertEquals(1.0, c.getReal(), 1e-12);
+         assertEquals(2.0, c.getImaginary(), 1e-12);
+     }
+
+     @Test
+     public void testParseNegativeImaginary() throws ParseException {
+         ComplexFormat fmt = new ComplexFormat();
+         Complex c = fmt.parse("1-2i");
+         assertEquals(1.0, c.getReal(), 1e-12);
+         assertEquals(-2.0, c.getImaginary(), 1e-12);
+     }
+
+     @Test
+     public void testParseRealOnly() throws ParseException {
+         ComplexFormat fmt = new ComplexFormat();
+         Complex c = fmt.parse("123");
+         assertEquals(123.0, c.getReal(), 1e-12);
+         assertEquals(0.0, c.getImaginary(), 1e-12);
+     }
+
+     @Test(expected = ParseException.class)
+     public void testParseEmpty() throws ParseException {
+         new ComplexFormat().parse("");
+     }
+
+     @Test(expected = ParseException.class)
+     public void testParseInvalidSign() throws ParseException {
+         new ComplexFormat().parse("1 2"); // '2' where '+'/'-' expected
+     }
+
+     @Test(expected = ParseException.class)
+     public void testParseTrailingOperator() throws ParseException {
+         // real part, sign, but missing imaginary number entirely
+         new ComplexFormat().parse("-1+");
+     }
+
+     @Test(expected = ParseException.class)
+     public void testParseLeadingSignOnly() throws ParseException {
+         // no real part, only a sign and imaginary character
+         new ComplexFormat().parse(" + i");
+     }
+
+     @Test(expected = ParseException.class)
+     public void testParseSignAndImaginaryCharacterOnly() throws ParseException {
+         // real number present, sign present, imaginary number missing, only 'i' present
+         new ComplexFormat().parse("1 - i");
+     }
+
+     /**
+      * Core regression test for MATH-198: Missing imaginary character at end of string
+      * must throw ParseException, not StringIndexOutOfBoundsException.
+      */
+     @Test
+     public void testParseMissingImaginaryCharacter() {
+         ComplexFormat fmt = new ComplexFormat();
+         try {
+             fmt.parse("1+2");
+             fail("Expected ParseException for missing imaginary character 'i'");
+         } catch (ParseException e) {
+             // error offset should point to the position where 'i' was expected,
+             // i.e., after the imaginary number part. For "1+2" that is index 3.
+             assertEquals(3, e.getErrorOffset());
+         }
+     }
+
+     /**
+      * Same bug with a multi-character imaginary symbol, e.g., "ab".
+      * Input "1+2a" is missing the second character; must not cause
+      * StringIndexOutOfBoundsException.
+      */
+     @Test
+     public void testParseMissingImaginaryCharacterMultiChar() {
+         ComplexFormat fmt = new ComplexFormat();
+         fmt.setImaginaryCharacter("ab");
+         try {
+             fmt.parse("1+2a");
+             fail("Expected ParseException for missing imaginary character 'ab'");
+         } catch (ParseException e) {
+             assertEquals(3, e.getErrorOffset());
+         }
+     }
+
+     @Test
+     public void testParseCustomImaginaryCharacter() throws ParseException {
+         ComplexFormat fmt = new ComplexFormat();
+         fmt.setImaginaryCharacter("j");
+         Complex c = fmt.parse("1+2j");
+         assertEquals(1.0, c.getReal(), 1e-12);
+         assertEquals(2.0, c.getImaginary(), 1e-12);
+     }
+
+     @Test
+     public void testParseWithWhitespace() throws ParseException {
+         ComplexFormat fmt = new ComplexFormat();
+         Complex c = fmt.parse("  1  +   2 i  ");
+         assertEquals(1.0, c.getReal(), 1e-12);
+         assertEquals(2.0, c.getImaginary(), 1e-12);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - ComplexFormatTest::testParseWithWhitespace
+ - ComplexFormatTest::testParseTrailingOperator
+
+Failing generated tests: ComplexFormatTest::testParseInvalidSign, ComplexFormatTest::testParseTrailingOperator, ComplexFormatTest::testParseWithWhitespace

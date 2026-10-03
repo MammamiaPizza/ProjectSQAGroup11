@@ -1,0 +1,230 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 11  Version: JacksonDatabind-11b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 609
+Trigger failures:
+- com.fasterxml.jackson.databind.type.TestJavaType::testLocalType728
+ --> junit.framework.AssertionFailedError: expected:<interface java.lang.CharSequence> but was:<class java.lang.Object>
+ - com.fasterxml.jackson.databind.type.TestLocalType609::testLocalPartialType609
+ --> com.fasterxml.jackson.databind.JsonMappingException: Type variable 'T' can not be resolved (with context of class com.fasterxml.jackson.databind.type.TestLocalType609$EntityContainer)
+Modified: com.fasterxml.jackson.databind.type.TypeFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.TypeFactory | java]
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes", "unchecked"})
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static SimpleType CORE_TYPE_STRING = new SimpleType(String.class);
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(Boolean.TYPE);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(Integer.TYPE);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(Long.TYPE);
+protected final LRUMap<ClassKey, JavaType> _typeCache = new LRUMap<ClassKey, JavaType>(16, 100);
+protected transient HierarchicType _cachedHashMapType;
+protected transient HierarchicType _cachedArrayListType;
+protected final TypeModifier[] _modifiers;
+protected final TypeParser _parser;
+private TypeFactory() {
+protected TypeFactory(TypeParser p, TypeModifier[] mods) {
+public TypeFactory withModifier(TypeModifier mod)
+public static TypeFactory defaultInstance() { return instance; }
+public void clearCache() {
+public static JavaType unknownType() {
+public static Class<?> rawClass(Type t) {
+public JavaType constructSpecializedType(JavaType baseType, Class<?> subclass)
+|| Map.class.isAssignableFrom(subclass)
+|| Collection.class.isAssignableFrom(subclass)) {
+public JavaType constructFromCanonical(String canonical) throws IllegalArgumentException
+public JavaType[] findTypeParameters(JavaType type, Class<?> expType)
+/* Otherwise need to go through type-erased class. This may miss cases where
+public JavaType[] findTypeParameters(Class<?> clz, Class<?> expType) {
+public JavaType[] findTypeParam
+...[truncated deterministically]...
+iableName, TypeBindings bindings)
+protected JavaType _unknownType() {
+return new SimpleType(Object.class);
+protected HierarchicType _findSuperTypeChain(Class<?> subtype, Class<?> supertype)
+protected HierarchicType _findSuperClassChain(Type currentType, Class<?> target)
+protected HierarchicType _findSuperInterfaceChain(Type currentType, Class<?> target)
+if (raw == HashMap.class) {
+if (target == Map.class) {
+if (raw == ArrayList.class) {
+if (target == List.class) {
+protected HierarchicType _doFindSuperInterfaceChain(HierarchicType current, Class<?> target)
+protected synchronized HierarchicType _hashMapSuperInterfaceChain(HierarchicType current)
+_doFindSuperInterfaceChain(base, Map.class);
+protected synchronized HierarchicType _arrayListSuperInterfaceChain(HierarchicType current)
+_doFindSuperInterfaceChain(base, List.class);
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+ import java.lang.reflect.TypeVariable;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ import com.fasterxml.jackson.databind.JavaType;
+
+ /**
+  * Tests reproducing and verifying behaviour for
+  * JacksonDatabind bug 11 (databind#609).
+  * Focuses on TypeFactory resolving type variables
+  * to their upper bounds when no explicit binding exists.
+  */
+ public class TypeFactoryBug11Test {
+
+     private static final TypeFactory FACTORY = TypeFactory.defaultInstance();
+
+     // --- Helper class hierarchies for testing ---
+
+     /** Base with bounded type variable T extends CharSequence. */
+     public static class BoundBase<T extends CharSequence> { }
+
+     /** Subclass that extends BoundBase raw (no type argument). */
+     public static class RawSub extends BoundBase { }
+
+     /** Simple generic class without bounds. */
+     public static class Box<T> { }
+
+     /** Subclass providing explicit String binding. */
+     public static class StringBox extends Box<String> { }
+
+     /** Intermediate generic which leaves T unresolved. */
+     public static class Wrapper<T> extends Box<T> { }
+
+     /** Concrete class fixing T to Integer. */
+     public static class IntWrapper extends Wrapper<Integer> { }
+
+     /**
+      * 1. findTypeParameters with explicit binding: should return String,
+      *    not Object.
+      */
+     @Test
+     public void testFindTypeParametersExplicitBinding() {
+         JavaType[] params = FACTORY.findTypeParameters(StringBox.class, Box.class);
+         assertNotNull("Type parameters should not be null", params);
+         assertEquals("Should have exactly 1 type parameter", 1, params.length);
+         assertEquals("Resolved type should be String",
+                 String.class, params[0].getRawClass());
+     }
+
+     /**
+      * 2. findTypeParameters on raw subclass: the type variable T extends CharSequence
+      *    should be resolved to CharSequence, NOT Object (databind#609).
+      */
+     @Test
+     public void testFindTypeParametersRawSubclassResolvesToBound() {
+         JavaType[] params = FACTORY.findTypeParameters(RawSub.class, BoundBase.class);
+         assertNotNull("Type parameters should not be null", params);
+         assertEquals("Should have exactly 1 type parameter", 1, params.length);
+         assertEquals("Raw subclass should resolve T to its upper bound CharSequence",
+                 CharSequence.class, params[0].getRawClass());
+     }
+
+     /**
+      * 3. Calling constructType on a TypeVariable with a non-Object bound
+      *    and null context must return the bound, not Object.
+      */
+     @Test
+     public void testConstructTypeVariableWithBound() {
+         @SuppressWarnings("unchecked")
+         TypeVariable<?> tv = (TypeVariable<?>) BoundBase.class.getTypeParameters()[0];
+         JavaType resolved = FACTORY.constructType(tv);
+         assertEquals("Type variable T extends CharSequence must resolve to CharSequence",
+                 CharSequence.class, resolved.getRawClass());
+     }
+
+     /**
+      * 4. constructType on a TypeVariable with no explicit bound (implicit Object)
+      *    and null context should return Object without throwing.
+      */
+     @Test
+     public void testConstructTypeVariableWithoutBoundDoesNotThrow() {
+         @SuppressWarnings("unchecked")
+         TypeVariable<?> tv = (TypeVariable<?>) Box.class.getTypeParameters()[0];
+         JavaType resolved = null;
+         try {
+             resolved = FACTORY.constructType(tv);
+         } catch (Exception e) {
+             fail("constructType on an unbounded type variable should not throw: " + e);
+         }
+         assertNotNull(resolved);
+         // Expected to be Object (unknown type)
+         assertEquals(Object.class, resolved.getRawClass());
+     }
+
+     /**
+      * 5. Partial resolution through generic intermediate: Wrapper<T> extends Box<T>.
+      *    For IntWrapper, Box<T> should resolve T = Integer.
+      */
+     @Test
+     public void testFindTypeParametersThroughIntermediate() {
+         JavaType[] params = FACTORY.findTypeParameters(IntWrapper.class, Box.class);
+         assertNotNull("Type parameters should not be null", params);
+         assertEquals("Should have 1 type parameter", 1, params.length);
+         assertEquals("T should be resolved to Integer",
+                 Integer.class, params[0].getRawClass());
+     }
+
+     /**
+      * 6. Calling moreSpecificType on two compatible types should return the
+      *    more specific one.
+      */
+     @Test
+     public void testMoreSpecificType() {
+         JavaType stringType = FACTORY.constructType(String.class);
+         JavaType charSeqType = FACTORY.constructType(CharSequence.class);
+         // String is more specific than CharSequence
+         JavaType result = FACTORY.moreSpecificType(stringType, charSeqType);
+         assertEquals("String should be more specific than CharSequence",
+                 String.class, result.getRawClass());
+         // Reverse order
+         result = FACTORY.moreSpecificType(charSeqType, stringType);
+         assertEquals("String should still be more specific when order reversed",
+                 String.class, result.getRawClass());
+     }
+
+     /**
+      * 7. findTypeParameters on a class that does not extend the expected type
+      *    should either return null or an empty array. Verify it does not throw.
+      */
+     @Test
+     public void testFindTypeParametersWrongBaseReturnsNull() {
+         JavaType[] params = FACTORY.findTypeParameters(String.class, BoundBase.class);
+         assertNull("Should return null when class does not extend expected type", params);
+     }
+
+     /**
+      * 8. constructType with a fully parameterized generic superclass
+      *    should produce a JavaType with correct raw class.
+      */
+     @Test
+     public void testConstructTypeGenericSuperclass() {
+         java.lang.reflect.Type genericSuper = StringBox.class.getGenericSuperclass();
+         JavaType type = FACTORY.constructType(genericSuper);
+         assertEquals("Raw class should be Box", Box.class, type.getRawClass());
+     }
+
+     /**
+      * 9. verify that unknownType() consistently returns Object and is not null.
+      */
+     @Test
+     public void testUnknownType() {
+         JavaType unknown = TypeFactory.unknownType();
+         assertNotNull("unknownType() must not be null", unknown);
+         assertEquals(Object.class, unknown.getRawClass());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.type.TypeFactoryBug11Test::testFindTypeParametersWrongBaseReturnsNull
+ - com.fasterxml.jackson.databind.type.TypeFactoryBug11Test::testFindTypeParametersRawSubclassResolvesToBound
+
+Failing generated tests: com.fasterxml.jackson.databind.type.TypeFactoryBug11Test::testFindTypeParametersRawSubclassResolvesToBound, com.fasterxml.jackson.databind.type.TypeFactoryBug11Test::testFindTypeParametersWrongBaseReturnsNull

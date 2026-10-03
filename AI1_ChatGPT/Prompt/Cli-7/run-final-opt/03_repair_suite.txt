@@ -1,0 +1,157 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 7  Version: Cli-7b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-121
+Trigger failures:
+- org.apache.commons.cli2.bug.Bug27575Test::testRequiredOptions
+ --> junit.framework.ComparisonFailure: expected:<[[-h]]> but was:<[-c <arg>]>
+Modified: org.apache.commons.cli2.builder.PatternBuilder
+
+Available API/signatures:
+[org.apache.commons.cli2.builder.PatternBuilder | java]
+package org.apache.commons.cli2.builder;
+public class PatternBuilder {
+public PatternBuilder() {
+private final Set options = new HashSet();
+public Option create() {
+for (final Iterator i = options.iterator(); i.hasNext();) {
+public PatternBuilder reset() {
+public void withPattern(final String pattern) {
+private static Validator validator(final char c) {
+final ClassValidator classv = new ClassValidator();
+final ClassValidator instancev = new ClassValidator();
+final FileValidator existingv = new FileValidator();
+
+Generated JUnit Test:
+package org.apache.commons.cli2.builder;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.cli2.Group;
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.OptionException;
+import org.apache.commons.cli2.commandline.Parser;
+
+public class PatternBuilderTest extends TestCase {
+
+    public void testRequiredOptionIsReportedInsteadOfCompetingArgumentOption()
+        throws Exception {
+        final Group group = buildGroup("!hc:");
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+
+        try {
+            parser.parse(new String[] { "-c", "value" });
+            fail("A missing required -h option should cause parsing to fail");
+        }
+        catch (final OptionException expected) {
+            assertEquals("[-h]", expected.getMessage());
+        }
+    }
+
+    public void testRequiredOptionAndArgumentOptionCanBothBeParsed()
+        throws Exception {
+        final Group group = buildGroup("!hc:");
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+
+        assertNotNull(parser.parse(new String[] { "-h", "-c", "value" }));
+    }
+
+    public void testOptionalArgumentOptionDoesNotRequireOtherOptionalOption()
+        throws Exception {
+        final Group group = buildGroup("hc:");
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+
+        assertNotNull(parser.parse(new String[] { "-c", "value" }));
+    }
+
+    public void testRequiredMarkerBuildsRequiredSingleOption() {
+        final PatternBuilder builder = new PatternBuilder();
+
+        builder.withPattern("!h");
+        final Option option = builder.create();
+
+        assertEquals("h", option.getShortName());
+        assertTrue(option.isRequired());
+    }
+
+    public void testCreateClearsPreviouslyBuiltOptions() throws Exception {
+        final PatternBuilder builder = new PatternBuilder();
+        builder.withPattern("!hc:");
+        builder.create();
+
+        builder.withPattern("cd:");
+        final Group secondGroup = (Group) builder.create();
+
+        final Parser parser = new Parser();
+        parser.setGroup(secondGroup);
+        assertNotNull(parser.parse(new String[] { "-c", "value" }));
+    }
+
+    public void testResetClearsPreviouslyBuiltRequiredOptions() throws Exception {
+        final PatternBuilder builder = new PatternBuilder();
+        builder.withPattern("!hc:");
+        builder.reset();
+        builder.withPattern("cd:");
+
+        final Group group = (Group) builder.create();
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+
+        assertNotNull(parser.parse(new String[] { "-c", "value" }));
+    }
+
+    public void testSeparatePatternsAccumulateIntoOneGroup() throws Exception {
+        final PatternBuilder builder = new PatternBuilder();
+        builder.withPattern("!h");
+        builder.withPattern("c:");
+
+        final Group group = (Group) builder.create();
+        final Parser parser = new Parser();
+        parser.setGroup(group);
+
+        try {
+            parser.parse(new String[] { "-c", "value" });
+            fail("The required option from the first pattern must remain required");
+        }
+        catch (final OptionException expected) {
+            assertEquals("[-h]", expected.getMessage());
+        }
+    }
+
+    private Group buildGroup(final String pattern) {
+        final PatternBuilder builder = new PatternBuilder();
+        builder.withPattern(pattern);
+        return (Group) builder.create();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-7f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-7f-ai -Dd4j.test.dir=/root/sqa-workspaces/Cli-7f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+ [mkdir] Created dir: /root/sqa-workspaces/Cli-7f-ai/target
+ [get] To: /root/sqa-workspaces/Cli-7f-ai/target/lib/junit/jars/junit-3.8.1.jar
+ [get] Error getting file:/root/defects4j/framework/projects/lib/junit-4.12.jar to /root/sqa-workspaces/Cli-7f-ai/target/lib/junit/jars/junit-3.8.1.jar
+
+get-dep-junit.jar:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-7f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-7f-ai/.test_suite/org/apache/commons/cli2/builder/PatternBuilderTest.java:51: error: cannot find symbol
+ [javac] assertEquals("h", option.getShortName());
+ [javac] ^
+ [javac] symbol: method getShortName()
+ [javac] location: variable option of type Option
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 19 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,342 @@
+package org.apache.commons.compress.archivers.cpio;
+
+ import static org.junit.Assert.*;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for CpioArchiveInputStream focusing on mode parsing bugs (COMPRESS-236).
+  * The buggy version throws IllegalArgumentException for modes lacking known file-type bits
+  * (e.g. 0x1a4 – regular file with permissions only).
+  */
+ public class CpioArchiveInputStreamTest {
+
+     // --- Helpers to build CPIO byte streams ---
+
+     private static final byte[] MAGIC_OLD_BINARY = { (byte) 0x71, (byte) 0xc7 };
+     private static final String MAGIC_OLD_ASCII = "070707";
+     private static final String MAGIC_NEW = "070701";
+
+     /**
+      * Builds an old binary CPIO archive with a single file entry.
+      * All 2-byte fields are big-endian. 4-byte fields are two 2-byte words, big-endian each.
+      */
+     private InputStream buildOldBinaryEntryStream(long dev, long ino, long mode,
+             long uid, long gid, long nlink, long rdev,
+             long mtime, String name, byte[] fileData) throws IOException {
+         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         // magic
+         baos.write(MAGIC_OLD_BINARY);
+         // dev (2)
+         write16be(baos, (int) dev);
+         // ino (2)
+         write16be(baos, (int) ino);
+         // mode (2)
+         write16be(baos, (int) mode);
+         // uid (2)
+         write16be(baos, (int) uid);
+         // gid (2)
+         write16be(baos, (int) gid);
+         // nlink (2)
+         write16be(baos, (int) nlink);
+         // rdev (2)
+         write16be(baos, (int) rdev);
+         // mtime (4): two 2-byte big-endian words (high word first)
+         write16be(baos, (int) ((mtime >> 16) & 0xFFFF));
+         write16be(baos, (int) (mtime & 0xFFFF));
+         // namesize (2)
+         byte[] nameBytes = name.getBytes("US-ASCII");
+         int namesize = nameBytes.length + 1; // include null terminator
+         write16be(baos, namesize);
+         // filesize (4): two 2-byte big-endian words
+         long size = fileData != null ? fileData.length : 0;
+         write16be(baos, (int) ((size >> 16) & 0xFFFF));
+         write16be(baos, (int) (size & 0xFFFF));
+         // name (null-terminated)
+         baos.write(nameBytes);
+         baos.write(0);
+         // file data
+         if (fileData != null) {
+             baos.write(fileData);
+         }
+
+         return new ByteArrayInputStream(baos.toByteArray());
+     }
+
+     /**
+      * Builds an old ASCII CPIO archive with a single file entry.
+      */
+     private InputStream buildOldAsciiEntryStream(long dev, long ino, long mode,
+             long uid, long gid, long nlink, long rdev,
+             long mtime, String name, byte[] fileData) throws IOException {
+         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         // magic
+         baos.write(MAGIC_OLD_ASCII.getBytes("US-ASCII"));
+         // fields as 6-digit octal strings (except mtime: 11, namesize: 6, filesize: 11)
+         writeOctal(baos, dev, 6);
+         writeOctal(baos, ino, 6);
+         writeOctal(baos, mode, 6);
+         writeOctal(baos, uid, 6);
+         writeOctal(baos, gid, 6);
+         writeOctal(baos, nlink, 6);
+         writeOctal(baos, rdev, 6);
+         writeOctal(baos, mtime, 11);
+         // namesize
+         byte[] nameBytes = name.getBytes("US-ASCII");
+         int namesize = nameBytes.length + 1;
+         writeOctal(baos, namesize, 6);
+         // filesize
+         long size = fileData != null ? fileData.length : 0;
+         writeOctal(baos, size, 11);
+         // name
+         baos.write(nameBytes);
+         baos.write(0);
+         // file data
+         if (fileData != null) {
+             baos.write(fileData);
+         }
+
+         return new ByteArrayInputStream(baos.toByteArray());
+     }
+
+     /**
+      * Builds a new-format (SVR4) CPIO archive with a single file entry (no CRC).
+      */
+     private InputStream buildNewEntryStream(long ino, long mode,
+             long uid, long gid, long nlink, long mtime,
+             long size, long devMaj, long devMin,
+             long rdevMaj, long rdevMin, String name,
+             byte[] fileData) throws IOException {
+         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         // magic
+         baos.write(MAGIC_NEW.getBytes("US-ASCII"));
+         // fields as 8-digit hex strings
+         writeHex(baos, ino, 8);
+         writeHex(baos, mode, 8);
+         writeHex(baos, uid, 8);
+         writeHex(baos, gid, 8);
+         writeHex(baos, nlink, 8);
+         writeHex(baos, mtime, 8);
+         writeHex(baos, fileData != null ? fileData.length : size, 8);
+         writeHex(baos, devMaj, 8);
+         writeHex(baos, devMin, 8);
+         writeHex(baos, rdevMaj, 8);
+         writeHex(baos, rdevMin, 8);
+         // namesize
+         byte[] nameBytes = name.getBytes("US-ASCII");
+         int namesize = nameBytes.length + 1;
+         writeHex(baos, namesize, 8);
+         // checksum (0)
+         writeHex(baos, 0, 8);
+         // name
+         baos.write(nameBytes);
+         baos.write(0);
+         // pad to 4
+         int pad = (2 + 110 + namesize) % 4;
+         if (pad != 0) {
+             pad = 4 - pad;
+         }
+         for (int i = 0; i < pad; i++) baos.write(0);
+         // file data
+         if (fileData != null) {
+             baos.write(fileData);
+         }
+
+         return new ByteArrayInputStream(baos.toByteArray());
+     }
+
+     private void write16be(ByteArrayOutputStream baos, int value) {
+         baos.write((value >> 8) & 0xFF);
+         baos.write(value & 0xFF);
+     }
+
+     private void writeOctal(ByteArrayOutputStream baos, long value, int width) throws IOException {
+         String s = String.format("%0" + width + "o", value);
+         baos.write(s.getBytes("US-ASCII"));
+     }
+
+     private void writeHex(ByteArrayOutputStream baos, long value, int width) throws IOException {
+         String s = String.format("%0" + width + "X", value);
+         baos.write(s.getBytes("US-ASCII"));
+     }
+
+     // --- Test cases ---
+
+     /**
+      * COMPRESS-236: Old binary entry with mode 0x1a4 (regular file permissions only).
+      * Buggy version throws IllegalArgumentException; fixed version should not.
+      */
+     @Test
+     public void testOldBinaryModeRedlineStyle() throws Exception {
+         InputStream in = buildOldBinaryEntryStream(
+                 0, 1234, 0x1a4, 0, 0, 1, 0,
+                 0L, "test.txt", "hello".getBytes("US-ASCII"));
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull("entry should not be null", entry);
+         assertEquals("raw mode", 0x1a4, entry.getMode());
+         // read data
+         byte[] buf = new byte[100];
+         int len = cis.read(buf, 0, buf.length);
+         assertTrue("should read some data", len > 0);
+         String content = new String(buf, 0, len, "US-ASCII");
+         assertEquals("hello", content);
+         cis.close();
+     }
+
+     /**
+      * Old ASCII entry with mode 0x1a4 (permissions only) – same bug trigger area.
+      */
+     @Test
+     public void testOldAsciiModeRedlineStyle() throws Exception {
+         InputStream in = buildOldAsciiEntryStream(
+                 0, 1234, 0x1a4, 0, 0, 1, 0,
+                 0L, "test.txt", "world".getBytes("US-ASCII"));
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull(entry);
+         assertEquals(0x1a4, entry.getMode());
+         byte[] buf = new byte[100];
+         int len = cis.read(buf, 0, buf.length);
+         assertTrue(len > 0);
+         assertEquals("world", new String(buf, 0, len, "US-ASCII"));
+         cis.close();
+     }
+
+     /**
+      * Old binary entry: directory mode 0x41ED (S_IFDIR | 0755).
+      */
+     @Test
+     public void testOldBinaryModeDirectory() throws Exception {
+         InputStream in = buildOldBinaryEntryStream(
+                 0, 1, 0x41ED, 0, 0, 2, 0,
+                 0L, "dir/", new byte[0]);
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull(entry);
+         assertEquals(0x41ED, entry.getMode());
+         assertTrue("is directory", entry.isDirectory());
+         cis.close();
+     }
+
+     /**
+      * Old binary mode 0x0 – if not the trailer, the parser throws IOException.
+      * (Mode 0 is only allowed for the trailer.)
+      */
+     @Test(expected = IOException.class)
+     public void testOldBinaryModeZeroNonTrailer() throws Exception {
+         InputStream in = buildOldBinaryEntryStream(
+                 0, 0, 0, 0, 0, 0, 0,
+                 0L, "not_trailer", new byte[0]);
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         cis.getNextCPIOEntry(); // should throw IOException (mode zero in non-trailer)
+         cis.close();
+     }
+
+     /**
+      * Old binary mode 0xFFFF (maximum unsigned short) – should parse without
+ IllegalArgumentException.
+      */
+     @Test
+     public void testOldBinaryModeMaxUnsigned() throws Exception {
+         InputStream in = buildOldBinaryEntryStream(
+                 0, 0, 0xFFFF, 0, 0, 0, 0,
+                 0L, "max.txt", new byte[0]);
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull(entry);
+         assertEquals(0xFFFF, entry.getMode());
+         cis.close();
+     }
+
+     /**
+      * Old ASCII mode 0xFFFF – max boundary.
+      */
+     @Test
+     public void testOldAsciiModeMaxUnsigned() throws Exception {
+         InputStream in = buildOldAsciiEntryStream(
+                 0, 0, 0xFFFF, 0, 0, 0, 0,
+                 0L, "max.txt", new byte[0]);
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull(entry);
+         assertEquals(0xFFFF, entry.getMode());
+         cis.close();
+     }
+
+     /**
+      * Old binary entry for the CPIO trailer 'TRAILER!!!' should return null from getNextCPIOEntry.
+      */
+     @Test
+     public void testOldBinaryTrailer() throws Exception {
+         InputStream in = buildOldBinaryEntryStream(
+                 0, 0, 0, 0, 0, 0, 0,
+                 0L, "TRAILER!!!", new byte[0]);
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNull("trailer entry should yield null", entry);
+         cis.close();
+     }
+
+     /**
+      * New-format entry with mode 0x1a4 – should be immune to the bug (new-format already
+      * sets mode without type-mask validation? Bug is in old-format branches).
+      */
+     @Test
+     public void testNewFormatModeRedlineStyle() throws Exception {
+         InputStream in = buildNewEntryStream(
+                 1, 0x1a4, 0, 0, 1, 0,
+                 5, 0, 0, 0, 0,
+                 "new.txt", "data1".getBytes("US-ASCII"));
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull(entry);
+         assertEquals(0x1a4, entry.getMode());
+         byte[] buf = new byte[100];
+         int len = cis.read(buf, 0, buf.length);
+         assertTrue(len > 0);
+         assertEquals("data1", new String(buf, 0, len, "US-ASCII"));
+         cis.close();
+     }
+
+     /**
+      * After reading an entry, reading past its data returns -1.
+      */
+     @Test
+     public void testReadPastEntryEndReturnsMinusOne() throws Exception {
+         InputStream in = buildOldBinaryEntryStream(
+                 0, 0, 0x81FF, 0, 0, 1, 0,
+                 0L, "data.bin", new byte[] { 1, 2, 3 });
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(in);
+         CpioArchiveEntry entry = cis.getNextCPIOEntry();
+         assertNotNull(entry);
+         byte[] buf = new byte[10];
+         int total = 0;
+         int len;
+         while ((len = cis.read(buf, 0, buf.length)) != -1) {
+             total += len;
+         }
+         assertEquals(3, total);
+         // next entry should be null (stream ends after one entry, no trailer)
+         assertNull(cis.getNextCPIOEntry());
+         cis.close();
+     }
+
+     /**
+      * Calling read when no entry has been read returns -1 (stream at end).
+      */
+     @Test
+     public void testReadWithoutEntryReturnsMinusOne() throws Exception {
+         // empty stream (no entries)
+         ByteArrayInputStream empty = new ByteArrayInputStream(new byte[0]);
+         CpioArchiveInputStream cis = new CpioArchiveInputStream(empty);
+         byte[] buf = new byte[1];
+         assertEquals(-1, cis.read(buf, 0, 1));
+         cis.close();
+     }
+ }

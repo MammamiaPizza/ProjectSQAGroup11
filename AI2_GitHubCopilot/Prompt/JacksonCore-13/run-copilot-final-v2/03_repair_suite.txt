@@ -1,0 +1,274 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 13  Version: JacksonCore-13b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 246
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestJsonGeneratorFeatures::testFieldNameQuotingEnabled
+ --> junit.framework.ComparisonFailure: expected:<{[foo]:1}> but was:<{["foo"]:1}>
+Modified: com.fasterxml.jackson.core.json.JsonGeneratorImpl
+
+Available API/signatures:
+[com.fasterxml.jackson.core.json.JsonGeneratorImpl | java]
+package com.fasterxml.jackson.core.json;
+public abstract class JsonGeneratorImpl extends GeneratorBase
+protected final static int[] sOutputEscapes = CharTypes.get7BitOutputEscapes();
+final protected IOContext _ioContext;
+protected int[] _outputEscapes = sOutputEscapes;
+protected int _maximumNonEscapedChar;
+protected CharacterEscapes _characterEscapes;
+protected boolean _cfgUnqNames;
+public JsonGeneratorImpl(IOContext ctxt, int features, ObjectCodec codec)
+@Override
+public JsonGenerator enable(Feature f) {
+protected void _checkStdFeatureChanges(int newFeatureFlags, int changedFeatures) {
+public JsonGenerator setHighestNonEscapedChar(int charCode) {
+public int getHighestEscapedChar() {
+public JsonGenerator setCharacterEscapes(CharacterEscapes esc)
+public CharacterEscapes getCharacterEscapes() {
+public JsonGenerator setRootValueSeparator(SerializableString sep) {
+public Version version() {
+public final void writeStringField(String fieldName, String value) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.json;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+
+ import java.io.IOException;
+ import java.io.StringWriter;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.*;
+
+ /**
+  * Tests for {@link JsonGeneratorImpl} focusing on the
+  * {@link Feature#QUOTE_FIELD_NAMES} behavior for JSON Object property names.
+  *
+  * Bug report: 246 – When QUOTE_FIELD_NAMES is disabled, the generator
+  * incorrectly still quotes field names that contain no special characters.
+  */
+ public class TestJsonGeneratorFeatures {
+
+     private JsonFactory newFactory() {
+         return new JsonFactory();
+     }
+
+     private JsonGenerator createGenerator(StringWriter sw) throws IOException {
+         return newFactory().createGenerator(sw);
+     }
+
+     // ----------------------------------------------------------------------
+     // Fault-related tests: QUOTE_FIELD_NAMES disabled → unquoted names
+     // ----------------------------------------------------------------------
+
+     /**
+      * Core regression: simple field name with QUOTE_FIELD_NAMES disabled
+      * should produce <code>{"foo":1}</code> without quotes around "foo".
+      */
+     @Test
+     public void testSimpleFieldNameUnquoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("foo", 1);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"foo\":1}", sw.toString());
+     }
+
+     /**
+      * Default behavior: QUOTE_FIELD_NAMES is enabled by default,
+      * so field names must be quoted.
+      */
+     @Test
+     public void testSimpleFieldNameQuotedDefault() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.writeStartObject();
+         g.writeNumberField("bar", 2);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"bar\":2}", sw.toString());
+     }
+
+     /**
+      * Enabling QUOTE_FIELD_NAMES explicitly must quote the field name.
+      */
+     @Test
+     public void testSimpleFieldNameExplicitlyQuoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.enable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("baz", 3);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"baz\":3}", sw.toString());
+     }
+
+     /**
+      * Disabling QUOTE_FIELD_NAMES via disable() and then enabling it again
+      * should restore quoted output.
+      */
+     @Test
+     public void testToggleFieldNameQuoting() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.enable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("toggle", 42);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"toggle\":42}", sw.toString());
+     }
+
+     /**
+      * A field name containing a space must still be quoted even when
+      * QUOTE_FIELD_NAMES is disabled, because unquoted JSON names
+      * cannot contain whitespace.
+      */
+     @Test
+     public void testFieldNameWithSpaceForcedQuoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("foo bar", 10);
+         g.writeEndObject();
+         g.close();
+         // Must be quoted despite QUOTE_FIELD_NAMES=disabled
+         assertEquals("{\"foo bar\":10}", sw.toString());
+     }
+
+     /**
+      * Multiple fields with QUOTE_FIELD_NAMES disabled: all simple names
+      * must be unquoted.
+      */
+     @Test
+     public void testMultipleFieldsUnquoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("a", 1);
+         g.writeNumberField("b", 2);
+         g.writeNumberField("c", 3);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"a\":1,\"b\":2,\"c\":3}", sw.toString());
+     }
+
+     /**
+      * Mixed: simple field name (unquoted) plus field name with special
+      * characters (must remain quoted).
+      */
+     @Test
+     public void testMixedQuoting() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("simple", 1);
+         g.writeNumberField("has space", 2);
+         g.writeNumberField("alsoSimple", 3);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"simple\":1,\"has space\":2,\"alsoSimple\":3}", sw.toString());
+     }
+
+     // ----------------------------------------------------------------------
+     // Normal / boundary tests
+     // ----------------------------------------------------------------------
+
+     /**
+      * Empty field name with QUOTE_FIELD_NAMES disabled.
+      * An empty string is a valid JSON name, but it must be quoted
+      * because an unquoted empty name is not valid JSON.
+      */
+     @Test
+     public void testEmptyFieldNameUnquotedDisabled() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("", 0);
+         g.writeEndObject();
+         g.close();
+         // Empty name must still be quoted in valid JSON
+         assertEquals("{\"\":0}", sw.toString());
+     }
+
+     /**
+      * writeStringField (not writeNumberField) with QUOTE_FIELD_NAMES disabled.
+      */
+     @Test
+     public void testWriteStringFieldUnquoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeStringField("key", "value");
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"key\":\"value\"}", sw.toString());
+     }
+
+     /**
+      * writeStringField with QUOTE_FIELD_NAMES enabled (default).
+      */
+     @Test
+     public void testWriteStringFieldQuoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.writeStartObject();
+         g.writeStringField("key", "value");
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"key\":\"value\"}", sw.toString());
+     }
+
+     /**
+      * Field name starting with a digit must still be quoted even
+      * when QUOTE_FIELD_NAMES is disabled because unquoted JSON
+      * names cannot start with a digit.
+      */
+     @Test
+     public void testFieldNameStartingWithDigitForcedQuoted() throws IOException {
+         StringWriter sw = new StringWriter();
+         JsonGenerator g = createGenerator(sw);
+         g.disable(Feature.QUOTE_FIELD_NAMES);
+         g.writeStartObject();
+         g.writeNumberField("123abc", 99);
+         g.writeEndObject();
+         g.close();
+         assertEquals("{\"123abc\":99}", sw.toString());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonCore-13f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonCore-13f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonCore-13f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonCore-13f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonCore-13f-copilot/.test_suite/com/fasterxml/jackson/core/json/TestJsonGeneratorFeatures.java:42: error: cannot find symbol
+ [javac] g.disable(Feature.QUOTE_FIELD_NAMES);
+ [javac] ^
+ [javac] symbol: variable Feature
+ [javac] location: class TestJsonGeneratorFeatures
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 22 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

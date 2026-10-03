@@ -1,0 +1,248 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 34  Version: Lang-34b
+JUnit: junit-4.7.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-586
+Trigger failures:
+- org.apache.commons.lang3.builder.ToStringBuilderTest::testObjectCycle
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionHierarchy
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testSelfInstanceTwoVarsReflectionObjectCycle
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayCycle
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionLongArrayArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionArrayArrayCy
+...[truncated deterministically]...
+uilder.ToStringBuilderTest::testReflectionIntArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionCharArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+ - org.apache.commons.lang3.builder.ToStringBuilderTest::testReflectionFloatArrayArray
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: {}
+Modified: org.apache.commons.lang3.builder.ToStringStyle
+
+Available API/signatures:
+[org.apache.commons.lang3.builder.ToStringStyle | java]
+package org.apache.commons.lang3.builder;
+public abstract class ToStringStyle implements Serializable {
+public static final ToStringStyle DEFAULT_STYLE = new DefaultToStringStyle();
+public static final ToStringStyle MULTI_LINE_STYLE = new MultiLineToStringStyle();
+public static final ToStringStyle NO_FIELD_NAMES_STYLE = new NoFieldNameToStringStyle();
+public static final ToStringStyle SHORT_PREFIX_STYLE = new ShortPrefixToStringStyle();
+public static final ToStringStyle SIMPLE_STYLE = new SimpleToStringStyle();
+private static final ThreadLocal<WeakHashMap<Object, Object>> REGISTRY = new ThreadLocal<WeakHashMap<Object,Object>>();
+static Map<Object, Object> getRegistry() {
+static boolean isRegistered(Object value) {
+static void register(Object value) {
+synchronized (ToStringStyle.class) {
+static void unregister(Object value) {
+protected ToStringStyle() {
+public void appendSuper(StringBuffer buffer, String superToString) {
+public void appendToString(StringBuffer buffer, String toString) {
+public void appendStart(StringBuffer buffer, Object object) {
+public void appendEnd(StringBuffer buffer, Object object) {
+protected void removeLastFieldSeparator(StringBuffer buffer) {
+public void append(StringBuffer buffer, String fieldName, Object value, Boolean fullDetail) {
+protected void appendInternal(StringBuffer buffer, String fieldName, Object value, boolean detail) {
+protected void appendCyclicObject(StringBuffer buffer, String fieldName, Object value) {
+protected void appendDetail(StringBuffer buffer, String fieldName, Object value) {
+protected void appendDetail(StringBuffer buffer, String f
+...[truncated deterministically]...
+ring nullText) {
+protected String getSizeStartText() {
+protected void setSizeStartText(String sizeStartText) {
+protected String getSizeEndText() {
+protected void setSizeEndText(String sizeEndText) {
+protected String getSummaryObjectStartText() {
+protected void setSummaryObjectStartText(String summaryObjectStartText) {
+protected String getSummaryObjectEndText() {
+protected void setSummaryObjectEndText(String summaryObjectEndText) {
+private static final class DefaultToStringStyle extends ToStringStyle {
+private Object readResolve() {
+private static final class NoFieldNameToStringStyle extends ToStringStyle {
+private static final class ShortPrefixToStringStyle extends ToStringStyle {
+private static final class SimpleToStringStyle extends ToStringStyle {
+private static final class MultiLineToStringStyle extends ToStringStyle {
+
+Generated JUnit Test:
+package org.apache.commons.lang3.builder;
+
+ import static org.junit.Assert.*;
+
+ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.Map;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ /**
+  * Tests for ToStringStyle focusing on registry bookkeeping, cyclic-object
+  * detection, array handling in appendInternal, and registry cleanup.
+  *
+  * The bug LANG-586 causes arrays and other objects to be improperly treated
+  * as cyclic references, outputting "{}" instead of detailed content even
+  * on first encounter. These tests expose the core registry and cleanup
+  * problems in the buggy version.
+  */
+ public class ToStringStyleTest {
+
+     private ToStringStyle style;
+
+     @Before
+     public void setUp() {
+         style = ToStringStyle.DEFAULT_STYLE;
+         Map<Object, Object> reg = ToStringStyle.getRegistry();
+         if (reg != null) {
+             reg.clear();
+         }
+     }
+
+     // ---- Registry bookkeeping ----
+
+     @Test
+     public void testGetRegistryReturnsMap() {
+         Map<Object, Object> reg = ToStringStyle.getRegistry();
+         assertNotNull("Registry should never be null", reg);
+     }
+
+     @Test
+     public void testRegisterIsRegisteredUnregisterCycle() {
+         Object val = new Object();
+         assertFalse("not registered before register", ToStringStyle.isRegistered(val));
+         ToStringStyle.register(val);
+         assertTrue("registered after register", ToStringStyle.isRegistered(val));
+         ToStringStyle.unregister(val);
+         assertFalse("not registered after unregister", ToStringStyle.isRegistered(val));
+     }
+
+     @Test
+     public void testMultipleRegistrationsIndependent() {
+         Object a = new Object();
+         Object b = new Object();
+         ToStringStyle.register(a);
+         ToStringStyle.register(b);
+         assertTrue("a should be registered", ToStringStyle.isRegistered(a));
+         assertTrue("b should be registered", ToStringStyle.isRegistered(b));
+         ToStringStyle.unregister(a);
+         assertFalse("a should be gone", ToStringStyle.isRegistered(a));
+         assertTrue("b should remain registered", ToStringStyle.isRegistered(b));
+         ToStringStyle.unregister(b);
+         assertFalse("b should be gone", ToStringStyle.isRegistered(b));
+     }
+
+     // ---- Primitive array handling (appendInternal path via generic append) ----
+
+     @Test
+     public void testIntarrayNotCyclicOnFirstAppend() {
+         int[] array = new int[] {10, 20, 30};
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "ints", (Object) array, Boolean.TRUE);
+         String result = buf.toString();
+         assertTrue("int[] must show elements, got: " + result,
+                 result.contains("10"));
+         assertFalse("int[] must be unregistered after append",
+                 ToStringStyle.isRegistered(array));
+     }
+
+     @Test
+     public void testLongArrayNotCyclicOnFirstAppend() {
+         long[] array = new long[] {100L, 200L};
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "longs", (Object) array, Boolean.TRUE);
+         String result = buf.toString();
+         assertTrue("long[] must show elements", result.contains("100"));
+         assertFalse(ToStringStyle.isRegistered(array));
+     }
+
+     @Test
+     public void testDoubleArrayNotCyclicOnFirstAppend() {
+         double[] array = new double[] {1.5, 3.5};
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "doubles", (Object) array, Boolean.TRUE);
+         String result = buf.toString();
+         assertTrue("double[] must show elements", result.contains("1.5"));
+         assertFalse(ToStringStyle.isRegistered(array));
+     }
+
+     @Test
+     public void testCharArrayNotCyclicOnFirstAppend() {
+         char[] array = new char[] {'X', 'Y'};
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "chars", (Object) array, Boolean.TRUE);
+         String result = buf.toString();
+         assertTrue("char[] must show elements", result.contains("X"));
+         assertFalse(ToStringStyle.isRegistered(array));
+     }
+
+     @Test
+     public void testBooleanArrayNotCyclicOnFirstAppend() {
+         boolean[] array = new boolean[] {true, false, true};
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "bools", (Object) array, Boolean.TRUE);
+         String result = buf.toString();
+         assertTrue("boolean[] must show elements", result.contains("true"));
+         assertFalse(ToStringStyle.isRegistered(array));
+     }
+
+     @Test
+     public void testFloatArrayNotCyclicOnFirstAppend() {
+         float[] array = new float[] {1.1f, 2.2f};
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "floats", (Object) array, Boolean.TRUE);
+         String result = buf.toString();
+         assertTrue("float[] must show elements", result.contains("1.1"));
+         assertFalse(ToStringStyle.isRegistered(array));
+     }
+
+     // ---- Object array and cycle detection ----
+
+     @Test
+     public void testObjectArraySelfCycleHandled() {
+         Object[] selfArray = new Object[1];
+         selfArray[0] = selfArray;
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "cycle", (Object) selfArray, Boolean.TRUE);
+         String result = buf.toString();
+         assertNotNull("must produce non-null output", result);
+         assertTrue("must produce non-empty output", result.length() > 0);
+         assertFalse("self-cycling array must be unregistered",
+                 ToStringStyle.isRegistered(selfArray));
+     }
+
+     // ---- Collection / Map through appendInternal ----
+
+     @Test
+     public void testCollectionAppendInternalCleanup() {
+         Collection<String> coll = Arrays.asList("x", "y");
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "coll", (Object) coll, Boolean.TRUE);
+         assertFalse("Collection must be unregistered after append",
+                 ToStringStyle.isRegistered(coll));
+     }
+
+     @Test
+     public void testMapAppendInternalCleanup() {
+         Map<String, Integer> map = new HashMap<String, Integer>();
+         map.put("k", 1);
+         StringBuffer buf = new StringBuffer();
+         style.append(buf, "map", (Object) map, Boolean.TRUE);
+         assertFalse("Map must be unregistered after append",
+                 ToStringStyle.isRegistered(map));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.lang3.builder.ToStringStyleTest::testGetRegistryReturnsMap
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.lang3.builder.ToStringStyleTest::testGetRegistryReturnsMap

@@ -1,0 +1,225 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 88  Version: Closure-88b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.DeadAssignmentsElimination
+Modified: com.google.javascript.jscomp.DeadAssignmentsElimination
+Triggers: com.google.javascript.jscomp.CommandLineRunnerTest::testIssue297, com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297a, com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297b, com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297c, com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297d, com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297e, com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297f
+
+Bug/specification summary:
+Bug report: 297
+Trigger failures:
+- com.google.javascript.jscomp.CommandLineRunnerTest::testIssue297
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297a
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297b
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297c
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297d
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297e
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.DeadAssignmentsEliminationTest::testIssue297f
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.DeadAssignmentsElimination
+
+Prompt-01 test plan:
+TARGETS: DeadAssignmentsElimination.process, scope entry/exit, post-order visit, and assignment liveness decisions.
+ORACLES: Existing Issue297 trigger tests and their compiler-output assertions are the expected-result source.
+CASES: Issue297a–f inputs covering dead-assignment elimination in the existing unit-test fixtures.
+CASES: CommandLineRunnerTest.testIssue297 for end-to-end compiler integration behavior.
+RISKS: Assignment removal must preserve observable effects and scope-sensitive variable liveness.
+RISKS: No trigger source, expected transformed JavaScript, or assertion details are provided.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.DeadAssignmentsElimination (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class DeadAssignmentsElimination extends AbstractPostOrderCallback implements
+@Override
+public boolean apply(Node n) {
+public DeadAssignmentsElimination(AbstractCompiler compiler) {
+public void process(Node externs, Node root) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private enum VariableLiveness {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.DataFlowAnalysis.FlowState;
+import com.google.javascript.jscomp.LiveVariablesAnalysis.LiveVariableLattice;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphNode;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+class DeadAssignmentsElimination extends AbstractPostOrderCallback implements
+
+/* METHOD DeadAssignmentsElimination */
+public DeadAssignmentsElimination(AbstractCompiler compiler) {
+ this.compiler = compiler;
+ }
+
+/* METHOD enterScope */
+@Override
+ public void enterScope(NodeTraversal t) {
+ Scope scope = t.getScope();
+ // Global scope _SHOULD_ work, however, liveness won't finish without
+ // -Xmx1024 in closure. We might have to look at coding conventions for
+ // exported variables as well.
+ if (scope.isGlobal()) {
+ return;
+ }
+
+ // We are not going to do any dead assignment elimination in when there is
+ // at least one inner function because in most browsers, when there is a
+ // closure, ALL the variables are saved (escaped).
+ Node fnBlock = t.getScopeRoot().getLastChild();
+ if (NodeUtil.containsFunction(fnBlock)) {
+ return;
+ }
+
+ // We don't do any dead assignment elimination if there are no assigns
+ // to eliminate. :)
+ if (!NodeUtil.has(fnBlock, matchRemovableAssigns,
+ Predicates.<Node>alwaysTrue())) {
+ return;
+ }
+
+ // Computes liveness information first.
+ ControlFlowGraph<Node> cfg = t.getControlFlowGraph();
+ liveness = new LiveVariablesAnalysis(cfg, scope, compiler);
+ liveness.analyze();
+ tryRemoveDeadAssignments(t, cfg);
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ Preconditions.checkNotNull(externs);
+ Preconditions.checkNotNull(root);
+ NodeTraversal.traverse(compiler, root, this);
+ }
+
+/* METHOD apply */
+@Override
+ public boolean apply(Node n) {
+ return (NodeUtil.isAssignmentOp(n) &&
+ n.getFirstChild().getType() == Token.NAME) ||
+ n.getType() == Token.INC || n.getType() == Token.DEC;
+ }
+
+/* METHOD exitScope */
+@Override
+ public void exitScope(NodeTraversal t) {
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ }
+
+/* METHOD tryRemoveDeadAssignments */
+private void tryRemoveDeadAssignments(NodeTraversal t,
+ ControlFlowGraph<Node> cfg) {
+ Iterable<DiGraphNode<Node, Branch>> nodes = cfg.getDirectedGraphNodes();
+
+ for (DiGraphNode<Node, Branch> cfgNode : nodes) {
+ FlowState<LiveVariableLattice> state =
+ cfgNode.getAnnotation();
+ Node n = cfgNode.getValue();
+ if (n == null) {
+ continue;
+ }
+ switch (n.getType()) {
+ case Token.IF:
+ case Token.WHILE:
+ case Token.DO:
+ tryRemoveAssignment(t, NodeUtil.getConditionExpression(n), state);
+ continue;
+ case Token.FOR:
+ if (!NodeUtil.isForIn(n)) {
+ tryRemoveAssignment(
+ t, NodeUtil.getConditionExpression(n), state);
+ }
+ continue;
+ case Token.SWITCH:
+ case Token.CASE:
+ case Token.RETURN:
+ if (n.hasChildren()) {
+ tryRemoveAssignment(t, n.getFirstChild(), state);
+ }
+ continue;
+ // TODO(user): case Token.VAR: Remove var a=1;a=2;.....
+ }
+
+ tryRemoveAssignment(t, n, state);
+ }
+ }
+
+/* METHOD isVariableStillLiveWithinExpression */
+private boolean isVariableStillLiveWithinExpression(
+ Node n, Node exprRoot, String variable) {
+ while (n != exprRoot) {
+ for(Node sibling = n.getNext(); sibling != null;
+ sibling = sibling.getNext()) {
+ if (!ControlFlowGraph.isEnteringNewCfgNode(sibling)) {
+ VariableLiveness state = isVariableReadBeforeKill(sibling, variable);
+
+ // If we see a READ or KILL there is no need to continue.
+ if (state == VariableLiveness.READ) {
+ return true;
+ } else if (state == VariableLiveness.KILL) {
+ return false;
+ }
+ }
+ }
+ n = n.getParent();
+ }
+ return false;
+ }
+
+/* METHOD tryRemoveAssignment */
+private void tryRemoveAssignment(NodeTraversal t, Node n,
+ FlowState<LiveVariableLattice> state) {
+ tryRemoveAssignment(t, n, n, state);
+ }
+
+/* METHOD isVariableReadBeforeKill */
+private VariableLiveness isVariableReadBeforeKill(
+ Node n, String variable) {
+ if (NodeUtil.isName(n) && variable.equals(n.getString())) {
+ if (NodeUtil.isLhs(n, n.getParent())) {
+ // The expression to which the assignment is made is evaluated before
+ // the RHS is evaluated (normal left to right evaluation) but the KILL
+ // occurs after the RHS is evaluated.
+ return VariableLiveness.KILL;
+ } else {
+ return VariableLiveness.READ;
+ }
+ }
+
+ // Expressions are evaluated left-right, depth first.
+ for (Node child = n.getFirstChild();
+ child != null; child = child.getNext()) {
+ if (!ControlFlowGraph.isEnteringNewCfgNode(child)) { // Not a FUNCTION
+ VariableLiveness state = isVariableReadBeforeKill(child, variable);
+ if (state != VariableLiveness.MAYBE_LIVE) {
+ return state;
+ }
+ }
+ }
+ return VariableLiveness.MAYBE_LIVE;
+ }

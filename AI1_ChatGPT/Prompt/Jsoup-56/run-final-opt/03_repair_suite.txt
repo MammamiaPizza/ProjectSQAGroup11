@@ -1,0 +1,183 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 56  Version: Jsoup-56b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 408
+Trigger failures:
+- org.jsoup.nodes.DocumentTypeTest::testRoundTrip
+ --> junit.framework.AssertionFailedError: expected:<<!DOCTYPE html [SYSTEM ]"exampledtdfile.dtd"...> but was:<<!DOCTYPE html []"exampledtdfile.dtd"...>
+Modified: org.jsoup.nodes.DocumentType, org.jsoup.parser.HtmlTreeBuilderState, org.jsoup.parser.Token, org.jsoup.parser.TokeniserState, org.jsoup.parser.XmlTreeBuilder
+
+Available API/signatures:
+[org.jsoup.nodes.DocumentType | java]
+package org.jsoup.nodes;
+public class DocumentType extends Node {
+public static final String PUBLIC_KEY = "PUBLIC";
+public static final String SYSTEM_KEY = "SYSTEM";
+public DocumentType(String name, String publicId, String systemId, String baseUri) {
+@Override
+public String nodeName() {
+private boolean has(final String attribute) {
+
+[org.jsoup.parser.HtmlTreeBuilderState | java]
+package org.jsoup.parser;
+enum HtmlTreeBuilderState {
+private boolean anythingElse(Token t, HtmlTreeBuilder tb) {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+final int stackSize = stack.size();
+private boolean exitTableBody(Token t, HtmlTreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(HtmlTreeBuilder tb) {
+private static String nullString = String.valueOf('\u0000');
+abstract boolean process(Token t, HtmlTreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static boolean isWhitespace(String data) {
+private static void handleRcData(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static final class Constants {
+
+[org.jsoup.parser.Token | java]
+package org.jsoup.parser;
+abstract class Token {
+private Token() {
+abstract Token reset();
+static void reset(StringBuilder sb) {
+static final class Doctype extends Token {
+final StringBuilder name = new StringBuilder();
+final StringBuilder publicIdentifier = new StringBuilder();
+final StringBuilder systemIdentifier = new StringBuilder();
+@Override
+public String getSystemIdentifier() {
+public boolean isForceQuirks() {
+static
+...[truncated deterministically]...
+t, CharacterReader r, TokeniserState elseTransition) {
+private static void readData(Tokeniser t, CharacterReader r, TokeniserState current, TokeniserState advance) {
+private static void readCharRef(Tokeniser t, TokeniserState advance) {
+private static void readEndTag(Tokeniser t, CharacterReader r, TokeniserState a, TokeniserState b) {
+private static void handleDataDoubleEscapeTag(Tokeniser t, CharacterReader r, TokeniserState primary, TokeniserState fallback) {
+
+[org.jsoup.parser.XmlTreeBuilder | java]
+package org.jsoup.parser;
+public class XmlTreeBuilder extends TreeBuilder {
+@Override
+protected void initialiseParse(String input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private void popStackToClose(Token.EndTag endTag) {
+
+Generated JUnit Test:
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Node;
+import org.jsoup.parser.Parser;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class DocumentTypeSystemIdentifierTest {
+
+    @Test
+    public void serializesSystemIdentifierWithSystemKeyword() {
+        DocumentType doctype = new DocumentType("html", "", "exampledtdfile.dtd", "");
+
+        assertEquals("<!DOCTYPE html SYSTEM \"exampledtdfile.dtd\">", doctype.outerHtml());
+    }
+
+    @Test
+    public void serializesBlankPublicIdentifierAsSystemDoctype() {
+        DocumentType doctype = new DocumentType("html", "   ", "legacy.dtd", "");
+
+        assertEquals("<!DOCTYPE html SYSTEM \"legacy.dtd\">", doctype.outerHtml());
+    }
+
+    @Test
+    public void serializesPublicIdentifierWithoutSystemIdentifier() {
+        DocumentType doctype = new DocumentType("html", "-//Example//DTD Test//EN", "", "");
+
+        assertEquals("<!DOCTYPE html PUBLIC \"-//Example//DTD Test//EN\">", doctype.outerHtml());
+    }
+
+    @Test
+    public void serializesPublicAndSystemIdentifiersInTheirCorrectPositions() {
+        DocumentType doctype = new DocumentType(
+                "html",
+                "-//Example//DTD Test//EN",
+                "example.dtd",
+                "");
+
+        assertEquals(
+                "<!DOCTYPE html PUBLIC \"-//Example//DTD Test//EN\" \"example.dtd\">",
+                doctype.outerHtml());
+    }
+
+    @Test
+    public void serializesHtml5DoctypeInLowerCaseWhenItHasNoIdentifiers() {
+        DocumentType doctype = new DocumentType("html", "", "", "");
+
+        assertEquals("<!doctype html>", doctype.outerHtml());
+    }
+
+    @Test
+    public void htmlParserPreservesSystemIdentifierAndItsKeyword() {
+        Document document = Jsoup.parse(
+                "<!DOCTYPE html SYSTEM \"exampledtdfile.dtd\"><html><head></head><body></body></html>");
+        DocumentType doctype = firstDoctype(document);
+
+        assertEquals("html", doctype.attr("name"));
+        assertEquals("", doctype.attr("publicId"));
+        assertEquals("exampledtdfile.dtd", doctype.attr("systemId"));
+        assertEquals("<!DOCTYPE html SYSTEM \"exampledtdfile.dtd\">", doctype.outerHtml());
+    }
+
+    @Test
+    public void htmlParserPreservesPublicAndSystemIdentifiers() {
+        Document document = Jsoup.parse(
+                "<!DOCTYPE html PUBLIC \"-//Example//DTD Test//EN\" \"example.dtd\"><html></html>");
+        DocumentType doctype = firstDoctype(document);
+
+        assertEquals("-//Example//DTD Test//EN", doctype.attr("publicId"));
+        assertEquals("example.dtd", doctype.attr("systemId"));
+        assertEquals(
+                "<!DOCTYPE html PUBLIC \"-//Example//DTD Test//EN\" \"example.dtd\">",
+                doctype.outerHtml());
+    }
+
+    @Test
+    public void xmlParserPreservesSystemDoctypeInformation() {
+        Document document = Jsoup.parse(
+                "<!DOCTYPE note SYSTEM \"note.dtd\"><note/>",
+                "",
+                Parser.xmlParser());
+        DocumentType doctype = firstDoctype(document);
+
+        assertEquals("note", doctype.attr("name"));
+        assertEquals("", doctype.attr("publicId"));
+        assertEquals("note.dtd", doctype.attr("systemId"));
+        assertEquals("<!DOCTYPE note SYSTEM \"note.dtd\">", doctype.outerHtml());
+    }
+
+    private DocumentType firstDoctype(Document document) {
+        for (Node node : document.childNodes()) {
+            if (node instanceof DocumentType) {
+                return (DocumentType) node;
+            }
+        }
+        fail("Expected document to contain a DocumentType node");
+        return null;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - DocumentTypeSystemIdentifierTest::serializesSystemIdentifierWithSystemKeyword
+ - DocumentTypeSystemIdentifierTest::serializesBlankPublicIdentifierAsSystemDoctype
+
+Failing generated tests: DocumentTypeSystemIdentifierTest::serializesBlankPublicIdentifierAsSystemDoctype, DocumentTypeSystemIdentifierTest::serializesSystemIdentifierWithSystemKeyword

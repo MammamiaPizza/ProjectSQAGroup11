@@ -1,0 +1,249 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 2  Version: Closure-2b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 884
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testBadInterfaceExtendsNonExistentInterfaces
+ --> java.lang.NullPointerException
+Modified: com.google.javascript.jscomp.TypeCheck
+
+Available API/signatures:
+[com.google.javascript.jscomp.TypeCheck | java]
+package com.google.javascript.jscomp;
+public class TypeCheck implements NodeTraversal.Callback, CompilerPass {
+"element {0} does not exist on this enum");
+"enum element {0} already defined");
+"enum key {0} must be a syntactic constant");
+"interface members can only be empty property declarations,"
+"interface member functions must have an empty body");
+"an interface can only extend, but not implement interfaces");
+"property {0} already defined on interface {1}; " +
+"property {0} is already defined by the {1} extended interface");
+@Override
+public void process(Node externsRoot, Node jsRoot) {
+public Scope processForTesting(Node externsRoot, Node jsRoot) {
+public void check(Node node, boolean externs) {
+private void checkNoTypeCheckSection(Node n, boolean enterSection) {
+final Scope outerScope = t.getScope();
+final String functionPrivateName = n.getFirstChild().getString();
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void checkTypeofString(NodeTraversal t, Node n, String s) {
+private void doPercentTypedAccounting(NodeTraversal t, Node n) {
+private void visitAssign(NodeTraversal t, Node assign) {
+private void checkPropCreation(NodeTraversal t, Node lvalue) {
+private boolean propertyIsImplicitCast(ObjectType type, String prop) {
+private static boolean hasUnknownOrEmptySupertype(FunctionType ctor) {
+private void visitGetProp(NodeTraversal t, Node n, Node parent) {
+private boolean isPropertyTest(Node getProp) {
+private void visitGetElem(NodeTraversal t, Node n) {
+private void visitVar(NodeTraversal t, Node n) {
+private void visitNew(NodeTraversal t, Node n) {
+private void visitFunction(NodeTraversal t, Node n) {
+"interface", functionPrivateName));
+private void visitCall(NodeTraversal t, Node n) {
+private void visitReturn(NodeTraversal t, Node n) {
+private void visitBinaryOperator(int op, NodeTraversal t, Node n) {
+"incompatible enum element types");
+private JSType getJSType(Node n) {
+private void ensureTyped(NodeTraversal t, Node n) {
+private void ensureTyped(NodeTraversal t, Node n, JSTypeNative type) {
+private void ensureTyped(NodeTraversal t, Node n, JSType type) {
+private JSType getNativeType(JSTypeNative typeId) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import junit.framework.TestCase;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.CheckLevel;
+import com.google.javascript.jscomp.ErrorManager;
+
+public class TypeCheckInterfaceExtendsTest extends TestCase {
+
+ private static final String EXTERNS =
+     "/** @constructor */ function Object() {}\n" +
+     "/** @constructor */ function Function() {}\n" +
+     "/** @constructor */ function Array() {}\n" +
+     "/** @constructor */ function String() {}\n" +
+     "/** @constructor */ function Number() {}\n" +
+     "/** @constructor */ function Boolean() {}\n" +
+     "var undefined;\n" +
+     "var null;\n";
+
+ private static class CollectingErrorManager implements ErrorManager {
+     private final List<JSError> errors = new ArrayList<JSError>();
+     private final List<JSError> warnings = new ArrayList<JSError>();
+     private double typedPercent = 0.0;
+
+     @Override
+     public void report(CheckLevel level, JSError error) {
+         if (level == CheckLevel.ERROR) {
+             errors.add(error);
+         } else if (level == CheckLevel.WARNING) {
+             warnings.add(error);
+         }
+     }
+
+     @Override
+     public void generateReport() {}
+
+     @Override
+     public int getErrorCount() { return errors.size(); }
+
+     @Override
+     public int getWarningCount() { return warnings.size(); }
+
+     @Override
+     public JSError[] getErrors() { return errors.toArray(new JSError[0]); }
+
+     @Override
+     public JSError[] getWarnings() { return warnings.toArray(new JSError[0]); }
+
+     @Override
+     public void setTypedPercent(double typedPercent) { this.typedPercent = typedPercent; }
+
+     @Override
+     public double getTypedPercent() { return typedPercent; }
+ }
+
+ private List<JSError> compileAndGetWarnings(String js) {
+     Compiler compiler = new Compiler();
+     CollectingErrorManager errorManager = new CollectingErrorManager();
+     compiler.setErrorManager(errorManager);
+     CompilerOptions options = new CompilerOptions();
+     options.setCheckTypes(true);
+     SourceFile externFile = SourceFile.fromCode("externs", EXTERNS);
+     SourceFile inputFile = SourceFile.fromCode("input", js);
+     try {
+         compiler.compile(externFile, inputFile, options);
+     } catch (NullPointerException npe) {
+         fail("NullPointerException thrown: " + npe.getMessage());
+     } catch (Exception e) {
+         fail("Unexpected exception: " + e.getMessage());
+     }
+     List<JSError> result = new ArrayList<JSError>();
+     for (JSError e : errorManager.getWarnings()) {
+         result.add(e);
+     }
+     for (JSError e : errorManager.getErrors()) {
+         result.add(e);
+     }
+     return result;
+ }
+
+ private boolean containsDiagnosticFor(List<JSError> diagnostics, String typeName) {
+     for (JSError e : diagnostics) {
+         if (e.getDescription().contains(typeName)) {
+             return true;
+         }
+     }
+     return false;
+ }
+
+ /**
+  * Interface extends a mix of existing and non-existent interfaces.
+  * Must not throw NPE and must emit warning mentioning the missing one.
+  */
+ public void testBadInterfaceExtendsNonExistentInterfaces() {
+     String js = "/** @interface */ function A() {}\n" +
+                 "/** @interface @extends {A, B} */ function C() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     assertFalse("Expected at least one diagnostic for missing interface B", diagnostics.isEmpty());
+     assertTrue("Expected diagnostic mentioning missing interface 'B'",
+             containsDiagnosticFor(diagnostics, "B"));
+ }
+
+ /**
+  * Interface extends a single non-existent interface.
+  */
+ public void testInterfaceExtendsSingleNonExistent() {
+     String js = "/** @interface @extends {Missing} */ function I() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     assertFalse("Expected diagnostic for missing interface Missing", diagnostics.isEmpty());
+     assertTrue("Expected diagnostic mentioning 'Missing'",
+             containsDiagnosticFor(diagnostics, "Missing"));
+ }
+
+ /**
+  * Interface extends a valid interface with no missing ones – no error about missing.
+  */
+ public void testInterfaceExtendsValidInterface() {
+     String js = "/** @interface */ function Base() {}\n" +
+                 "/** @interface @extends {Base} */ function Sub() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     assertTrue("Expected no diagnostic mentioning Base as missing",
+             !containsDiagnosticFor(diagnostics, "Base"));
+ }
+
+ /**
+  * Interface with no extends clause – nothing to check.
+  */
+ public void testInterfaceNoExtends() {
+     String js = "/** @interface */ function I() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     // May contain no diagnostic about any missing interface
+ }
+
+ /**
+  * Interface extends multiple non-existent interfaces.
+  */
+ public void testInterfaceExtendsMultipleNonexistent() {
+     String js = "/** @interface @extends {X, Y} */ function I() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     assertFalse("Expected diagnostic for missing interfaces", diagnostics.isEmpty());
+     assertTrue("Expected diagnostic mentioning X or Y",
+             containsDiagnosticFor(diagnostics, "X") || containsDiagnosticFor(diagnostics, "Y"));
+ }
+
+ /**
+  * Interface extending itself – should not throw NPE and may emit a diagnostic.
+  */
+ public void testInterfaceExtendsSelf() {
+     String js = "/** @interface @extends {Self} */ function Self() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     // At minimum, no NPE. A diagnostic about recursive extends may appear.
+     // Just verify no NPE (handled in helper). No further assertion required.
+ }
+
+ /**
+  * Class extending a non-existent class – ensure no NPE in similar path.
+  * (Risk: NPE may also affect class extends)
+  */
+ public void testClassExtendsNonExistent() {
+     String js = "/** @constructor @extends {NotFound} */ function Sub() {}";
+     List<JSError> diagnostics = compileAndGetWarnings(js);
+     // No NPE, may produce a warning about missing type.
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-2f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-2f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-2f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-2f-copilot/.test_suite/com/google/javascript/jscomp/TypeCheckInterfaceExtendsTest.java:89: error: cannot find symbol
+ [javac] if (e.getDescription().contains(typeName)) {
+ [javac] ^
+ [javac] symbol: method getDescription()
+ [javac] location: variable e of type JSError
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 13 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

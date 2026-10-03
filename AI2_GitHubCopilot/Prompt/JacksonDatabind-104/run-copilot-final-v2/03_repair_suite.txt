@@ -1,0 +1,209 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 104  Version: JacksonDatabind-104b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2167
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.jdk.DateSerializationTest::testDateISO8601_10k
+ --> org.junit.ComparisonFailure: expected:<"[+10]204-01-01T00:00:00.0...> but was:<"[:]204-01-01T00:00:00.0...>
+ - com.fasterxml.jackson.databind.ser.jdk.DateSerializationTest::testDateISO8601_BCE
+ --> org.junit.ComparisonFailure: expected:<"[+0000]-01-01T00:00:00.000+...> but was:<"[0001]-01-01T00:00:00.000+...>
+Modified: com.fasterxml.jackson.databind.util.StdDateFormat
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.util.StdDateFormat | java]
+package com.fasterxml.jackson.databind.util;
+@SuppressWarnings("serial")
+public class StdDateFormat
+protected final static String PATTERN_PLAIN_STR = "\\d\\d\\d\\d[-]\\d\\d[-]\\d\\d";
+protected final static Pattern PATTERN_PLAIN = Pattern.compile(PATTERN_PLAIN_STR);
+protected final static Pattern PATTERN_ISO8601;
+public final static String DATE_FORMAT_STR_ISO8601 = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+protected final static String DATE_FORMAT_STR_PLAIN = "yyyy-MM-dd";
+protected final static String DATE_FORMAT_STR_RFC1123 = "EEE, dd MMM yyyy HH:mm:ss zzz";
+protected final static TimeZone DEFAULT_TIMEZONE;
+protected final static Locale DEFAULT_LOCALE = Locale.US;
+protected final static DateFormat DATE_FORMAT_RFC1123;
+protected final static DateFormat DATE_FORMAT_ISO8601;
+public final static StdDateFormat instance = new StdDateFormat();
+protected static final Calendar CALENDAR = new GregorianCalendar(DEFAULT_TIMEZONE, DEFAULT_LOCALE);
+protected transient TimeZone _timezone;
+protected final Locale _locale;
+protected Boolean _lenient;
+public StdDateFormat() {
+@Deprecated // since 2.7
+public StdDateFormat(TimeZone tz, Locale loc) {
+protected StdDateFormat(TimeZone tz, Locale loc, Boolean lenient) {
+public static TimeZone getDefaultTimeZone() {
+public StdDateFormat withTimeZone(TimeZone tz) {
+public StdDateFormat withLocale(Locale loc) {
+public StdDateFormat withLenient(Boolean b) {
+public StdDateFormat withColonInTimeZone(boolean b) {
+@Override
+public StdDateFormat clone() {
+@Deprecated // since 2.9
+public static DateFormat getISO8601Format(TimeZone tz, Locale loc) {
+public static DateFormat g
+...[truncated deterministically]...
+buffer, int value) {
+public String toString() {
+public String toPattern() { // same as SimpleDateFormat
+@Override // since 2.7[.2], as per [databind#1130]
+public boolean equals(Object o) {
+public int hashCode() {
+protected boolean looksLikeISO8601(String dateStr)
+private Date _parseDateFromLong(String longStr, ParsePosition pos) throws ParseException
+protected Date parseAsISO8601(String dateStr, ParsePosition pos)
+protected Date _parseAsISO8601(String dateStr, ParsePosition bogus)
+final int totalLen = dateStr.length();
+private static int _parse4D(String str, int index) {
+private static int _parse2D(String str, int index) {
+protected Date parseAsRFC1123(String dateStr, ParsePosition pos)
+protected void _clearFormats() {
+protected Calendar _getCalendar(TimeZone tz) {
+protected static <T> boolean _equals(T value1, T value2) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.util;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.TimeZone;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class StdDateFormatTest {
+
+ private static final StdDateFormat DF =
+         StdDateFormat.instance.withTimeZone(TimeZone.getTimeZone("UTC"));
+
+ /**
+  * Creates a Date for the given proleptic year (0 = 1 BC, -1 = 2 BC, …).
+  */
+ private static Date createDate(int prolepticYear,
+                                int month, int day,
+                                int hour, int minute, int second, int ms) {
+     GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+     cal.clear();
+     if (prolepticYear <= 0) {
+         cal.set(Calendar.ERA, GregorianCalendar.BC);
+         cal.set(Calendar.YEAR, 1 - prolepticYear);
+     } else {
+         cal.set(Calendar.ERA, GregorianCalendar.AD);
+         cal.set(Calendar.YEAR, prolepticYear);
+     }
+     cal.set(Calendar.MONTH, month - 1);
+     cal.set(Calendar.DAY_OF_MONTH, day);
+     cal.set(Calendar.HOUR_OF_DAY, hour);
+     cal.set(Calendar.MINUTE, minute);
+     cal.set(Calendar.SECOND, second);
+     cal.set(Calendar.MILLISECOND, ms);
+     return cal.getTime();
+ }
+
+ /**
+  * Extracts the proleptic year from a Date using UTC.
+  */
+ private static int getYear(Date date) {
+     GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+     cal.setTime(date);
+     if (cal.get(Calendar.ERA) == GregorianCalendar.BC) {
+         return 1 - cal.get(Calendar.YEAR);
+     }
+     return cal.get(Calendar.YEAR);
+ }
+
+ @Test
+ public void testFormatYear9999() {
+     Date d = createDate(9999, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("9999-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatYear10000() {
+     Date d = createDate(10000, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("+10000-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatYear10204() {
+     Date d = createDate(10204, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("+10204-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatYear0() {
+     Date d = createDate(0, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("+0000-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatYearNegative1() {
+     Date d = createDate(-1, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("-0001-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatYearNegative9999() {
+     Date d = createDate(-9999, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("-9999-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatYearNegative10000() {
+     Date d = createDate(-10000, 1, 1, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("-10000-01-01T00:00:00.000"));
+ }
+
+ @Test
+ public void testFormatVeryLargeYear() {
+     Date d = createDate(123456, 7, 20, 0, 0, 0, 0);
+     String formatted = DF.format(d);
+     assertTrue(formatted.startsWith("+123456-07-20T00:00:00.000"));
+ }
+
+ @Test
+ public void testParseYear10000() throws Exception {
+     Date d = DF.parse("+10000-01-01T00:00:00.000+0000");
+     assertEquals(10000, getYear(d));
+ }
+
+ @Test
+ public void testParseYear0() throws Exception {
+     Date d = DF.parse("+0000-01-01T00:00:00.000+0000");
+     assertEquals(0, getYear(d));
+ }
+
+ @Test
+ public void testParseYearNegative1() throws Exception {
+     Date d = DF.parse("-0001-01-01T00:00:00.000+0000");
+     assertEquals(-1, getYear(d));
+ }
+
+ @Test
+ public void testParseYearNegative10000() throws Exception {
+     Date d = DF.parse("-10000-01-01T00:00:00.000+0000");
+     assertEquals(-10000, getYear(d));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYear0
+ - com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYear10000
+ - com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYearNegative1
+Failing generated tests: com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYear0, com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYear10000, com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYearNegative1, com.fasterxml.jackson.databind.util.StdDateFormatTest::testParseYearNegative10000

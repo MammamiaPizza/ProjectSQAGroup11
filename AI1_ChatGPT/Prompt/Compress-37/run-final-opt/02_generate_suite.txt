@@ -1,0 +1,421 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 37  Version: Compress-37b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+Triggers: org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::survivesBlankLinesInPaxHeader
+
+Bug/specification summary:
+Bug report: COMPRESS-355
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::survivesBlankLinesInPaxHeader
+ --> java.lang.NegativeArraySizeException
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+
+Prompt-01 test plan:
+TARGETS: TarArchiveInputStream.getNextTarEntry handling PAX extended headers 
+TARGETS: parsePaxHeaders(InputStream) record-length parsing and blank-line handling 
+ORACLES: Trigger test survivesBlankLinesInPaxHeader must complete without NegativeArraySizeException 
+ORACLES: Parsed valid PAX headers must still be applied to the following TarArchiveEntry 
+CASES: PAX header containing a blank line before, between, or after valid header records 
+CASES: Normal valid length-prefixed PAX key/value records followed by a regular entry 
+CASES: Blank/empty PAX input must not create a negative-sized read buffer 
+RISKS: Context lacks exact PAX malformed-input exception/termination expectations
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.tar.TarArchiveInputStream (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveInputStream extends ArchiveInputStream {
+private Map<String, String> globalPaxHeaders = new HashMap<String, String>();
+public TarArchiveInputStream(final InputStream is) {
+public TarArchiveInputStream(final InputStream is, final String encoding) {
+public TarArchiveInputStream(final InputStream is, final int blockSize) {
+public TarArchiveInputStream(final InputStream is, final int blockSize, final int recordSize) {
+@Override
+public void close() throws IOException {
+public int getRecordSize() {
+public int available() throws IOException {
+public long skip(final long n) throws IOException {
+final long skipped = is.skip(Math.min(n, available));
+public boolean markSupported() {
+public void mark(final int markLimit) {
+public synchronized void reset() {
+public TarArchiveEntry getNextTarEntry() throws IOException {
+/* skip to the end of the last record */
+final byte[] headerBuf = getRecord();
+} catch (final IllegalArgumentException e) {
+final byte[] longLinkData = getLongNameData();
+final byte[] longNameData = getLongNameData();
+private void skipRecordPadding() throws IOException {
+final long numRecords = (this.entrySize / this.recordSize) + 1;
+final long padding = (numRecords * this.recordSize) - this.entrySize;
+final long skipped = IOUtils.skip(is, padding);
+protected byte[] getLongNameData() throws IOException {
+final ByteArrayOutputStream longName = new ByteArrayOutputStream();
+private byte[] getRecord() throws IOException {
+protected boolean isEOFRecord(final byte[] record) {
+return record == null || ArchiveUtils.isArrayZero(record, recordSize);
+protected byte[] readRecord() throws IOException {
+final byte[] record = new byte[recordSize];
+final int readNow = IOUtils.readFully(is, record);
+return record;
+private void readGlobalPaxHeaders() throws IOException {
+private void paxHeaders() throws IOException{
+final Map<String, String> headers = parsePaxHeaders(this);
+Map<String, String> parsePaxHeaders(final InputStream i)
+final Map<String, String> headers = new HashMap<String, String>(globalPaxHeaders);
+final ByteArrayOutputStream coll = new ByteArrayOutputStream();
+final String keyword = coll.toString(CharsetNames.UTF_8);
+final int got = IOUtils.readFully(i, rest);
+private void applyPaxHeadersToCurrentEntry(final Map<String, String> headers) {
+for (final Entry<String, String> ent : headers.entrySet()){
+final String key = ent.getKey();
+final String val = ent.getValue();
+private void readOldGNUSparse() throws IOException {
+private boolean isDirectory() {
+public ArchiveEntry getNextEntry() throws IOException {
+private void tryToConsumeSecondEOFRecord() throws IOException {
+final boolean marked = is.markSupported();
+public int read(final byte[] buf, final int offset, int numToRead) throws IOException {
+public boolean canReadEntryData(final ArchiveEntry ae) {
+final TarArchiveEntry te = (TarArchiveEntry) ae;
+public TarArchiveEntry getCurrentEntry() {
+protected final void setCurrentEntry(final TarArchiveEntry e) {
+protected final boolean isAtEOF() {
+protected final void setAtEOF(final boolean b) {
+private void consumeRemainderOfLastBlock() throws IOException {
+final long bytesReadOfLastBlock = getBytesRead() % blockSize;
+final long skipped = IOUtils.skip(is, blockSize - bytesReadOfLastBlock);
+public static boolean matches(final byte[] signature, final int length) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.tar;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipEncoding;
+import org.apache.commons.compress.archivers.zip.ZipEncodingHelper;
+import org.apache.commons.compress.utils.ArchiveUtils;
+import org.apache.commons.compress.utils.CharsetNames;
+import org.apache.commons.compress.utils.IOUtils;
+public class TarArchiveInputStream extends ArchiveInputStream {
+
+/* METHOD TarArchiveInputStream */
+public TarArchiveInputStream(final InputStream is) {
+ this(is, TarConstants.DEFAULT_BLKSIZE, TarConstants.DEFAULT_RCDSIZE);
+ }
+
+/* METHOD TarArchiveInputStream */
+public TarArchiveInputStream(final InputStream is, final String encoding) {
+ this(is, TarConstants.DEFAULT_BLKSIZE, TarConstants.DEFAULT_RCDSIZE,
+ encoding);
+ }
+
+/* METHOD TarArchiveInputStream */
+public TarArchiveInputStream(final InputStream is, final int blockSize) {
+ this(is, blockSize, TarConstants.DEFAULT_RCDSIZE);
+ }
+
+/* METHOD TarArchiveInputStream */
+public TarArchiveInputStream(final InputStream is, final int blockSize,
+ final String encoding) {
+ this(is, blockSize, TarConstants.DEFAULT_RCDSIZE, encoding);
+ }
+
+/* METHOD TarArchiveInputStream */
+public TarArchiveInputStream(final InputStream is, final int blockSize, final int recordSize) {
+ this(is, blockSize, recordSize, null); 
+ }
+
+/* METHOD TarArchiveInputStream */
+public TarArchiveInputStream(final InputStream is, final int blockSize, final int recordSize,
+ final String encoding) {
+ this.is = is;
+ this.hasHitEOF = false;
+ this.encoding = encoding;
+ this.zipEncoding = ZipEncodingHelper.getZipEncoding(encoding);
+ this.recordSize = recordSize;
+ this.blockSize = blockSize;
+ }
+
+/* METHOD matches */
+public static boolean matches(final byte[] signature, final int length) {
+ if (length < TarConstants.VERSION_OFFSET+TarConstants.VERSIONLEN) {
+ return false;
+ }
+
+ if (ArchiveUtils.matchAsciiBuffer(TarConstants.MAGIC_POSIX,
+ signature, TarConstants.MAGIC_OFFSET, TarConstants.MAGICLEN)
+ &&
+ ArchiveUtils.matchAsciiBuffer(TarConstants.VERSION_POSIX,
+ signature, TarConstants.VERSION_OFFSET, TarConstants.VERSIONLEN)
+ ){
+ return true;
+ }
+ if (ArchiveUtils.matchAsciiBuffer(TarConstants.MAGIC_GNU,
+ signature, TarConstants.MAGIC_OFFSET, TarConstants.MAGICLEN)
+ &&
+ (
+ ArchiveUtils.matchAsciiBuffer(TarConstants.VERSION_GNU_SPACE,
+ signature, TarConstants.VERSION_OFFSET, TarConstants.VERSIONLEN)
+ ||
+ ArchiveUtils.matchAsciiBuffer(TarConstants.VERSION_GNU_ZERO,
+ signature, TarConstants.VERSION_OFFSET, TarConstants.VERSIONLEN)
+ )
+ ){
+ return true;
+ }
+ // COMPRESS-107 - recognise Ant tar files
+ if (ArchiveUtils.matchAsciiBuffer(TarConstants.MAGIC_ANT,
+ signature, TarConstants.MAGIC_OFFSET, TarConstants.MAGICLEN)
+ &&
+ ArchiveUtils.matchAsciiBuffer(TarConstants.VERSION_ANT,
+ signature, TarConstants.VERSION_OFFSET, TarConstants.VERSIONLEN)
+ ){
+ return true;
+ }
+ return false;
+ }
+
+/* METHOD getNextTarEntry */
+public TarArchiveEntry getNextTarEntry() throws IOException {
+ if (hasHitEOF) {
+ return null;
+ }
+
+ if (currEntry != null) {
+ /* Skip will only go to the end of the current entry */
+ IOUtils.skip(this, Long.MAX_VALUE);
+
+ /* skip to the end of the last record */
+ skipRecordPadding();
+ }
+
+ final byte[] headerBuf = getRecord();
+
+ if (headerBuf == null) {
+ /* hit EOF */
+ currEntry = null;
+ return null;
+ }
+
+ try {
+ currEntry = new TarArchiveEntry(headerBuf, zipEncoding);
+ } catch (final IllegalArgumentException e) {
+ throw new IOException("Error detected parsing the header", e);
+ }
+
+ entryOffset = 0;
+ entrySize = currEntry.getSize();
+
+ if (currEntry.isGNULongLinkEntry()) {
+ final byte[] longLinkData = getLongNameData();
+ if (longLinkData == null) {
+ // Bugzilla: 40334
+ // Malformed tar file - long link entry name not followed by
+ // entry
+ return null;
+ }
+ currEntry.setLinkName(zipEncoding.decode(longLinkData));
+ }
+
+ if (currEntry.isGNULongNameEntry()) {
+ final byte[] longNameData = getLongNameData();
+ if (longNameData == null) {
+ // Bugzilla: 40334
+ // Malformed tar file - long entry name not followed by
+ // entry
+ return null;
+ }
+ currEntry.setName(zipEncoding.decode(longNameData));
+ }
+
+ if (currEntry.isGlobalPaxHeader()){ // Process Global Pax headers
+ readGlobalPaxHeaders();
+ }
+
+ if (currEntry.isPaxHeader()){ // Process Pax headers
+ paxHeaders();
+ } else if (!globalPaxHeaders.isEmpty()) {
+ applyPaxHeadersToCurrentEntry(globalPaxHeaders);
+ }
+
+ if (currEntry.isOldGNUSparse()){ // Process sparse files
+ readOldGNUSparse();
+ }
+
+ // If the size of the next element in the archive has changed
+ // due to a new size being reported in the posix header
+ // information, we update entrySize here so that it contains
+ // the correct value.
+ entrySize = currEntry.getSize();
+
+ return currEntry;
+ }
+
+/* METHOD getLongNameData */
+protected byte[] getLongNameData() throws IOException {
+ // read in the name
+ final ByteArrayOutputStream longName = new ByteArrayOutputStream();
+ int length = 0;
+ while ((length = read(SMALL_BUF)) >= 0) {
+ longName.write(SMALL_BUF, 0, length);
+ }
+ getNextEntry();
+ if (currEntry == null) {
+ // Bugzilla: 40334
+ // Malformed tar file - long entry name not followed by entry
+ return null;
+ }
+ byte[] longNameData = longName.toByteArray();
+ // remove trailing null terminator(s)
+ length = longNameData.length;
+ while (length > 0 && longNameData[length - 1] == 0) {
+ --length;
+ }
+ if (length != longNameData.length) {
+ final byte[] l = new byte[length];
+ System.arraycopy(longNameData, 0, l, 0, length);
+ longNameData = l;
+ }
+ return longNameData;
+ }
+
+/* METHOD read */
+@Override
+ public int read(final byte[] buf, final int offset, int numToRead) throws IOException {
+ int totalRead = 0;
+
+ if (hasHitEOF || isDirectory() || entryOffset >= entrySize) {
+ return -1;
+ }
+
+ if (currEntry == null) {
+ throw new IllegalStateException("No current tar entry");
+ }
+
+ numToRead = Math.min(numToRead, available());
+ 
+ totalRead = is.read(buf, offset, numToRead);
+ 
+ if (totalRead == -1) {
+ if (numToRead > 0) {
+ throw new IOException("Truncated TAR archive");
+ }
+ hasHitEOF = true;
+ } else {
+ count(totalRead);
+ entryOffset += totalRead;
+ }
+
+ return totalRead;
+ }
+
+/* METHOD available */
+@Override
+ public int available() throws IOException {
+ if (isDirectory()) {
+ return 0;
+ }
+ if (entrySize - entryOffset > Integer.MAX_VALUE) {
+ return Integer.MAX_VALUE;
+ }
+ return (int) (entrySize - entryOffset);
+ }
+
+/* METHOD skip */
+@Override
+ public long skip(final long n) throws IOException {
+ if (n <= 0 || isDirectory()) {
+ return 0;
+ }
+
+ final long available = entrySize - entryOffset;
+ final long skipped = is.skip(Math.min(n, available)); 
+ count(skipped);
+ entryOffset += skipped;
+ return skipped;
+ }
+
+/* METHOD getNextEntry */
+@Override
+ public ArchiveEntry getNextEntry() throws IOException {
+ return getNextTarEntry();
+ }
+
+/* METHOD canReadEntryData */
+@Override
+ public boolean canReadEntryData(final ArchiveEntry ae) {
+ if (ae instanceof TarArchiveEntry) {
+ final TarArchiveEntry te = (TarArchiveEntry) ae;
+ return !te.isSparse();
+ }
+ return false;
+ }
+
+/* METHOD getCurrentEntry */
+public TarArchiveEntry getCurrentEntry() {
+ return currEntry;
+ }
+
+/* METHOD setCurrentEntry */
+protected final void setCurrentEntry(final TarArchiveEntry e) {
+ currEntry = e;
+ }
+
+/* METHOD close */
+@Override
+ public void close() throws IOException {
+ is.close();
+ }
+
+/* METHOD getRecordSize */
+public int getRecordSize() {
+ return recordSize;
+ }
+
+/* METHOD markSupported */
+@Override
+ public boolean markSupported() {
+ return false;
+ }
+
+/* METHOD mark */
+@Override
+ public void mark(final int markLimit) {
+ }
+
+/* METHOD reset */
+@Override
+ public synchronized void reset() {
+ }
+
+/* METHOD isEOFRecord */
+protected boolean isEOFRecord(final byte[] record) {
+ return record == null || ArchiveUtils.isArrayZero(record, recordSize);
+ }
+
+/* METHOD readRecord */
+protected byte[] readRecord() throws IOException {
+
+ final byte[] record = new byte[recordSize];
+
+ final int readNow = IOUtils.readFully(is, record);
+ count(readNow);
+ if (readNow != recordSize) {
+ return null;
+ }
+
+ return record;
+ }

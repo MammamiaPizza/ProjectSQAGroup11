@@ -1,0 +1,349 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 26  Version: JacksonCore-26b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.core.json.async.NonBlockingJsonParser
+Modified: com.fasterxml.jackson.core.json.async.NonBlockingJsonParser
+Triggers: com.fasterxml.jackson.core.json.async.AsyncLocationTest::testLocationOffsets
+
+Bug/specification summary:
+Bug report: 531
+Trigger failures:
+- com.fasterxml.jackson.core.json.async.AsyncLocationTest::testLocationOffsets
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<3>
+Modified: com.fasterxml.jackson.core.json.async.NonBlockingJsonParser
+
+Prompt-01 test plan:
+TARGETS: NonBlockingJsonParser.nextToken(), _finishToken(), _finishTokenWithEOF()
+TARGETS: _skipWS(int), _startFieldName(int), _startFieldNameAfterComma(int), _startValue(int)
+TARGETS: Location tracking via _inputPtr, _currInputRow, _currInputRowStart, token offsets
+ORACLES: AsyncLocationTest::testLocationOffsets expects correct column (1-based) in token locations
+ORACLES: JsonLocation.getColumnNr() returns column offset; expected=1, actual=3 indicates row-reset
+bug
+CASES: Empty nonblocking feed then endOfInput; token stream with field names at column 1
+CASES: JSON with nested objects; comma after value resets column tracking for next field name
+CASES: boundary: single-byte vs multi-byte UTF-8 in field names affecting column count
+RISKS: Non-visible feeds (needMoreInput=true) may skip column updates during buffer refills
+RISKS: Limited context; exact line affected unclear—likely _skipWS or field-name start resets column
+late
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.json.async.NonBlockingJsonParser (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.json.async;
+public class NonBlockingJsonParser
+@SuppressWarnings("deprecation")
+private final static int FEAT_MASK_TRAILING_COMMA = Feature.ALLOW_TRAILING_COMMA.getMask();
+private final static int FEAT_MASK_LEADING_ZEROS = Feature.ALLOW_NUMERIC_LEADING_ZEROS.getMask();
+private final static int FEAT_MASK_ALLOW_MISSING = Feature.ALLOW_MISSING_VALUES.getMask();
+private final static int FEAT_MASK_ALLOW_SINGLE_QUOTES = Feature.ALLOW_SINGLE_QUOTES.getMask();
+private final static int FEAT_MASK_ALLOW_UNQUOTED_NAMES = Feature.ALLOW_UNQUOTED_FIELD_NAMES.getMask();
+private final static int FEAT_MASK_ALLOW_JAVA_COMMENTS = Feature.ALLOW_COMMENTS.getMask();
+private final static int FEAT_MASK_ALLOW_YAML_COMMENTS = Feature.ALLOW_YAML_COMMENTS.getMask();
+private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+protected byte[] _inputBuffer = NO_BYTES;
+protected int _origBufferLen;
+@Override
+public ByteArrayFeeder getNonBlockingInputFeeder() {
+public final boolean needMoreInput() {
+public void feedInput(byte[] buf, int start, int end) throws IOException
+public void endOfInput() {
+public int releaseBuffered(OutputStream out) throws IOException {
+protected char _decodeEscaped() throws IOException {
+public JsonToken nextToken() throws IOException
+protected final JsonToken _finishToken() throws IOException
+protected final JsonToken _finishTokenWithEOF() throws IOException
+private final JsonToken _startDocument(int ch) throws IOException
+private final JsonToken _finishBOM(int bytesHandled) throws IOException
+private final JsonToken _startFieldName(int ch) throws IOException
+private final JsonToken _startFieldNameAfterComma(int ch) throws IOException
+private final JsonToken _startValue(int ch) throws IOException
+private final JsonToken _startValueExpectComma(int ch) throws IOException
+private final JsonToken _startValueExpectColon(int ch) throws IOException
+private final JsonToken _startValueAfterComma(int ch) throws IOException
+protected JsonToken _startUnexpectedValue(boolean leadingComma, int ch) throws IOException
+private final int _skipWS(int ch) throws IOException
+private final JsonToken _startSlashComment(int fromMinorState) throws IOException
+private final JsonToken _finishHashComment(int fromMinorState) throws IOException
+private final JsonToken _finishCppComment(int fromMinorState) throws IOException
+private final JsonToken _finishCComment(int fromMinorState, boolean gotStar) throws IOException
+private final JsonToken _startAfterComment(int fromMinorState) throws IOException
+protected JsonToken _startFalseToken() thr
+...[truncated deterministically]...
+leOddName(int ch) throws IOException
+final int[] codes = CharTypes.getInputCodeUtf8JsNames();
+private JsonToken _finishUnquotedName(int qlen, int currQuad, int currQuadBytes)
+private JsonToken _finishAposName(int qlen, int currQuad, int currQuadBytes)
+protected final JsonToken _finishFieldWithEscape() throws IOException
+private int _decodeSplitEscaped(int value, int bytesRead) throws IOException
+protected JsonToken _startString() throws IOException
+final int max = Math.min(_inputEnd, (ptr + outBuf.length));
+private final JsonToken _finishRegularString() throws IOException
+final int max = Math.min(_inputEnd, (ptr + (outBuf.length - outPtr)));
+protected JsonToken _startAposString() throws IOException
+private final JsonToken _finishAposString() throws IOException
+private final boolean _decodeSplitMultiByte(int c, int type, boolean gotNext)
+private final boolean _decodeSplitUTF8_3(int prev, int prevCount, int next)
+private final boolean _decodeSplitUTF8_4(int prev, int prevCount, int next)
+private final int _decodeCharEscape() throws IOException
+private final int _decodeFastCharEscape() throws IOException
+private final int _decodeUTF8_2(int c, int d) throws IOException
+private final int _decodeUTF8_3(int c, int d, int e) throws IOException
+private final int _decodeUTF8_4(int c, int d, int e, int f) throws IOException
+
+/* HEADER */
+package com.fasterxml.jackson.core.json.async;
+import java.io.IOException;
+import java.io.OutputStream;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.async.ByteArrayFeeder;
+import com.fasterxml.jackson.core.async.NonBlockingInputFeeder;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer;
+import com.fasterxml.jackson.core.util.VersionUtil;
+public class NonBlockingJsonParser
+
+/* METHOD NonBlockingJsonParser */
+public NonBlockingJsonParser(IOContext ctxt, int parserFeatures,
+ ByteQuadsCanonicalizer sym)
+ {
+ super(ctxt, parserFeatures, sym);
+ }
+
+/* METHOD _startNegativeNumber */
+protected JsonToken _startNegativeNumber() throws IOException
+ {
+ _numberNegative = true;
+ if (_inputPtr >= _inputEnd) {
+ _minorState = MINOR_NUMBER_MINUS;
+ return (_currToken = JsonToken.NOT_AVAILABLE);
+ }
+ int ch = _inputBuffer[_inputPtr++] & 0xFF;
+ if (ch <= INT_0) {
+ if (ch == INT_0) {
+ return _finishNumberLeadingNegZeroes();
+ }
+ // One special case: if first char is 0, must not be followed by a digit
+ reportUnexpectedNumberChar(ch, "expected digit (0-9) to follow minus sign, for valid numeric value");
+ } else if (ch > INT_9) {
+ if (ch == 'I') {
+ return _finishNonStdToken(NON_STD_TOKEN_MINUS_INFINITY, 2);
+ }
+ reportUnexpectedNumberChar(ch, "expected digit (0-9) to follow minus sign, for valid numeric value");
+ }
+ char[] outBuf = _textBuffer.emptyAndGetCurrentSegment();
+ outBuf[0] = '-';
+ outBuf[1] = (char) ch;
+ if (_inputPtr >= _inputEnd) {
+ _minorState = MINOR_NUMBER_INTEGER_DIGITS;
+ _textBuffer.setCurrentLength(2);
+ _intLength = 1;
+ return (_currToken = JsonToken.NOT_AVAILABLE);
+ }
+ ch = _inputBuffer[_inputPtr];
+ int outPtr = 2;
+
+ while (true) {
+ if (ch < INT_0) {
+ if (ch == INT_PERIOD) {
+ _intLength = outPtr-1;
+ ++_inputPtr;
+ return _startFloat(outBuf, outPtr, ch);
+ }
+ break;
+ }
+ if (ch > INT_9) {
+ if (ch == INT_e || ch == INT_E) {
+ _intLength = outPtr-1;
+ ++_inputPtr;
+ return _startFloat(outBuf, outPtr, ch);
+ }
+ break;
+ }
+ if (outPtr >= outBuf.length) {
+ // NOTE: must expand, to ensure contiguous buffer, outPtr is the length
+ outBuf = _textBuffer.expandCurrentSegment();
+ }
+ outBuf[outPtr++] = (char) ch;
+ if (++_inputPtr >= _inputEnd) {
+ _minorState = MINOR_NUMBER_INTEGER_DIGITS;
+ _textBuffer.setCurrentLength(outPtr);
+ return (_currToken = JsonToken.NOT_AVAILABLE);
+ }
+ ch = _inputBuffer[_inputPtr] & 0xFF;
+ }
+ _intLength = outPtr-1;
+ _textBuffer.setCurrentLength(outPtr);
+ return _valueComplete(JsonToken.VALUE_NUMBER_INT);
+ }
+
+/* METHOD _finishNumberMinus */
+protected JsonToken _finishNumberMinus(int ch) throws IOException
+ {
+ if (ch <= INT_0) {
+ if (ch == INT_0) {
+ return _finishNumberLeadingNegZeroes();
+ }
+ reportUnexpectedNumberChar(ch, "expected digit (0-9) to follow minus sign, for valid numeric value");
+ } else if (ch > INT_9) {
+ if (ch == 'I') {
+ return _finishNonStdToken(NON_STD_TOKEN_MINUS_INFINITY, 2);
+ }
+ reportUnexpectedNumberChar(ch, "expected digit (0-9) to follow minus sign, for valid numeric value");
+ }
+ char[] outBuf = _textBuffer.emptyAndGetCurrentSegment();
+ outBuf[0] = '-';
+ outBuf[1] = (char) ch;
+ _intLength = 1;
+ return _finishNumberIntegralPart(outBuf, 2);
+ }
+
+/* METHOD _finishFloatFraction */
+protected JsonToken _finishFloatFraction() throws IOException
+ {
+ int fractLen = _fractLength;
+ char[] outBuf = _textBuffer.getBufferWithoutReset();
+ int outPtr = _textBuffer.getCurrentSegmentSize();
+
+ // caller guarantees at least one char; also, sign-extension not needed here
+ int ch;
+ while (((ch = _inputBuffer[_inputPtr++]) >= INT_0) && (ch <= INT_9)) {
+ ++fractLen;
+ if (outPtr >= outBuf.length) {
+ outBuf = _textBuffer.expandCurrentSegment();
+ }
+ outBuf[outPtr++] = (char) ch;
+ if (_inputPtr >= _inputEnd) {
+ _textBuffer.setCurrentLength(outPtr);
+ _fractLength
+...[truncated deterministically]...
+(fractLen == 0) {
+ reportUnexpectedNumberChar(ch, "Decimal point not followed by a digit");
+ }
+ _fractLength = fractLen;
+ _textBuffer.setCurrentLength(outPtr);
+
+ // Ok: end of floating point number or exponent?
+ if (ch == INT_e || ch == INT_E) { // exponent?
+ _textBuffer.append((char) ch);
+ _expLength = 0;
+ if (_inputPtr >= _inputEnd) {
+ _minorState = MINOR_NUMBER_EXPONENT_MARKER;
+ return JsonToken.NOT_AVAILABLE;
+ }
+ _minorState = MINOR_NUMBER_EXPONENT_DIGITS;
+ return _finishFloatExponent(true, _inputBuffer[_inputPtr++] & 0xFF);
+ }
+
+ // push back the last char
+ --_inputPtr;
+ _textBuffer.setCurrentLength(outPtr);
+ // negative, int-length, fract-length already set, so...
+ _expLength = 0;
+ return _valueComplete(JsonToken.VALUE_NUMBER_FLOAT);
+ }
+
+/* METHOD _finishNonStdToken */
+protected JsonToken _finishNonStdToken(int type, int matched) throws IOException
+ {
+ final String expToken = _nonStdToken(type);
+ final int end = expToken.length();
+
+ while (true) {
+ if (_inputPtr >= _inputEnd) {
+ _nonStdTokenType = type;
+ _pending32 = matched;
+ _minorState = MINOR_VALUE_TOKEN_NON_STD;
+ return (_currToken = JsonToken.NOT_AVAILABLE);
+ }
+ int ch = _inputBuffer[_inputPtr];
+ if (matched == end) { // need to verify trailing separator
+ if (ch < INT_0 || (ch == INT_RBRACKET) || (ch == INT_RCURLY)) { // expected/allowed chars
+ return _valueNonStdNumberComplete(type);
+ }
+ break;
+ }
+ if (ch != expToken.charAt(matched)) {
+ break;
+ }
+ ++matched;
+ ++_inputPtr;
+ }
+ _minorState = MINOR_VALUE_TOKEN_ERROR;
+ _textBuffer.resetWithCopy(expToken, 0, matched);
+ return _finishErrorToken();
+ }
+
+/* METHOD _reportErrorToken */
+protected JsonToken _reportErrorToken(String actualToken) throws IOException
+ {
+ // !!! TODO: Include non-standard ones if enabled
+ _reportError("Unrecognized token '%s': was expecting %s", _textBuffer.contentsAsString(),
+ "'null', 'true' or 'false'");
+ return JsonToken.NOT_AVAILABLE; // never gets here
+ }
+
+/* METHOD _finishToken */
+protected final JsonToken _finishToken() throws IOException
+ {
+ // NOTE: caller ensures there's input available...
+ switch (_minorState) {
+ case MINOR_ROOT_BOM:
+ return _finishBOM(_pending32);
+ case MINOR_FIELD_LEADING_WS:
+ return _startFieldName(_inputBuffer[_inputPtr++] & 0xFF);
+ case MINOR_FIELD_LEADING_COMMA:
+ return _startFieldNameAfterComma(_inputBuffer[_inputPtr++] & 0xFF);
+
+ // Field name states
+ case MINOR_FIELD_NAME:
+ return _parseEscapedName(_quadLength, _pending32, _pendingBytes);
+ case MINOR_FIELD_NAME_ESCAPE:
+ return _finishFieldWithEscape();
+ case MINOR_FIELD_APOS_NAME:
+ return _finishAposName(_quadLength, _pending32, _pendingBytes);
+ case MINOR_FIELD_UNQUOTED_NAME:
+ return _finishUnquotedName(_quadLength, _pending32, _pendingBytes);
+
+ // Value states
+
+ case MINOR_VALUE_LEADING_WS:
+ return _startValue(_inputBuffer[_inputPtr++] & 0xFF);
+ case MINOR_VALUE_WS_AFTER_COMMA:
+ return _startValueAfterComma(_inputBuffer[_inputPtr++] & 0xFF);
+ case MINOR_VALUE_EXPECTING_COMMA:
+ return _startValueExpectComma(_inputBuffer[_inputPtr++] & 0xFF);
+ case MINOR_VALUE_EXPECTING_COLON:
+ return _startValueExpectColon(_inputBuffer[_inputPtr++] & 0xFF);
+
+ case MINOR_VALUE_TOKEN_NULL:
+ return _finishKeywordToken("null", _pending32, JsonToken.VALUE_NULL);
+ case MINOR_VALUE_TOKEN_TRUE:
+ return _finishKeywordToken("true", _pending32
+...[truncated deterministically]...
+portInvalidEOF(": was expecting fraction after exponent marker", JsonToken.VALUE_NUMBER_FLOAT);
+
+ // How about comments? 
+ // Inside C-comments; not legal
+
+// case MINOR_COMMENT_LEADING_SLASH: // not legal, but use default error
+ case MINOR_COMMENT_CLOSING_ASTERISK:
+ case MINOR_COMMENT_C:
+ _reportInvalidEOF(": was expecting closing '*/' for comment", JsonToken.NOT_AVAILABLE);
+
+ case MINOR_COMMENT_CPP:
+ case MINOR_COMMENT_YAML:
+ // within C++/YAML comments, ok, as long as major state agrees...
+ return _eofAsNextToken();
+ 
+ default:
+ }
+ _reportInvalidEOF(": was expecting rest of token (internal state: "+_minorState+")", _currToken);
+ return t; // never gets here
+ }

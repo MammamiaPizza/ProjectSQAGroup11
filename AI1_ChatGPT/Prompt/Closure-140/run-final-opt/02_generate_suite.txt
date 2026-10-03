@@ -1,0 +1,451 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 140  Version: Closure-140b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.Compiler
+Modified: com.google.javascript.jscomp.Compiler
+Triggers: com.google.javascript.jscomp.CrossModuleCodeMotionTest::testEmptyModule
+
+Bug/specification summary:
+Bug report: 126
+Trigger failures:
+- com.google.javascript.jscomp.CrossModuleCodeMotionTest::testEmptyModule
+ --> junit.framework.AssertionFailedError: compiler.reportCodeChange() was called even though nothing changed
+Modified: com.google.javascript.jscomp.Compiler
+
+Prompt-01 test plan:
+TARGETS: Compiler.reportCodeChange() behavior during CrossModuleCodeMotion with empty modules
+ORACLES: Existing trigger assertion: no reportCodeChange() call when compiler output/AST is unchanged
+CASES: Empty JSModule alongside non-empty modules; run CrossModuleCodeMotion optimization
+CASES: Empty-only module set and normal movable code across non-empty modules
+CASES: Boundary: empty module before/after source modules in module dependency/order setup
+RISKS: reportCodeChange() may be observable only through test compiler instrumentation, not public result APIs
+RISKS: Context lacks exact module construction, pass options, and intended behavior beyond no-op change reporting
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.Compiler (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public class Compiler extends AbstractCompiler {
+private final StringBuilder debugLog = new StringBuilder();
+public PerformanceTracker tracker;
+public Compiler() {
+public Compiler(PrintStream stream) {
+public Compiler(ErrorManager errorManager) {
+@Override
+public void setErrorManager(ErrorManager errorManager) {
+private MessageFormatter createMessageFormatter() {
+public void initOptions(CompilerOptions options) {
+private void initBasedOnOptions() {
+private void checkFirstModule(JSModule[] modules) {
+public void rebuildInputsFromModules() {
+private CompilerInput[] getAllInputsFromModules() {
+private Result compile() {
+public Result call() throws Exception {
+public void disableThreads() {
+@SuppressWarnings("unchecked")
+private <T> T runInCompilerThread(final Callable<T> callable) {
+final boolean dumpTraceReport = options.tracer.isOn();
+public void run() {
+private void compileInternal() {
+public void parse() {
+public void setPassConfig(PassConfig passes) {
+public void check() {
+private void externExports() {
+protected CompilerPass createInternal(AbstractCompiler compiler) {
+private void maybeSanityCheck() {
+private void runSanityCheck() {
+private void runCustomPasses(CustomPassExecutionTime executionTime) {
+public Result getResult() {
+public JSError[] getMessages() {
+public JSError[] getErrors() {
+public JSError[] getWarnings() {
+public Node getRoot() {
+private int nextUniqueNameId() {
+@VisibleForTesting
+public String get() {
+public CompilerInput getInput(String name) {
+public CompilerInput newExternInput(String name) {
+public JSTypeRegistry getTypeRegistry() {
+public Scope getTopScope() {
+public ReverseAbstractInterpreter getReverseAbstractInterpreter() {
+public Node parse(JSSourceFile file) {
+public String toSource() {
+public String call() throws Exception {
+public String[] toSourceArray() {
+public String[] call() throws Exception {
+public String toSource(final JSModule module) {
+public String[] toSourceArray(final JSModule module) {
+public Void call() throws Exception {
+public static class CodeBuilder {
+private final StringBuilder sb = new StringBuilder();
+public String toString() {
+public int getLength() {
+public void optimize() {
+public void processDefines() {
+public void normalize() {
+public void reportCodeChange() {
+public CodingConvention getCodingConvention() {
+public boolean isIdeMode() {
+public boolean isTypeCheckingEnabled() {
+public void report(JSError error) {
+public int getErrorCount() {
+public int getWarningCount() {
+public boolean hasErrors() {
+private SourceFile getSourceFileByName(String sourceName) {
+public String getSourceLine(String sourceName, int lineNumber) {
+public Region getSourceRegion(String sourceName, int lineNumber) {
+public SourceMap getSourceMap() {
+public static void setLoggingLevel(Level level) {
+public String getAstDotGraph() throws IOException {
+public ErrorManager getErrorManager() {
+public static class IntermediateState implements Serializable {
+private IntermediateState() {}
+public IntermediateState getState() {
+public void setState(IntermediateState state) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.CompilerOptions.DevMode;
+import com.google.javascript.jscomp.CompilerOptions.TracerMode;
+import com.google.javascript.jscomp.mozilla.rhino.ErrorReporter;
+import com.google.javascript.jscomp.parsing.Config;
+import com.google.javascript.jscomp.parsing.ParserRunner;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+public class Compiler extends AbstractCompiler {
+
+/* METHOD reportCodeChange */
+@Override
+ public void reportCodeChange() {
+ for (CodeChangeHandler handler : codeChangeHandlers) {
+ handler.reportChange();
+ }
+ }
+
+/* METHOD Compiler */
+public Compiler() {
+ this((PrintStream) null);
+ }
+
+/* METHOD Compiler */
+public Compiler(PrintStream stream) {
+ addChangeHandler(recentChange);
+ this.typeValidator = new TypeValidator(this);
+ outStream = stream;
+ }
+
+/* METHOD Compiler */
+public Compiler(ErrorManager errorManager) {
+ this();
+ setErrorManager(errorManager);
+ }
+
+/* METHOD report */
+@Override
+ public void report(JSError error) {
+ CheckLevel level = error.level;
+ WarningsGuard guard = options.getWarningsGuard();
+ if (guard != null) {
+ CheckLevel newLevel = guard.level(error);
+ if (newLevel != null) {
+ level = newLevel;
+ }
+ }
+
+ if (level.isOn()) {
+ errorManager.report(level, error);
+ }
+ }
+
+/* METHOD toSourceArray */
+public String[] toSourceArray(final JSModule module) {
+ return runInCompilerThread(new Callable<String[]>() {
+ public String[] call() throws Exception {
+ List<CompilerInput> inputs = module.getInputs();
+ int numInputs = inputs.size();
+ if (numInputs == 0) {
+ return new String[0];
+ }
+
+ String[] sources = new String[numInputs];
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs.get(i).getAstRoot(Compiler.this);
+ if (scriptNode == null) {
+ throw new IllegalArgumentException(
+ "Bad module input: " + inputs.get(i).getName());
+ }
+
+ cb.reset();
+ toSource(cb, i, scriptNode);
+ sources[i] = cb.toString();
+ }
+ return sources;
+ }
+ });
+ }
+
+/* METHOD runInCompilerThread */
+return runInCompilerThread(new Callable<String[]>() {
+ public String[] call() throws Exception {
+ List<CompilerInput> inputs = module.getInputs();
+ int numInputs = inputs.size();
+ if (numInputs == 0) {
+ return new String[0];
+ }
+
+ String[] sources = new String[numInputs];
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs.get(i).getAstRoot(Compiler.this);
+ if (scriptNode == null) {
+ throw new IllegalArgumentException(
+ "Bad module input: " + inputs.get(i).getName());
+ }
+
+ cb.reset();
+ toSource(cb, i, scriptNode);
+ sources[i] = cb.toString();
+ }
+ return sources;
+ }
+ }
+
+/* METHOD call */
+public String[] call() throws Exception {
+ List<CompilerInput> inputs = module.getInputs();
+ int numInputs = inputs.size();
+ if (numInputs == 0) {
+ return new String[0];
+ }
+
+ String[] sources = new String[numInputs];
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs.get(i).getAstRoot(Compiler.this);
+ if (scriptNode == null) {
+ throw new IllegalArgumentException(
+ "Bad module input: " + inputs.get(i).getName());
+ }
+
+ cb.reset();
+ toSource(cb, i, scriptNode);
+ sources[i] = cb.toString();
+ }
+ return sources;
+ }
+
+/* METHOD compile */
+public Result compile(JSSourceFile[] externs,
+ JSSourceFile[] inputs,
+ CompilerOptions options) {
+
+ // The compile method should only be called once.
+ Preconditions.checkState(jsRoot == null);
+
+ try {
+ init(externs, inputs, options);
+ if (hasErrors()) {
+ return getResult();
+ }
+ return compile();
+ } finally {
+ Tracer t = newTracer("generateReport");
+ errorManager.generateReport();
+ stopTracer(t, "generateReport");
+ }
+ }
+
+/* METHOD compile */
+public Result compile(JSSourceFile[] externs,
+ JSModule[] modules,
+ CompilerOptions options) {
+ // The compile method should only be called once.
+ Preconditions.checkState(jsRoot == null);
+
+ try {
+ init(externs, modules, options);
+ if (hasErrors()) {
+ return getResult();
+ }
+ return compile();
+ } finally {
+ Tracer t = newTracer("generateReport");
+ errorManager.generateReport();
+ stopTracer(t, "generateReport");
+ }
+ }
+
+/* METHOD toSourceArray */
+public String[] toSourceArray() {
+ return runInCompilerThread(new Callable<String[]>() {
+ public String[] call() throws Exception {
+ Tracer tracer = newTracer("toSourceArray");
+ try {
+ int numInputs = inputs.length;
+ String[] sources = new String[numInputs];
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs[i].getAstRoot(Compiler.this);
+ cb.reset();
+ toSource(cb, i, scriptNode);
+ sources[i] = cb.toString();
+ }
+ return sources;
+ } finally {
+ stopTracer(tracer, "toSourceArray");
+ }
+ }
+ });
+ }
+
+/* METHOD runInCompilerThread */
+return runInCompilerThread(new Callable<String[]>() {
+ public String[] call() throws Exception {
+ Tracer tracer = newTracer("toSourceArray");
+ try {
+ int numInputs = inputs.length;
+ String[] sources = new String[numInputs];
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs[i].getAstRoot(Compiler.this);
+ cb.reset();
+ toSource(cb, i, scriptNode);
+ sources[i] = cb.toString();
+ }
+ return sources;
+ } finally {
+ stopTracer(tracer, "toSourceArray");
+ }
+ }
+ }
+
+/* METHOD call */
+public String[] call() throws Exception {
+ Tracer tracer = newTracer("toSourceArray");
+ try {
+ int numInputs = inputs.length;
+ String[] sources = new String[numInputs];
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs[i].getAstRoot(Compiler.this);
+ cb.reset();
+ toSource(cb, i, scriptNode);
+ sources[i] = cb.toString();
+ }
+ return sources;
+ } finally {
+ stopTracer(tracer, "toSourceArray");
+ }
+ }
+
+/* METHOD toSource */
+public String toSource(final JSModule module) {
+ return runInCompilerThread(new Callable<String>() {
+ public String call() throws Exception {
+ List<CompilerInput> inputs = module.getInputs();
+ int numInputs = inputs.size();
+ if (numInputs == 0) {
+ return "";
+ }
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs.get(i).getAstRoot(Compiler.this);
+ if (scriptNode == null) {
+ throw new IllegalArgumentException(
+ "Bad module: " + module.getName());
+ }
+ toSource(cb, i, scriptNode);
+ }
+ return cb.toString();
+ }
+ });
+ }
+
+/* METHOD runInCompilerThread */
+return runInCompilerThread(new Callable<String>() {
+ public String call() throws Exception {
+ List<CompilerInput> inputs = module.getInputs();
+ int numInputs = inputs.size();
+ if (numInputs == 0) {
+ return "";
+ }
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs.get(i).getAstRoot(Compiler.this);
+ if (scriptNode == null) {
+ throw new IllegalArgumentException(
+ "Bad module: " + module.getName());
+ }
+ toSource(cb, i, scriptNode);
+ }
+ return cb.toString();
+ }
+ }
+
+/* METHOD call */
+public String call() throws Exception {
+ List<CompilerInput> inputs = module.getInputs();
+ int numInputs = inputs.size();
+ if (numInputs == 0) {
+ return "";
+ }
+ CodeBuilder cb = new CodeBuilder();
+ for (int i = 0; i < numInputs; i++) {
+ Node scriptNode = inputs.get(i).getAstRoot(Compiler.this);
+ if (scriptNode == null) {
+ throw new IllegalArgumentException(
+ "Bad module: " + module.getName());
+ }
+ toSource(cb, i, scriptNode);
+ }
+ return cb.toString();
+ }
+
+/* METHOD init */
+public void init(JSSourceFile[] externs, JSModule[] modules,
+ CompilerOptions options) {
+ initOptions(options);
+
+ checkFirstModule(modules);
+
+ this.externs = makeCompilerInput(externs, true);
+ this.modules = modules;
+ // Generate the module graph, and report any errors in the module
+ // specification as errors.
+ try {
+ this.moduleGraph = new JSModuleGraph(modules);
+ } catch (JSModuleGraph.ModuleDependenceException e) {
+ // problems with the module format. Report as an error. The
+ // message gives all details.
+ report(JSError.make(MODULE_DEPENDENCY_ERROR,
+ e.getModule().getName(), e.getDependentModule().getName()));
+ return;
+ }
+ this.inputs = getAllInputsFromModules();
+ initBasedOnOptions();
+
+ initInputsByNameMap();
+ }

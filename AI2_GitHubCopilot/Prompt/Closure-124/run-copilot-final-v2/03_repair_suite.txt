@@ -1,0 +1,149 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 124  Version: Closure-124b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1017
+Trigger failures:
+- com.google.javascript.jscomp.ExploitAssignsTest::testIssue1017
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.ExploitAssigns
+
+Available API/signatures:
+[com.google.javascript.jscomp.ExploitAssigns | java]
+package com.google.javascript.jscomp;
+class ExploitAssigns extends AbstractPeepholeOptimization {
+@Override
+private static boolean isCollapsibleValue(Node value, boolean isLValue) {
+private boolean isSafeReplacement(Node node, Node replacement) {
+private boolean isNameAssignedTo(String name, Node node) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.common.collect.ImmutableList;
+ import com.google.javascript.rhino.Node;
+ import junit.framework.TestCase;
+
+ /**
+  * Tests for {@link ExploitAssigns}.
+  */
+ public class ExploitAssignsTest extends TestCase {
+
+     // ---- testIssue1017 -----
+     /**
+      * Regression test for issue #1017: when a variable is reassigned inside
+      * a conditional block, a later read of the original alias must not be
+      * replaced with the new value because the alias was captured before the
+      * conditional assignment.
+      */
+     public void testIssue1017() {
+         String js = "var x=1;var y=x;if(true){x=2}var z=y";
+         // With the bug, the pass would collapse "z=y" into "z=x" which
+         // changes semantics (x may have been changed after the alias).
+         // Therefore the input should remain unchanged.
+         String expected = "var x=1;var y=x;if(true){x=2}var z=y";
+         assertEquals(expected, process(js));
+     }
+
+     // ---- Normal safe collapses ----
+
+     /** Simple variable to variable assignment collapse. */
+     public void testSimpleVarCollapse() {
+         assertEquals("var b=1,a=b", process("var b=1;var a=b"));
+     }
+
+     /** Boolean immutable value used as rvalue in subsequent statement. */
+     public void testBooleanCollapse() {
+         assertEquals("var b=true,a=b", process("var b=true;var a=true"));
+     }
+
+     /** Numeric immutable value used as rvalue in subsequent statement. */
+     public void testNumberCollapse() {
+         assertEquals("var b=3,a=b", process("var b=3;var a=3"));
+     }
+
+     /** String immutable value used as rvalue in subsequent statement. */
+     public void testStringCollapse() {
+         assertEquals("var b=\"hi\",a=b", process("var b=\"hi\";var a=\"hi\""));
+     }
+
+     /** Null literal used as rvalue in subsequent statement. */
+     public void testNullCollapse() {
+         assertEquals("var b=null,a=b", process("var b=null;var a=null"));
+     }
+
+     /** Nested assign chain collapse. b=c; a=b; => a=b=c. */
+     public void testNestedAssignCollapse() {
+         assertEquals("var c=1,b=c,a=b", process("var c=1;var b=c;var a=b"));
+     }
+
+     // ---- Property (GETPROP) L-value safety ----
+
+     /** Collapse is allowed for properties on 'this'. */
+     public void testThisPropCollapse() {
+         assertEquals("var a=this.x=a", process("var a=this.x;a=this.x"));
+     }
+
+     /** Collapse must NOT happen for properties on non-this objects. */
+     public void testNonThisPropNotCollapsed() {
+         String js = "var a=obj.x;a=obj.x";
+         assertEquals(js, process(js));
+     }
+
+     /** Assign-to-property chain: a.b=null; a.b.c=null; must not exploit first assign. */
+     public void testPropAssignChainSafety() {
+         String js = "a.b=null;a.b.c=null";
+         assertEquals(js, process(js));
+     }
+
+     // ---- Return / conditional contexts ----
+
+     /** The collapse may happen inside a return statement. */
+     public void testReturnContextCollapse() {
+         assertEquals("return b=3,a=b", process("var b=3;return b=3"));
+     }
+
+     // ---- helper ----
+
+     /**
+      * Parses {@code js}, runs {@link ExploitAssigns} on the resulting AST,
+      * and returns the source produced by pretty-printing the modified tree.
+      */
+     private String process(String js) {
+         Compiler compiler = new Compiler();
+         compiler.init(ImmutableList.<SourceFile>of(),
+                       ImmutableList.<SourceFile>of(),
+                       new CompilerOptions());
+         Node root = compiler.parse(SourceFile.fromCode("testcode", js));
+         if (root == null) {
+             throw new RuntimeException("Parse error in test input: " + js);
+         }
+         ExploitAssigns pass = new ExploitAssigns();
+         pass.process(compiler, root);
+         return compiler.toSource(root);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-124f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-124f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-124f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-124f-copilot/.test_suite/com/google/javascript/jscomp/ExploitAssignsTest.java:102: error: cannot find symbol
+ [javac] pass.process(compiler, root);
+ [javac] ^
+ [javac] symbol: method process(Compiler,Node)
+ [javac] location: variable pass of type ExploitAssigns
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 14 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

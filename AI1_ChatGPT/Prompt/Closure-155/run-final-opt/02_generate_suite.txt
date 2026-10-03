@@ -1,0 +1,406 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 155  Version: Closure-155b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.InlineVariables, com.google.javascript.jscomp.ReferenceCollectingCallback, com.google.javascript.jscomp.Scope
+Modified: com.google.javascript.jscomp.InlineVariables, com.google.javascript.jscomp.ReferenceCollectingCallback, com.google.javascript.jscomp.Scope
+Triggers: com.google.javascript.jscomp.InlineVariablesTest::testArgumentsModifiedInInnerFunction, com.google.javascript.jscomp.InlineVariablesTest::testArgumentsModifiedInOuterFunction, com.google.javascript.jscomp.InlineVariablesTest::testIssue378ModifiedArguments1, com.google.javascript.jscomp.InlineVariablesTest::testIssue378ModifiedArguments2, com.google.javascript.jscomp.InlineVariablesTest::testIssue378EscapedArguments1, com.google.javascript.jscomp.InlineVariablesTest::testIssue378EscapedArguments2, com.google.javascript.jscomp.InlineVariablesTest::testIssue378EscapedArguments4
+
+Bug/specification summary:
+Bug report: 378
+Trigger failures:
+- com.google.javascript.jscomp.InlineVariablesTest::testArgumentsModifiedInInnerFunction
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineVariablesTest::testArgumentsModifiedInOuterFunction
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineVariablesTest::testIssue378ModifiedArguments1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineVariablesTest::testIssue378ModifiedArguments2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineVariablesTest::testIssue378EscapedArguments1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineVariablesTest::testIssue378EscapedArguments2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.InlineVariablesTest::testIssue378EscapedArguments4
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.InlineVariables, com.google.javascript.jscomp.ReferenceCollectingCallback, com.google.javascript.jscomp.Scope
+
+Prompt-01 test plan:
+TARGETS: InlineVariables.process; arguments aliases must not be inlined when modified or escaped across scopes. 
+TARGETS: ReferenceCollectingCallback reference/block/scope tracking; Scope.Var locality and declaration metadata. 
+ORACLES: Existing InlineVariablesTest trigger assertions and compiler output expectations. 
+CASES: Outer function modifies arguments; inner function modifies captured arguments. 
+CASES: Issue378 argument alias modified before/after use; nested-function mutation. 
+CASES: Escaped arguments alias passed/stored in inner contexts, including trigger variants 1,2,4. 
+RISKS: APIs shown are largely package-private; test likely needs jscomp package/compiler test harness. 
+RISKS: No patch or alternate-version behavior supplied; derive expectations only from existing trigger tests.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.InlineVariables (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class InlineVariables implements CompilerPass {
+enum Mode {
+private final IdentifyConstants identifyConstants = new IdentifyConstants();
+@Override
+public void process(Node externs, Node root) {
+private Predicate<Var> getFilterForMode() {
+private class IdentifyConstants implements Predicate<Var> {
+public boolean apply(Var var) {
+private class IdentifyLocals implements Predicate<Var> {
+private static class AliasCandidate {
+private class InliningBehavior implements Behavior {
+private final Set<Var> staleVars = Sets.newHashSet();
+final Map<Node, AliasCandidate> aliasCandidates = Maps.newHashMap();
+private void blacklistVarReferencesInTree(Node root, Scope scope) {
+private boolean isVarInlineForbidden(Var var) {
+private void removeDeclaration(Reference declaration) {
+private void inlineValue(Var v, Reference ref, Node value) {
+private boolean isStringWorthInlining(Var var, List<Reference> refs) {
+private boolean canMoveAggressively(Node value) {
+private boolean isValidDeclaration(Reference declaration) {
+private boolean isValidInitialization(Reference initialization) {
+private boolean isValidReference(Reference reference) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.CodingConvention.SubclassRelationship;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.Behavior;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.Reference;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.ReferenceCollection;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class InlineVariables implements CompilerPass {
+ enum Mode {
+
+/* METHOD InlineVariables */
+InlineVariables(
+ AbstractCompiler compiler,
+ Mode mode,
+ boolean inlineAllStrings) {
+ this.compiler = compiler;
+ this.mode = mode;
+ this.inlineAllStrings = inlineAllStrings;
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ ReferenceCollectingCallback callback = new ReferenceCollectingCallback(
+ compiler, new InliningBehavior(), getFilterForMode());
+ callback.process(externs, root);
+ }
+
+/* METHOD inlineValue */
+private void inlineValue(Var v, Reference ref, Node value) {
+ if (ref.isSimpleAssignmentToName()) {
+ // This is the initial assignment.
+ ref.getGrandparent().replaceChild(ref.getParent(), value);
+ } else {
+ ref.getParent().replaceChild(ref.getNameNode(), value);
+ }
+
+ blacklistVarReferencesInTree(value, v.scope);
+ compiler.reportCodeChange();
+ }
+
+/* METHOD afterExitScope */
+@Override
+ public void afterExitScope(NodeTraversal t,
+ Map<Var, ReferenceCollection> referenceMap) {
+ collectAliasCandidates(t, referenceMap);
+ doInlinesForScope(t, referenceMap);
+ }
+
+/* METHOD inline */
+private void inline(Var v, Reference declaration,
+ Reference init, Reference reference) {
+ Node value = init.getAssignedValue();
+ Preconditions.checkState(value != null);
+ // Check for function declarations before the value is moved in the AST.
+ boolean isFunctionDeclaration = NodeUtil.isFunctionDeclaration(value);
+
+ inlineValue(v, reference, value.detachFromParent());
+ if (declaration != init) {
+ Node expressRoot = init.getGrandparent();
+ Preconditions.checkState(expressRoot.getType() == Token.EXPR_RESULT);
+ NodeUtil.removeChild(expressRoot.getParent(), expressRoot);
+ }
+
+ // Function declarations have already been removed.
+ if (!isFunctionDeclaration) {
+ removeDeclaration(declaration);
+ } else {
+ compiler.reportCodeChange();
+ }
+ }
+
+===== com.google.javascript.jscomp.ReferenceCollectingCallback (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class ReferenceCollectingCallback implements ScopedCallback, CompilerPass {
+private final Deque<BasicBlock> blockStack = new ArrayDeque<BasicBlock>();
+public void process(Node externs, Node root) {
+public Set<Var> getReferencedVariables() {
+public ReferenceCollection getReferenceCollection(Var v) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+private static boolean isBlockBoundary(Node n, Node parent) {
+private void addReference(NodeTraversal t, Var v, Reference reference) {
+interface Behavior {
+static Behavior DO_NOTHING_BEHAVIOR = new Behavior() {
+@Override
+static class ReferenceCollection {
+protected boolean isWellDefined() {
+private boolean isInitializingDeclarationAt(int index) {
+private boolean isInitializingAssignmentAt(int index) {
+private Reference getOneAndOnlyAssignment() {
+static final class Reference {
+private static boolean isLhsOfForInExpression(Node n) {
+public String getSourceName() {
+static final class BasicBlock {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class ReferenceCollectingCallback implements ScopedCallback, CompilerPass {
+
+/* METHOD ReferenceCollectingCallback */
+ReferenceCollectingCallback(AbstractCompiler compiler, Behavior behavior) {
+ this(compiler, behavior, Predicates.<Var>alwaysTrue());
+ }
+
+/* METHOD ReferenceCollectingCallback */
+ReferenceCollectingCallback(AbstractCompiler compiler, Behavior behavior,
+ Predicate<Var> varFilter) {
+ this.compiler = compiler;
+ this.behavior = behavior;
+ this.varFilter = varFilter;
+ }
+
+/* METHOD process */
+public void process(Node externs, Node root) {
+ NodeTraversal.traverse(compiler, root, this);
+ }
+
+/* METHOD enterScope */
+public void enterScope(NodeTraversal t) {
+ Node n = t.getScope().getRootNode();
+ BasicBlock parent = blockStack.isEmpty() ? null : blockStack.peek();
+ blockStack.push(new BasicBlock(parent, n));
+ }
+
+/* METHOD visit */
+public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.NAME) {
+ Var v = t.getScope().getVar(n.getString());
+ if (v != null && varFilter.apply(v)) {
+ addReference(t, v,
+ new Reference(n, parent, t, blockStack.peek()));
+ }
+ }
+
+ if (isBlockBoundary(n, parent)) {
+ blockStack.pop();
+ }
+ }
+
+/* METHOD exitScope */
+public void exitScope(NodeTraversal t) {
+ blockStack.pop();
+ behavior.afterExitScope(t, referenceMap);
+ }
+
+/* METHOD afterExitScope */
+@Override
+ public void afterExitScope(NodeTraversal t,
+ Map<Var, ReferenceCollection> referenceMap) {}
+
+/* METHOD getReferencedVariables */
+public Set<Var> getReferencedVariables() {
+ return referenceMap.keySet();
+ }
+
+/* METHOD getReferenceCollection */
+public ReferenceCollection getReferenceCollection(Var v) {
+ return referenceMap.get(v);
+ }
+
+/* METHOD shouldTraverse */
+public boolean shouldTraverse(NodeTraversal nodeTraversal, Node n,
+ Node parent) {
+ // If node is a new basic block, put on basic block stack
+ if (isBlockBoundary(n, parent)) {
+ blockStack.push(new BasicBlock(blockStack.peek(), n));
+ }
+ return true;
+ }
+
+===== com.google.javascript.jscomp.Scope (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+public class Scope implements StaticScope<JSType> {
+private final Map<String, Var> vars = new LinkedHashMap<String, Var>();
+public static class Var implements StaticSlot<JSType> {
+public String getName() {
+public Node getParentNode() {
+public boolean isBleedingFunction() {
+public boolean isGlobal() {
+public boolean isLocal() {
+public boolean isConst() {
+public boolean isDefine() {
+public Node getInitialValue() {
+public JSType getType() {
+public Node getNameNode() {
+public JSDocInfo getJSDocInfo() {
+public boolean isTypeInferred() {
+public String getInputName() {
+public boolean isNoShadow() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+@Override
+public String toString() {
+public Node getRootNode() {
+public Scope getParent() {
+public StaticScope<JSType> getParentScope() {
+public ObjectType getTypeOfThis() {
+public StaticSlot<JSType> getSlot(String name) {
+public StaticSlot<JSType> getOwnSlot(String name) {
+public Var getVar(String name) {
+public boolean isDeclared(String name, boolean recurse) {
+public Iterator<Var> getVars() {
+public int getVarCount() {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import static com.google.javascript.rhino.jstype.JSTypeNative.GLOBAL_THIS;
+import com.google.common.base.Preconditions;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.StaticScope;
+import com.google.javascript.rhino.jstype.StaticSlot;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+public class Scope implements StaticScope<JSType> {
+
+/* METHOD Scope */
+Scope(Node rootNode, AbstractCompiler compiler) {
+ this.parent = null;
+ this.rootNode = rootNode;
+ thisType = compiler.getTypeRegistry().getNativeObjectType(GLOBAL_THIS);
+ this.isBottom = false;
+ this.depth = 0;
+ }
+
+/* METHOD Scope */
+Scope(Scope parent, Node rootNode) {
+ Preconditions.checkNotNull(parent);
+ Preconditions.checkArgument(rootNode != parent.rootNode);
+
+ this.parent = parent;
+ this.rootNode = rootNode;
+ JSType nodeType = rootNode.getJSType();
+ if (nodeType != null && nodeType instanceof FunctionType) {
+ thisType = ((FunctionType) nodeType).getTypeOfThis();
+ } else {
+ thisType = parent.thisType;
+ }
+ this.isBottom = false;
+ this.depth = parent.depth + 1;
+ }
+
+/* METHOD Scope */
+Scope(Node rootNode, ObjectType thisType) {
+ this.parent = null;
+ this.rootNode = rootNode;
+ this.thisType = thisType;
+ this.isBottom = true;
+ this.depth = 0;
+ }
+
+/* METHOD isGlobal */
+public boolean isGlobal() {
+ return scope.isGlobal();
+ }
+
+/* METHOD isLocal */
+public boolean isLocal() {
+ return scope.isLocal();
+ }
+
+/* METHOD getInputName */
+public String getInputName() {
+ if (input == null)
+ return "<non-file>";
+ else
+ return input.getName();
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "Scope.Var " + name;
+ }
+
+/* METHOD getRootNode */
+public Node getRootNode() {
+ return rootNode;
+ }
+
+/* METHOD getParent */
+public Scope getParent() {
+ return parent;
+ }
+
+/* METHOD getParentScope */
+@Override
+ public StaticScope<JSType> getParentScope() {
+ return parent;
+ }
+
+/* METHOD getVar */
+public Var getVar(String name) {
+ Var var = vars.get(name);
+ if (var != null) {
+ return var;
+ } else if (parent != null) { // Recurse up the parent Scope
+ return parent.getVar(name);
+ } else {
+ return null;
+ }
+ }

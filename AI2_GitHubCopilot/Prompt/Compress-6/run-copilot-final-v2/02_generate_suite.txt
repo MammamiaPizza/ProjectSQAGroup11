@@ -1,0 +1,363 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 6  Version: Compress-6b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+Triggers: org.apache.commons.compress.archivers.zip.ZipArchiveEntryTest::testNotEquals
+
+Bug/specification summary:
+Bug report: COMPRESS-94
+Trigger failures:
+- org.apache.commons.compress.archivers.zip.ZipArchiveEntryTest::testNotEquals
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+
+Prompt-01 test plan:
+TARGETS: equals(Object), hashCode() on ZipArchiveEntry (subclass of java.util.zip.ZipEntry)
+ORACLES: equals must return false when entries differ in platform, unix mode, or internal/external
+attributes (ZipEntry compares only name/comment in parent)
+ORACLES: hashCode must be consistent with equals; two equal entries must have same hashCode
+CASES: same name but different platform (PLATFORM_UNIX vs PLATFORM_FAT)
+CASES: same name but different unix mode or external attributes
+CASES: entries differing only in internal attributes or extra fields
+CASES: null, self, different class, subclass instance
+RISKS: exact failing condition in testNotEquals unknown; need to infer from parent equals ignoring
+subclass fields
+RISKS: may need to add equals/hashCode checks for platform, external attributes, extra fields that
+were missing
+RISKS: ensure clone() methods also preserve attributes correctly for equality tests
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.zip.ZipArchiveEntry (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.zip;
+public class ZipArchiveEntry extends java.util.zip.ZipEntry
+public static final int PLATFORM_UNIX = 3;
+public static final int PLATFORM_FAT = 0;
+public ZipArchiveEntry(String name) {
+public ZipArchiveEntry(java.util.zip.ZipEntry entry) throws ZipException {
+public ZipArchiveEntry(ZipArchiveEntry entry) throws ZipException {
+protected ZipArchiveEntry() {
+public ZipArchiveEntry(File inputFile, String entryName) {
+public Object clone() {
+public boolean isSupportedCompressionMethod() {
+public int getMethod() {
+public void setMethod(int method) {
+public int getInternalAttributes() {
+public void setInternalAttributes(int value) {
+public long getExternalAttributes() {
+public void setExternalAttributes(long value) {
+public void setUnixMode(int mode) {
+public int getUnixMode() {
+public int getPlatform() {
+protected void setPlatform(int platform) {
+public void setExtraFields(ZipExtraField[] fields) {
+public ZipExtraField[] getExtraFields() {
+public void addExtraField(ZipExtraField ze) {
+public void addAsFirstExtraField(ZipExtraField ze) {
+public void removeExtraField(ZipShort type) {
+public ZipExtraField getExtraField(ZipShort type) {
+public void setExtra(byte[] extra) throws RuntimeException {
+protected void setExtra() {
+public void setCentralDirectoryExtra(byte[] b) {
+public byte[] getLocalFileDataExtra() {
+public byte[] getCentralDirectoryExtra() {
+public String getName() {
+public boolean isDirectory() {
+protected void setName(String name) {
+public int hashCode() {
+private void mergeExtraFields(ZipExtraField[] f, boolean local)
+public Date getLastModifiedDate() {
+public boolean equals(Object obj) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.zip;
+import java.io.File;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.zip.ZipException;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+public class ZipArchiveEntry extends java.util.zip.ZipEntry
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(File inputFile, String entryName) {
+ this(inputFile.isDirectory() && !entryName.endsWith("/") ? 
+ entryName + "/" : entryName);
+ if (inputFile.isFile()){
+ setSize(inputFile.length());
+ }
+ setTime(inputFile.lastModified());
+ // TODO are there any other fields we can set here?
+ }
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(String name) {
+ super(name);
+ }
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(java.util.zip.ZipEntry entry) throws ZipException {
+ super(entry);
+ setName(entry.getName());
+ byte[] extra = entry.getExtra();
+ if (extra != null) {
+ setExtraFields(ExtraFieldUtils.parse(extra));
+ } else {
+ // initializes extra data to an empty byte array
+ setExtra();
+ }
+ setMethod(entry.getMethod());
+ }
+
+/* METHOD ZipArchiveEntry */
+public ZipArchiveEntry(ZipArchiveEntry entry) throws ZipException {
+ this((java.util.zip.ZipEntry) entry);
+ setInternalAttributes(entry.getInternalAttributes());
+ setExternalAttributes(entry.getExternalAttributes());
+ setExtraFields(entry.getExtraFields());
+ }
+
+/* METHOD ZipArchiveEntry */
+protected ZipArchiveEntry() {
+ this("");
+ }
+
+/* METHOD clone */
+public Object clone() {
+ ZipArchiveEntry e = (ZipArchiveEntry) super.clone();
+
+ e.extraFields = extraFields != null ? (LinkedHashMap) extraFields.clone() : null;
+ e.setInternalAttributes(getInternalAttributes());
+ e.setExternalAttributes(getExternalAttributes());
+ e.setExtraFields(getExtraFields());
+ return e;
+ }
+
+/* METHOD setMethod */
+public void setMethod(int method) {
+ if (method < 0) {
+ throw new IllegalArgumentException(
+ "ZIP compression method can not be negative: " + method);
+ }
+ this.method = method;
+ }
+
+/* METHOD setUnixMode */
+public void setUnixMode(int mode) {
+ // CheckStyle:MagicNumberCheck OFF - no point
+ setExternalAttributes((mode << SHORT_SHIFT)
+ // MS-DOS read-only attribute
+ | ((mode & 0200) == 0 ? 1 : 0)
+ // MS-DOS directory flag
+ | (isDirectory() ? 0x10 : 0));
+ // CheckStyle:MagicNumberCheck ON
+ platform = PLATFORM_UNIX;
+ }
+
+/* METHOD setCentralDirectoryExtra */
+public void setCentralDirectoryExtra(byte[] b) {
+ try {
+ ZipExtraField[] central = ExtraFieldUtils.parse(b, false);
+ mergeExtraFields(central, false);
+ } catch (ZipException e) {
+ throw new RuntimeException(e.getMessage(), e);
+ }
+ }
+
+/* METHOD getLastModifiedDate */
+public Date getLastModifiedDate() {
+ return new Date(getTime());
+ }
+
+/* METHOD equals */
+public boolean equals(Object obj) {
+ if (this == obj) {
+ return true;
+ }
+ if (obj == null || getClass() != obj.getClass()) {
+ return false;
+ }
+ ZipArchiveEntry other = (ZipArchiveEntry) obj;
+ if (name == null) {
+ if (other.name != null) {
+ return false;
+ }
+ } else if (!name.equals(other.name)) {
+ return false;
+ }
+ return true;
+ }
+
+/* METHOD isSupportedCompressionMethod */
+public boolean isSupportedCompressionMethod() {
+ return method == STORED || method == DEFLATED;
+ }
+
+/* METHOD setExtraFields */
+public void setExtraFields(ZipExtraField[] fields) {
+ extraFields = new LinkedHashMap();
+ for (int i = 0; i < fields.length; i++) {
+ extraFields.put(fields[i].getHeaderId(), fields[i]);
+ }
+ setExtra();
+ }
+
+/* METHOD getExtraFields */
+public ZipExtraField[] getExtraFields() {
+ if (extraFields == null) {
+ return new ZipExtraField[0];
+ }
+ ZipExtraField[] result = new ZipExtraField[extraFields.size()];
+ return (ZipExtraField[]) extraFields.values().toArray(result);
+ }
+
+/* METHOD addExtraField */
+public void addExtraField(ZipExtraField ze) {
+ if (extraFields == null) {
+ extraFields = new LinkedHashMap();
+ }
+ extraFields.put(ze.getHeaderId(), ze);
+ setExtra();
+ }
+
+/* METHOD addAsFirstExtraField */
+public void addAsFirstExtraField(ZipExtraField ze) {
+ LinkedHashMap copy = extraFields;
+ extraFields = new LinkedHashMap();
+ extraFields.put(ze.getHeaderId(), ze);
+ if (copy != null) {
+ copy.remove(ze.getHeaderId());
+ extraFields.putAll(copy);
+ }
+ setExtra();
+ }
+
+/* METHOD removeExtraField */
+public void removeExtraField(ZipShort type) {
+ if (extraFields == null) {
+ throw new java.util.NoSuchElementException();
+ }
+ if (extraFields.remove(type) == null) {
+ throw new java.util.NoSuchElementException();
+ }
+ setExtra();
+ }
+
+/* METHOD getExtraField */
+public ZipExtraField getExtraField(ZipShort type) {
+ if (extraFields != null) {
+ return (ZipExtraField) extraFields.get(type);
+ }
+ return null;
+ }
+
+/* METHOD setExtra */
+public void setExtra(byte[] extra) throws RuntimeException {
+ try {
+ ZipExtraField[] local = ExtraFieldUtils.parse(extra, true);
+ mergeExtraFields(local, true);
+ } catch (ZipException e) {
+ throw new RuntimeException(e.getMessage(), e);
+ }
+ }
+
+/* METHOD setExtra */
+protected void setExtra() {
+ super.setExtra(ExtraFieldUtils.mergeLocalFileDataData(getExtraFields()));
+ }
+
+/* METHOD getLocalFileDataExtra */
+public byte[] getLocalFileDataExtra() {
+ byte[] extra = getExtra();
+ return extra != null ? extra : new byte[0];
+ }
+
+/* METHOD getCentralDirectoryExtra */
+public byte[] getCentralDirectoryExtra() {
+ return ExtraFieldUtils.mergeCentralDirectoryData(getExtraFields());
+ }
+
+/* METHOD isDirectory */
+public boolean isDirectory() {
+ return getName().endsWith("/");
+ }
+
+/* METHOD getMethod */
+public int getMethod() {
+ return method;
+ }
+
+/* METHOD getInternalAttributes */
+public int getInternalAttributes() {
+ return internalAttributes;
+ }
+
+/* METHOD setInternalAttributes */
+public void setInternalAttributes(int value) {
+ internalAttributes = value;
+ }
+
+/* METHOD getExternalAttributes */
+public long getExternalAttributes() {
+ return externalAttributes;
+ }
+
+/* METHOD setExternalAttributes */
+public void setExternalAttributes(long value) {
+ externalAttributes = value;
+ }
+
+/* METHOD getUnixMode */
+public int getUnixMode() {
+ return platform != PLATFORM_UNIX ? 0 :
+ (int) ((getExternalAttributes() >> SHORT_SHIFT) & SHORT_MASK);
+ }
+
+/* METHOD getPlatform */
+public int getPlatform() {
+ return platform;
+ }
+
+/* METHOD setPlatform */
+protected void setPlatform(int platform) {
+ this.platform = platform;
+ }
+
+/* METHOD getName */
+public String getName() {
+ return name == null ? super.getName() : name;
+ }
+
+/* METHOD setName */
+protected void setName(String name) {
+ this.name = name;
+ }
+
+/* METHOD mergeExtraFields */
+private void mergeExtraFields(ZipExtraField[] f, boolean local)
+ throws ZipException {
+ if (extraFields == null) {
+ setExtraFields(f);
+ } else {
+ for (int i = 0; i < f.length; i++) {
+ ZipExtraField existing = getExtraField(f[i].getHeaderId());
+ if (existing == null) {
+ addExtraField(f[i]);
+ } else {
+ if (local) {
+ byte[] b = f[i].getLocalFileDataData();
+ existing.parseFromLocalFileData(b, 0, b.length);
+ } else {
+ byte[] b = f[i].getCentralDirectoryData();
+ existing.parseFromCentralDirectoryData(b, 0, b.length);
+ }
+ }
+ }
+ setExtra();
+ }
+ }

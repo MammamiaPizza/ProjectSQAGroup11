@@ -1,0 +1,221 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 22  Version: Cli-22b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: cli-1
+Trigger failures:
+- org.apache.commons.cli.ApplicationTest::testGroovy
+ --> junit.framework.ComparisonFailure: expected:<[println 'hello']> but was:<[--]>
+ - org.apache.commons.cli.PosixParserTest::testStopAtExpectedArg
+ --> junit.framework.ComparisonFailure: Confirm -b is set expected:<[foo]> but was:<[--]>
+Modified: org.apache.commons.cli.PosixParser
+
+Available API/signatures:
+[org.apache.commons.cli.PosixParser | java]
+package org.apache.commons.cli;
+public class PosixParser extends Parser
+private List tokens = new ArrayList();
+private void init()
+protected String[] flatten(Options options, String[] arguments, boolean stopAtNonOption)
+private void gobble(Iterator iter)
+private void processNonOptionToken(String value)
+private void processOptionToken(String token, boolean stopAtNonOption)
+protected void burstToken(String token, boolean stopAtNonOption)
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+ import junit.framework.TestCase;
+
+ /**
+  * JUnit 3.8.1 tests for the PosixParser "--" delimiter bug (Defects4J Cli-22b).
+  * The bug causes the flatten method to insert a spurious extra "--" token
+  * when encountering the POSIX end-of-options delimiter "--", which corrupts
+  * option values and argument lists.
+  */
+ public class PosixParserBugTest extends TestCase {
+
+     private PosixParser parser;
+     private Options options;
+
+     protected void setUp() {
+         parser = new PosixParser();
+         options = new Options();
+         options.addOption("b", true, "an option that takes an argument");
+         options.addOption("x", false, "a boolean option");
+         options.addOption("v", false, "verbose flag");
+         options.addOption("D", true, "define property");
+     }
+
+     /**
+      * Reproduces testStopAtExpectedArg: option -b before "--", value after.
+      * Expected: "-b" receives value "foo", not the spurious "--".
+      */
+     public void testDoubleDashMidArgsOptionValue() {
+         String[] args = { "-b", "--", "foo" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertEquals("Option -b should get value 'foo', not '--'",
+                 "foo", cmd.getOptionValue("b"));
+     }
+
+     /**
+      * Reproduces testGroovy: "--" followed by a single non-option argument.
+      * Expected: the non-option "println 'hello'" is preserved, not replaced by "--".
+      */
+     public void testDoubleDashFollowedByNonOption() {
+         String[] args = { "--", "println 'hello'" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertEquals("Should have exactly one remaining arg", 1, cmd.getArgs().length);
+         assertEquals("Remaining arg should be 'println 'hello'', not '--'",
+                 "println 'hello'", cmd.getArgs()[0]);
+     }
+
+     /**
+      * "--" at the beginning of the argument list with multiple non-options.
+      * All tokens after "--" must be treated as non-option arguments.
+      */
+     public void testDoubleDashAtStartWithMultipleArgs() {
+         String[] args = { "--", "foo", "bar", "baz" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertEquals("Should have three remaining args", 3, cmd.getArgs().length);
+         assertEquals("foo", cmd.getArgs()[0]);
+         assertEquals("bar", cmd.getArgs()[1]);
+         assertEquals("baz", cmd.getArgs()[2]);
+     }
+
+     /**
+      * Normal parsing without any "--" delimiter (sanity check).
+      * Options and their values should be parsed correctly.
+      */
+     public void testNoDashDashNormal() {
+         String[] args = { "-b", "val1", "-x", "-v" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertEquals("val1", cmd.getOptionValue("b"));
+         assertTrue("Option -x should be set", cmd.hasOption("x"));
+         assertTrue("Option -v should be set", cmd.hasOption("v"));
+         assertEquals("No remaining args expected", 0, cmd.getArgs().length);
+     }
+
+     /**
+      * Options parsed before "--", then a single non-option after.
+      * Options preceding "--" must be recognized; token after is a non-option.
+      */
+     public void testOptionsBeforeDoubleDash() {
+         String[] args = { "-x", "-v", "--", "file.txt" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertTrue("Option -x should be set", cmd.hasOption("x"));
+         assertTrue("Option -v should be set", cmd.hasOption("v"));
+         assertEquals("One remaining arg expected", 1, cmd.getArgs().length);
+         assertEquals("file.txt", cmd.getArgs()[0]);
+     }
+
+     /**
+      * Multiple non-option arguments after "--".
+      * All tokens following "--" must appear as remaining args.
+      */
+     public void testMultipleArgsAfterDoubleDash() {
+         String[] args = { "-x", "--", "a", "b", "c" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertTrue("Option -x should be set", cmd.hasOption("x"));
+         assertEquals("Three remaining args expected", 3, cmd.getArgs().length);
+         assertEquals("a", cmd.getArgs()[0]);
+         assertEquals("b", cmd.getArgs()[1]);
+         assertEquals("c", cmd.getArgs()[2]);
+     }
+
+     /**
+      * "--" is the very last token; nothing follows it.
+      * Options before "--" should be parsed; no remaining args.
+      */
+     public void testDoubleDashAsLastToken() {
+         String[] args = { "-x", "-v", "--" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertTrue("Option -x should be set", cmd.hasOption("x"));
+         assertTrue("Option -v should be set", cmd.hasOption("v"));
+         assertEquals("No remaining args expected", 0, cmd.getArgs().length);
+     }
+
+     /**
+      * "--" is the only token in the argument list.
+      * No options and no remaining args.
+      */
+     public void testDoubleDashOnly() {
+         String[] args = { "--" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertEquals("No remaining args", 0, cmd.getArgs().length);
+         assertFalse("No options set", cmd.hasOption("b") || cmd.hasOption("x"));
+     }
+
+     /**
+      * stopAtNonOption=false must still handle "--" correctly.
+      * The value after "--" should be assigned to the preceding option.
+      */
+     public void testStopAtNonOptionFalseWithDoubleDash() {
+         String[] args = { "-b", "--", "foo" };
+         CommandLine cmd = parser.parse(options, args, false);
+         assertEquals("Option -b value should be 'foo' even with stopAtNonOption=false",
+                 "foo", cmd.getOptionValue("b"));
+     }
+
+     /**
+      * Long option syntax (--foo=bar) must remain unaffected by the "--" fix.
+      * Regression test to ensure legitimate long options still work.
+      */
+     public void testLongOptionWithEqualsUnaffected() {
+         Options opts = new Options();
+         opts.addOption("f", "file", true, "filename");
+         String[] args = { "--file=test.txt", "-x" };
+         CommandLine cmd = parser.parse(opts, args, false);
+         assertEquals("test.txt", cmd.getOptionValue("file"));
+         assertTrue(cmd.hasOption("x"));
+     }
+
+     /**
+      * Edge case: "--" between two option-value pairs (no option after "--").
+      * The option after "--" should be treated as a non-option argument.
+      */
+     public void testDoubleDashBetweenOptionAndNonOption() {
+         String[] args = { "-D", "key=val", "--", "extra" };
+         CommandLine cmd = parser.parse(options, args, false);
+         assertEquals("Option -D value", "key=val", cmd.getOptionValue("D"));
+         assertEquals("One remaining arg", 1, cmd.getArgs().length);
+         assertEquals("extra", cmd.getArgs()[0]);
+     }
+
+     /**
+      * Stress: many options then "--" then many non-options.
+      */
+     public void testManyOptionsThenManyArgs() {
+         String[] args = { "-x", "-v", "-b", "beta", "--",
+                 "file1", "file2", "file3", "file4", "file5" };
+         CommandLine cmd = parser.parse(options, args, true);
+         assertTrue(cmd.hasOption("x"));
+         assertTrue(cmd.hasOption("v"));
+         assertEquals("beta", cmd.getOptionValue("b"));
+         assertEquals("Five remaining args", 5, cmd.getArgs().length);
+         assertEquals("file1", cmd.getArgs()[0]);
+         assertEquals("file5", cmd.getArgs()[4]);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-22f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-22f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Cli-22f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+ [mkdir] Created dir: /root/sqa-workspaces/Cli-22f-copilot/target
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-22f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-22f-copilot/.test_suite/org/apache/commons/cli/PosixParserBugTest.java:31: error: unreported exception ParseException; must be caught or declared to be thrown
+ [javac] CommandLine cmd = parser.parse(options, args, true);
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

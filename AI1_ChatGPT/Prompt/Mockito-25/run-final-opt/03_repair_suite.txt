@@ -1,0 +1,164 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 25  Version: Mockito-25b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 230
+Trigger failures:
+- org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::will_return_default_value_on_non_mockable_nested_generic
+ --> java.lang.ClassCastException: org.mockito.internal.creation.jmock.ClassImposterizer$ClassWithSuperclassToWorkAroundCglibBug$$EnhancerByMockitoWithCGLIB$$2f702d3d cannot be cast to java.lang.String
+ - org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_multiple_type_variable_bounds_when_return_type_of_parameterized_method_is_a_typevar_that_is_referencing_a_typevar_on_class
+ --> java.lang.ClassCastException: $java.lang.Comparable$$EnhancerByMockitoWithCGLIB$$5139a9fd cannot be cast to java.lang.Cloneable
+ - org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_return_types_declared_with_a_bounded_wildcard
+ --> java.lang.ClassCastException
+...[truncated deterministically]...
+ClassWithSuperclassToWorkAroundCglibBug$$EnhancerByMockitoWithCGLIB$$2f702d3d cannot be cast to java.util.Map$Entry
+ - org.mockito.internal.stubbing.defaultanswers.ReturnsGenericDeepStubsTest::can_create_mock_from_multiple_type_variable_bounds_when_method_return_type_is_referencing_a_typevar_on_class
+ --> java.lang.ClassCastException: $java.lang.Comparable$$EnhancerByMockitoWithCGLIB$$5139a9fd cannot be cast to java.lang.Cloneable
+Modified: org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs
+
+Available API/signatures:
+[org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs | java]
+package org.mockito.internal.stubbing.defaultanswers;
+public class ReturnsDeepStubs implements Answer<Object>, Serializable {
+private ReturnsEmptyValues delegate = new ReturnsEmptyValues();
+public Object answer(InvocationOnMock invocation) throws Throwable {
+private Object getMock(InvocationOnMock invocation) throws Throwable {
+private Object recordDeepStubMock(InvocationOnMock invocation, InvocationContainerImpl container) {
+final Object mock = org.mockito.Mockito.mock(clz, this);
+protected GenericMetadataSupport actualParameterizedType(Object mock) {
+
+Generated JUnit Test:
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Test;
+import org.mockito.Mockito;
+
+public class ReturnsDeepStubsGenericRegressionTest {
+
+    public interface ValueHolder<T> {
+        T value();
+    }
+
+    public interface StringHolder extends ValueHolder<String> {
+    }
+
+    public interface MultiBoundHolder<T extends Comparable<T> & Cloneable> {
+        T value();
+    }
+
+    public interface Wrapper<T> {
+        T value();
+    }
+
+    public interface ParameterizedMultiBoundHolder<T extends Comparable<T> & Cloneable> {
+        Wrapper<T> wrapper();
+    }
+
+    public interface MethodMultiBoundHolder<T extends Comparable<T> & Cloneable> {
+        <S extends T> S value();
+    }
+
+    public interface WildcardEntryHolder {
+        List<? extends Map.Entry<String, String>> entries();
+    }
+
+    public interface Node<T> {
+        Node<T> next();
+        T value();
+    }
+
+    public interface StringNode extends Node<String> {
+    }
+
+    public interface PlainNode {
+        PlainNode child();
+    }
+
+    @Test
+    public void returnsDefaultValueForNestedGenericStringRatherThanIncompatibleMock() {
+        StringHolder holder = deepMock(StringHolder.class);
+
+        String value = holder.value();
+
+        assertNull(value);
+    }
+
+    @Test
+    public void createsDeepStubAssignableToAllMultipleBoundsForDirectTypeVariable() {
+        MultiBoundHolder<?> holder = deepMock(MultiBoundHolder.class);
+
+        Cloneable value = holder.value();
+
+        assertNotNull(value);
+        assertTrue(value instanceof Comparable);
+    }
+
+    @Test
+    public void createsDeepStubAssignableToAllMultipleBoundsInsideParameterizedReturn() {
+        ParameterizedMultiBoundHolder<?> holder = deepMock(ParameterizedMultiBoundHolder.class);
+
+        Cloneable value = holder.wrapper().value();
+
+        assertNotNull(value);
+        assertTrue(value instanceof Comparable);
+    }
+
+    @Test
+    public void createsDeepStubAssignableToMultipleBoundsForGenericMethodReturn() {
+        MethodMultiBoundHolder<?> holder = deepMock(MethodMultiBoundHolder.class);
+
+        Cloneable value = holder.value();
+
+        assertNotNull(value);
+        assertTrue(value instanceof Comparable);
+    }
+
+    @Test
+    public void resolvesBoundedWildcardReturnToCompatibleMapEntryMock() {
+        WildcardEntryHolder holder = deepMock(WildcardEntryHolder.class);
+
+        Map.Entry<String, String> entry = holder.entries().get(0);
+
+        assertNotNull(entry);
+        assertNull(entry.getKey());
+        assertNull(entry.getValue());
+    }
+
+    @Test
+    public void preservesConcreteGenericTypeAcrossChainedDeepStubs() {
+        StringNode node = deepMock(StringNode.class);
+
+        String value = node.next().next().value();
+
+        assertNull(value);
+    }
+
+    @Test
+    public void returnsSameDeepStubForRepeatedMatchingInvocation() {
+        PlainNode node = deepMock(PlainNode.class);
+
+        assertSame(node.child(), node.child());
+    }
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private static <T> T deepMock(Class<?> type) {
+        return (T) Mockito.mock((Class) type, Mockito.RETURNS_DEEP_STUBS);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - ReturnsDeepStubsGenericRegressionTest::resolvesBoundedWildcardReturnToCompatibleMapEntryMock
+ - ReturnsDeepStubsGenericRegressionTest::preservesConcreteGenericTypeAcrossChainedDeepStubs
+
+Failing generated tests: ReturnsDeepStubsGenericRegressionTest::preservesConcreteGenericTypeAcrossChainedDeepStubs, ReturnsDeepStubsGenericRegressionTest::resolvesBoundedWildcardReturnToCompatibleMapEntryMock

@@ -1,0 +1,527 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 83  Version: Jsoup-83b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.parser.CharacterReader, org.jsoup.parser.TokeniserState
+Modified: org.jsoup.parser.CharacterReader, org.jsoup.parser.TokeniserState
+Triggers: org.jsoup.parser.HtmlParserTest::parsesQuiteRoughAttributes, org.jsoup.parser.TokeniserStateTest::handlesLessInTagThanAsNewTag
+
+Bug/specification summary:
+Bug report: 797
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::parsesQuiteRoughAttributes
+ --> junit.framework.AssertionFailedError: expected:<<p =a>One<a[></a></p><p><a>Something</a></p><a]>Else</a>> but was:<<p =a>One<a[ <p>Something</a></p><a <p]>Else</a>>
+ - org.jsoup.parser.TokeniserStateTest::handlesLessInTagThanAsNewTag
+ --> junit.framework.AssertionFailedError: expected:<<p[></p><p></p><div id="one"><span>Two</span></div]>> but was:<<p[ <p<div id="one" <span>Two</p]>>
+Modified: org.jsoup.parser.CharacterReader, org.jsoup.parser.TokeniserState
+
+Prompt-01 test plan:
+TARGETS: CharacterReader consumeTo/consumeToAny and buffering positions at '<' boundaries. 
+TARGETS: TokeniserState handling of '<' inside tag/attribute parsing as a new tag start. 
+ORACLES: Existing trigger expected DOM/HTML strings define required tokenisation outcomes. 
+CASES: Parse rough attributes containing '<'; verify following p/a elements are separately formed. 
+CASES: Tokenise/parse '<' in a tag before p/div/span; verify p closure and nested div/span output. 
+CASES: Boundary '<' at buffer boundary and immediately followed by tag-like input, if controllable. 
+RISKS: CharacterReader buffer state may skip or retain '<', affecting TokeniserState transitions. 
+RISKS: Context lacks exact input strings and direct TokeniserState public entry points.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.CharacterReader (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public final class CharacterReader {
+static final char EOF = (char) -1;
+private static final int readAheadLimit = (int) (maxBufferLen * 0.75);
+public CharacterReader(Reader input, int sz) {
+public CharacterReader(Reader input) {
+public CharacterReader(String input) {
+private void bufferUp() {
+final int read = reader.read(charBuf);
+public int pos() {
+public boolean isEmpty() {
+private boolean isEmptyNoBufferUp() {
+public char current() {
+public void advance() {
+public String consumeTo(char c) {
+public String consumeToAny(final char... chars) {
+String consumeToAnySorted(final char... chars) {
+@Override
+public String toString() {
+private static String cacheString(final char[] charBuf, final String[] stringCache, final int start, final int count) {
+static boolean rangeEquals(final char[] charBuf, final int start, int count, final String cached) {
+boolean rangeEquals(final int start, final int count, final String cached) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.UncheckedIOException;
+import org.jsoup.helper.Validate;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.Locale;
+
+/* METHOD CharacterReader */
+public CharacterReader(Reader input, int sz) {
+ Validate.notNull(input);
+ Validate.isTrue(input.markSupported());
+ reader = input;
+ charBuf = new char[sz > maxBufferLen ? maxBufferLen : sz];
+ bufferUp();
+ }
+
+/* METHOD CharacterReader */
+public CharacterReader(Reader input) {
+ this(input, maxBufferLen);
+ }
+
+/* METHOD CharacterReader */
+public CharacterReader(String input) {
+ this(new StringReader(input), input.length());
+ }
+
+/* METHOD consumeTo */
+public String consumeTo(char c) {
+ int offset = nextIndexOf(c);
+ if (offset != -1) {
+ String consumed = cacheString(charBuf, stringCache, bufPos, offset);
+ bufPos += offset;
+ return consumed;
+ } else {
+ return consumeToEnd();
+ }
+ }
+
+/* METHOD pos */
+public int pos() {
+ return readerPos + bufPos;
+ }
+
+/* METHOD isEmpty */
+public boolean isEmpty() {
+ bufferUp();
+ return bufPos >= bufLength;
+ }
+
+/* METHOD current */
+public char current() {
+ bufferUp();
+ return isEmptyNoBufferUp() ? EOF : charBuf[bufPos];
+ }
+
+/* METHOD advance */
+public void advance() {
+ bufPos++;
+ }
+
+/* METHOD consumeToAny */
+public String consumeToAny(final char... chars) {
+ bufferUp();
+ final int start = bufPos;
+ final int remaining = bufLength;
+ final char[] val = charBuf;
+
+ OUTER: while (bufPos < remaining) {
+ for (char c : chars) {
+ if (val[bufPos] == c)
+ break OUTER;
+ }
+ bufPos++;
+ }
+
+ return bufPos > start ? cacheString(charBuf, stringCache, start, bufPos -start) : "";
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return new String(charBuf, bufPos, bufLength - bufPos);
+ }
+
+/* METHOD consumeTagName */
+String consumeTagName() {
+ // '\t', '\n', '\r', '\f', ' ', '/', '>', nullChar
+ // NOTE: out of spec, added '<' to fix common author bugs
+ bufferUp();
+ final int start = bufPos;
+ final int remaining = bufLength;
+ final char[] val = charBuf;
+
+ while (bufPos < remaining) {
+ final char c = val[bufPos];
+ if (c == '\t'|| c == '\n'|| c == '\r'|| c == '\f'|| c == ' '|| c == '/'|| c == '>'|| c == TokeniserState.nullChar)
+ break;
+ bufPos++;
+ }
+
+ return bufPos > start ? cacheString(charBuf, stringCache, start, bufPos -start) : "";
+ }
+
+/* METHOD consumeLetterThenDigitSequence */
+String consumeLetterThenDigitSequence() {
+ bufferUp();
+ int start = bufPos;
+ while (bufPos < bufLength) {
+ char c = charBuf[bufPos];
+ if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || Character.isLetter(c))
+ bufPos++;
+ else
+ break;
+ }
+ while (!isEmptyNoBufferUp()) {
+ char c = charBuf[bufPos];
+ if (c >= '0' && c <= '9')
+ bufPos++;
+ else
+ break;
+ }
+
+ return cacheString(charBuf, stringCache, start, bufPos - start);
+ }
+
+/* METHOD consumeDigitSequence */
+String consumeDigitSequence() {
+ bufferUp();
+ int start = bufPos;
+ while (bufPos < bufLength) {
+ char c = charBuf[bufPos];
+ if (c >= '0' && c <= '9')
+ bufPos
+...[truncated deterministically]...
+METHOD cacheString */
+private static String cacheString(final char[] charBuf, final String[] stringCache, final int start, final int count) {
+ // limit (no cache):
+ if (count > maxStringCacheLen)
+ return new String(charBuf, start, count);
+ if (count < 1)
+ return "";
+
+ // calculate hash:
+ int hash = 0;
+ int offset = start;
+ for (int i = 0; i < count; i++) {
+ hash = 31 * hash + charBuf[offset++];
+ }
+
+ // get from cache
+ final int index = hash & stringCache.length - 1;
+ String cached = stringCache[index];
+
+ if (cached == null) { // miss, add
+ cached = new String(charBuf, start, count);
+ stringCache[index] = cached;
+ } else { // hashcode hit, check equality
+ if (rangeEquals(charBuf, start, count, cached)) { // hit
+ return cached;
+ } else { // hashcode conflict
+ cached = new String(charBuf, start, count);
+ stringCache[index] = cached; // update the cache, as recently used strings are more likely to show up again
+ }
+ }
+ return cached;
+ }
+
+/* METHOD nextIndexOf */
+int nextIndexOf(char c) {
+ // doesn't handle scanning for surrogates
+ bufferUp();
+ for (int i = bufPos; i < bufLength; i++) {
+ if (c == charBuf[i])
+ return i - bufPos;
+ }
+ return -1;
+ }
+
+ /**
+ * Returns the number of characters between the current position and the next instance of the input sequence
+ *
+ * @param seq scan target
+ * @return offset between current position and next instance of target. -1 if not found.
+ */
+ int nextIndexOf(CharSequence seq) {
+ bufferUp();
+ // doesn't handle scanning for surrogates
+ char startChar = seq.charAt(0);
+ for (int offset = bufPos; offset < bufLength; offset++) {
+ // scan to first instance of startchar:
+ if (startC
+...[truncated deterministically]...
+< bufLength && startChar != charBuf[offset]) { /* empty */ }
+ int i = offset + 1;
+ int last = i + seq.length()-1;
+ if (offset < bufLength && last <= bufLength) {
+ for (int j = 1; i < last && seq.charAt(j) == charBuf[i]; i++, j++) { /* empty */ }
+ if (i == last) // found full sequence
+ return offset - bufPos;
+ }
+ }
+ return -1;
+ }
+
+===== org.jsoup.parser.TokeniserState (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+enum TokeniserState {
+private void anythingElse(Tokeniser t, CharacterReader r) {
+abstract void read(Tokeniser t, CharacterReader r);
+private static final String replacementStr = String.valueOf(Tokeniser.replacementChar);
+private static void handleDataEndTag(Tokeniser t, CharacterReader r, TokeniserState elseTransition) {
+private static void readData(Tokeniser t, CharacterReader r, TokeniserState current, TokeniserState advance) {
+private static void readCharRef(Tokeniser t, TokeniserState advance) {
+private static void readEndTag(Tokeniser t, CharacterReader r, TokeniserState a, TokeniserState b) {
+private static void handleDataDoubleEscapeTag(Tokeniser t, CharacterReader r, TokeniserState primary, TokeniserState fallback) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.nodes.DocumentType;
+enum TokeniserState {
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ t.transition(BeforeDoctypePublicIdentifier);
+ break;
+ case '"':
+ t.error(this);
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ t.error(this);
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ break;
+ case '"':
+...[truncated deterministically]...
+_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matches('/')) {
+ t.createTempBuffer();
+ t.advanceTransition(RCDATAEndTagOpen);
+ } else if (r.matchesLetter() && t.appropriateEndTagName() != null && !r.containsIgnoreCase("</" + t.appropriateEndTagName())) {
+ // diverge from spec: got a start tag, but there's no appropriate end tag (</title>), so rather than
+ // consuming to EOF; break out here
+ t.tagPending = t.createTagPending(false).name(t.appropriateEndTagName());
+ t.emitTagPending();
+ r.unconsume(); // undo "<"
+ t.transition(Data);
+ } else {
+ t.emit("<");
+ t.transition(Rcdata);
+ }
+ }
+ },
+ RCDATAEndTagOpen {
+ void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ t.createTagPending(false);
+ t.tagPending.appendTagName(r.current());
+ t.dataBuffer.append(r.current());
+ t.advanceTransition(RCDATAEndTagName);
+ } else {
+ t.emit("</");
+ t.transition(Rcdata);
+ }
+ }
+ },
+ RCDATAEndTagName {
+ void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ String name = r.consumeLetterSequence();
+ t.tagPending.appendTagName(name);
+ t.dataBuffer.append(name);
+ return;
+ }
+
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ if (t.isAppropriateEndTagToken())
+ t.transition(BeforeAttributeName);
+ else
+ anythingElse(t, r);
+ break;
+ case '/':
+ if (t.isAppropriateEndTagToken())
+ t.transition(SelfClosingStartTag);
+ else
+ anythingElse(t, r);
+ break;
+ case '>':
+ if (t.isAppropriateEndTagToken()) {
+ t.emitTagPending();
+ t.transition(Data);
+ }
+ else
+ anythingElse(t, r);
+ break;
+ default:
+ anythingElse(t, r);
+...[truncated deterministically]...
+r) {
+ t.emit("</" + t.dataBuffer.toString());
+ r.unconsume();
+ t.transition(Rcdata);
+ }
+ },
+ RawtextLessthanSign {
+ void read(Tokeniser t, CharacterReader r) {
+ if (r.matches('/')) {
+ t.createTempBuffer();
+ t.advanceTransition(RawtextEndTagOpen);
+ } else {
+ t.emit('<');
+ t.transition(Rawtext);
+ }
+ }
+ },
+ RawtextEndTagOpen {
+ void read(Tokeniser t, CharacterReader r) {
+ readEndTag(t, r, RawtextEndTagName, Rawtext);
+ }
+ },
+ RawtextEndTagName {
+ void read(Tokeniser t, CharacterReader r) {
+ handleDataEndTag(t, r, Rawtext);
+ }
+ },
+ ScriptDataLessthanSign {
+ void read(Tokeniser t, CharacterReader r) {
+ switch (r.consume()) {
+ case '/':
+ t.createTempBuffer();
+ t.transition(ScriptDataEndTagOpen);
+ break;
+ case '!':
+ t.emit("<!");
+ t.transition(ScriptDataEsca
+...[truncated deterministically]...
+sition(AttributeName);
+ break;
+ case eof:
+ t.eofError(this);
+ t.transition(Data);
+ break;
+ case '"':
+ case '\'':
+ case '<':
+ case '=':
+ t.error(this);
+ t.tagPending.newAttribute();
+ t.tagPending.appendAttributeName(c);
+ t.transition(AttributeName);
+ break;
+ default: // A-Z, anything else
+ t.tagPending.newAttribute();
+ r.unconsume();
+ t.transition(AttributeName);
+ }
+ }
+ },
+ AttributeName {
+ // from before attribute name
+ void read(Tokeniser t, CharacterReader r) {
+ String name = r.consumeToAnySorted(attributeNameCharsSorted);
+ t.tagPending.appendAttributeName(name);
+
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ t.transition(AfterAttributeName);
+ break;
+ case '/':
+ t.transition(SelfClosingStartTag);
+ break;
+ case '=':
+ t.transition(BeforeAttributeValue);
+ break;
+ case '>':
+ t.emitTagPending();
+ t.transition(Data);
+ break;
+ case nullChar:
+ t.error(this);
+ t.tagPending.appendAttributeName(replacementChar);
+ break;
+ case eof:
+ t.eofError(this);
+ t.transition(Data);
+ break;
+ case '"':
+ case '\'':
+ case '<':
+ t.error(this);
+ t.tagPending.appendAttributeName(c);
+ break;
+ default: // buffer underrun
+ t.tagPending.appendAttributeName(c);
+ }
+ }

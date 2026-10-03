@@ -1,0 +1,82 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 38  Version: Mockito-38b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.verification.argumentmatching.ArgumentMatchingTool
+Modified: org.mockito.internal.verification.argumentmatching.ArgumentMatchingTool
+Triggers: org.mockito.internal.verification.argumentmatching.ArgumentMatchingToolTest::shouldWorkFineWhenGivenArgIsNull, org.mockitousage.bugs.ActualInvocationHasNullArgumentNPEBugTest::shouldAllowPassingNullArgument
+
+Bug/specification summary:
+Bug report: 79
+Trigger failures:
+- org.mockito.internal.verification.argumentmatching.ArgumentMatchingToolTest::shouldWorkFineWhenGivenArgIsNull
+ --> java.lang.NullPointerException
+ - org.mockitousage.bugs.ActualInvocationHasNullArgumentNPEBugTest::shouldAllowPassingNullArgument
+ --> java.lang.NullPointerException
+Modified: org.mockito.internal.verification.argumentmatching.ArgumentMatchingTool
+
+Prompt-01 test plan:
+TARGETS: ArgumentMatchingTool.getSuspiciouslyNotMatchingArgsIndexes(List<Matcher>, Object[]).
+TARGETS: Null-safe behavior in safelyMatches(Matcher,Object) and toStringEquals(Matcher,Object).
+ORACLES: Existing trigger tests specify null arguments must not throw NullPointerException.
+CASES: Matcher list with a null actual argument; verify suspicious-index result is produced safely.
+CASES: Invocation/verification path passing null argument, as in ActualInvocationHasNullArgumentNPEBugTest.
+CASES: Normal matching and nonmatching arguments to preserve suspicious-index behavior.
+RISKS: Expected exact indexes for matcher/null combinations are not provided by this context.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.verification.argumentmatching.ArgumentMatchingTool (java) =====
+/*
+ * Copyright (c) 2007 Mockito contributors
+ * This program is made available under the terms of the MIT License.
+ */
+package org.mockito.internal.verification.argumentmatching;
+
+import java.util.LinkedList;
+import java.util.List;
+
+import org.hamcrest.Matcher;
+import org.hamcrest.StringDescription;
+import org.mockito.internal.matchers.ContainsExtraTypeInformation;
+
+@SuppressWarnings("unchecked")
+public class ArgumentMatchingTool {
+
+ /**
+ * Suspiciously not matching arguments are those that don't much, the toString() representation is the same but types are different.
+ */
+ public Integer[] getSuspiciouslyNotMatchingArgsIndexes(List<Matcher> matchers, Object[] arguments) {
+ if (matchers.size() != arguments.length) {
+ return new Integer[0];
+ }
+ 
+ List<Integer> suspicious = new LinkedList<Integer>();
+ int i = 0;
+ for (Matcher m : matchers) {
+ if (m instanceof ContainsExtraTypeInformation 
+ && !safelyMatches(m, arguments[i]) 
+ && toStringEquals(m, arguments[i])
+ && !((ContainsExtraTypeInformation) m).typeMatches(arguments[i])) {
+ suspicious.add(i);
+ }
+ i++;
+ }
+ return suspicious.toArray(new Integer[0]);
+ }
+
+ private boolean safelyMatches(Matcher m, Object arg) {
+ try {
+ return m.matches(arg);
+ } catch (Throwable t) {
+ return false;
+ }
+ }
+
+ private boolean toStringEquals(Matcher m, Object arg) {
+ return StringDescription.toString(m).equals(arg.toString());
+ }
+}

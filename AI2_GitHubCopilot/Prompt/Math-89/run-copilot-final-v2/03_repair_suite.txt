@@ -1,0 +1,238 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 89  Version: Math-89b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-259
+Trigger failures:
+- org.apache.commons.math.stat.FrequencyTest::testAddNonComparable
+ --> java.lang.ClassCastException: java.lang.Object cannot be cast to java.lang.Comparable
+Modified: org.apache.commons.math.stat.Frequency
+
+Available API/signatures:
+[org.apache.commons.math.stat.Frequency | java]
+package org.apache.commons.math.stat;
+public class Frequency implements Serializable {
+public Frequency() {
+public Frequency(Comparator comparator) {
+@Override
+public String toString() {
+@Deprecated
+public void addValue(Object v) {
+public void addValue(Comparable<?>v){
+public void addValue(int v) {
+public void addValue(Integer v) {
+public void addValue(long v) {
+public void addValue(char v) {
+public void clear() {
+public Iterator valuesIterator() {
+public long getSumFreq() {
+public long getCount(Object v) {
+public long getCount(int v) {
+public long getCount(long v) {
+public long getCount(char v) {
+public double getPct(Object v) {
+final long sumFreq = getSumFreq();
+public double getPct(int v) {
+public double getPct(long v) {
+public double getPct(char v) {
+public long getCumFreq(Object v) {
+public long getCumFreq(int v) {
+public long getCumFreq(long v) {
+public long getCumFreq(char v) {
+public double getCumPct(Object v) {
+public double getCumPct(int v) {
+public double getCumPct(long v) {
+public double getCumPct(char v) {
+private static class NaturalComparator implements Comparator, Serializable {
+public int compare(Object o1, Object o2) {
+
+Generated JUnit Test:
+package org.apache.commons.math.stat;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+
+ import java.util.Iterator;
+
+ import org.junit.Test;
+
+ /**
+  * Test class for {@link Frequency} targeting bug MATH-259:
+  * addValue(Object) should handle non-Comparable arguments by throwing
+  * IllegalArgumentException instead of a ClassCastException.
+  */
+ public class FrequencyTest {
+
+     @Test
+     public void testEmptyFrequency() {
+         Frequency f = new Frequency();
+         assertEquals("Empty frequency should have sum freq 0", 0, f.getSumFreq());
+         assertEquals("getCount on non-existent object should be 0", 0, f.getCount(new Object()));
+         assertEquals("getCount(Integer) on empty should be 0", 0, f.getCount(42));
+         assertTrue("getPct on empty should be NaN", Double.isNaN(f.getPct("test")));
+         assertTrue("getCumPct on empty should be NaN", Double.isNaN(f.getCumPct('a')));
+     }
+
+     @Test
+     public void testAddComparableString() {
+         Frequency f = new Frequency();
+         f.addValue("hello");
+         assertEquals("Count of 'hello' after one addition should be 1", 1, f.getCount("hello"));
+         f.addValue("hello");
+         assertEquals("Count of 'hello' after second addition should be 2", 2, f.getCount("hello"));
+         assertEquals("Sum freq should be 2", 2, f.getSumFreq());
+     }
+
+     @Test
+     public void testAddComparableInteger() {
+         Frequency f = new Frequency();
+         f.addValue(Integer.valueOf(5));
+         assertEquals("Count of 5 should be 1", 1, f.getCount(5));
+         f.addValue(5);   // primitive int overload
+         assertEquals("Count of 5 after adding primitive int should be 2", 2, f.getCount(5));
+     }
+
+     @Test
+     public void testAddPrimitiveTypes() {
+         Frequency f = new Frequency();
+         f.addValue(10L);         // long
+         f.addValue(10);          // int
+         f.addValue('A');         // char
+         assertEquals("Count of Long 10 should combine int and long additions", 2, f.getCount(10L));
+         assertEquals("Count of char 'A' should be 1", 1, f.getCount('A'));
+         assertEquals("Sum freq should be 3", 3, f.getSumFreq());
+     }
+
+     @Test
+     public void testAddNonComparableThrowsIllegalArgumentException() {
+         Frequency f = new Frequency();
+         f.addValue("initial"); // make freqTable contain a Comparable so that the
+ClassCastException
+                                // detection path inside addValue(Comparable) is exercised
+         try {
+             f.addValue(new Object()); // non-Comparable via deprecated Object method
+             fail("Expected IllegalArgumentException for non-Comparable argument");
+         } catch (IllegalArgumentException e) {
+             // Expected after fix: bug MATH-259 ensures no ClassCastException here
+         } catch (ClassCastException e) {
+             // Buggy behaviour: the deprecated addValue(Object) performs an invalid cast
+             fail("ClassCastException should not be thrown; IllegalArgumentException is expected");
+         }
+     }
+
+     @Test
+     public void testAddNullObjectDeprecated() {
+         Frequency f = new Frequency();
+         try {
+             f.addValue((Object) null);
+             fail("Expected NullPointerException for null argument via deprecated method");
+         } catch (NullPointerException expected) {
+             // the underlying TreeMap forbids null keys
+         }
+     }
+
+     @Test
+     public void testGetCountForNonExistent() {
+         Frequency f = new Frequency();
+         f.addValue("foo");
+         assertEquals("Count of non-existent should be 0", 0, f.getCount("bar"));
+         assertEquals("Count of non-existent integer should be 0", 0, f.getCount(99));
+     }
+
+     @Test
+     public void testGetCumFreqOrdering() {
+         Frequency f = new Frequency();
+         f.addValue(1);
+         f.addValue(2);
+         f.addValue(3);
+         f.addValue(2); // frequencies: 1->1, 2->2, 3->1
+         // cumulative: 1->1, 2->3, 3->4
+         assertEquals("Cum freq of value 1", 1, f.getCumFreq(1));
+         assertEquals("Cum freq of value 2", 3, f.getCumFreq(2));
+         assertEquals("Cum freq of value 3", 4, f.getCumFreq(3));
+         assertEquals("Cum freq below lowest", 0, f.getCumFreq(0));
+         assertEquals("Cum freq above highest", 4, f.getCumFreq(4));
+     }
+
+     @Test
+     public void testGetPctAndCumPct() {
+         Frequency f = new Frequency();
+         f.addValue("a");
+         f.addValue("b");
+         f.addValue("b");
+         // a: count=1 (33.3…%), b: count=2 (66.6…%)
+         assertEquals("Pct of 'a'", 1.0 / 3.0, f.getPct("a"), 1e-9);
+         assertEquals("Pct of 'b'", 2.0 / 3.0, f.getPct("b"), 1e-9);
+         // cumulative: a->0.333, b->1.0
+         assertEquals("Cum Pct of 'a'", 1.0 / 3.0, f.getCumPct("a"), 1e-9);
+         assertEquals("Cum Pct of 'b'", 1.0, f.getCumPct("b"), 1e-9);
+     }
+
+     @Test
+     public void testClear() {
+         Frequency f = new Frequency();
+         f.addValue("x");
+         f.addValue(42);
+         assertEquals("Sum freq before clear", 2, f.getSumFreq());
+         f.clear();
+         assertEquals("Sum freq after clear", 0, f.getSumFreq());
+         assertEquals("Count after clear", 0, f.getCount("x"));
+     }
+
+     @Test
+     public void testValuesIterator() {
+         Frequency f = new Frequency();
+         f.addValue(10);
+         f.addValue(20);
+         f.addValue(10);
+         Iterator<?> it = f.valuesIterator();
+         assertTrue("Iterator should have next", it.hasNext());
+         Object first = it.next();
+         assertTrue("First value should be 10 or 20 (depends on comparator)",
+                 first.equals(Long.valueOf(10)) || first.equals(Long.valueOf(20)));
+         assertTrue("Should have second element", it.hasNext());
+         Object second = it.next();
+         assertFalse("Should have no third element (only two distinct values)", it.hasNext());
+         assertNotNull(first);
+         assertNotNull(second);
+     }
+
+     @Test
+     public void testToStringContainsData() {
+         Frequency f = new Frequency();
+         f.addValue("score");
+         String out = f.toString();
+         assertTrue("toString should contain the value", out.contains("score"));
+         assertTrue("toString should contain frequency", out.contains("1"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-89f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-89f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-89f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 2.0-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-89f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-89f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-89f-copilot/target/test-classes
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-89f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-89f-copilot/.test_suite/org/apache/commons/math/stat/FrequencyTest.java:64: error: not a statement
+ [javac] ClassCastException
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 22 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

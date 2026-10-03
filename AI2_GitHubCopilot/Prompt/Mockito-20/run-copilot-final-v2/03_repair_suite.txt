@@ -1,0 +1,312 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 20  Version: Mockito-20b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 92
+Trigger failures:
+- org.mockitousage.annotation.SpyAnnotationTest::should_spy_inner_class
+ --> junit.framework.ComparisonFailure: expected:<[inner] strength> but was:<[null] strength>
+ - org.mockitousage.annotation.SpyAnnotationTest::should_report_when_constructor_is_explosive
+ --> junit.framework.AssertionFailedError
+ - org.mockitousage.constructor.CreatingMocksWithConstructorTest::can_spy_abstract_classes
+ --> junit.framework.ComparisonFailure: expected:<hey!> but was:<null>
+ - org.mockitousage.constructor.CreatingMocksWithConstructorTest::exception_message_when_constructor_not_found
+ --> junit.framework.AssertionFailedError
+ - org.mockitousage.constructor.CreatingMocksWithConstructorTest::can_create_mock_with_constructor
+ --> junit.framework.ComparisonFailure: expected:<hey!> but was:<null>
+ - org.mockitousage.constructor.CreatingMocksWithConstructorTest::can_mock_inner_classes
+ --> junit.framework.ComparisonFailure: expected:<hey!> but was:<null>
+ - org.mockitousage.constructor.CreatingMocksWithConstructorTest::mocking_inner_classes_with_wrong_outer_instance
+ --> junit.framework.AssertionFailedError
+ - org.mockitousage.constructor.CreatingMocksWithConstructorTest::can_mock_abstract_classes
+ --> junit.framework.ComparisonFailure: expected:<hey!> but was:<null>
+Modified: org.mockito.internal.creation.bytebuddy.ByteBuddyMockMaker
+
+Available API/signatures:
+[org.mockito.internal.creation.bytebuddy.ByteBuddyMockMaker | java]
+package org.mockito.internal.creation.bytebuddy;
+public class ByteBuddyMockMaker implements MockMaker {
+public ByteBuddyMockMaker() {
+public <T> T createMock(MockCreationSettings<T> settings, MockHandler handler) {
+" class to mock : " + describeClass(mockedProxyType),
+" created class : " + describeClass(settings.getTypeToMock()),
+" proxy instance class : " + describeClass(mockInstance),
+private <T> T ensureMockIsAssignableToMockedType(MockCreationSettings<T> settings, T mock) {
+private static String describeClass(Class type) {
+private static String describeClass(Object instance) {
+public MockHandler getHandler(Object mock) {
+public void resetMock(Object mock, MockHandler newHandler, MockCreationSettings settings) {
+private static ClassInstantiator initializeClassInstantiator() {
+Constructor<?> usingClassCacheConstructor = objenesisClassLoader.getDeclaredConstructor(boolean.class);
+return ClassInstantiator.class.cast(usingClassCacheConstructor.newInstance(new GlobalConfiguration().enableClassCache()));
+private static InternalMockHandler asInternalMockHandler(MockHandler handler) {
+"Please see the javadocs for the MockMaker interface.",
+
+Generated JUnit Test:
+package org.mockito.internal.creation.bytebuddy;
+
+ import static org.junit.Assert.*;
+
+ import java.util.Collections;
+ import java.util.Set;
+
+ import org.junit.Before;
+ import org.junit.Test;
+ import org.mockito.exceptions.base.MockitoException;
+ import org.mockito.internal.InternalMockHandler;
+ import org.mockito.invocation.Invocation;
+ import org.mockito.invocation.MockHandler;
+ import org.mockito.mock.MockCreationSettings;
+ import org.mockito.mock.SerializableMode;
+
+ public class ByteBuddyMockMakerTest {
+
+     private ByteBuddyMockMaker mockMaker;
+
+     @Before
+     public void setUp() {
+         mockMaker = new ByteBuddyMockMaker();
+     }
+
+     @Test
+     public void shouldCreateMockWithConstructorAndFieldsInitialized() {
+         MockCreationSettings<ConstructorClass> settings = new
+MockSettingsBuilder<>(ConstructorClass.class)
+                 .useConstructor(true)
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         ConstructorClass mock = mockMaker.createMock(settings, handler);
+         assertEquals("initialized", mock.getValue());
+     }
+
+     @Test
+     public void canMockAbstractClassWithConstructor() {
+         MockCreationSettings<AbstractWithConstructor> settings = new
+MockSettingsBuilder<>(AbstractWithConstructor.class)
+                 .useConstructor(true)
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         AbstractWithConstructor mock = mockMaker.createMock(settings, handler);
+         assertEquals("abstractValue", mock.getValue());
+     }
+
+     @Test
+     public void shouldSpyInnerClassAndRetainField() {
+         // inner class constructor should set "inner"
+         MockCreationSettings<InnerClass> settings = new MockSettingsBuilder<>(InnerClass.class)
+                 .useConstructor(true)
+                 .outerInstance(new ByteBuddyMockMakerTest())   // correct outer
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         InnerClass mock = mockMaker.createMock(settings, handler);
+         assertEquals("inner", mock.getInnerValue());
+     }
+
+     @Test(expected = MockitoException.class)
+     public void shouldThrowWhenWrongOuterInstance() {
+         MockCreationSettings<InnerClass> settings = new MockSettingsBuilder<>(InnerClass.class)
+                 .useConstructor(true)
+                 .outerInstance(new Object())     // deliberately wrong type
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         mockMaker.createMock(settings, handler);
+     }
+
+     @Test
+     public void shouldReportWhenConstructorIsExplosive() {
+         MockCreationSettings<ExplosiveConstructor> settings = new
+MockSettingsBuilder<>(ExplosiveConstructor.class)
+                 .useConstructor(true)
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         try {
+             mockMaker.createMock(settings, handler);
+             fail("Should have thrown MockitoException");
+         } catch (MockitoException e) {
+             assertTrue("Message should mention constructor",
+                     e.getMessage().toLowerCase().contains("constructor"));
+             assertNotNull("Cause should be the explosive exception", e.getCause());
+             assertTrue("Cause should be RuntimeException",
+                     e.getCause() instanceof RuntimeException);
+         }
+     }
+
+     @Test
+     public void shouldReportWhenConstructorNotFound() {
+         // class has no no-arg constructor
+         MockCreationSettings<NoDefaultConstructor> settings = new
+MockSettingsBuilder<>(NoDefaultConstructor.class)
+                 .useConstructor(true)
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         try {
+             mockMaker.createMock(settings, handler);
+             fail("Should throw exception");
+         } catch (MockitoException e) {
+             assertTrue("Message should indicate constructor issue",
+                     e.getMessage().toLowerCase().contains("constructor"));
+         }
+     }
+
+     @Test
+     public void createMockWithoutConstructorShouldNotInitializeFields() {
+         MockCreationSettings<ConstructorClass> settings = new
+MockSettingsBuilder<>(ConstructorClass.class)
+                 .useConstructor(false)
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         ConstructorClass mock = mockMaker.createMock(settings, handler);
+         assertNull("Field must be null when constructor is not used", mock.getValue());
+     }
+
+     @Test(expected = MockitoException.class)
+     public void shouldThrowExceptionWhenAcrossClassLoadersMode() {
+         MockCreationSettings<String> settings = new MockSettingsBuilder<>(String.class)
+                 .serializableMode(SerializableMode.ACROSS_CLASSLOADERS)
+                 .build();
+         MockHandler handler = new DummyInternalMockHandler();
+         mockMaker.createMock(settings, handler);
+     }
+
+     @Test(expected = MockitoException.class)
+     public void shouldRejectNonInternalMockHandler() {
+         MockCreationSettings<ConstructorClass> settings = new
+MockSettingsBuilder<>(ConstructorClass.class).build();
+         MockHandler handler = new MockHandler() {
+             @Override
+             public Object handle(Invocation invocation) throws Throwable { return null; }
+         };
+         mockMaker.createMock(settings, handler);
+     }
+
+     @Test
+     public void getHandlerReturnsNullForNonMock() {
+         assertNull(mockMaker.getHandler(new Object()));
+     }
+
+     @Test
+     public void getHandlerShouldReturnMockHandlerAfterCreation() {
+         MockCreationSettings<ConstructorClass> settings = new
+MockSettingsBuilder<>(ConstructorClass.class).build();
+         MockHandler handler = new DummyInternalMockHandler();
+         ConstructorClass mock = mockMaker.createMock(settings, handler);
+         assertNotNull(mockMaker.getHandler(mock));
+         assertSame(handler, mockMaker.getHandler(mock));
+     }
+
+     @Test
+     public void resetMockShouldSetInterceptor() {
+         MockCreationSettings<ConstructorClass> settings = new
+MockSettingsBuilder<>(ConstructorClass.class).build();
+         MockHandler handler = new DummyInternalMockHandler();
+         ConstructorClass mock = mockMaker.createMock(settings, handler);
+         MockHandler newHandler = new DummyInternalMockHandler();
+         mockMaker.resetMock(mock, newHandler, settings);
+         assertSame("Handler should be replaced after reset", newHandler,
+mockMaker.getHandler(mock));
+     }
+
+     // ---------- test model classes ----------
+
+     public static class ConstructorClass {
+         private String value;
+         public ConstructorClass() { this.value = "initialized"; }
+         public String getValue() { return value; }
+     }
+
+     public static abstract class AbstractWithConstructor {
+         private String value;
+         public AbstractWithConstructor() { this.value = "abstractValue"; }
+         public String getValue() { return value; }
+     }
+
+     /** non-static inner – requires a valid outer instance */
+     public class InnerClass {
+         private String innerValue;
+         public InnerClass() { this.innerValue = "inner"; }
+         public String getInnerValue() { return innerValue; }
+     }
+
+     public static class ExplosiveConstructor {
+         public ExplosiveConstructor() { throw new RuntimeException("Boom"); }
+     }
+
+     public static class NoDefaultConstructor {
+         public NoDefaultConstructor(int ignored) {}
+     }
+
+     // ---------- helper stubs ----------
+
+     /** Minimal InternalMockHandler that never calls the mock. */
+     static class DummyInternalMockHandler implements InternalMockHandler {
+         @Override public Object handle(Invocation invocation) throws Throwable { return null; }
+         @Override public MockCreationSettings getMockSettings() { return null; }
+     }
+
+     /** Simple builder for a minimal MockCreationSettings implementation. */
+     static class MockSettingsBuilder<T> {
+         private final Class<T> typeToMock;
+         private boolean useConstructor = false;
+         private Object outerInstance;
+         private SerializableMode serializableMode = SerializableMode.NONE;
+
+         MockSettingsBuilder(Class<T> typeToMock) { this.typeToMock = typeToMock; }
+
+         MockSettingsBuilder<T> useConstructor(boolean v) { useConstructor = v; return this; }
+         MockSettingsBuilder<T> outerInstance(Object o) { outerInstance = o; return this; }
+         MockSettingsBuilder<T> serializableMode(SerializableMode m) { serializableMode = m; return
+this; }
+
+         MockCreationSettings<T> build() {
+             final boolean cons = useConstructor;
+             final Object outer = outerInstance;
+             final SerializableMode ser = serializableMode;
+             return new MockCreationSettings<T>() {
+                 @Override public Class<T> getTypeToMock() { return typeToMock; }
+                 @Override public Set<Class<?>> getExtraInterfaces() { return
+Collections.emptySet(); }
+                 @Override public boolean isUsingConstructor() { return cons; }
+                 @Override public Object getOuterInstance() { return outer; }
+                 @Override public SerializableMode getSerializableMode() { return ser; }
+                 // all remaining methods return harmless defaults
+                 @Override public Object getSpiedInstance() { return null; }
+                 @Override public boolean isSerializable() { return false; }
+                 @Override public String getMockName() { return typeToMock.getSimpleName(); }
+                 @Override public boolean isStubOnly() { return false; }
+                 @Override public boolean isLenient() { return false; }
+                 @Override public <R> R getConstructorArgs() { return null; }
+                 @Override public MockHandler getMockHandler() { return null; }
+                 @Override public boolean isInline() { return false; }
+                 @Override public <R> R getMockMaker() { return null; }
+                 @Override public boolean isInstance(Object instance) { return false; }
+                 @Override public Set<Class<?>> getAdditionalInterfaces() { return
+Collections.emptySet(); }
+             };
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Mockito-20f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Mockito-20f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Mockito-20f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [exec] 
+ [exec] Deprecated Gradle features were used in this build, making it incompatible with Gradle 5.0.
+ [exec] Use '--warning-mode all' to show the individual deprecation warnings.
+ [exec] See https://docs.gradle.org/4.9/userguide/command_line_interface.html#sec:command_line_warningsNote: /root/sqa-workspaces/Mockito-20f-copilot/subprojects/testng/src/main/java/org/mockito/testng/MockitoBeforeTestNGMethod.java uses unchecked or unsafe operations.
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Mockito-20f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Mockito-20f-copilot/.test_suite/org/mockito/internal/creation/bytebuddy/ByteBuddyMockMakerTest.java:196: error: DummyInternalMockHandler is not abstract and does not override abstract method getInvocationContainer() in InternalMockHandler
+ [javac] static class DummyInternalMockHandler implements InternalMockHandler {
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 17 minutes 2 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

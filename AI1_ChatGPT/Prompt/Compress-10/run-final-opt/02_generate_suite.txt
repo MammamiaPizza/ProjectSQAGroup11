@@ -1,0 +1,467 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 10  Version: Compress-10b
+JUnit: junit-4.10.jar  Build: Maven
+Target: org.apache.commons.compress.archivers.zip.ZipFile
+Modified: org.apache.commons.compress.archivers.zip.ZipFile
+Triggers: org.apache.commons.compress.archivers.zip.UTF8ZipFilesTest::testReadWinZipArchive
+
+Bug/specification summary:
+Bug report: COMPRESS-164
+Trigger failures:
+- org.apache.commons.compress.archivers.zip.UTF8ZipFilesTest::testReadWinZipArchive
+ --> junit.framework.AssertionFailedError: InputStream is null
+Modified: org.apache.commons.compress.archivers.zip.ZipFile
+
+Prompt-01 test plan:
+TARGETS: ZipFile.getEntry(String) and getInputStream(ZipArchiveEntry) for WinZip UTF-8 archive entries.
+TARGETS: ZipFile constructors with encoding/useUnicodeExtraFields and getEncoding().
+ORACLES: Existing UTF8ZipFilesTest::testReadWinZipArchive expects a non-null InputStream.
+ORACLES: Entry lookup result and stream readability from the supplied archive fixture.
+CASES: Open the WinZip archive; find its UTF-8-named entry; obtain and read its InputStream.
+CASES: Verify lookup behavior with the configured encoding and Unicode extra-fields setting.
+CASES: Boundary: absent entry name should not yield an InputStream requestable from a null entry.
+RISKS: Fixture names/content and intended encoding details are not provided in this context.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.archivers.zip.ZipFile (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.archivers.zip;
+public class ZipFile {
+private static final class OffsetEntry {
+public ZipFile(File f) throws IOException {
+public ZipFile(String name) throws IOException {
+public ZipFile(String name, String encoding) throws IOException {
+public ZipFile(File f, String encoding) throws IOException {
+public ZipFile(File f, String encoding, boolean useUnicodeExtraFields)
+public String getEncoding() {
+public void close() throws IOException {
+public static void closeQuietly(ZipFile zipfile) {
+public Enumeration<ZipArchiveEntry> getEntries() {
+public Enumeration<ZipArchiveEntry> getEntriesInPhysicalOrder() {
+public ZipArchiveEntry getEntry(String name) {
+public boolean canReadEntryData(ZipArchiveEntry ze) {
+public InputStream getInputStream(ZipArchiveEntry ze)
+final Inflater inflater = new Inflater(true);
+@Override
+protected void finalize() throws Throwable {
+private Map<ZipArchiveEntry, NameAndComment> populateFromCentralDirectory()
+final GeneralPurposeBit gpFlag = GeneralPurposeBit.parse(cfh, off);
+final boolean hasUTF8Flag = gpFlag.usesUTF8ForNames();
+/* end of central directory record */ + DWORD
+/* directory record */ + DWORD
+private void positionAtCentralDirectory()
+private void positionAtCentralDirectory64()
+private void positionAtCentralDirectory32()
+private void skipBytes(final int count) throws IOException {
+private boolean startsWithLocalFileHeader() throws IOException {
+private class BoundedInputStream extends InputStream {
+public int read() throws IOException {
+synchronized (archive) {
+public int read(byte[] b, int off, int len) throws IOException {
+private static final class NameAndComment {
+private NameAndComment(byte[] name, byte[] comment) {
+public int compare(ZipArchiveEntry e1, ZipArchiveEntry e2) {
+
+/* HEADER */
+package org.apache.commons.compress.archivers.zip;
+import java.io.EOFException;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
+import java.util.zip.ZipException;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.DWORD;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.SHORT;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.WORD;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.ZIP64_MAGIC;
+import static org.apache.commons.compress.archivers.zip.ZipConstants.ZIP64_MAGIC_SHORT;
+public class ZipFile {
+
+/* METHOD ZipFile */
+public ZipFile(File f, String encoding, boolean useUnicodeExtraFields)
+ throws IOException {
+ this.archiveName = f.getAbsolutePath();
+ this.encoding = encoding;
+ this.zipEncoding = ZipEncodingHelper.getZipEncoding(encoding);
+ this.useUnicodeExtraFields = useUnicodeExtraFields;
+ archive = new RandomAccessFile(f, "r");
+ boolean success = false;
+ try {
+ Map<ZipArchiveEntry, NameAndComment> entriesWithoutUTF8Flag =
+ populateFromCentralDirectory();
+ resolveLocalFileHeaderData(entriesWithoutUTF8Flag);
+ success = true;
+ } finally {
+ if (!success) {
+ try {
+ closed = true;
+ archive.close();
+ } catch (IOException e2) { // NOPMD
+ // swallow, throw the original exception instead
+ }
+ }
+ }
+ }
+
+/* METHOD ZipFile */
+public ZipFile(File f) throws IOException {
+ this(f, ZipEncodingHelper.UTF8);
+ }
+
+/* METHOD ZipFile */
+public ZipFile(String name) throws IOException {
+ this(new File(name), ZipEncodingHelper.UTF8);
+ }
+
+/* METHOD ZipFile */
+public ZipFile(String name, String encoding) throws IOException {
+ this(new File(name), encoding, true);
+ }
+
+/* METHOD ZipFile */
+public ZipFile(File f, String encoding) throws IOException {
+ this(f, encoding, true);
+ }
+
+/* METHOD getInputStream */
+public InputStream getInputStream(ZipArchiveEntry ze)
+ throws IOException, ZipException {
+ OffsetEntry offsetEntry = entries.get(ze);
+ if (offsetEntry == null) {
+ return null;
+ }
+ ZipUtil.checkRequestedFeatures(ze);
+ long start = offsetEntry.dataOffset;
+ BoundedInputStream bis =
+ new BoundedInputStream(start, ze.getCompressedSize());
+ switch (ze.getMethod()) {
+ case ZipArchiveEntry.STORED:
+ return bis;
+ case ZipArchiveEntry.DEFLATED:
+ bis.addDummy();
+ final Inflater inflater = new Inflater(true);
+ return new InflaterInputStream(bis, inflater) {
+ @Override
+ public void close() throws IOException {
+ super.close();
+ inflater.end();
+ }
+ };
+ default:
+ throw new ZipException("Found unsupported compression method "
+ + ze.getMethod());
+ }
+ }
+
+/* METHOD finalize */
+@Override
+ protected void finalize() throws Throwable {
+ try {
+ if (!closed) {
+ System.err.println("Cleaning up unclosed ZipFile for archive "
+ + archiveName);
+ close();
+ }
+ } finally {
+ super.finalize();
+ }
+ }
+
+/* METHOD getEntriesInPhysicalOrder */
+public Enumeration<ZipArchiveEntry> getEntriesInPhysicalOrder() {
+ ZipArchiveEntry[] allEntries =
+ entries.keySet().toArray(new ZipArchiveEntry[0]);
+ Arrays.sort(allEntries, OFFSET_COMPARATOR);
+ return Collections.enumeration(Arrays.asList(allEntries));
+ }
+
+/* METHOD compare */
+public int compare(ZipArchiveEntry e1, ZipArchiveEntry e2) {
+ if (e1 == e2)
+ return 0;
+
+ OffsetEntry off1 = entries.get(e1);
+ OffsetEntry off2 = entries.get(e2);
+ if (off1 == null) {
+ return 1;
+ }
+ if (off2 == null) {
+ return -1;
+ }
+ long val = (off1.headerOffset - off2.headerOffset);
+ return val == 0 ? 0 : val < 0 ? -1 : +1;
+ }
+
+/* METHOD getEntries */
+public Enumeration<ZipArchiveEntry> getEntries() {
+ return Collections.enumeration(entries.keySet());
+ }
+
+/* METHOD getEntry */
+public ZipArchiveEntry getEntry(String name) {
+ return nameMap.get(name);
+ }
+
+/* METHOD canReadEntryData */
+public boolean canReadEntryData(ZipArchiveEntry ze) {
+ return ZipUtil.canHandleEntryData(ze);
+ }
+
+/* METHOD InflaterInputStream */
+return new InflaterInputStream(bis, inflater) {
+ @Override
+ public void close() throws IOException {
+ super.close();
+ inflater.end();
+ }
+ }
+
+/* METHOD getEncoding */
+public String getEncoding() {
+ return encoding;
+ }
+
+/* METHOD close */
+public void close() throws IOException {
+ // this flag is only written here and read in finalize() which
+ // can never be run in parallel.
+ // no synchronization needed.
+ closed = true;
+
+ archive.close();
+ }
+
+/* METHOD close */
+@Override
+ public void close() throws IOException {
+ super.close();
+ inflater.end();
+ }
+
+/* METHOD setSizesAndOffsetFromZip64Extra */
+private void setSizesAndOffsetFromZip64Extra(ZipArchiveEntry ze,
+ OffsetEntry offset,
+ int diskStart)
+ throws IOException {
+ Zip64ExtendedInformationExtraField z64 =
+ (Zip64ExtendedInformationExtraField)
+ ze.getExtraField(Zip64ExtendedInformationExtraField.HEADER_ID);
+ if (z64 != null) {
+ boolean hasUncompressedSize = ze.getSize() == ZIP64_MAGIC;
+ boolean hasCompressedSize = ze.getCompressedSize() == ZIP64_MAGIC;
+ boolean hasRelativeHeaderOffset =
+ offset.headerOffset == ZIP64_MAGIC;
+ z64.reparseCentralDirectoryData(hasUncompressedSize,
+ hasCompressedSize,
+ hasRelativeHeaderOffset,
+ diskStart == ZIP64_MAGIC_SHORT);
+
+ if (hasUncompressedSize) {
+ ze.setSize(z64.getSize().getLongValue());
+ } else if (hasCompressedSize) {
+ z64.setSize(new ZipEightByteInteger(ze.getSize()));
+ }
+
+ if (hasCompressedSize) {
+ ze.setCompressedSize(z64.getCompressedSize().getLongValue());
+ } else if (hasUncompressedSize) {
+ z64.setCompressedSize(new ZipEightByteInteger(ze.getCompressedSize()));
+ }
+
+ if (hasRelativeHeaderOffset) {
+ offset.headerOffset =
+ z64.getRelativeHeaderOffset().getLongValue();
+ }
+ }
+ }
+
+/* METHOD resolveLocalFileHeaderData */
+private void resolveLocalFileHeaderData(Map<ZipArchiveEntry, NameAndComment>
+ entriesWithoutUTF8Flag)
+ throws IOException {
+ // changing the name of a ZipArchiveEntry is going to change
+ // the hashcode - see COMPRESS-164
+ // Map needs to be reco
+...[truncated deterministically]...
+hive.seek(offset + LFH_OFFSET_FOR_FILENAME_LENGTH);
+ byte[] b = new byte[SHORT];
+ archive.readFully(b);
+ int fileNameLen = ZipShort.getValue(b);
+ archive.readFully(b);
+ int extraFieldLen = ZipShort.getValue(b);
+ int lenToSkip = fileNameLen;
+ while (lenToSkip > 0) {
+ int skipped = archive.skipBytes(lenToSkip);
+ if (skipped <= 0) {
+ throw new RuntimeException("failed to skip file name in"
+ + " local file header");
+ }
+ lenToSkip -= skipped;
+ }
+ byte[] localExtraData = new byte[extraFieldLen];
+ archive.readFully(localExtraData);
+ ze.setExtra(localExtraData);
+ offsetEntry.dataOffset = offset + LFH_OFFSET_FOR_FILENAME_LENGTH
+ + SHORT + SHORT + fileNameLen + extraFieldLen;
+
+ if (entriesWithoutUTF8Flag.containsKey(ze)) {
+ String orig = ze.getName();
+ NameAndComment nc = entriesWithoutUTF8Flag.get(ze);
+ ZipUtil.setNameAndCommentFromExtraFields(ze, nc.name,
+ nc.comment);
+ if (!orig.equals(ze.getName())) {
+ nameMap.remove(orig);
+ nameMap.put(ze.getName(), ze);
+ }
+ }
+ }
+ }
+
+/* METHOD read */
+@Override
+ public int read() throws IOException {
+ if (remaining-- <= 0) {
+ if (addDummyByte) {
+ addDummyByte = false;
+ return 0;
+ }
+ return -1;
+ }
+ synchronized (archive) {
+ archive.seek(loc++);
+ return archive.read();
+ }
+ }
+
+/* METHOD read */
+@Override
+ public int read(byte[] b, int off, int len) throws IOException {
+ if (remaining <= 0) {
+ if (addDummyByte) {
+ addDummyByte = false;
+ b[off] = 0;
+ return 1;
+ }
+ return -1;
+ }
+
+ if (len <= 0) {
+ return 0;
+ }
+
+ if (len > remaining) {
+ len = (int) remaining;
+ }
+ int ret = -1;
+ synchronized (archive) {
+ archive.seek(loc);
+ ret = archive.read(b, off, len);
+ }
+ if (ret > 0) {
+ loc += ret;
+ remaining -= ret;
+ }
+ return ret;
+ }
+
+/* METHOD populateFromCentralDirectory */
+private Map<ZipArchiveEntry, NameAndComment> populateFromCentralDirectory()
+ throws IOException {
+ HashMap<ZipArchiveEntry, NameAndComment> noUTF8Flag =
+ new HashMap<ZipArchiveEntry, NameAndComment>();
+
+ positionAtCentralDirectory();
+
+ byte[] signatureBytes = new byte[WORD];
+ archive.readFully(signatureBytes);
+ long sig = ZipLong.getValue(signatureBytes);
+
+ if (sig != CFH_SIG && startsWithLocalFileHeader()) {
+ throw new IOException("central directory is empty, can't expand"
+ + " corrupt archive.");
+ }
+
+ while (sig == CFH_SIG) {
+ readCentralDirectoryEntry(noUTF8Flag);
+ archive.readFully(signatureBytes);
+ sig = ZipLong.getValue(signatureBytes);
+ }
+ return noUTF8Flag;
+ }
+
+/* METHOD readCentralDirectoryEntry */
+private void
+ readCentralDirectoryEntry(Map<ZipArchiveEntry, NameAndComment> noUTF8Flag)
+ throws IOException {
+ byte[] cfh = new byte[CFH_LEN];
+
+ archive.readFully(cfh);
+ int off = 0;
+ ZipArchiveEntry ze = new ZipArchiveEntry();
+
+ int versionMadeBy = ZipShort.getValue(cfh, off);
+ off += SHORT;
+ ze.setPlatform((versionMadeBy >> BYTE_SHIFT) & NIBLET_MASK);
+
+ off += SHORT; // skip version info
+
+ final GeneralPurposeBit gpFlag = GeneralPurposeBit.parse(cfh, off);
+ final boolean hasUTF8Flag = gpFlag.usesUTF8ForNames();
+ final ZipEncoding entryEncoding =
+ hasUTF8Flag ? ZipEncodingHelper.UTF8_ZIP_ENCODING : zipEncoding;
+ ze.setGeneralPurposeBit(gpFlag);
+
+ off += SHORT;
+
+ ze.setMethod(ZipShort.getValue(cfh, off));
+ off += SHORT;
+
+ long time = ZipUtil.dosToJavaTime(ZipLong.getValue(cfh, off));
+ ze.setTime(time);
+ off += WORD;
+
+ ze.setCrc(ZipLong.getValue(cfh, off));
+ off += WORD;
+
+ ze.setCompressedSize(ZipLong.getValue(cfh, off));
+ off += WORD;
+
+ ze.setSize(ZipLong.getValue(cfh, off));
+ off += WORD;
+
+ int fileNam
+...[truncated deterministically]...
+, off);
+ // data offset will be filled later
+ entries.put(ze, offset);
+
+ nameMap.put(ze.getName(), ze);
+
+ byte[] cdExtraData = new byte[extraLen];
+ archive.readFully(cdExtraData);
+ ze.setCentralDirectoryExtra(cdExtraData);
+
+ setSizesAndOffsetFromZip64Extra(ze, offset, diskStart);
+
+ byte[] comment = new byte[commentLen];
+ archive.readFully(comment);
+ ze.setComment(entryEncoding.decode(comment));
+
+ if (!hasUTF8Flag && useUnicodeExtraFields) {
+ noUTF8Flag.put(ze, new NameAndComment(fileName, comment));
+ }
+ }

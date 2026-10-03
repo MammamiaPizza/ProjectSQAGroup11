@@ -1,0 +1,159 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 20  Version: JacksonCore-20b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 318
+Trigger failures:
+- com.fasterxml.jackson.core.base64.Base64GenerationTest::testBinaryAsEmbeddedObject
+ --> com.fasterxml.jackson.core.JsonGenerationException: No native support for writing embedded objects
+ - com.fasterxml.jackson.core.main.TestGeneratorMisc::testAsEmbedded
+ --> com.fasterxml.jackson.core.JsonGenerationException: No native support for writing embedded objects
+Modified: com.fasterxml.jackson.core.JsonGenerator
+
+Available API/signatures:
+[com.fasterxml.jackson.core.JsonGenerator | java]
+package com.fasterxml.jackson.core;
+public abstract class JsonGenerator
+public enum Feature {
+public static int collectDefaults()
+private Feature(boolean defaultState) {
+public boolean enabledByDefault() { return _defaultState; }
+public boolean enabledIn(int flags) { return (flags & _mask) != 0; }
+public int getMask() { return _mask; }
+protected PrettyPrinter _cfgPrettyPrinter;
+protected JsonGenerator() { }
+public abstract JsonGenerator setCodec(ObjectCodec oc);
+public abstract ObjectCodec getCodec();
+@Override
+public abstract Version version();
+public abstract JsonGenerator enable(Feature f);
+public abstract JsonGenerator disable(Feature f);
+public final JsonGenerator configure(Feature f, boolean state) {
+public abstract boolean isEnabled(Feature f);
+public abstract int getFeatureMask();
+@Deprecated
+public abstract JsonGenerator setFeatureMask(int values);
+public JsonGenerator overrideStdFeatures(int values, int mask) {
+public int getFormatFeatures() {
+public JsonGenerator overrideFormatFeatures(int values, int mask) {
+public void setSchema(FormatSchema schema) {
+public FormatSchema getSchema() { return null; }
+public JsonGenerator setPrettyPrinter(PrettyPrinter pp) {
+public PrettyPrinter getPrettyPrinter() {
+public abstract JsonGenerator useDefaultPrettyPrinter();
+public JsonGenerator setHighestNonEscapedChar(int charCode) { return this; }
+public int getHighestEscapedChar() { return 0; }
+public CharacterEscapes getCharacterEscapes() { return null; }
+public JsonGenerator setCharacterEscapes(CharacterEscapes esc) { return this; }
+public JsonGenerator setRootValueSeparator(SerializableStrin
+...[truncated deterministically]...
+ame) throws IOException {
+public final void writeObjectField(String fieldName, Object pojo) throws IOException {
+public void writeOmittedField(String fieldName) throws IOException { }
+public void copyCurrentEvent(JsonParser p) throws IOException
+public void copyCurrentStructure(JsonParser p) throws IOException
+public abstract JsonStreamContext getOutputContext();
+public abstract void flush() throws IOException;
+public abstract boolean isClosed();
+public abstract void close() throws IOException;
+protected void _reportError(String msg) throws JsonGenerationException {
+protected final void _throwInternal() { VersionUtil.throwInternal(); }
+protected void _reportUnsupportedOperation() {
+protected final void _verifyOffsets(int arrayLength, int offset, int length)
+protected void _writeSimpleObject(Object value) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.io.StringWriter;
+
+import org.junit.Test;
+
+public class JsonGeneratorEmbeddedObjectTest
+{
+    @Test
+    public void testWriteEmbeddedObjectWithBinaryWritesBase64() throws Exception {
+        StringWriter output = new StringWriter();
+        JsonGenerator generator = new JsonFactory().createGenerator(output);
+
+        generator.writeEmbeddedObject(new byte[] { 1, 2, 3 });
+        generator.close();
+
+        assertEquals("\"AQID\"", output.toString());
+    }
+
+    @Test
+    public void testWriteEmbeddedObjectWithEmptyBinaryWritesEmptyBase64String() throws Exception {
+        StringWriter output = new StringWriter();
+        JsonGenerator generator = new JsonFactory().createGenerator(output);
+
+        generator.writeEmbeddedObject(new byte[0]);
+        generator.close();
+
+        assertEquals("\"\"", output.toString());
+    }
+
+    @Test
+    public void testWriteObjectWithBinaryUsesBinaryOutput() throws Exception {
+        StringWriter output = new StringWriter();
+        JsonGenerator generator = new JsonFactory().createGenerator(output);
+
+        generator.writeObject(new byte[] { 0, 127, -1 });
+        generator.close();
+
+        assertEquals("\"AH//\"", output.toString());
+    }
+
+    @Test
+    public void testWriteObjectFieldWithBinaryUsesBinaryOutput() throws Exception {
+        StringWriter output = new StringWriter();
+        JsonGenerator generator = new JsonFactory().createGenerator(output);
+
+        generator.writeStartObject();
+        generator.writeObjectField("data", new byte[] { 1, 2, 3 });
+        generator.writeEndObject();
+        generator.close();
+
+        assertEquals("{\"data\":\"AQID\"}", output.toString());
+    }
+
+    @Test
+    public void testWriteEmbeddedObjectWithNullWritesNull() throws Exception {
+        StringWriter output = new StringWriter();
+        JsonGenerator generator = new JsonFactory().createGenerator(output);
+
+        generator.writeEmbeddedObject(null);
+        generator.close();
+
+        assertEquals("null", output.toString());
+    }
+
+    @Test
+    public void testWriteEmbeddedObjectWithUnsupportedValueStillFails() throws Exception {
+        JsonGenerator generator = new JsonFactory().createGenerator(new StringWriter());
+
+        try {
+            generator.writeEmbeddedObject(new Object());
+            fail("Expected JsonGenerationException for unsupported embedded object");
+        } catch (JsonGenerationException e) {
+            assertEquals("No native support for writing embedded objects", e.getOriginalMessage());
+        } finally {
+            generator.close();
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.core.JsonGeneratorEmbeddedObjectTest::testWriteEmbeddedObjectWithUnsupportedValueStillFails
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: com.fasterxml.jackson.core.JsonGeneratorEmbeddedObjectTest::testWriteEmbeddedObjectWithUnsupportedValueStillFails

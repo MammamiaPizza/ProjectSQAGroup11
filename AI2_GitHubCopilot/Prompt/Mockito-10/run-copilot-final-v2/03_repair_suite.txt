@@ -1,0 +1,173 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 10  Version: Mockito-10b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 99
+Trigger failures:
+- org.mockitousage.bugs.DeepStubsWronglyReportsSerializationProblemsTest::should_not_raise_a_mockito_exception_about_serialization_when_accessing_deep_stub
+ --> org.mockito.exceptions.base.MockitoException:
+Modified: org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs
+
+Available API/signatures:
+[org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs | java]
+package org.mockito.internal.stubbing.defaultanswers;
+public class ReturnsDeepStubs implements Answer<Object>, Serializable {
+public Object answer(InvocationOnMock invocation) throws Throwable {
+private Object deepStub(InvocationOnMock invocation, GenericMetadataSupport returnTypeGenericMetadata) throws Throwable {
+private Object newDeepStubMock(GenericMetadataSupport returnTypeGenericMetadata) {
+private MockSettings withSettingsUsing(GenericMetadataSupport returnTypeGenericMetadata) {
+private ReturnsDeepStubs returnsDeepStubsAnswerUsing(final GenericMetadataSupport returnTypeGenericMetadata) {
+private Object recordDeepStubAnswer(final Object mock, InvocationContainerImpl container) throws Throwable {
+protected GenericMetadataSupport actualParameterizedType(Object mock) {
+private static class ReturnsDeepStubsSerializationFallback extends ReturnsDeepStubs implements Serializable {
+@SuppressWarnings("serial") // not gonna be serialized
+public ReturnsDeepStubsSerializationFallback(GenericMetadataSupport returnTypeGenericMetadata) {
+@Override
+private Object writeReplace() throws IOException {
+private static class DeeplyStubbedAnswer implements Answer<Object>, Serializable {
+@SuppressWarnings("serial") // serialization will fail with a nice message if mock not serializable
+private static MockitoCore mockitoCore() {
+private static ReturnsEmptyValues delegate() {
+private static class LazyHolder {
+private static final MockitoCore MOCKITO_CORE = new MockitoCore();
+private static final ReturnsEmptyValues DELEGATE = new ReturnsEmptyValues();
+
+Generated JUnit Test:
+package org.mockitousage.bugs;
+
+ import static org.junit.Assert.*;
+ import static org.mockito.Mockito.*;
+
+ import java.io.ByteArrayOutputStream;
+ import java.io.ObjectOutputStream;
+ import java.io.Serializable;
+
+ import org.junit.Test;
+ import org.mockito.exceptions.base.MockitoException;
+
+ public class DeepStubsWronglyReportsSerializationProblemsTest {
+
+     // --- helper types for deep stubbing ---
+
+     interface NonSerializableInterface {
+         String getValue();
+     }
+
+     interface Service {
+         NonSerializableInterface getNonSerializable();
+     }
+
+     interface A {
+         B getB();
+     }
+     interface B {
+         C getC();
+     }
+     interface C {
+         String getValue();
+     }
+
+     interface PrimitiveService {
+         int getId();
+     }
+
+     interface GenericService<K> {
+         K getKey();
+     }
+
+     interface SubInterface {
+         String sayHello();
+     }
+
+     interface ParentWithExtras {
+         SubInterface getSub();
+     }
+
+     // --- tests ---
+
+     @Test
+     public void should_not_raise_a_mockito_exception_about_serialization_when_accessing_deep_stub()
+{
+         // bug 99: accessing a deep stub should not throw MockitoException about serialization
+         Service mock = mock(Service.class, RETURNS_DEEP_STUBS);
+         NonSerializableInterface deepStub = mock.getNonSerializable();
+         assertNotNull("deep stub should be returned", deepStub);
+         assertNull("default value for String return should be null", deepStub.getValue());
+     }
+
+     @Test
+     public void shouldReturnSameMockOnMultipleInvocations() {
+         Service mock = mock(Service.class, RETURNS_DEEP_STUBS);
+         NonSerializableInterface first = mock.getNonSerializable();
+         NonSerializableInterface second = mock.getNonSerializable();
+         assertNotNull(first);
+         assertSame("deep stub must be cached", first, second);
+     }
+
+     @Test
+     public void shouldReturnDefaultValueForNonMockableReturnType() {
+         PrimitiveService mock = mock(PrimitiveService.class, RETURNS_DEEP_STUBS);
+         assertEquals("primitive returns default 0", 0, mock.getId());
+     }
+
+     @Test
+     public void shouldSupportNestedDeepStubChains() {
+         A mock = mock(A.class, RETURNS_DEEP_STUBS);
+         B b = mock.getB();
+         assertNotNull(b);
+         C c = b.getC();
+         assertNotNull(c);
+         assertNull(c.getValue());
+     }
+
+     @Test
+     public void shouldHandleGenericReturnTypes() {
+         @SuppressWarnings("unchecked")
+         GenericService<String> mock = mock(GenericService.class, RETURNS_DEEP_STUBS);
+         String result = mock.getKey();
+         // String is final → not mockable → delegate returns null for Object type
+         assertNull("final type should return null via empty default", result);
+     }
+
+     @Test
+     public void shouldPropagateExtraInterfacesToDeepStubMock() {
+         ParentWithExtras mock = mock(ParentWithExtras.class,
+                 withSettings().extraInterfaces(Serializable.class)
+                         .defaultAnswer(RETURNS_DEEP_STUBS));
+         SubInterface sub = mock.getSub();
+         assertNotNull(sub);
+         assertTrue("deep stub should implement extra interfaces", sub instanceof Serializable);
+     }
+
+     @Test
+     public void shouldAllowSerializationOfDeepStubMockWhenParentIsSerializable() throws Exception {
+         Service mock = mock(Service.class,
+                 withSettings().serializable().defaultAnswer(RETURNS_DEEP_STUBS));
+         NonSerializableInterface deepStub = mock.getNonSerializable();
+         // serialization round-trip must succeed because the deep stub mock is created with
+         // serializable settings (via withSettingsUsing) and Mockito makes it serializable
+         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         new ObjectOutputStream(baos).writeObject(deepStub);
+         // if we reach here no exception was thrown
+     }
+
+     @Test
+     public void shouldReturnDeepStubMockEvenWhenParentIsSerializable() {
+         Service mock = mock(Service.class,
+                 withSettings().serializable().defaultAnswer(RETURNS_DEEP_STUBS));
+         NonSerializableInterface deepStub = mock.getNonSerializable();
+         assertNotNull(deepStub);
+         deepStub.getValue(); // should succeed without MockitoException
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.mockitousage.bugs.DeepStubsWronglyReportsSerializationProblemsTest::shouldHandleGenericReturnTypes
+ - org.mockitousage.bugs.DeepStubsWronglyReportsSerializationProblemsTest::shouldPropagateExtraInterfacesToDeepStubMock
+
+Failing generated tests: org.mockitousage.bugs.DeepStubsWronglyReportsSerializationProblemsTest::shouldHandleGenericReturnTypes, org.mockitousage.bugs.DeepStubsWronglyReportsSerializationProblemsTest::shouldPropagateExtraInterfacesToDeepStubMock

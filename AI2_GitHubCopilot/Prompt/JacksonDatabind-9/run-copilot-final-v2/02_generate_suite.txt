@@ -1,0 +1,77 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 9  Version: JacksonDatabind-9b
+JUnit: junit-4.11.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ser.std.StdKeySerializer
+Modified: com.fasterxml.jackson.databind.ser.std.StdKeySerializer
+Triggers: com.fasterxml.jackson.databind.ser.TestMapSerialization::testClassKey
+
+Bug/specification summary:
+Bug report: 682
+Trigger failures:
+- com.fasterxml.jackson.databind.ser.TestMapSerialization::testClassKey
+ --> junit.framework.ComparisonFailure: expected:<{"[]java.lang.String":2}> but was:<{"[class ]java.lang.String":2}>
+Modified: com.fasterxml.jackson.databind.ser.std.StdKeySerializer
+
+Prompt-01 test plan:
+TARGETS: StdKeySerializer.serialize(Object,…) – for Class keys strip "class " prefix so toString
+gives full name without "class ".
+ORACLES: TestMapSerialization.testClassKey expects key like "[]java.lang.String" (brackets, then
+class name) not "[class ]java.lang.String".
+CASES: Normal class (String), primitive (int), interface, array class (String[]), null key,
+non-Class key (unchanged), inner class, duplicate keys.
+RISKS: Overly broad toString replacement may break non-Class keys that contain "class ". Only Class
+instances should be treated. Ensure no regression for null key.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ser.std.StdKeySerializer (java) =====
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.io.IOException;
+import java.lang.reflect.Type;
+import java.util.Date;
+
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+
+/**
+ * Specialized serializer that can be used as the generic key
+ * serializer, when serializing {@link java.util.Map}s to JSON
+ * Objects.
+ */
+@SuppressWarnings("serial")
+public class StdKeySerializer extends StdSerializer<Object>
+{
+ public StdKeySerializer() { super(Object.class); }
+
+ @Override
+ public void serialize(Object value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+ String str;
+ 
+ if (value instanceof Date) {
+ provider.defaultSerializeDateKey((Date) value, jgen);
+ return;
+ } else {
+ str = value.toString();
+ }
+ jgen.writeFieldName(str);
+ }
+
+ @Override
+ public JsonNode getSchema(SerializerProvider provider, Type typeHint) throws JsonMappingException {
+ return createSchemaNode("string");
+ }
+
+ @Override
+ public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) throws JsonMappingException {
+ visitor.expectStringFormat(typeHint);
+ }
+}

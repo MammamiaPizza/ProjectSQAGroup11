@@ -1,0 +1,404 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 103  Version: Closure-103b
+JUnit: junit4-core.jar  Build: Ant
+Target: com.google.javascript.jscomp.ControlFlowAnalysis, com.google.javascript.jscomp.DisambiguateProperties
+Modified: com.google.javascript.jscomp.ControlFlowAnalysis, com.google.javascript.jscomp.DisambiguateProperties
+Triggers: com.google.javascript.jscomp.CheckUnreachableCodeTest::testInstanceOfThrowsException, com.google.javascript.jscomp.ControlFlowAnalysisTest::testInstanceOf, com.google.javascript.jscomp.DisambiguatePropertiesTest::testSupertypeReferenceOfSubtypeProperty
+
+Bug/specification summary:
+Bug report: 113
+Trigger failures:
+- com.google.javascript.jscomp.CheckUnreachableCodeTest::testInstanceOfThrowsException
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_UNREACHABLE_CODE. unreachable code at testcode line 1 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.ControlFlowAnalysisTest::testInstanceOf
+ --> junit.framework.AssertionFailedError: No cross edges found
+ - com.google.javascript.jscomp.DisambiguatePropertiesTest::testSupertypeReferenceOfSubtypeProperty
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.ControlFlowAnalysis, com.google.javascript.jscomp.DisambiguateProperties
+
+Prompt-01 test plan:
+TARGETS: ControlFlowAnalysis mayThrowException/exception edges for INSTANCEOF expressions. 
+TARGETS: DisambiguateProperties property type collection/renaming across supertype-subtype references. 
+ORACLES: Existing trigger assertions: INSTANCEOF has cross edges; throwing INSTANCEOF does not mark code unreachable. 
+ORACLES: Existing DisambiguatePropertiesTest assertion for supertype reference of subtype property. 
+CASES: INSTANCEOF normal expression and INSTANCEOF whose evaluation can throw, inside reachable statements. 
+CASES: Exception-handler and no-handler contexts; verify CFG reachability/cross-edge behavior through existing tests. 
+CASES: Property declared on subtype, referenced through supertype; verify disambiguation outcome via test harness. 
+RISKS: Private CFG helpers require compiler AST/test utilities rather than direct unit calls. 
+RISKS: Available context omits exact expected renamed property strings and full type-system behavior.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.ControlFlowAnalysis (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+final class ControlFlowAnalysis implements Callback, CompilerPass {
+@Override
+private final Deque<Node> exceptionHandler = new ArrayDeque<Node>();
+private final Multimap<Node, Node> finallyMap = HashMultimap.create();
+public void process(Node externs, Node root) {
+private void prioritizeFromEntryNode(DiGraphNode<Node, Branch> entry) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void handleIf(Node node) {
+private void handleWhile(Node node) {
+private void handleDo(Node node) {
+private void handleFor(Node forNode) {
+private void handleSwitch(Node node) {
+private void handleCase(Node node) {
+private void handleDefault(Node node) {
+private void handleWith(Node node) {
+private void handleStmtList(Node node) {
+private void handleFunction(Node node) {
+private void handleExpr(Node node) {
+private void handleThrow(Node node) {
+private void handleTry(Node node) {
+private void handleCatch(Node node) {
+private void handleBreak(Node node) {
+private void handleContinue(Node node) {
+private void handleReturn(Node node) {
+private void handleStmt(Node node) {
+private Node computeFollowNode(Node node) {
+private Node computeFollowNode(Node fromNode, Node node) {
+private static Node computeFallThrough(Node n) {
+private void connectToPossibleExceptionHandler(Node cfgNode, Node target) {
+private static Node getNextSiblingOfType(Node first, int ... types) {
+private static boolean matchLabel(Node target, String label) {
+private static boolean mayThrowException(Node n) {
+static boolean isBreakStructure(Node n, boolean labeled) {
+static boolean isContinueStructure(Node n) {
+private static class AstControlFlowGraph extends ControlFlowGraph<Node> {
+private int getPosition(DiGraphNode<Node, Branch> n) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.NodeTraversal.Callback;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphNode;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.ArrayDeque;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+
+/* METHOD ControlFlowAnalysis */
+ControlFlowAnalysis(AbstractCompiler compiler,
+ boolean shouldTraverseFunctions) {
+ this.compiler = compiler;
+ this.shouldTraverseFunctions = shouldTraverseFunctions;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ switch (n.getType()) {
+ case Token.IF:
+ handleIf(n);
+ return;
+ case Token.WHILE:
+ handleWhile(n);
+ return;
+ case Token.DO:
+ handleDo(n);
+ return;
+ case Token.FOR:
+ handleFor(n);
+ return;
+ case Token.SWITCH:
+ handleSwitch(n);
+ return;
+ case Token.CASE:
+ handleCase(n);
+ return;
+ case Token.DEFAULT:
+ handleDefault(n);
+ return;
+ case Token.BLOCK:
+ case Token.SCRIPT:
+ handleStmtList(n);
+ return;
+ case Token.FUNCTION:
+ handleFunction(n);
+ return;
+ case Token.EXPR_RESULT:
+ handleExpr(n);
+ return;
+ case Token.THROW:
+ handleThrow(n);
+ return;
+ case Token.TRY:
+ handleTry(n);
+ return;
+ case Token.CATCH:
+ handleCatch(n);
+ return;
+ case Token.BREAK:
+ handleBreak(n);
+ return;
+ case Token.CONTINUE:
+ handleContinue(n);
+ return;
+ case Token.RETURN:
+ handleReturn(n);
+ return;
+ case Token.WITH:
+ handleWith(n);
+ return;
+ case Token.LABEL:
+ return;
+ default:
+ handleStmt(n);
+ return;
+ }
+ }
+
+/* METHOD compare */
+@Override
+ public int compare(
+ DiGraphNode<Node, Branch> a, DiGraphNode<Node, Branch> b) {
+ return astPosition.get(a.getValue()) - astPosition.get(b.getValue());
+ }
+
+/* METHOD shouldTraverse */
+@Override
+ public boolean shouldTraverse(
+ NodeTraversal nodeTraversal, Node n, Node parent) {
+ astPosition.put(n, astPositionCounter++);
+
+ swit
+...[truncated deterministically]...
+== cfg.getEntry().getValue()) {
+ exceptionHandler.push(n);
+ return true;
+ }
+ return false;
+ case Token.TRY:
+ exceptionHandler.push(n);
+ return true;
+ }
+
+ /*
+ * We are going to stop the traversal depending on what the node's parent
+ * is.
+ *
+ * We are only interested in adding edges between nodes that change control
+ * flow. The most obvious ones are loops and IF-ELSE's. A statement
+ * transfers control to its next sibling.
+ *
+ * In case of an expression tree, there is no control flow within the tree
+ * even when there are short circuited operators and conditionals. When we
+ * are doing data flow analysis, we will simply synthesize lattices up the
+ * expression tree by finding the meet at each expression node.
+ *
+ * For example: within a Token.SWITCH, the expression in question does not
+ * change the control flow and need not to be considered.
+ */
+ if (parent != null) {
+ switch (parent.getType()) {
+ case Token.FOR:
+ // Only traverse the body of the for loop.
+ return n == parent.getLastChild();
+
+ // Skip the conditions.
+ case Token.IF:
+ case Token.WHILE:
+ case Token.WITH:
+ return n != parent.getFirstChild();
+ case Token.DO:
+ return n != parent.getFirstChild().getNext();
+ // Only traverse the body of the cases
+ case To
+...[truncated deterministically]...
+.FUNCTION:
+ return n == parent.getFirstChild().getNext().getNext();
+ case Token.CONTINUE:
+ case Token.BREAK:
+ case Token.EXPR_RESULT:
+ case Token.VAR:
+ case Token.RETURN:
+ case Token.THROW:
+ return false;
+ case Token.TRY:
+ /* Just before we are about to visit the second child of the TRY node,
+ * we know that we will be visiting either the CATCH or the FINALLY.
+ * In other words, we know that the post order traversal of the TRY
+ * block has been finished, no more exceptions can be caught by the
+ * handler at this TRY block and should be taken out of the stack.
+ */
+ if (n == parent.getFirstChild().getNext()) {
+ Preconditions.checkState(exceptionHandler.peek() == parent);
+ exceptionHandler.pop();
+ }
+ }
+ }
+ return true;
+ }
+
+===== com.google.javascript.jscomp.DisambiguateProperties (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class DisambiguateProperties<T> implements CompilerPass {
+DisambiguateProperties.class.getName());
+private class Property {
+final Map<Node, T> rootTypes = Maps.newHashMap();
+checkState(!skipRenaming, "Attempt to record skipped property: %s", name);
+private Map<String, Property> properties = Maps.newHashMap();
+public void process(Node externs, Node root) {
+private void addInvalidatingType(JSType type) {
+protected Property getProperty(String name) {
+private abstract class AbstractScopingCallback implements ScopedCallback {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+protected StaticScope<T> getScope() {
+private class FindExternProperties extends AbstractScopingCallback {
+@Override public void visit(NodeTraversal t, Node n, Node parent) {
+private class FindRenameableProperties extends AbstractScopingCallback {
+@Override
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void handleGetProp(NodeTraversal t, Node n) {
+private void handleObjectLit(NodeTraversal t, Node n) {
+private Map<T, String> buildPropNames(UnionFind<T> types, String name) {
+private interface TypeSystem<T> {
+private static class JSTypeSystem implements TypeSystem<JSType> {
+public JSTypeSys
+...[truncated deterministically]...
+stem(TightenTypes tt, CodingConvention convention) {
+@Override public StaticScope<ConcreteType> getRootScope() {
+@Override public StaticScope<ConcreteType> getFunctionScope(Node decl) {
+@Override public boolean isInvalidatingType(ConcreteType type) {
+public ImmutableSet<ConcreteType> getTypesToSkipForType(ConcreteType type) {
+@Override public boolean isTypeToSkip(ConcreteType type) {
+public ConcreteType restrictByNotNullOrUndef
+...[truncated deterministically]...
+(ConcreteType type) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import static com.google.common.base.Preconditions.checkState;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.ConcreteType.ConcreteFunctionType;
+import com.google.javascript.jscomp.ConcreteType.ConcreteInstanceType;
+import com.google.javascript.jscomp.ConcreteType.ConcreteUnionType;
+import com.google.javascript.jscomp.ConcreteType.ConcreteUniqueType;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.TypeValidator.TypeMismatch;
+import com.google.javascript.jscomp.graph.StandardUnionFind;
+import com.google.javascript.jscomp.graph.UnionFind;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionPrototypeType;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.StaticScope;
+import com.google.javascript.rhino.jstype.UnionType;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
+import java.util.logging.Logger;
+class DisambiguateProperties<T> implements CompilerPass {
+
+/* METHOD DisambiguateProperties */
+private DisambiguateProperties(AbstractCompiler compiler,
+ TypeSystem<T> typeSystem) {
+ this.compiler = compiler;
+ this.typeSystem = typeSystem;
+ }
+
+/* METHOD renameProperties */
+void renameProperties() {
+ int propsRenamed = 0, propsSkipped = 0, instancesRenamed = 0,
+ i
+...[truncated deterministically]...
+values()) {
+ if (prop.shouldRename()) {
+ Map<T, String> propNames = buildPropNames(prop.getTypes(), prop.name);
+
+ ++propsRenamed;
+ prop.expandTypesToSkip();
+ UnionFind<T> types = prop.getTypes();
+ for (Node node : prop.renameNodes) {
+ T rootType = prop.rootTypes.get(node);
+ if (prop.shouldRename(rootType)) {
+ String newName = propNames.get(rootType);
+ node.setString(newName);
+ compiler.reportCodeChange();
+ ++instancesRenamed;
+ } else {
+ ++instancesSkipped;
+ }
+ }
+ } else {
+ if (prop.skipRenaming) {
+ ++propsSkipped;
+ } else {
+ ++singleTypeProps;
+ }
+ }
+ }
+ logger.info("Renamed " + instancesRenamed + " instances of "
+ + propsRenamed + " properties.");
+ logger.info("Skipped renaming " + instancesSkipped + " invalidated "
+ + "properties, " + propsSkipped + " instances of properties "
+ + "that were skipped for specific types and " + singleTypeProps
+ + " properties that were referenced from only one type.");
+ }
+
+/* METHOD process */
+public void process(Node externs, Node root) {
+ for (TypeMismatch mis : compiler.getTypeValidator().getMismatches()) {
+ addInvalidatingType(mis.typeA);
+ addInvalidatingType(mis.typeB);
+ }
+
+ StaticScope<T> scope = typeSystem.getRootScope();
+ NodeTraversal.traverse(compiler, externs, new FindExternProperties());
+ NodeTraversal.traverse(compiler, root, new FindRenameableProperties());
+ renameProperties();
+ }
+
+/* METHOD handleObjectLit */
+private void handleObjectLit(NodeTraversal t, Node n) {
+ Node child = n.getFirstChild();
+ while (child != null) {
+ if (child.getType() == Token.STRING) {
+ // We should never see a mix of numbers and strings.
+ String name = child.getString();
+ T type = typeSystem.getType(getScope(), n, name);
+
+ Property prop = getProperty(name);
+ if (!prop.scheduleRenaming(child,
+ processProperty(t, prop,
+...[truncated deterministically]...
+gs) {
+ compiler.report(JSError.make(
+ t.getSourceName(), child, INVALIDATION, name,
+ (type == null ? "null" : type.toString()), n.toString()));
+ }
+ }
+ }
+
+ child = child.getNext().getNext();
+ }
+ }

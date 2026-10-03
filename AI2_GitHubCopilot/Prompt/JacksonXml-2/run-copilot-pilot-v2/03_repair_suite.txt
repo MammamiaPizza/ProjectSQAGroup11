@@ -1,0 +1,282 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonXml  Bug: 2  Version: JacksonXml-2b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 196
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.misc.XmlTextTest::testMixedContent
+ --> junit.framework.AssertionFailedError: expected:<27> but was:<0>
+Modified: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream
+
+Available API/signatures:
+[com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream | java]
+package com.fasterxml.jackson.dataformat.xml.deser;
+public class XmlTokenStream
+public final static int XML_START_ELEMENT = 1;
+public final static int XML_END_ELEMENT = 2;
+public final static int XML_ATTRIBUTE_NAME = 3;
+public final static int XML_ATTRIBUTE_VALUE = 4;
+public final static int XML_TEXT = 5;
+public final static int XML_END = 6;
+final protected XMLStreamReader2 _xmlReader;
+final protected Object _sourceReference;
+protected int _currentState;
+protected int _attributeCount;
+protected int _nextAttributeIndex = 0;
+protected String _localName;
+protected String _namespaceURI;
+protected String _textValue;
+protected int _repeatElement;
+protected ElementWrapper _currentWrapper;
+protected String _nextLocalName;
+protected String _nextNamespaceURI;
+public XmlTokenStream(XMLStreamReader xmlReader, Object sourceRef)
+public XMLStreamReader2 getXmlReader() {
+public int next() throws IOException
+public void skipEndElement() throws IOException
+public int getCurrentToken() { return _currentState; }
+public String getText() { return _textValue; }
+public String getLocalName() { return _localName; }
+public String getNamespaceURI() { return _namespaceURI; }
+public boolean hasAttributes() {
+public void closeCompletely() throws IOException
+public void close() throws IOException
+public JsonLocation getCurrentLocation() {
+public JsonLocation getTokenLocation() {
+protected void repeatStartElement()
+protected void skipAttributes()
+protected String convertToString() throws IOException
+private final int _next() throws XMLStreamException
+private final String _collectUntilTag() throws XMLStreamException
+private final int _skipUntilTag() throws XMLStreamException
+private final int _initStartElement() throws XMLStreamException
+final String ns = _xmlReader.getNamespaceURI();
+final String localName = _xmlReader.getLocalName();
+protected int _handleRepeatElement() throws IOException
+private final int _handleEndElement()
+private JsonLocation _extractLocation(XMLStreamLocation2 location)
+@Override
+public String toString()
+
+Generated JUnit Test:
+package com.fasterxml.jackson.dataformat.xml.deser;
+
+ import java.io.*;
+ import javax.xml.stream.*;
+
+ import org.junit.*;
+ import static org.junit.Assert.*;
+
+ public class XmlTokenStreamTest {
+
+     private XMLStreamReader createReader(String xml) throws XMLStreamException {
+         XMLInputFactory factory = XMLInputFactory.newInstance();
+         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+         return factory.createXMLStreamReader(new StringReader(xml));
+     }
+
+     private XmlTokenStream createTokenStream(String xml) throws XMLStreamException {
+         return new XmlTokenStream(createReader(xml), null);
+     }
+
+     @Test
+     public void testSimpleText() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root>hello</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("hello", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testMixedContentTextBeforeChild() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root>abc<child/></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("abc", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testMixedContentTextAfterChild() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root><child/>def</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("def", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testMixedContentTextBeforeAndAfter() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root>abc<child/>def</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("abc", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("def", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testEmptyElement() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testWhitespaceOnly() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root>   </root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         // whitespace-only text should be ignored (not produce XML_TEXT)
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testMultipleMixedSegments() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root>a<b/>c<d/>e</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("a", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("b", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("b", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("c", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("d", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("d", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("e", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testCDATAText() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root><![CDATA[hello]]></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("hello", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testRepeatStartElement() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root><list><item>value</item></list></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("list", tokens.getLocalName());
+         tokens.repeatStartElement();
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("list", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("item", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("value", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("item", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("list", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testRepeatStartElementWithText() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root><elem>text1<child/>text2</elem></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("elem", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("text1", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("child", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("text2", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("elem", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+
+     @Test
+     public void testNestedMixedContent() throws Exception {
+         XmlTokenStream tokens = createTokenStream("<root>a<b>c<d/>e</b>f</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("a", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("b", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("c", tokens.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, tokens.next());
+         assertEquals("d", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("d", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("e", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("b", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, tokens.next());
+         assertEquals("f", tokens.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, tokens.next());
+         assertEquals("root", tokens.getLocalName());
+         assertEquals(XmlTokenStream.XML_END, tokens.next());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 11
+ - com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testSimpleText
+ - com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testMixedContentTextBeforeAndAfter
+ - com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testMixedContentTextBeforeChild
+Failing generated tests: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testCDATAText, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testEmptyElement, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testMixedContentTextAfterChild, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testMixedContentTextBeforeAndAfter, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testMixedContentTextBeforeChild, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testMultipleMixedSegments, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testNestedMixedContent, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testRepeatStartElement, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testRepeatStartElementWithText, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testSimpleText, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamTest::testWhitespaceOnly

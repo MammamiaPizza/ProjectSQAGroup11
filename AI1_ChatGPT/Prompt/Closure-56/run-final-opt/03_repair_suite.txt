@@ -1,0 +1,122 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 56  Version: Closure-56b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 511
+Trigger failures:
+- com.google.javascript.jscomp.JSCompilerSourceExcerptProviderTest::testExceptNoNewLine
+ --> junit.framework.ComparisonFailure: expected:<foo2:third line> but was:<null>
+ - com.google.javascript.jscomp.JsMessageExtractorTest::testSyntaxError1
+ --> junit.framework.AssertionFailedError
+ - com.google.javascript.jscomp.JsMessageExtractorTest::testSyntaxError2
+ --> junit.framework.AssertionFailedError
+Modified: com.google.javascript.jscomp.SourceFile
+
+Available API/signatures:
+[com.google.javascript.jscomp.SourceFile | java]
+package com.google.javascript.jscomp;
+public class SourceFile implements StaticSourceFile, Serializable {
+public interface Generator {
+public String getCode();
+public SourceFile(String fileName) {
+@Override
+public int getLineOffset(int lineno) {
+private void findLineOffsets() {
+public String getCode() throws IOException {
+public Reader getCodeReader() throws IOException {
+@VisibleForTesting
+private void setCode(String sourceCode) {
+public String getOriginalPath() {
+public void setOriginalPath(String originalPath) {
+public void clearCachedSource() {
+public String getName() {
+public boolean isExtern() {
+public String getLine(int lineNumber) {
+public Region getRegion(int lineNumber) {
+public String toString() {
+public static SourceFile fromFile(String fileName, Charset c) {
+public static SourceFile fromFile(String fileName) {
+public static SourceFile fromFile(File file, Charset c) {
+public static SourceFile fromFile(File file) {
+public static SourceFile fromCode(String fileName, String code) {
+public static SourceFile fromInputStream(String fileName, InputStream s)
+public static SourceFile fromReader(String fileName, Reader r)
+static class Preloaded extends SourceFile {
+static class Generated extends SourceFile {
+public synchronized String getCode() throws IOException {
+static class OnDisk extends SourceFile {
+protected String inputCharset = Charsets.UTF_8.name();
+public void setCharset(Charset c) {
+public Charset getCharset() {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
+
+import org.junit.Test;
+
+public class SourceFileFinalLineTest {
+
+  @Test
+  public void testGetLineReturnsFinalUnterminatedLineAndSupportsEarlierLookups() {
+    SourceFile source =
+        SourceFile.fromCode("test.js", "foo0:first line\nfoo1:second line\nfoo2:third line");
+
+    assertEquals("foo2:third line", source.getLine(3));
+    assertEquals("foo1:second line", source.getLine(2));
+    assertEquals("foo0:first line", source.getLine(1));
+    assertNull(source.getLine(4));
+  }
+
+  @Test
+  public void testGetLineReturnsOnlyLineWhenFileHasNoNewline() {
+    SourceFile source = SourceFile.fromCode("single.js", "var value = 1;");
+
+    assertEquals("var value = 1;", source.getLine(1));
+    assertNull(source.getLine(2));
+  }
+
+  @Test
+  public void testGetRegionForFinalUnterminatedLineContainsThatLine() {
+    SourceFile source =
+        SourceFile.fromCode("region.js", "first line\nsecond line\nfinal unterminated line");
+
+    Region region = source.getRegion(3);
+
+    assertNotNull(region);
+    assertEquals(true, region.getSourceExcerpt().contains("final unterminated line"));
+    assertFalse(region.getSourceExcerpt().contains("\r"));
+  }
+
+  @Test
+  public void testLineOffsetsIncludeFinalUnterminatedLine() {
+    SourceFile source = SourceFile.fromCode("offsets.js", "one\ntwo\nthree");
+
+    assertEquals(0, source.getLineOffset(1));
+    assertEquals(4, source.getLineOffset(2));
+    assertEquals(8, source.getLineOffset(3));
+
+    try {
+      source.getLineOffset(4);
+      fail("Expected an exception for a line beyond the final unterminated line");
+    } catch (IllegalArgumentException expected) {
+      assertNotNull(expected.getMessage());
+    }
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.google.javascript.jscomp.SourceFileFinalLineTest::testGetRegionForFinalUnterminatedLineContainsThatLine
+
+Extract test suite......................................................... OK
+Failing generated tests: com.google.javascript.jscomp.SourceFileFinalLineTest::testGetRegionForFinalUnterminatedLineContainsThatLine

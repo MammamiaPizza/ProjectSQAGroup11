@@ -1,0 +1,298 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 87  Version: Jsoup-87b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1149
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::preservedCaseLinksCantNest
+ --> junit.framework.AssertionFailedError: expected:<<A> ONE <[/A> <A> Two] </A>> but was:<<A> ONE <[A> Two </A>] </A>>
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState, org.jsoup.parser.Tag
+
+Available API/signatures:
+[org.jsoup.nodes.Element | java]
+package org.jsoup.nodes;
+public class Element extends Node {
+private static final List<Node> EMPTY_NODES = Collections.emptyList();
+private static final Pattern classSplit = Pattern.compile("\\s+");
+public Element(String tag) {
+public Element(Tag tag, String baseUri, Attributes attributes) {
+public Element(Tag tag, String baseUri) {
+protected List<Node> ensureChildNodes() {
+@Override
+protected boolean hasAttributes() {
+public Attributes attributes() {
+public String baseUri() {
+protected void doSetBaseUri(String baseUri) {
+public int childNodeSize() {
+public String nodeName() {
+public String tagName() {
+public Element tagName(String tagName) {
+public Tag tag() {
+public boolean isBlock() {
+public String id() {
+public Element attr(String attributeKey, String attributeValue) {
+public Element a
+...[truncated deterministically]...
+ndable accum, int depth, final Document.OutputSettings out) throws IOException {
+public String html() {
+public <T extends Appendable> T html(T appendable) {
+public Element html(String html) {
+public Element clone() {
+public Element shallowClone() {
+protected Element doClone(Node parent) {
+private static final class NodeList extends ChangeNotifyingArrayList<Node> {
+public void onContentsChanged() {
+
+[org.jsoup.parser.HtmlTreeBuilder | java]
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+public static final int MaxScopeSearchDepth = 100; // prevents the parser bogging down in exceptionally broken pages
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, Par
+...[truncated deterministically]...
+rivate boolean selfClosing = false; // can self close (<foo />). used for unknown tags that self close, without forcing them as empty.
+private Tag(String tagName) {
+public String getName() {
+public static Tag valueOf(String tagName, ParseSettings settings) {
+public static Tag valueOf(String tagName) {
+public boolean isBlock() {
+public boolean formatAsBlock() {
+public boolean canContainBlock() {
+public boolean isInline() {
+public boolean isData() {
+public boolean isEmpty() {
+public boolean isSelfClosing() {
+public boolean isKnownTag() {
+public static boolean isKnownTag(String tagName) {
+public boolean preserveWhitespace() {
+public boolean isFormListed() {
+public boolean isFormSubmittable() {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+public String toString() {
+private static void register(Tag tag) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.Element;
+ import org.jsoup.nodes.Node;
+ import org.jsoup.nodes.TextNode;
+ import org.junit.Test;
+
+ import java.util.List;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertTrue;
+
+ /**
+  * Verifies that <a> (anchor) elements are never nested – an open <a> must be implicitly
+  * closed before a new <a> start tag, regardless of tag‑name case (bug #1149).
+  */
+ public class LinkNestingTest {
+
+     private Document parse(String html) {
+         return Jsoup.parse(html);
+     }
+
+     private Document parsePreserveCase(String html) {
+         return Parser.htmlParser().settings(ParseSettings.preserveCase).parseInput(html, "");
+     }
+
+     private Element body(Document doc) {
+         return doc.body();
+     }
+
+     // --------------------------------------------------------------------
+     // Lowercase / uppercase / mixed case with normalised (lowercase) tags
+     // --------------------------------------------------------------------
+
+     @Test
+     public void testLowerCaseLinkCantNest() {
+         Document doc = parse("<a>one<a>two</a>three</a>");
+         List<Node> children = body(doc).childNodes();
+         assertEquals(3, children.size());
+         Element first = (Element) children.get(0);
+         assertEquals("a", first.tagName());
+         assertEquals("one", first.text());
+         Element second = (Element) children.get(1);
+         assertEquals("a", second.tagName());
+         assertEquals("two", second.text());
+         assertTrue(children.get(2) instanceof TextNode);
+         assertEquals("three", ((TextNode) children.get(2)).text());
+     }
+
+     @Test
+     public void testUpperCaseLinkCantNest() {
+         Document doc = parse("<A>one<A>two</A>three</A>");
+         List<Node> children = body(doc).childNodes();
+         assertEquals(3, children.size());
+         assertEquals("one", ((Element) children.get(0)).text());
+         assertEquals("two", ((Element) children.get(1)).text());
+         // both are normalised to lowercase
+         assertEquals("a", ((Element) children.get(0)).tagName());
+         assertEquals("a", ((Element) children.get(1)).tagName());
+     }
+
+     @Test
+     public void testMixedCaseLinkCantNest() {
+         Document doc = parse("<A>one<a>two</a>three</A>");
+         List<Node> children = body(doc).childNodes();
+         assertEquals(3, children.size());
+         assertEquals("one", ((Element) children.get(0)).text());
+         assertEquals("two", ((Element) children.get(1)).text());
+         assertEquals("a", ((Element) children.get(0)).tagName());
+         assertEquals("a", ((Element) children.get(1)).tagName());
+     }
+
+     // --------------------------------------------------------------------
+     // Preserved‑case settings – tag names keep original case
+     // --------------------------------------------------------------------
+
+     @Test
+     public void testPreservedCaseLinksCantNest() {
+         Document doc = parsePreserveCase("<A>one<A>two</A>three</A>");
+         List<Node> children = body(doc).childNodes();
+         assertEquals(3, children.size());
+         Element first = (Element) children.get(0);
+         assertEquals("A", first.tagName()); // case preserved
+         assertEquals("one", first.text());
+         Element second = (Element) children.get(1);
+         assertEquals("A", second.tagName());
+         assertEquals("two", second.text());
+         TextNode text = (TextNode) children.get(2);
+         assertEquals("three", text.text());
+     }
+
+     @Test
+     public void testPreservedCaseMixedCantNest() {
+         Document doc = parsePreserveCase("<A>one<a>two</a>three</A>");
+         List<Node> children = body(doc).childNodes();
+         assertEquals(3, children.size());
+         Element first = (Element) children.get(0);
+         assertEquals("A", first.tagName());
+         assertEquals("one", first.text());
+         Element second = (Element) children.get(1);
+         assertEquals("a", second.tagName()); // inner keeps its original case
+         assertEquals("two", second.text());
+     }
+
+     // --------------------------------------------------------------------
+     // Edge cases
+     // --------------------------------------------------------------------
+
+     @Test
+     public void testLinksWithAttributes() {
+         Document doc = parse("<a href='one'><a href='two'>text</a></a>");
+         Element body = body(doc);
+         assertEquals(2, body.children().size());
+         Element first = body.child(0);
+         assertEquals("a", first.tagName());
+         assertEquals("one", first.attr("href"));
+         assertEquals("", first.text()); // outer <a> was implicitly closed, so it has no content
+         Element second = body.child(1);
+         assertEquals("a", second.tagName());
+         assertEquals("two", second.attr("href"));
+         assertEquals("text", second.text());
+     }
+
+     @Test
+     public void testEmptyLinks() {
+         Document doc = parse("<a></a><a></a>");
+         Element body = body(doc);
+         assertEquals(2, body.children().size());
+         assertEquals("a", body.child(0).tagName());
+         assertEquals("a", body.child(1).tagName());
+     }
+
+     @Test
+     public void testDeepNesting() {
+         Document doc = parse("<a><A><a>text</a></A></a>");
+         Element body = body(doc);
+         // At every <a>/<A> start the previous <a> is closed → three siblings
+         assertEquals(3, body.children().size());
+         assertEquals("a", body.child(0).tagName());
+         assertTrue(body.child(0).text().isEmpty());
+         assertEquals("a", body.child(1).tagName());
+         assertTrue(body.child(1).text().isEmpty());
+         assertEquals("a", body.child(2).tagName());
+         assertEquals("text", body.child(2).text());
+     }
+
+     @Test
+     public void testLinkNestingDoesNotBreakOtherInlineElements() {
+         Document doc = parse("<a><b>text</b></a>");
+         Element body = body(doc);
+         assertEquals(1, body.children().size());
+         Element a = body.child(0);
+         assertEquals("a", a.tagName());
+         assertEquals(1, a.children().size());
+         assertEquals("b", a.child(0).tagName());
+     }
+
+     @Test
+     public void testLinkInsideParagraphNesting() {
+         Document doc = parse("<p><a>one<a>two</a></a></p>");
+         Element p = body(doc).child(0);
+         assertEquals("p", p.tagName());
+         assertEquals(2, p.children().size());
+         assertEquals("a", p.child(0).tagName());
+         assertEquals("one", p.child(0).text());
+         assertEquals("a", p.child(1).tagName());
+         assertEquals("two", p.child(1).text());
+     }
+
+     @Test
+     public void testMultipleLinksWithWhitespaceBetween() {
+         Document doc = parse("<a>first</a> <a>second</a>");
+         Element body = body(doc);
+         assertEquals(3, body.childNodeSize());
+         assertEquals("a", body.child(0).tagName());
+         assertEquals("first", body.child(0).text());
+         assertTrue(body.childNode(1) instanceof TextNode);
+         assertEquals(" ", ((TextNode) body.childNode(1)).text());
+         assertEquals("a", body.child(2).tagName());
+     }
+
+     @Test
+     public void testNestedLinkWithTextBeforeInnerLink() {
+         // outer <a> has text, then inner <a>. Outer must close before inner, so text stays in
+outer.
+         Document doc = parse("<a>before<a>inner</a>after</a>");
+         List<Node> children = body(doc).childNodes();
+         assertEquals(3, children.size());
+         Element first = (Element) children.get(0);
+         assertEquals("a", first.tagName());
+         assertEquals("before", first.text());
+         Element second = (Element) children.get(1);
+         assertEquals("a", second.tagName());
+         assertEquals("inner", second.text());
+         assertEquals("after", ((TextNode) children.get(2)).text());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-87f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-87f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-87f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-87f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-87f-copilot/.test_suite/org/jsoup/parser/LinkNestingTest.java:188: error: package outer does not exist
+ [javac] outer.
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

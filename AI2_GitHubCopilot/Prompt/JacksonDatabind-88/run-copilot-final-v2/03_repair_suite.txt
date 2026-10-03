@@ -1,0 +1,193 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 88  Version: JacksonDatabind-88b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1735
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.GenericTypeId1735Test::testNestedTypeCheck1735
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([not subtype of]): got one (of type com.fasterxml.jackson.databind.JsonMappingException) with message "Problem deserializing property 'w' (expected type: [simple type, class com.fasterxml.jackson.databind.jsontype.GenericTypeId1735Test$Payload1735]; actual type: java.util.HashMap), problem: Can not set com.fasterxml.jackson.databind.jsontype.GenericTypeId1735Test$Payload1735 field com.fasterxml.jackson.databind.jsontype.GenericTypeId1735Test$Wrapper1735.w to java.util.HashMap
+Modified: com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolver
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolver | java]
+package com.fasterxml.jackson.databind.jsontype.impl;
+public class ClassNameIdResolver
+public ClassNameIdResolver(JavaType baseType, TypeFactory typeFactory) {
+@Override
+public JsonTypeInfo.Id getMechanism() { return JsonTypeInfo.Id.CLASS; }
+public void registerSubtype(Class<?> type, String name) {
+public String idFromValue(Object value) {
+public String idFromValueAndType(Object value, Class<?> type) {
+public JavaType typeFromId(DatabindContext context, String id) throws IOException {
+protected JavaType _typeFromId(String id, DatabindContext ctxt) throws IOException
+/* 30-Jan-2010, tatu: Most ids are basic class names; so let's first
+return dctxt.handleUnknownTypeId(_baseType, id, this, "no such class found");
+throw new IllegalArgumentException("Invalid type id '"+id+"' (for id type 'Id.class'): "+e.getMessage(), e);
+protected final String _idFrom(Object value, Class<?> cls, TypeFactory typeFactory)
+if (Enum.class.isAssignableFrom(cls)) {
+if (!cls.isEnum()) { // means that it's sub-class of base enum, so:
+str = typeFactory.constructCollectionType(EnumSet.class, enumClass).toCanonical();
+Class<?> valueClass = Object.class;
+str = typeFactory.constructMapType(EnumMap.class, enumClass, valueClass).toCanonical();
+public String getDescForKnownTypeIds() {
+return "class name used as type id";
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.jsontype.impl;
+
+ import static org.junit.Assert.*;
+ import static org.hamcrest.CoreMatchers.*;
+
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ import com.fasterxml.jackson.databind.*;
+ import org.junit.Rule;
+ import org.junit.Test;
+ import org.junit.rules.ExpectedException;
+
+ /**
+  * Tests for {@link ClassNameIdResolver} to verify that {@code typeFromId} throws an exception
+  * containing "not subtype of" when the resolved type is not assignment-compatible with the
+  * declared base type (defect report #1735 / bug #88).
+  */
+ public class ClassNameIdResolverTest {
+
+     @Rule
+     public ExpectedException thrown = ExpectedException.none();
+
+     // ---- Helper types for subtype checks ----
+
+     static class Base { }
+     static class Sub extends Base { }
+     static class Unrelated { }
+
+     static class BaseWrapper {
+         @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS)
+         public Base value;
+     }
+
+     static class NumberWrapper {
+         @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS)
+         public Number value;
+     }
+
+     static class CharSequenceWrapper {
+         @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS)
+         public CharSequence value;
+     }
+
+     // ---- Tests: non-subtype class ids ----
+
+     @Test
+     public void testNonSubtypeClassId() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage(containsString("not subtype of"));
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"java.util.HashMap\"}}";
+         mapper.readValue(json, BaseWrapper.class);
+     }
+
+     @Test
+     public void testUnrelatedClassId() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage(containsString("not subtype of"));
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"" + Unrelated.class.getName() + "\"}}";
+         mapper.readValue(json, BaseWrapper.class);
+     }
+
+     @Test
+     public void testNonSubtypeWithNumberBase() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage(containsString("not subtype of"));
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"java.lang.String\"}}";
+         mapper.readValue(json, NumberWrapper.class);
+     }
+
+     @Test
+     public void testNonSubtypeGenericId() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage(containsString("not subtype of"));
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"java.util.ArrayList<java.util.HashMap>\"}}";
+         mapper.readValue(json, BaseWrapper.class);
+     }
+
+     // ---- Tests: valid subtype class ids ----
+
+     @Test
+     public void testValidSubtypeClassId() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"" + Sub.class.getName() + "\"}}";
+         BaseWrapper result = mapper.readValue(json, BaseWrapper.class);
+         assertNotNull("value should not be null", result.value);
+         assertTrue("value should be instance of Sub", result.value instanceof Sub);
+     }
+
+     @Test
+     public void testBaseTypeItselfAsId() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"" + Base.class.getName() + "\"}}";
+         BaseWrapper result = mapper.readValue(json, BaseWrapper.class);
+         assertNotNull("value should not be null", result.value);
+         assertTrue("value should be instance of Base", result.value instanceof Base);
+     }
+
+     @Test
+     public void testValidSubtypeForNumber() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"java.lang.Integer\",\"int\":42}}";
+         NumberWrapper result = mapper.readValue(json, NumberWrapper.class);
+         assertNotNull("value should not be null", result.value);
+         assertTrue(result.value instanceof Integer);
+     }
+
+     @Test
+     public void testValidSubtypeForInterface() throws Exception {
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"java.lang.String\",\"str\":\"hello\"}}";
+         CharSequenceWrapper result = mapper.readValue(json, CharSequenceWrapper.class);
+         assertNotNull("value should not be null", result.value);
+         assertTrue(result.value instanceof String);
+     }
+
+     // ---- Tests: unknown / invalid class names ----
+
+     @Test
+     public void testUnknownClassId() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage(containsString("no such class found"));
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"com.example.NonExistent\"}}";
+         mapper.readValue(json, BaseWrapper.class);
+     }
+
+     @Test
+     public void testEmptyClassId() throws Exception {
+         // An empty class name should lead to ClassNotFoundException or similar error
+         thrown.expect(JsonMappingException.class);
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"\"}}";
+         mapper.readValue(json, BaseWrapper.class);
+     }
+
+     @Test
+     public void testInvalidGenericSyntax() throws Exception {
+         // Malformed generic id should cause an IAE wrapped in a JsonMappingException
+         thrown.expect(JsonMappingException.class);
+         ObjectMapper mapper = new ObjectMapper();
+         String json = "{\"value\":{\"@class\":\"java.util.ArrayList<\"}}";
+         mapper.readValue(json, BaseWrapper.class);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testValidSubtypeForInterface
+ - com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testValidSubtypeForNumber
+ - com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testNonSubtypeWithNumberBase
+Failing generated tests: com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testNonSubtypeGenericId, com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testNonSubtypeWithNumberBase, com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testValidSubtypeForInterface, com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolverTest::testValidSubtypeForNumber

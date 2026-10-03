@@ -1,0 +1,109 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 44  Version: Jsoup-44b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.parser.TreeBuilder
+Modified: org.jsoup.parser.TreeBuilder
+Triggers: org.jsoup.parser.HtmlParserTest::testInvalidTableContents
+
+Bug/specification summary:
+Bug report: 552
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::testInvalidTableContents
+ --> junit.framework.AssertionFailedError: Search text did not come after comment
+Modified: org.jsoup.parser.TreeBuilder
+
+Prompt-01 test plan:
+TARGETS: process(Token.Comment) via HtmlTreeBuilderState or TreeBuilder; processStartTag(String) for
+table elements
+ORACLES: testInvalidTableContents asserts comment precedes specific text; Jsoup HTML parsing spec
+(WHATWG)
+CASES: table with comment then text; comment before/after <td>; nested table comment; multiple
+comments
+RISKS: No patch access; bug likely in foster-parenting or insertion mode; test both HtmlParser and
+XmlTreeBuilder
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.TreeBuilder (java) =====
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
+import java.util.ArrayList;
+
+/**
+ * @author Jonathan Hedley
+ */
+abstract class TreeBuilder {
+ CharacterReader reader;
+ Tokeniser tokeniser;
+ protected Document doc; // current doc we are building into
+ protected ArrayList<Element> stack; // the stack of open elements
+ protected String baseUri; // current base uri, for creating new elements
+ protected Token currentToken; // currentToken is used only for error tracking.
+ protected ParseErrorList errors; // null when not tracking errors
+
+ private Token.StartTag start = new Token.StartTag(); // start tag to process
+ private Token.EndTag end = new Token.EndTag();
+
+ protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+ Validate.notNull(input, "String input must not be null");
+ Validate.notNull(baseUri, "BaseURI must not be null");
+
+ doc = new Document(baseUri);
+ reader = new CharacterReader(input);
+ this.errors = errors;
+ tokeniser = new Tokeniser(reader, errors);
+ stack = new ArrayList<Element>(32);
+ this.baseUri = baseUri;
+ }
+
+ Document parse(String input, String baseUri) {
+ return parse(input, baseUri, ParseErrorList.noTracking());
+ }
+
+ Document parse(String input, String baseUri, ParseErrorList errors) {
+ initialiseParse(input, baseUri, errors);
+ runParser();
+ return doc;
+ }
+
+ protected void runParser() {
+ while (true) {
+ Token token = tokeniser.read();
+ process(token);
+ token.reset();
+
+ if (token.type == Token.TokenType.EOF)
+ break;
+ }
+ }
+
+ protected abstract boolean process(Token token);
+
+ protected boolean processStartTag(String name) {
+ return process(start.reset().name(name));
+ }
+
+ public boolean processStartTag(String name, Attributes attrs) {
+ start.reset();
+ start.nameAttr(name, attrs);
+ return process(start);
+ }
+
+ protected boolean processEndTag(String name) {
+ return process(end.reset().name(name));
+ }
+
+ protected Element currentElement() {
+ int size = stack.size();
+ return size > 0 ? stack.get(size-1) : null;
+ }
+}

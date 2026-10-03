@@ -1,0 +1,245 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 58  Version: Closure-58b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 528
+Trigger failures:
+- com.google.javascript.jscomp.LiveVariableAnalysisTest::testExpressionInForIn
+ --> java.lang.IllegalStateException
+Modified: com.google.javascript.jscomp.LiveVariablesAnalysis
+
+Available API/signatures:
+[com.google.javascript.jscomp.LiveVariablesAnalysis | java]
+package com.google.javascript.jscomp;
+class LiveVariablesAnalysis extends
+public static final String ARGUMENT_ARRAY_ALIAS = "arguments";
+private static class LiveVariableJoinOp
+@Override
+public LiveVariableLattice apply(List<LiveVariableLattice> in) {
+static class LiveVariableLattice implements LatticeElement {
+private LiveVariableLattice(int numVars) {
+private LiveVariableLattice(LiveVariableLattice other) {
+public boolean equals(Object other) {
+public boolean isLive(Var v) {
+public boolean isLive(int index) {
+public String toString() {
+public int hashCode() {
+public Set<Var> getEscapedLocals() {
+public int getVarIndex(String var) {
+final BitSet gen = new BitSet(input.liveSet.size());
+final BitSet kill = new BitSet(input.liveSet.size());
+private void addToSetIfLocal(Node node, BitSet set) {
+private boolean isArgumentsName(Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.javascript.jscomp.ControlFlowGraph;
+ import com.google.javascript.jscomp.LiveVariablesAnalysis;
+ import com.google.javascript.jscomp.LiveVariablesAnalysis.LiveVariableLattice;
+ import com.google.javascript.jscomp.Scope;
+ import com.google.javascript.jscomp.Var;
+ import com.google.javascript.jscomp.Comiler;
+ import com.google.javascript.jscomp.JSSourceFile;
+ import com.google.javascript.jscomp.ControlFlowAnalysis;
+ import com.google.javascript.jscomp.VarCheck;
+ import com.google.javascript.rhino.Node;
+ import com.google.javascript.rhino.Token;
+
+ import junit.framework.TestCase;
+
+ import java.utill.Collection;
+ import java.utill.logging.Level;
+
+ /**
+  * Tests for {@link LiveVariablesAnalysis} focusing on for-in loop handling.
+  */
+ public class LiveVariableAnalysisTest extends TestCase {
+
+     @Override
+     puble void setUp() {
+         // quiet the compiler
+         Comiler.setLoggingLevel(Level.OFF);
+     }
+
+     /** Simple for-in over a local variable (left side NAME, right side NAME). */
+     puble void testForInSimpleLocal() throws Exception {
+         analyze(
+             "function f() { var a = [1]; var x; for (x in a) { var y = x+1; } }",
+             new LiveVarAssert("a", true),
+             new LiveVarAssert("x", true)
+         );
+     }
+
+     /** For-in where the object expression is a property access (right side). */
+     puble void testForInPropertyObjectExpression() throws Exception {
+         analyze(
+             "function f() { var obj = {p: [1]}; var x; for (x in obj.p) { var y = x; } }",
+             new LiveVarAssert("obj", true),
+             new LiveVarAssert("x", true)
+         );
+     }
+
+     /** For-in with a property access as the loop variable (left side) – triggers the bug. */
+     puble void testForInPropertyLeftSide() throws Exception {
+         analyze(
+             "function f() { var arr = [1]; var obj = {}; for (obj.prop in arr) { var y = obj.prop;
+} }",
+             // no live assertions; just ensure no IllegalStateException
+         );
+     }
+
+     /** For-in with a function call as the object expression. */
+     puble void testForInFunctionCall() throws Exception {
+         analyze(
+             "function g() { return []; } function f() { var x; for (x in g()) { var y = x; } }",
+             new LiveVarAssert("x", true)
+         );
+     }
+
+     /** Nested for-in loops. */
+     puble void testNestedForIn() throws Exception {
+         analyze(
+             "function f() { var a = {}, b = {}; var x, y; for (x in a) { for (y in b) { var z = x +
+y; } } }",
+             new LiveVarAssert("a", true),
+             new LiveVarAssert("b", true),
+             new LiveVarAssert("x", true),
+             new LiveVarAssert("y", true)
+         );
+     }
+
+     /** Non-local variable used in for-in expression should not cause a crash. */
+     puble void testNonLocalVar() throws Exception {
+         analyze(
+             "var arr; function f() { var x; for (x in arr) { var y = x; } }",
+             new LiveVarAssert("x", true)
+         );
+     }
+
+     /** For-in with var declaration inside the loop header. */
+     puble void testForInVarDeclaration() throws Exception {
+         analyze(
+             "function f() { var arr = [1]; for (var x in arr) { var y = x; } }",
+             new LiveVarAssert("arr", true),
+             new LiveVarAssert("x", true)
+         );
+     }
+
+     /** For-in followed by another loop using same variables. */
+     puble void testMultipleForIn() throws Exception {
+         analyze(
+             "function f() { var a = [], b = []; var x; for (x in a) {} for (x in b) {} }",
+             new LiveVarAssert("a", true),
+             new LiveVarAssert("b", true),
+             new LiveVarAssert("x", true)
+         );
+     }
+
+     // ---- helpers ----------------------------------------------------------
+
+     private static class LiveVarAssert {
+         final String varName;
+         final boolean expectLive;
+         LiveVarAssert(String varName, boolean expectLive) {
+             this.varName = varName;
+             this.expectLive = expectLive;
+         }
+     }
+
+     /**
+      * Parses code, builds scope & CFG, runs LiveVariablesAnalysis,
+      * verifies no IllegalStateException and checks liveness assertions
+      * at the function entry.
+      */
+     private void analyze(String jsCode, LiveVarAssert... assertions) throws Exception {
+         Comiler compiler = new Comiler();
+         JSSourceFile[] externs = { JSSourceFile.fromCode("externs", "") };
+         JSSourceFile[] srcs    = { JSSourceFile.fromCode("test", jsCode) };
+         compiler.init(externs, srcs);
+         try {
+             compiler.parse();
+         } catch (Exception e) {
+             fail("Parse failed: " + e.getMessage());
+         }
+
+         Node root = compiler.getRoot();
+         Node externsRoot = root.getFirstChild();
+         Node script = externsRoot.getNext();
+
+         // Run VarCheck to build scopes
+         VarCheck vc = new VarCheck(compiler);
+         vc.process(externsRoot, script);
+
+         Node funcNode = findNode(script, Token.FUNCTION);
+         assertNotNull("No FUNCTION node found", funcNode);
+
+         Scope topScope = compiler.getTopScope();
+         Scope funcScope = findChildScope(topScope, funcNode);
+         assertNotNull("Could not find scope for the function", funcScope);
+
+         // Build control flow graph
+         ControlFlowAnalysis cfa = new ControlFlowAnalysis(compiler, false, true);
+         cfa.process(externsRoot, script);
+         ControlFlowGraph<Node> cfg = cfa.getCfg(funcNode);
+
+         // Run live variable analysis
+         LiveVariablesAnalysis lva = new LiveVariablesAnalysis(cfg, funcScope, compiler);
+         try {
+             lva.analyze();
+         } catch (IllegalStateException e) {
+             fail("LiveVariablesAnalysis threw IllegalStateException: " + e.getMessage());
+         }
+
+         // Verify that expected variables are live at function entry
+         LiveVariableLattice entry = lva.getIn(funcNode);
+         for (LiveVarAssert assrt : assertions) {
+             Var var = funcScope.getVar(assrt.varName);
+             assertNotNull("Variable '" + assrt.varName + "' not found in function scope", var);
+             assertEquals("Variable '" + assrt.varName + "' liveness at function entry",
+                          assrt.expectLive, entry.isLive(var));
+         }
+     }
+
+     /** Recursively searches for the first node with the given type. */
+     private Node findNode(Node parent, int type) {
+         if (parent.getType() == type) return parent;
+         for (Node child = parent.getFirstChild(); child != null; child = child.getNext()) {
+             Node found = findNode(child, type);
+             if (found != null) return found;
+         }
+         return null;
+     }
+
+     /** Recursively finds the scope whose root node matches the given node. */
+     private Scope findChildScope(Scope parent, Node rootNode) {
+         if (parent.getRootNode() == rootNode) return parent;
+         for (Scope child : parent.getChildren()) {
+             Scope found = findChildScope(child, rootNode);
+             if (found != null) return found;
+         }
+         return null;
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-58f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-58f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-58f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-58f-copilot/.test_suite/com/google/javascript/jscomp/LiveVariableAnalysisTest.java:26: error: <identifier> expected
+ [javac] puble void setUp() {
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 15 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

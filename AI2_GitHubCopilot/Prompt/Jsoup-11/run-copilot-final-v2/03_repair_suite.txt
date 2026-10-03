@@ -1,0 +1,203 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 11  Version: Jsoup-11b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 36
+Trigger failures:
+- org.jsoup.select.SelectorTest::notAll
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query ':not(p)': unexpected token at ':not(p)'
+ - org.jsoup.select.SelectorTest::testPseudoHas
+ --> junit.framework.AssertionFailedError: expected:<3> but was:<0>
+ - org.jsoup.select.SelectorTest::notClass
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'div:not(.left)': unexpected token at ':not(.left)'
+ - org.jsoup.select.SelectorTest::notParas
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'p:not([id=1])': unexpected token at ':not([id=1])'
+Modified: org.jsoup.select.Selector
+
+Available API/signatures:
+[org.jsoup.select.Selector | java]
+package org.jsoup.select;
+<tr><td><code>.class</code></td><td>elements with a class name of "class"</td><td><code>div.left</code>, <code>.result</code></td></tr>
+<tr><td><code>:not(<em>selector</em>)</code></td><td>elements that do not match the <em>selector</em></td><code>div:not(.logo)</code> finds all divs that do not have the "logo" class</td></tr>
+@see Element#select(String)
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Selector {
+private Selector(String query, Element root) {
+@param query CSS selector
+@param root root element to descend into
+@return matching elements, empty if not
+public static Elements select(String query, Element root) {
+@param roots root elements to descend into
+public static Elements select(String query, Iterable<Element> roots) {
+private Elements select() {
+} else { // E.class, E#id, E[attr] etc. AND
+private void combinator(String combinator) {
+private Elements findElements() {
+private void addElements(Collection<Element> add) {
+private void intersectElements(Collection<Element> intersect) {
+private Elements byId() {
+private Elements byClass() {
+private Elements byTag() {
+private Elements byAttribute() {
+private Elements allElements() {
+private Elements indexLessThan() {
+private Elements indexGreaterThan() {
+private Elements indexEquals() {
+private int consumeIndex() {
+private Elements has() {
+private Elements contains(boolean own) {
+private Elements matches(boolean own) {
+private static Elements filterForChildren(Collection<Element> parents, Collection<Element> candidates) {
+private static Elements filterForDescendants(Collection<Element> parents, Collection<Element> candidates) {
+private static Elements filterForParentsOfDescendants(Collection<Element> parents, Collection<Element> children) {
+private static Elements filterForAdjacentSiblings(Collection<Element> elements, Collection<Element> candidates) {
+private static Elements filterForGeneralSiblings(Collection<Element> elements, Collection<Element> candidates) {
+private static Elements filterForSelf(Collection<Element> parents, Collection<Element> candidates) {
+public static class SelectorParseException extends IllegalStateException {
+public SelectorParseException(String msg, Object... params) {
+
+Generated JUnit Test:
+package org.jsoup.select;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SelectorTest {
+
+ private static Document doc;
+ private static int totalElements;
+ private static int paragraphCount;
+
+ @BeforeClass
+ public static void setUp() {
+     String html = "<html><head></head><body>"
+             + "<div id='1' class='left'>div left</div>"
+             + "<div class='right'>div right</div>"
+             + "<p class='left'>p left</p>"
+             + "<p id='1'>p id1</p>"
+             + "<span><a href='#'>link</a></span>"
+             + "<div><span>span1</span></div>"
+             + "<div><span>span2</span></div>"
+             + "<div><span>span3</span></div>"
+             + "<div>no span</div>"
+             + "<ul><li>item</li></ul>"
+             + "</body></html>";
+     doc = Jsoup.parse(html);
+     totalElements = doc.getAllElements().size();
+     paragraphCount = doc.getElementsByTag("p").size();
+ }
+
+ @Test
+ public void testNotTag() {
+     Elements selected = Selector.select(":not(p)", doc);
+     // Expect all elements except <p> tags
+     for (Element el : selected) {
+         assertFalse("Should not contain <p>", "p".equals(el.tagName()));
+     }
+     assertEquals(totalElements - paragraphCount, selected.size());
+ }
+
+ @Test
+ public void testNotClass() {
+     Elements selected = Selector.select("div:not(.left)", doc);
+     int divTotal = doc.getElementsByTag("div").size();
+     int divLeft = doc.select("div.left").size();
+     assertEquals(divTotal - divLeft, selected.size());
+     for (Element el : selected) {
+         assertFalse("Should not have class left", el.hasClass("left"));
+     }
+ }
+
+ @Test
+ public void testNotAttribute() {
+     Elements selected = Selector.select("p:not([id=1])", doc);
+     int pTotal = doc.getElementsByTag("p").size();
+     int pId1 = doc.select("p[id=1]").size();
+     assertEquals(pTotal - pId1, selected.size());
+     for (Element el : selected) {
+         assertFalse("Should not have id=1", "1".equals(el.id()));
+     }
+ }
+
+ @Test
+ public void testPseudoHas() {
+     Elements selected = Selector.select("div:has(span)", doc);
+     // Expect exactly 3 divs that contain a span
+     assertEquals(3, selected.size());
+     for (Element el : selected) {
+         assertFalse("Should contain span descendant", el.getElementsByTag("span").isEmpty());
+     }
+ }
+
+ @Test
+ public void testHasChild() {
+     Elements selected = Selector.select("span:has(a)", doc);
+     // Only one span has an anchor
+     assertEquals(1, selected.size());
+ }
+
+ @Test
+ public void testHasDirectChild() {
+     Elements selected = Selector.select("ul:has(>li)", doc);
+     assertEquals(1, selected.size());
+ }
+
+ @Test
+ public void testNestedNot() {
+     Elements selected = Selector.select(":not(:not(p))", doc);
+     // Should be equivalent to just p
+     assertEquals(paragraphCount, selected.size());
+     for (Element el : selected) {
+         assertEquals("p", el.tagName());
+     }
+ }
+
+ @Test
+ public void testNotAll() {
+     Elements selected = Selector.select(":not(p)", doc);
+     // Already covered by testNotTag, but we duplicate test name as required by bug triggers.
+     // We keep original expectation: no p.
+     assertFalse(selected.isEmpty());
+     for (Element el : selected) {
+         assertFalse("p".equals(el.tagName()));
+     }
+ }
+
+ @Test(expected = Selector.SelectorParseException.class)
+ public void testInvalidNotMissingParen() {
+     Selector.select(":not(p", doc);
+ }
+
+ @Test(expected = Selector.SelectorParseException.class)
+ public void testInvalidNotEmpty() {
+     Selector.select(":not()", doc);
+ }
+
+ @Test(expected = Selector.SelectorParseException.class)
+ public void testInvalidNotBadInner() {
+     Selector.select(":not(!!)", doc);
+ }
+
+ @Test(expected = Selector.SelectorParseException.class)
+ public void testInvalidHasEmpty() {
+     Selector.select(":has()", doc);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.select.SelectorTest::testInvalidNotMissingParen
+ - org.jsoup.select.SelectorTest::testInvalidNotEmpty
+
+Failing generated tests: org.jsoup.select.SelectorTest::testInvalidHasEmpty, org.jsoup.select.SelectorTest::testInvalidNotEmpty, org.jsoup.select.SelectorTest::testInvalidNotMissingParen

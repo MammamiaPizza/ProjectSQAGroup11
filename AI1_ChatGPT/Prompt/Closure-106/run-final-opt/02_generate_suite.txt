@@ -1,0 +1,439 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 106  Version: Closure-106b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.GlobalNamespace, com.google.javascript.rhino.JSDocInfoBuilder
+Modified: com.google.javascript.jscomp.GlobalNamespace, com.google.javascript.rhino.JSDocInfoBuilder
+Triggers: com.google.javascript.jscomp.CheckSideEffectsTest::testJSDocComments, com.google.javascript.jscomp.CollapsePropertiesTest::testTwinReferenceCancelsChildCollapsing, com.google.javascript.jscomp.CollapsePropertiesTest::testCrashInNestedAssign, com.google.javascript.jscomp.CollapsePropertiesTest::testCrashInCommaOperator
+
+Bug/specification summary:
+Bug report: 19
+Trigger failures:
+- com.google.javascript.jscomp.CheckSideEffectsTest::testJSDocComments
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_USELESS_CODE. Suspicious code. This code lacks side-effects. Is there a bug? at testcode line 1 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testTwinReferenceCancelsChildCollapsing
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testCrashInNestedAssign
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testCrashInCommaOperator
+ --> java.lang.IllegalArgumentException
+Modified: com.google.javascript.jscomp.GlobalNamespace, com.google.javascript.rhino.JSDocInfoBuilder
+
+Prompt-01 test plan:
+TARGETS: GlobalNamespace reference collection/twin handling; JSDocInfoBuilder JSDoc annotation recording/build.
+ORACLES: Existing trigger assertions: no JSC_USELESS_CODE for JSDoc comment input; collapse output/assertions.
+CASES: JSDoc-only/commented expression at line 1; verify CheckSideEffects emits zero unexpected warnings.
+CASES: Twin references that cancel child property collapsing; nested assignment and comma-operator expressions.
+CASES: Global-name/property references across declarations, assignments, and nested/comma contexts.
+RISKS: GlobalNamespace internals/private APIs limit direct unit access; prefer compiler-pass integration tests.
+RISKS: Exact collapse behavior/input fixtures are not provided; derive expected results only from existing triggers.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.GlobalNamespace (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class GlobalNamespace {
+private List<Name> globalNames = new ArrayList<Name>();
+private Map<String, Name> nameMap = new HashMap<String, Name>();
+private static class NodeFilter implements Predicate<Node> {
+public boolean apply(Node n) {
+private void process() {
+private boolean isGlobalNameReference(String name, Scope s) {
+private String getTopVarName(String name) {
+private boolean isGlobalVarReference(String name, Scope s) {
+private boolean isGlobalScope(Scope s) {
+private class BuildGlobalNamespace extends AbstractPostOrderCallback {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private boolean isConstructorOrEnumDeclaration(Node n, Node parent) {
+static class Name {
+enum Type {
+@Override public String toString() {
+private static JSDocInfo getDocInfoForDeclaration(Ref ref) {
+static class Ref {
+private Ref(Ref original, Type type) {
+private Ref(Type type) {
+static void markTwins(Ref a, Ref b) {
+static Ref createRefForTesting(Type type) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.TokenStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class GlobalNamespace {
+
+/* METHOD GlobalNamespace */
+GlobalNamespace(AbstractCompiler compiler, Node root) {
+ this(compiler, null, root);
+ }
+
+/* METHOD GlobalNamespace */
+GlobalNamespace(AbstractCompiler compiler, Node externsRoot, Node root) {
+ this.compiler = compiler;
+ this.externsRoot = externsRoot;
+ this.root = root;
+ }
+
+/* METHOD process */
+private void process() {
+ if (externsRoot != null) {
+ inExterns = true;
+ NodeTraversal.traverse(compiler, externsRoot, new BuildGlobalNamespace());
+ }
+ inExterns = false;
+
+ NodeTraversal.traverse(compiler, root, new BuildGlobalNamespace());
+ generated = true;
+ }
+
+/* METHOD visit */
+public void visit(NodeTraversal t, Node n, Node parent) {
+ if (nodeFilter != null && !nodeFilter.apply(n)) {
+ return;
+ }
+
+ // If we are traversing the externs, then we save a pointer to the scope
+ // generated by them, so that we can do lookups in it later.
+ if (externsRoot != null && n == externsRoot) {
+ externsScope = t.getScope();
+ }
+
+ String name;
+ boolean isSet = false;
+ Name.Type type = Name.Type.OTHER;
+ boolean isPropAssign = false;
+
+ switch (n.getType()) {
+ case Token.STRING:
+ // This may be a key in an object literal declaration.
+ name = null;
+ if (parent != null && parent.getType() == Token.OBJECTLIT) {
+ name = getNameForObjLitKey(n);
+ }
+ if (name == null) return;
+ isSet = true;
+ type = getValueType(n.getNext());
+ break;
+ case Token.NAME:
+ // This may be a variable get or set.
+ if (parent != null) {
+ switch (parent.getType()) {
+ case Token.VAR:
+ isSet = true;
+ Node rvalue = n.getFirstChild();
+ type = rvalue == null ? Name.Type.OTHER : getValueType(rvalue);
+ break;
+ case Token.ASSIGN:
+ if (parent.getFirstChild() == n) {
+ isSet = true;
+ type = getValueType(n.getNext());
+ }
+ break;
+ case Token.GETPROP:
+ return;
+ case Token.FUNCTION:
+ Node gramps = parent.getParent();
+ if (gramps == null ||
+ NodeUtil.isFunctionAnonymous(parent)) return;
+ isSet = true;
+ type = Name.Type.FUNCTION;
+ break;
+ }
+ }
+ name = n.getString();
+ break;
+ case Token.GETPROP:
+ // This may be a namespaced name get or set.
+ if (parent != null) {
+ switch (parent.getType()) {
+ case Token.ASSIGN:
+ if (parent.getFirstChild() == n) {
+ isSet = true;
+ type = getValueType(n.getNext());
+ isPropAssign = true;
+ }
+ break;
+ case Token.GETPROP:
+ return;
+ }
+ }
+ name = n.getQualifiedName();
+ if (name == null) return;
+ break;
+ default:
+ return;
+ }
+
+ // We are only interested in global names.
+ Scope scope = t.getScope
+...[truncated deterministically]...
+(isGlobalScope(scope)) {
+ handleSetFromGlobal(t, n, parent, name, isPropAssign, type);
+ } else {
+ handleSetFromLocal(t, n, parent, name);
+ }
+ } else {
+ handleGet(t, n, parent, name);
+ }
+ }
+
+/* METHOD scanNewNodes */
+void scanNewNodes(Scope scope, Set<Node> newNodes) {
+ NodeTraversal t = new NodeTraversal(compiler,
+ new BuildGlobalNamespace(new NodeFilter(newNodes)));
+ t.traverseAtScope(scope);
+ }
+
+/* METHOD apply */
+public boolean apply(Node n) {
+ if (!n.isQualifiedName()) {
+ return false;
+ }
+
+ Node current;
+ for (current = n;
+ current.getType() == Token.GETPROP;
+ current = current.getFirstChild()) {
+ if (newNodes.contains(current)) {
+ return true;
+ }
+ }
+
+ return current.getType() == Token.NAME && newNodes.contains(current);
+ }
+
+/* METHOD getValueType */
+Name.Type getValueType(Node n) {
+ switch (n.getType()) {
+ case Token.OBJECTLIT:
+ return Name.Type.OBJECTLIT;
+ case Token.FUNCTION:
+ return Name.Type.FUNCTION;
+ case Token.OR:
+ // Recurse on the second value. If the first value were an object
+ // literal or function, then the OR would be meaningless and the
+ // second value would be dead code. Assume that if the second value
+ // is an object literal or function, then the first value will also
+ // evaluate to one when it doesn't evaluate to false.
+ return getValueType(n.getLastChild());
+ case Token.HOOK:
+ // The same line of reasoning used for the OR case applies here.
+ Node second = n.getFirstChild().getNext();
+ Name.Type t = getValueType(second);
+ if (t != Name.Type.OTHER) return t;
+ Node third = second.getNext();
+ return getValueType(th
+...[truncated deterministically]...
+l name reference. Contains references to the relevant parse tree
+ * node and its ancestors that may be affected.
+ */
+ static class Ref {
+ enum Type {
+ SET_FROM_GLOBAL,
+ SET_FROM_LOCAL,
+ PROTOTYPE_GET,
+ ALIASING_GET, // Prevents a name's properties from being collapsed
+ DIRECT_GET, // Prevents a name from being completely eliminated
+ CALL_GET, // Prevents a name from being collapsed if never set
+ }
+
+===== com.google.javascript.rhino.JSDocInfoBuilder (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino;
+final public class JSDocInfoBuilder {
+public JSDocInfoBuilder(boolean parseDocumentation) {
+public boolean isPopulated() {
+public boolean isPopulatedWithFileOverview() {
+public boolean isDescriptionRecorded() {
+public JSDocInfo build(String sourceName) {
+private static void populateDefaults(JSDocInfo info) {
+public void markAnnotation(String annotation, int lineno, int charno) {
+public void markName(String name, int lineno, int charno) {
+public boolean recordBlockDescription(String description) {
+public boolean recordVisibility(Visibility visibility) {
+public boolean recordParameter(String parameterName, JSTypeExpression type) {
+public boolean recordParameterDescription(String parameterName, String description) {
+public boolean recordTemplateTypeName(String name) {
+public boolean recordThrowType(JSTypeExpression type) {
+public boolean recordThrowDescription(JSTypeExpression type, String description) {
+public boolean addAuthor(String author) {
+public boolean addReference(String reference) {
+public boolean recordVersion(String version) {
+public boolean recordDeprecationReason(String reason) {
+public boolean recordSuppressions(Set<String> suppressions) {
+public boolean recordType(JSTypeExpression type) {
+public boolean recordTypedef(JSTypeExpression type) {
+public boolean record
+...[truncated deterministically]...
+olean recordNoTypeCheck() {
+public boolean recordConstructor() {
+public boolean isConstructorRecorded() {
+public boolean recordPreserveTry() {
+public boolean recordOverride() {
+public boolean recordNoAlias() {
+public boolean recordDeprecated() {
+public boolean recordInterface() {
+public boolean recordExport() {
+public boolean recordNoShadow() {
+public boolean recordImplicitCast() {
+public boolean recordNoSideEffects() {
+public boolean isInterfaceRecorded() {
+public boolean hasParameter(String name) {
+public boolean recordImplementedInterface(JSTypeExpression interfaceName) {
+private boolean hasAnyTypeRelatedTags() {
+private boolean hasAnySingletonTypeTags() {
+
+/* HEADER */
+package com.google.javascript.rhino;
+import com.google.javascript.rhino.JSDocInfo.Visibility;
+import java.util.Set;
+
+/* METHOD JSDocInfoBuilder */
+public JSDocInfoBuilder(boolean parseDocumentation) {
+ this.currentInfo = new JSDocInfo(parseDocumentation);
+ this.parseDocumentation = parseDocumentation;
+ }
+
+/* METHOD build */
+public JSDocInfo build(String sourceName) {
+ if (populated) {
+ JSDocInfo built = currentInfo;
+ built.setSourceName(sourceName);
+ populateDefaults(built);
+ populated = false;
+ currentInfo = new JSDocInfo(this.parseDocumentation);
+ return built;
+ } else {
+ return null;
+ }
+ }
+
+/* METHOD markText */
+public void markText(String text, int startLineno, int startCharno, int endLineno,
+ int endCharno) {
+ if (currentMarker != null) {
+ currentMarker.description = new JSDocInfo.StringPosition();
+ currentMarker.description.setItem(text);
+ currentMarker.description.setPositionInformation(startLineno, startCharno,
+ endLineno, endCharno);
+ }
+ }
+
+/* METHOD recordFileOverview */
+public boolean recordFileOverview(String description) {
+ if (currentInfo.documentFileOverview(description)) {
+ populated = true;
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD recordNoSideEffects */
+public boolean recordNoSideEffects() {
+ if (!currentInfo.isNoSideEffects()) {
+ currentInfo.setNoSideEffects(true);
+ populated = true;
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD isPopulatedWithFileOverview */
+public boolean isPopulatedWithFileOverview() {
+ return isPopulated() && currentInfo.hasFileOverview();
+ }
+
+/* METHOD isDescriptionRecorded */
+public boolean isDescriptionRecorded() {
+ return currentInfo.getDescription() != null;
+ }
+
+/* METHOD markAnnotation */
+public void markAnnotation(String annotation, int lineno, int charno) {
+ JSDocInfo.Marker marker = currentInfo.addMarker();
+
+ if (marker != null) {
+ marker.annotation = new JSDocInfo.StringPosition();
+ marker.annotation.setItem(annotation);
+ marker.annotation.setPositionInformation(lineno, charno, lineno,
+ charno + annotation.length());
+ }
+
+ currentMarker = marker;
+ }
+
+/* METHOD markTypeNode */
+public void markTypeNode(Node typeNode, int lineno, int startCharno, int endCharno,
+ boolean hasLC) {
+ if (currentMarker != null) {
+ currentMarker.type = new JSDocInfo.TypePosition();
+ currentMarker.type.setItem(typeNode);
+ currentMarker.type.hasBrackets = hasLC;
+ currentMarker.type.setPositionInformation(lineno, startCharno,
+ lineno, endCharno);
+ }
+ }
+
+/* METHOD markName */
+public void markName(String name, int lineno, int charno) {
+ if (currentMarker != null) {
+ currentMarker.name = new JSDocInfo.StringPosition();
+ currentMarker.name.setItem(name);
+ currentMarker.name.setPositionInformation(lineno, charno,
+ lineno, charno + name.length());
+ }
+ }
+
+/* METHOD recordBlockDescription */
+public boolean recordBlockDescription(String description) {
+ if (parseDocumentation) {
+ populated = true;
+ }
+ return currentInfo.documentBlock(description);
+ }
+
+/* METHOD recordParameterDescription */
+public boolean recordParameterDescription(String parameterName, String description) {
+ if (currentInfo.documentParam(parameterName, description)) {
+ populated = true;
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD recordThrowDescription */
+public boolean recordThrowDescription(JSTypeExpression type, String description) {
+ if (currentInfo.documentThrows(type, description)) {
+ populated = true;
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD recordReturnDescription */
+public boolean recordReturnDescription(String description) {
+ if (currentInfo.documentReturn(description)) {
+ populated = true;
+ return true;
+ } else {
+ return false;
+ }
+ }

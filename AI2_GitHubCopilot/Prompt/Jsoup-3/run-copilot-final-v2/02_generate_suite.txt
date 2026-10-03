@@ -1,0 +1,433 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 3  Version: Jsoup-3b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.Element, org.jsoup.parser.Parser, org.jsoup.parser.Tag
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.Parser, org.jsoup.parser.Tag
+Triggers: org.jsoup.nodes.ElementTest::testAppendRowToTable, org.jsoup.nodes.ElementTest::testPrependRowToTable, org.jsoup.parser.ParserTest::handlesNestedImplicitTable
+
+Bug/specification summary:
+Bug report: 21
+Trigger failures:
+- org.jsoup.nodes.ElementTest::testAppendRowToTable
+ --> junit.framework.AssertionFailedError: expected:<...tr><td>1</td></tr><t[r><td>2</td></tr]></table>> but was:<...tr><td>1</td></tr><t[able><tr><td>2</td></tr></table]></table>>
+ - org.jsoup.nodes.ElementTest::testPrependRowToTable
+ --> junit.framework.AssertionFailedError: expected:<<table><t[r><td>2</td></tr]><tr><td>1</td></tr>...> but was:<<table><t[able><tr><td>2</td></tr></table]><tr><td>1</td></tr>...>
+ - org.jsoup.parser.ParserTest::handlesNestedImplicitTable
+ --> junit.framework.AssertionFailedError: expected:<...> <tr><td> <table><t[r><td>3</td> <td>4</td></tr></table> </td></tr><tr><td>5]</td></tr></table>> but was:<...> <tr><td> <table><t[d>3</td> <td>4</td></table> <tr><td>5</td></tr>]</td></tr></table>>
+Modified: org.jsoup.nodes.Element, org.jsoup.parser.Parser, org.jsoup.parser.Tag
+
+Prompt-01 test plan:
+TARGETS: Element.append(String), Element.prepend(String)
+TARGETS: Parser.parseBodyFragment for table context
+ORACLES: Expected HTML: append <tr> to existing <table> yields single table with both rows, no extra
+<table> or </table>
+ORACLES: Prepend row: row order correct, no spurious table tags
+ORACLES: Nested table: inner table contained in <td>, outer row after </td> untouched
+CASES: Normal: append row to non-empty table; prepend row; nested table inside <td>
+CASES: Boundary: append row to empty table; append multiple rows; append text after table
+RISKS: Fragment parser may auto-close <table> before inserting row; Tag containment rules for
+<tr>/<td> may be missing
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Element (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+public class Element extends Node {
+public Element(Tag tag, String baseUri, Attributes attributes) {
+public Element(Tag tag, String baseUri) {
+@Override
+public String nodeName() {
+public String tagName() {
+public Tag tag() {
+public boolean isBlock() {
+public String id() {
+public Element attr(String attributeKey, String attributeValue) {
+public Element parent() {
+public Elements parents() {
+private static void accumulateParents(Element el, Elements parents) {
+public Element child(int index) {
+public Elements children() {
+public Elements select(String query) {
+public Element appendChild(Node child) {
+public Element prependChild(Node child) {
+public Element appendElement(String tagName) {
+public Element prependElement(String tagName) {
+public Element appendText(String text) {
+public Element prependText(String text) {
+public Element append(String html) {
+...[truncated deterministically]...
+ng className) {
+Toggle a class name on this element's {@code class} attribute: if present, remove it; otherwise add it.
+@param className class name to toggle
+public Element toggleClass(String className) {
+public String val() {
+public Element val(String value) {
+public String html() {
+private void html(StringBuilder accum) {
+public Element html(String html) {
+public String toString() {
+public boolean equals(Object o) {
+public int hashCode() {
+
+/* HEADER */
+package org.jsoup.nodes;
+import org.apache.commons.lang.Validate;
+import org.apache.commons.lang.StringUtils;
+import org.jsoup.parser.Parser;
+import org.jsoup.parser.Tag;
+import org.jsoup.select.Collector;
+import org.jsoup.select.Elements;
+import org.jsoup.select.Selector;
+import java.util.*;
+public class Element extends Node {
+
+/* METHOD Element */
+public Element(Tag tag, String baseUri, Attributes attributes) {
+ super(baseUri, attributes);
+ 
+ Validate.notNull(tag); 
+ this.tag = tag;
+ }
+
+/* METHOD Element */
+public Element(Tag tag, String baseUri) {
+ this(tag, baseUri, new Attributes());
+ }
+
+/* METHOD tag */
+public Tag tag() {
+ return tag;
+ }
+
+/* METHOD prepend */
+public Element prepend(String html) {
+ Validate.notNull(html);
+ 
+ Element fragment = Parser.parseBodyFragment(html, baseUri).body();
+ List<Node> nodes = fragment.childNodes();
+ for (int i = nodes.size() - 1; i >= 0; i--) {
+ Node node = nodes.get(i);
+ node.parentNode = null;
+ prependChild(node);
+ }
+ return this;
+ }
+
+/* METHOD append */
+public Element append(String html) {
+ Validate.notNull(html);
+ 
+ Element fragment = Parser.parseBodyFragment(html, baseUri).body();
+ for (Node node : fragment.childNodes()) {
+ node.parentNode = null;
+ appendChild(node);
+ }
+ return this;
+ }
+
+/* METHOD children */
+public Elements children() {
+ // create on the fly rather than maintaining two lists. if gets slow, memoize, and mark dirty on change
+ List<Element> elements = new ArrayList<Element>();
+ for (Node node : childNodes) {
+ if (node instanceof Element)
+ elements.add((Element) node);
+ }
+ return new Elements(elements);
+ }
+
+/* METHOD wrap */
+public Element wrap(String html) {
+ Validate.notEmpty(html);
+
+ Element wrapBody = Parser.parseBodyFragment(html, baseUri).body();
+ Elements wrapChildren = wrapBody.children();
+ Element wrap = wrapChildren.first();
+ if (wrap == null) // nothing to wrap with; noop
+ return null;
+
+ Element deepest = getDeepChild(wrap);
+ parentNode.replaceChild(this, wrap);
+ deepest.addChild(this);
+
+ // remainder (unbalananced wrap, like <div></div><p></p> -- The <p> is remainder
+ if (wrapChildren.size() > 1) {
+ for (int i = 1; i < wrapChildren.size(); i++) { // skip first
+ Element remainder = wrapChildren.get(i);
+ remainder.parentNode.removeChild(remainder);
+ wrap.appendChild(remainder);
+ }
+ }
+ return this;
+ }
+
+===== org.jsoup.parser.Parser (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Parser {
+private static final Tag htmlTag = Tag.valueOf("html");
+private static final Tag headTag = Tag.valueOf("head");
+private static final Tag bodyTag = Tag.valueOf("body");
+private static final Tag titleTag = Tag.valueOf("title");
+private static final Tag textareaTag = Tag.valueOf("textarea");
+private Parser(String html, String baseUri, boolean isBodyFragment) {
+@param html HTML to parse
+@param baseUri base URI of document (i.e. original fetch location), for resolving relative URLs.
+@return parsed Document
+public static Document parse(String html, String baseUri) {
+@param bodyHtml fragment of HTML
+@return Document, with empty head, and HTML parsed into body
+public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+private Document parse() {
+private void parseComment() {
+private void parseXmlDecl() {
+private void parseEndTag() {
+private void parseStartTag() {
+private Attribute parseAttribute() {
+private void parseTextNode() {
+private void parseCdata() {
+private Element addChildToParent(Element child, boolean isEmptyElement) {
+private boolean stackHasValidParent(Tag childTag) {
+private Element popStackToSuitableContainer(Tag tag) {
+private Element popStackToClose(Tag tag) {
+private Element last() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.apache.commons.lang.Validate;
+import org.jsoup.nodes.*;
+import java.util.*;
+public class Parser {
+
+/* METHOD Parser */
+private Parser(String html, String baseUri, boolean isBodyFragment) {
+ Validate.notNull(html);
+ Validate.notNull(baseUri);
+
+ stack = new LinkedList<Element>();
+ tq = new TokenQueue(html);
+ this.baseUri = baseUri;
+
+ if (isBodyFragment) {
+ doc = Document.createShell(baseUri);
+ stack.add(doc.body());
+ } else {
+ doc = new Document(baseUri);
+ stack.add(doc);
+ }
+ }
+
+/* METHOD parse */
+public static Document parse(String html, String baseUri) {
+ Parser parser = new Parser(html, baseUri, false);
+ return parser.parse();
+ }
+
+/* METHOD parseBodyFragment */
+public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+ Parser parser = new Parser(bodyHtml, baseUri, true);
+ return parser.parse();
+ }
+
+/* METHOD addChildToParent */
+private Element addChildToParent(Element child, boolean isEmptyElement) {
+ Element parent = popStackToSuitableContainer(child.tag());
+ Tag childTag = child.tag();
+ boolean validAncestor = stackHasValidParent(childTag);
+
+ if (!validAncestor) {
+ // create implicit parent around this child
+ Tag parentTag = childTag.getImplicitParent();
+ Element implicit = new Element(parentTag, baseUri);
+ // special case: make
+...[truncated deterministically]...
+{
+ Element head = new Element(headTag, baseUri);
+ implicit.appendChild(head);
+ }
+ implicit.appendChild(child);
+
+ // recurse to ensure somewhere to put parent
+ Element root = addChildToParent(implicit, false);
+ if (!isEmptyElement)
+ stack.addLast(child);
+ return root;
+ }
+
+ parent.appendChild(child);
+
+ if (!isEmptyElement)
+ stack.addLast(child);
+ return parent;
+ }
+
+ private boolean stackHasValidParent(Tag childTag) {
+ if (stack.size() == 1 && childTag.equals(htmlTag))
+ return true; // root is valid for html node
+
+ // otherwise, look up the stack for valid ancestors
+ for (int i = stack.size() -1; i >= 0; i--) {
+ Element el = stack.get(i);
+ Tag parent2 = el.tag();
+ if (parent2.isValidParent(child
+...[truncated deterministically]...
+tainer(Tag tag) {
+ while (!stack.isEmpty()) {
+ if (last().tag().canContain(tag))
+ return last();
+ else
+ stack.removeLast();
+ }
+ return null;
+ }
+
+ private Element popStackToClose(Tag tag) {
+ // first check to see if stack contains this tag; if so pop to there, otherwise ignore
+ int counter = 0;
+ Element elToClose = null;
+ for (int i = stack.size() -1; i > 0; i--) {
+ counter++;
+ Element el = stack.get(i);
+ Tag elTag = el.tag();
+ if (elTag.equals(bodyTag) || elTag.equals(htmlTag)) { // once in body, don't close past body
+ break;
+ } else if (elTag.equals(tag)) {
+ elToClose = el;
+ break;
+ }
+ }
+
+===== org.jsoup.parser.Tag (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+@author Jonathan Hedley, jonathan@hedley.net */
+public class Tag {
+private static final Map<String, Tag> tags = new HashMap<String, Tag>();
+private Tag(String tagName) {
+public String getName() {
+@param tagName Name of tag, e.g. "p". Case insensitive.
+@return The tag, either defined or new generic.
+public static Tag valueOf(String tagName) {
+synchronized (tags) {
+@param child potential child tag.
+@return true if this can contain child.
+@return if block tag
+public boolean isBlock() {
+@return if tag can contain block tags
+public boolean canContainBlock() {
+@return if this tag is an inline tag.
+public boolean isInline() {
+@return if this tag is a data only tag
+public boolean isData() {
+@return if this is an emtpy tag
+public boolean isEmpty() {
+@return if preserve whitepace
+public boolean preserveWhitespace() {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+public String toString() {
+private static Tag createBlock(String tagName) {
+private static Tag createInline(String tagName) {
+private static Tag register(Tag tag) {
+private Tag setContainInlineOnly() {
+private Tag setContainDataOnly() {
+private Tag setEmpty() {
+private Tag setOptionalClosing() {
+private Tag setPreserveWhitespace() {
+private Tag setAncestor(String... tagNames) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.apache.commons.lang.Validate;
+import java.util.*;
+public class Tag {
+
+/* METHOD Tag */
+private Tag(String tagName) {
+ this.tagName = tagName.toLowerCase();
+ }
+
+/* METHOD defined */
+Get a Tag by name. If not previously defined (unknown), returns a new generic tag, that can do anything.
+ <p>
+ Pre-defined tags (P, DIV etc) will be ==, but unknown tags are not registered and will only .equals().
+ @param tagName Name of tag, e.g. "p". Case insensitive.
+ @return The tag, either defined or new generic.
+ */
+ public static Tag valueOf(String tagName) {
+ Validate.notNull(tagName);
+ tagName = tagName.trim().toLowerCase();
+ Validate.notEmpty(tagName);
+
+ synchronized (tags) {
+ Tag tag = tags.get(tagName);
+ if (tag == null) {
+ // not defined: create default; go anywhere, do anything! (incl be inside a <p>)
+ tag = new Tag(tagName);
+ tag.setAncestor(defaultAncestor.tagName);
+ tag.isBlock = false;
+ tag.canContainBlock = true;
+ }
+ return tag;
+ }
+ }
+
+/* METHOD getName */
+public String getName() {
+ return tagName;
+ }
+
+/* METHOD canContain */
+boolean canContain(Tag child) {
+ Validate.notNull(child);
+
+ if (child.isBlock && !this.canContainBlock)
+ return false;
+
+ if (!child.isBlock && !this.canContainInline) // not block == inline
+ return false;
+
+ if (this.optionalClosing && this.equals(child))
+ return
+...[truncated deterministically]...
+n only contain a few. if more than head in here, modify to have a list of valids
+ // TODO: (could solve this with walk for ancestor)
+ if (this.tagName.equals("head")) {
+ if (child.tagName.equals("base") || child.tagName.equals("script") || child.tagName.equals("noscript") || child.tagName.equals("link") ||
+ child.tagName.equals("meta") || child.tagName.equals("title") || child.tagName.equals("style") || child.tagName.equals("object")) {
+ return true;
+ }
+ return false;
+ }
+ 
+ // dt and dd (in dl)
+ if (this.tagName.equals("dt") && child.tagName.equals("dd"))
+ return false;
+ if (this.tagName.equals("dd") && child.tagName.equals("dt"))
+ return false;
+
+ // don't allow children to contain their parent (directly)
+ 
+ return true;
+ }
+
+ /**
+ Gets if this
+...[truncated deterministically]...
+eateBlock("CAPTION").setAncestor("TABLE");
+ createBlock("THEAD").setAncestor("TABLE").setOptionalClosing();
+ createBlock("TFOOT").setAncestor("TABLE").setOptionalClosing();
+ createBlock("TBODY").setAncestor("TABLE").setOptionalClosing();
+ createBlock("COLGROUP").setAncestor("TABLE").setOptionalClosing();
+ createBlock("COL").setAncestor("COLGROUP").setEmpty();
+ createBlock("TR").setAncestor("TABLE").setOptionalClosing();
+ createBlock("TH").setAncestor("TR").setOptionalClosing();
+ createBlock("TD").setAncestor("TR").setOptionalClosing();
+ }

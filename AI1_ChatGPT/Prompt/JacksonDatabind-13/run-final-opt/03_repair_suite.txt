@@ -1,0 +1,103 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 13  Version: JacksonDatabind-13b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 742
+Trigger failures:
+- com.fasterxml.jackson.databind.struct.TestObjectIdDeserialization::testNullObjectId
+ --> com.fasterxml.jackson.databind.JsonMappingException: (was java.lang.NullPointerException) (through reference chain: com.fasterxml.jackson.databind.struct.Identifiable["id"])
+Modified: com.fasterxml.jackson.databind.deser.DefaultDeserializationContext, com.fasterxml.jackson.databind.deser.impl.ObjectIdValueProperty
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.DefaultDeserializationContext | java]
+package com.fasterxml.jackson.databind.deser;
+public abstract class DefaultDeserializationContext
+protected transient LinkedHashMap<ObjectIdGenerator.IdKey, ReadableObjectId> _objectIds;
+protected DefaultDeserializationContext(DeserializerFactory df, DeserializerCache cache) {
+protected DefaultDeserializationContext(DefaultDeserializationContext src) {
+public DefaultDeserializationContext copy() {
+throw new IllegalStateException("DefaultDeserializationContext sub-class not overriding copy()");
+@Override
+public ReadableObjectId findObjectId(Object id, ObjectIdGenerator<?> gen, ObjectIdResolver resolverType)
+final ObjectIdGenerator.IdKey key = gen.key(id);
+if (resolverType.getClass() == SimpleObjectIdResolver.class) {
+@Deprecated // since 2.4
+public ReadableObjectId findObjectId(Object id, ObjectIdGenerator<?> gen) {
+public
+...[truncated deterministically]...
+faultDeserializationContext with(DeserializerFactory factory);
+/* And then the concrete implementation class
+public final static class Impl extends DefaultDeserializationContext
+public Impl(DeserializerFactory df) {
+protected Impl(Impl src) { super(src); }
+protected Impl(Impl src, DeserializerFactory factory) {
+if (getClass() != Impl.class) {
+public DefaultDeserializationContext with(DeserializerFactory factory) {
+
+[com.fasterxml.jackson.databind.deser.impl.ObjectIdValueProperty | java]
+package com.fasterxml.jackson.databind.deser.impl;
+public final class ObjectIdValueProperty
+protected final ObjectIdReader _objectIdReader;
+protected ObjectIdValueProperty(ObjectIdValueProperty src, JsonDeserializer<?> deser)
+@Deprecated // since 2.3
+protected ObjectIdValueProperty(ObjectIdValueProperty src, PropertyName newName) {
+protected ObjectIdValueProperty(ObjectIdValueProperty src, String newName) {
+@Override
+public ObjectIdValueProperty withName(PropertyName newName) {
+public ObjectIdValueProperty withValueDeserializer(JsonDeserializer<?> deser) {
+public <A extends Annotation> A getAnnotation(Class<A> acls) {
+@Override public AnnotatedMember getMember() { return null; }
+public void set(Object instance, Object value) throws IOException {
+public Object setAndReturn(Object instance, Object value) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.struct;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class ObjectIdNullDeserializationTest
+{
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    public static class Identifiable {
+        public String id;
+        public String name;
+    }
+
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    public void testNullObjectIdIsAccepted() throws Exception {
+        Identifiable value = mapper.readValue(
+                "{\"id\":null,\"name\":\"pending\"}", Identifiable.class);
+
+        assertNull(value.id);
+        assertEquals("pending", value.name);
+    }
+
+    @Test
+    public void testNonNullObjectIdStillDeserializes() throws Exception {
+        Identifiable value = mapper.readValue(
+                "{\"id\":\"object-1\",\"name\":\"stored\"}", Identifiable.class);
+
+        assertEquals("object-1", value.id);
+        assertEquals("stored", value.name);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.struct.ObjectIdNullDeserializationTest::testNullObjectIdIsAccepted
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.struct.ObjectIdNullDeserializationTest::testNullObjectIdIsAccepted

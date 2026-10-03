@@ -1,0 +1,396 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 2  Version: JacksonDatabind-2b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 467
+Trigger failures:
+- com.fasterxml.jackson.databind.node.TestConversions::testConversionOfPojos
+ --> junit.framework.AssertionFailedError: Expected Object, got POJO
+Modified: com.fasterxml.jackson.databind.util.TokenBuffer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.util.TokenBuffer | java]
+package com.fasterxml.jackson.databind.util;
+public class TokenBuffer
+protected final static int DEFAULT_GENERATOR_FEATURES = JsonGenerator.Feature.collectDefaults();
+protected ObjectCodec _objectCodec;
+protected int _generatorFeatures;
+protected boolean _closed;
+protected boolean _hasNativeTypeIds;
+protected boolean _hasNativeObjectIds;
+protected boolean _mayHaveNativeIds;
+protected Segment _first;
+protected Segment _last;
+protected int _appendAt;
+protected Object _typeId;
+protected Object _objectId;
+protected boolean _hasNativeId = false;
+protected JsonWriteContext _writeContext;
+@Deprecated
+public TokenBuffer(ObjectCodec codec) {
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+public TokenBuffer(JsonParser jp)
+@Override
+public Version version() {
+public JsonParser asParser()
+public JsonParser asParser(ObjectCodec codec)
+public JsonParser asParser(JsonParser src)
+public JsonToken firstToken() {
+@SuppressWarnings("resource")
+public TokenBuffer append(TokenBuffer other)
+public void serialize(JsonGenerator jgen)
+public TokenBuffer deserialize(JsonParser jp, DeserializationContext ctxt)
+public String toString()
+private final void _appendNativeIds(StringBuilder sb)
+public JsonGenerator enable(Feature f) {
+public JsonGenerator disable(Feature f) {
+public boolean isEnabled(Feature f) {
+public int getFeatureMask() {
+public JsonGenerator setFeatureMask(int mask) {
+public JsonGenerator useDefaultPrettyPrinter() {
+public JsonGenerator setCodec(ObjectCodec oc) {
+public ObjectCodec getCodec() { return _objectCodec; }
+public final JsonWriteContext getOutputContext() { return _writeC
+...[truncated deterministically]...
+Type(int index)
+public Object get(int index) {
+public Segment next() { return _next; }
+public boolean hasIds() {
+public Segment append(int index, JsonToken tokenType)
+public Segment append(int index, JsonToken tokenType, Object value)
+public Segment appendRaw(int index, int rawTokenType, Object value)
+private void set(int index, JsonToken tokenType)
+private void set(int index, JsonToken tokenType, Object value)
+private void set(int index, int rawTokenType, Object value)
+private void set(int index, int rawTokenType, Object value, Object objectId, Object typeId)
+private final void assignNativeIds(int index, Object objectId, Object typeId)
+public Object findObjectId(int index) {
+public Object findTypeId(int index) {
+private final int _typeIdIndex(int i) { return i+i; }
+private final int _objectIdIndex(int i) { return i+i+1; }
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.util;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ import java.io.IOException;
+ import java.util.Arrays;
+ import java.util.List;
+
+ import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+ import com.fasterxml.jackson.core.*;
+ import com.fasterxml.jackson.databind.*;
+
+ public class TokenBufferBug2Test {
+
+     private final ObjectMapper MAPPER = new ObjectMapper();
+
+     @Test
+     public void testWriteObjectWithSimpleBean() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeObject(new SimpleBean("Alice", 30));
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("name", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("Alice", p.getText());
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("age", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(30, p.getIntValue());
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectWithNestedBean() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeObject(new OutterBean("outer", new InnerBean("nested", 1)));
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("outerField", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("outer", p.getText());
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("inner", p.getCurrentName());
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("innerField", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("nested", p.getText());
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("innerValue", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(1, p.getIntValue());
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectWithListField() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         ListBean bean = new ListBean();
+         bean.items = Arrays.asList("one", "two", "three");
+         tb.writeObject(bean);
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("items", p.getCurrentName());
+         assertNextToken(p, JsonToken.START_ARRAY);
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("one", p.getText());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("two", p.getText());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("three", p.getText());
+         assertNextToken(p, JsonToken.END_ARRAY);
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectWithNullProperty() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeObject(new SimpleBean(null, 42));
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("name", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NULL);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("age", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(42, p.getIntValue());
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectWithEmptyBean() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeObject(new EmptyBean());
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectWithPolymorphicType() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         Circle circle = new Circle(5);
+         tb.writeObject(circle);
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("@class", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals(Circle.class.getName(), p.getText());
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("radius", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(5, p.getIntValue());
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectWithObjectId() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         ObjectIdBean bean = new ObjectIdBean(101, "data");
+         tb.writeObject(bean);
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("id", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+         assertEquals(101, p.getIntValue());
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("value", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("data", p.getText());
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteLargeArray() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeStartArray();
+         final int COUNT = 50;
+         for (int i = 0; i < COUNT; i++) {
+             tb.writeNumber(i);
+         }
+         tb.writeEndArray();
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_ARRAY);
+         for (int i =0; i < COUNT; i++) {
+             assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+             assertEquals(i, p.getIntValue());
+         }
+         assertNextToken(p, JsonToken.END_ARRAY);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteObjectDeepNesting() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         DeepOuter outer = DeepOuter.create(5);
+         tb.writeObject(outer);
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.START_OBJECT);
+         for (int i =0; i <5; i++) {
+             assertNextToken(p, JsonToken.FIELD_NAME);
+             assertEquals("child", p.getCurrentName());
+             assertNextToken(p, JsonToken.START_OBJECT);
+         }
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("value", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         assertEquals("leaf", p.getText());
+         for (int i =0; i <5; i++) {
+             assertNextToken(p, JsonToken.END_OBJECT);
+         }
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testWriteNullObjectYieldsNullToken() throws IOException {
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeObject(null);
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         assertNextToken(p, JsonToken.VALUE_NULL);
+         assertNull(p.nextToken());
+     }
+
+     @Test
+     public void testRoundtripThroughObjectMaper() throws IOException {
+         SimpleBean original = new SimpleBean("Bob", 99);
+         TokenBuffer tb = new TokenBuffer(MAPPER, false);
+         tb.writeObject(original);
+         tb.close();
+
+         JsonParser p = tb.asParser();
+         ObjectMapper mapper = new ObjectMapper();
+         SimpleBean result = mapper.readValue(p, SimpleBean.class);
+         assertEquals(original.name, result.name);
+         assertEquals(original.age, result.age);
+     }
+
+     // Helpers
+     private void assertNextToken(JsonParser p, JsonToken expected) throws IOException {
+         assertNotNull("Expected token " + expected + " but reached null", p.nextToken());
+         assertEquals(expected, p.getCurrentToken());
+     }
+
+     // Test data classes
+     public static class SimpleBean {
+         public String name;
+         public int age;
+         public SimpleBean() {}
+         public SimpleBean(String name, int age) {
+             this.name = name;
+             this.age = age;
+         }
+     }
+
+     public static class InnerBean {
+         public String innerField;
+         public int innerValue;
+         public InnerBean() {}
+         public InnerBean(String innerField, int innerValue) {
+             this.innerField = innerField;
+             this.innerValue = innerValue;
+         }
+     }
+
+     public static class OutterBean {
+         public String outerField;
+         public InnerBean inner;
+         public OutterBean() {}
+         public OutterBean(String outerField, InnerBean inner) {
+             this.outerField = outerField;
+             this.inner = inner;
+         }
+     }
+
+     public static class ListBean {
+         public List<String> items;
+     }
+
+     public static class EmptyBean { }
+
+     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY)
+     public interface Shape { }
+
+     public static class Circle implements Shape {
+         public int radius;
+         public Circle() {}
+         public Circle(int radius) { this.radius = radius; }
+     }
+
+     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+     public static class ObjectIdBean {
+         public int id;
+         public String value;
+         public ObjectIdBean() {}
+         public ObjectIdBean(int id, String value) {
+             this.id = id;
+             this.value = value;
+         }
+     }
+
+     public static class DeepOuter {
+         public DeepOuter child;
+         public String value;
+         public static DeepOuter create(int depth) {
+             DeepOuter root = new DeepOuter();
+             DeepOuter cur = root;
+             for (int i =0; i < depth; i++) {
+                 cur.child = new DeepOuter();
+                 cur = cur.child;
+             }
+             cur.value = "leaf";
+             return root;
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.util.TokenBufferBug2Test::testWriteObjectWithEmptyBean
+ - com.fasterxml.jackson.databind.util.TokenBufferBug2Test::testWriteObjectDeepNesting
+
+Failing generated tests: com.fasterxml.jackson.databind.util.TokenBufferBug2Test::testWriteObjectDeepNesting, com.fasterxml.jackson.databind.util.TokenBufferBug2Test::testWriteObjectWithEmptyBean

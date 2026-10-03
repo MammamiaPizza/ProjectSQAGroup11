@@ -1,0 +1,129 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 51  Version: Math-51b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-631
+Trigger failures:
+- org.apache.commons.math.analysis.solvers.RegulaFalsiSolverTest::testIssue631
+ --> org.apache.commons.math.exception.TooManyEvaluationsException: illegal state: maximal count (3,624) exceeded: evaluations
+Modified: org.apache.commons.math.analysis.solvers.BaseSecantSolver
+
+Available API/signatures:
+[org.apache.commons.math.analysis.solvers.BaseSecantSolver | java]
+package org.apache.commons.math.analysis.solvers;
+public abstract class BaseSecantSolver
+protected static final double DEFAULT_ABSOLUTE_ACCURACY = 1e-6;
+protected BaseSecantSolver(final double absoluteAccuracy, final Method method) {
+@Override
+protected final double doSolve() {
+final double ftol = getFunctionValueAccuracy();
+final double atol = getAbsoluteAccuracy();
+final double rtol = getRelativeAccuracy();
+final double x = x1 - ((f1 * (x1 - x0)) / (f1 - f0));
+final double fx = computeObjectiveValue(x);
+protected enum Method {
+
+Generated JUnit Test:
+package org.apache.commons.math.analysis.solvers;
+
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.exception.ConvergenceException;
+import org.apache.commons.math.exception.NoBracketingException;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class BaseSecantSolverRegressionTest {
+
+    @Test(expected = ConvergenceException.class)
+    public void testRegulaFalsiDetectsStagnationInsteadOfExhaustingEvaluations() {
+        UnivariateRealFunction function = new UnivariateRealFunction() {
+            public double value(double x) {
+                final double y = 1.0 - x;
+                return 1.0 - 1.0e20 * y * y;
+            }
+        };
+
+        new RegulaFalsiSolver().solve(3624, function, 0.0, 1.0);
+    }
+
+    @Test
+    public void testReturnsExactRootAtEitherInitialEndpoint() {
+        UnivariateRealFunction function = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x - 2.0;
+            }
+        };
+
+        Assert.assertEquals(2.0,
+                            new RegulaFalsiSolver().solve(10, function, 2.0, 5.0),
+                            0.0);
+        Assert.assertEquals(2.0,
+                            new RegulaFalsiSolver().solve(10, function, -1.0, 2.0),
+                            0.0);
+    }
+
+    @Test
+    public void testIllinoisSolverConvergesOnBracketedNonlinearRoot() {
+        UnivariateRealFunction function = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x * x - 2.0;
+            }
+        };
+
+        double root = new IllinoisSolver().solve(100, function, 0.0, 2.0);
+
+        Assert.assertEquals(Math.sqrt(2.0), root, 2.0e-6);
+        Assert.assertTrue(Math.abs(function.value(root)) <= 1.0e-5);
+    }
+
+    @Test
+    public void testPegasusSolverConvergesOnBracketedNonlinearRoot() {
+        UnivariateRealFunction function = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x * x - 2.0;
+            }
+        };
+
+        double root = new PegasusSolver().solve(100, function, 0.0, 2.0);
+
+        Assert.assertEquals(Math.sqrt(2.0), root, 2.0e-6);
+        Assert.assertTrue(Math.abs(function.value(root)) <= 1.0e-5);
+    }
+
+    @Test
+    public void testAllowedSolutionBelowSideReturnsNonPositiveFunctionValue() {
+        UnivariateRealFunction function = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x * x - 2.0;
+            }
+        };
+
+        double root = new IllinoisSolver().solve(100, function, 0.0, 2.0,
+                                                 AllowedSolution.BELOW_SIDE);
+
+        Assert.assertTrue(function.value(root) <= 0.0);
+        Assert.assertEquals(Math.sqrt(2.0), root, 2.0e-6);
+    }
+
+    @Test(expected = NoBracketingException.class)
+    public void testRejectsInitialIntervalWithoutOppositeSigns() {
+        UnivariateRealFunction function = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x * x + 1.0;
+            }
+        };
+
+        new RegulaFalsiSolver().solve(20, function, -1.0, 1.0);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.math.analysis.solvers.BaseSecantSolverRegressionTest::testRegulaFalsiDetectsStagnationInsteadOfExhaustingEvaluations
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.math.analysis.solvers.BaseSecantSolverRegressionTest::testRegulaFalsiDetectsStagnationInsteadOfExhaustingEvaluations

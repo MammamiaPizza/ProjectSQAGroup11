@@ -1,0 +1,124 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JxPath  Bug: 18  Version: JxPath-18b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.apache.commons.jxpath.ri.axes.AttributeContext
+Modified: org.apache.commons.jxpath.ri.axes.AttributeContext
+Triggers: org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testAxisAttribute, org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testAxisAttribute
+
+Bug/specification summary:
+Bug report: JXPATH-115
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testAxisAttribute
+ --> junit.framework.AssertionFailedError: Evaluating value iterator <vendor/product/price:amount/attribute::node()> expected:<[10%, 20%]> but was:<[]>
+ - org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testAxisAttribute
+ --> junit.framework.AssertionFailedError: Evaluating value iterator <vendor/product/price:amount/attribute::node()> expected:<[10%, 20%]> but was:<[]>
+Modified: org.apache.commons.jxpath.ri.axes.AttributeContext
+
+Prompt-01 test plan:
+TARGETS: AttributeContext.setPosition() must advance to matching attributes in the parent's
+attribute iterator
+ORACLES: Expected values "10%", "20%" from DOM/JDOM documents with amount attributes; test asserts
+iterator returns both
+CASES: Single attribute node, multiple attributes, no matching attributes, boundary at last
+position, reset then nextNode
+RISKS: Limited to supplied API signatures; cannot inspect parent context's attribute iteration logic
+or NodeTest matching behavior
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.jxpath.ri.axes.AttributeContext (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.axes;
+
+import org.apache.commons.jxpath.ri.EvalContext;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.compiler.NodeNameTest;
+import org.apache.commons.jxpath.ri.compiler.NodeTest;
+import org.apache.commons.jxpath.ri.model.NodeIterator;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+/**
+ * EvalContext that walks the "attribute::" axis.
+ *
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public class AttributeContext extends EvalContext {
+
+ private NodeTest nodeTest;
+ private boolean setStarted = false;
+ private NodeIterator iterator;
+ private NodePointer currentNodePointer;
+
+ /**
+ * @param parentContext represents the previous step on the path
+ * @param nodeTest is the name of the attribute we are looking for
+ */
+ public AttributeContext(EvalContext parentContext, NodeTest nodeTest) {
+ super(parentContext);
+ this.nodeTest = nodeTest;
+ }
+
+ public NodePointer getCurrentNodePointer() {
+ return currentNodePointer;
+ }
+
+ public void reset() {
+ setStarted = false;
+ iterator = null;
+ super.reset();
+ }
+
+ public boolean setPosition(int position) {
+ if (position < getCurrentPosition()) {
+ reset();
+ }
+
+ while (getCurrentPosition() < position) {
+ if (!nextNode()) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+ public boolean nextNode() {
+ super.setPosition(getCurrentPosition() + 1);
+ if (!setStarted) {
+ setStarted = true;
+ if (!(nodeTest instanceof NodeNameTest)) {
+ return false;
+ }
+ QName name = ((NodeNameTest) nodeTest).getNodeName();
+ iterator =
+ parentContext.getCurrentNodePointer().attributeIterator(name);
+ }
+ if (iterator == null) {
+ return false;
+ }
+ if (!iterator.setPosition(iterator.getPosition() + 1)) {
+ return false;
+ }
+ currentNodePointer = iterator.getNodePointer();
+ return true;
+ }
+}

@@ -1,0 +1,220 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 19  Version: Time-19b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 124
+Trigger failures:
+- org.joda.time.TestDateTimeZoneCutover::testDateTimeCreation_london
+ --> junit.framework.ComparisonFailure: expected:<...1-10-30T01:15:00.000[+01:00]> but was:<...1-10-30T01:15:00.000[Z]>
+Modified: org.joda.time.DateTimeZone
+
+Available API/signatures:
+[org.joda.time.DateTimeZone | java]
+package org.joda.time;
+public abstract class DateTimeZone implements Serializable {
+public static final DateTimeZone UTC = new FixedDateTimeZone("UTC", "UTC", 0, 0);
+public static DateTimeZone getDefault() {
+synchronized(DateTimeZone.class) {
+public static void setDefault(DateTimeZone zone) throws SecurityException {
+@FromString
+public static DateTimeZone forID(String id) {
+public static DateTimeZone forOffsetHours(int hoursOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetHoursMinutes(int hoursOffset, int minutesOffset) throws IllegalArgumentException {
+public static DateTimeZone forOffsetMillis(int millisOffset) {
+public static DateTimeZone forTimeZone(TimeZone zone) {
+final String id = zone.getID();
+private static synchronized DateTimeZone fixedOffsetZone(String id, int offset) {
+public static Set<String> getAvailableIDs() {
+public static Provider getProvider() {
+public static void setProvider(Provider provider) throws SecurityException {
+private static void setProvider0(Provider provider) {
+private static Provider getDefaultProvider() {
+public static NameProvider getNameProvider() {
+public static void setNameProvider(NameProvider nameProvider) throws SecurityException {
+private static void setNameProvider0(NameProvider nameProvider) {
+private static NameProvider getDefaultNameProvider() {
+private static synchronized String getConvertedId(String id) {
+private static int parseOffset(String str) {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public String toString() {
+private static String printOffset(int offse
+...[truncated deterministically]...
+c long convertLocalToUTC(long instantLocal, boolean strict) {
+public long getMillisKeepLocal(DateTimeZone newZone, long oldInstant) {
+public boolean isLocalDateTimeGap(LocalDateTime localDateTime) {
+public long adjustOffset(long instant, boolean earlierOrLater) {
+public abstract boolean isFixed();
+public abstract long nextTransition(long instant);
+public abstract long previousTransition(long instant);
+public java.util.TimeZone toTimeZone() {
+public abstract boolean equals(Object object);
+public int hashCode() {
+protected Object writeReplace() throws ObjectStreamException {
+private static final class Stub implements Serializable {
+private void writeObject(ObjectOutputStream out) throws IOException {
+private void readObject(ObjectInputStream in) throws IOException {
+private Object readResolve() throws ObjectStreamException {
+
+Generated JUnit Test:
+package org.joda.time;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+public class TestDateTimeZoneBug19 {
+
+ private static final DateTimeZone LONDON = DateTimeZone.forID("Europe/London");
+ private static final DateTimeZone UTC = DateTimeZone.UTC;
+
+ /**
+  * Returns the UTC millis for the given fields in the ISO chronology at UTC.
+  */
+ private static long utcMillis(int year, int month, int day, int hour, int min, int sec, int millis)
+{
+     return new DateTime(year, month, day, hour, min, sec, millis, UTC).getMillis();
+ }
+
+ /**
+  * Constructs a local millis value from a UTC instant and an offset.
+  */
+ private static long localMillis(long utcInstant, int offsetMillis) {
+     return utcInstant + offsetMillis;
+ }
+
+ /**
+  * Simulates the original failing test: create a DateTime in a gap and
+  * check its UTC instant and offset.
+  */
+ @Test
+ public void testDateTimeCreation_LondonGap_1891() {
+     long utcExpected = utcMillis(1891, 10, 30, 0, 15, 0, 0);
+     DateTime dt = new DateTime(1891, 10, 30, 1, 15, 0, 0, LONDON);
+     assertEquals("UTC millis should correspond to 00:15 UTC", utcExpected, dt.getMillis());
+     assertEquals("Offset should be +01:00 (3600000 ms)", DateTimeConstants.MILLIS_PER_HOUR,
+             dt.getZone().getOffset(dt.getMillis()));
+ }
+
+ /** Gap middle: local 01:15 → offset +01:00 */
+ @Test
+ public void testGetOffsetFromLocal_GapMiddle_01_15() {
+     long utc = utcMillis(1891, 10, 30, 0, 15, 0, 0);
+     long local = localMillis(utc, DateTimeConstants.MILLIS_PER_HOUR);
+     assertEquals(DateTimeConstants.MILLIS_PER_HOUR, LONDON.getOffsetFromLocal(local));
+ }
+
+ /** Gap start: local 01:00:00.000 → offset +01:00 */
+ @Test
+ public void testGetOffsetFromLocal_GapStart_01_00() {
+     long utc = utcMillis(1891, 10, 30, 0, 0, 0, 0);
+     long local = localMillis(utc, DateTimeConstants.MILLIS_PER_HOUR);
+     assertEquals(DateTimeConstants.MILLIS_PER_HOUR, LONDON.getOffsetFromLocal(local));
+ }
+
+ /** Gap end: local 02:00:00.000 → offset +01:00 */
+ @Test
+ public void testGetOffsetFromLocal_GapEnd_02_00() {
+     long utc = utcMillis(1891, 10, 30, 1, 0, 0, 0);
+     long local = localMillis(utc, DateTimeConstants.MILLIS_PER_HOUR);
+     assertEquals(DateTimeConstants.MILLIS_PER_HOUR, LONDON.getOffsetFromLocal(local));
+ }
+
+ /** Non‑gap time before the transition: offset should be 0. */
+ @Test
+ public void testGetOffsetFromLocal_BeforeGap_00_30() {
+     long utc = utcMillis(1891, 10, 30, 0, 30, 0, 0);
+     long local = utc; // before gap offset = 0
+     assertEquals(0, LONDON.getOffsetFromLocal(local));
+ }
+
+ /** Non‑gap time after the transition: offset should be +01:00. */
+ @Test
+ public void testGetOffsetFromLocal_AfterGap_02_30() {
+     long utc = utcMillis(1891, 10, 30, 1, 30, 0, 0);
+     long local = localMillis(utc, DateTimeConstants.MILLIS_PER_HOUR);
+     assertEquals(DateTimeConstants.MILLIS_PER_HOUR, LONDON.getOffsetFromLocal(local));
+ }
+
+ /**
+  * convertLocalToUTC with strict=false for a gap time must return the UTC
+  * instant after the gap.
+  */
+ @Test
+ public void testConvertLocalToUTC_GapTime_nonStrict() {
+     long utcExpected = utcMillis(1891, 10, 30, 0, 15, 0, 0);
+     long local = localMillis(utcExpected, DateTimeConstants.MILLIS_PER_HOUR);
+     assertEquals(utcExpected, LONDON.convertLocalToUTC(local, false));
+ }
+
+ /**
+  * convertLocalToUTC with strict=true for a gap time must throw an exception.
+  */
+ @Test
+ public void testConvertLocalToUTC_GapTime_strict() {
+     long utcExpected = utcMillis(1891, 10, 30, 0, 15, 0, 0);
+     long local = localMillis(utcExpected, DateTimeConstants.MILLIS_PER_HOUR);
+     try {
+         LONDON.convertLocalToUTC(local, true);
+         fail("Expected IllegalArgumentException for gap time in strict mode");
+     } catch (IllegalArgumentException e) {
+         // expected
+     }
+ }
+
+ /** Winter time in December 1891 – offset should be 0. */
+ @Test
+ public void testGetOffsetFromLocal_Winter_December() {
+     long utc = utcMillis(1891, 12, 15, 12, 0, 0, 0);
+     long local = utc;
+     assertEquals("Winter offset", 0, LONDON.getOffsetFromLocal(local));
+ }
+
+ /**
+  * getOffset at UTC midnight on the transition day – the offset should be
+  * +01:00 because the transition already happened by that UTC instant.
+  */
+ @Test
+ public void testGetOffset_UTC_midnight_transitionDay() {
+     long utc = utcMillis(1891, 10, 30, 0, 0, 0, 0);
+     assertEquals(DateTimeConstants.MILLIS_PER_HOUR, LONDON.getOffset(utc));
+ }
+
+ /**
+  * Verify that converting a local time just before the gap (00:59) works
+  * correctly and yields offset 0.
+  */
+ @Test
+ public void testGetOffsetFromLocal_JustBeforeGap_00_59() {
+     long utc = utcMillis(1891, 10, 30, 0, 0, 0, 0) + 59 * DateTimeConstants.MILLIS_PER_MINUTE;
+     long local = utc; // offset 0
+     assertEquals(0, LONDON.getOffsetFromLocal(local));
+ }
+
+ /**
+  * For an ambiguous local time (autumn fall‑back) the method must return a
+  * valid offset (0 or +01:00) without throwing.
+  */
+ @Test
+ public void testGetOffsetFromLocal_Overlap_Autumn() {
+     // autumn 1968: BST → GMT on 27 Oct 1968 (03:00 BST → 02:00 GMT)
+     // local 02:30 is ambiguous
+     long utc = utcMillis(1968, 10, 27, 1, 30, 0, 0); // 01:30 UTC → exists twice
+     long localAmbiguous = localMillis(utc, DateTimeConstants.MILLIS_PER_HOUR); // +01:00
+     int offset = LONDON.getOffsetFromLocal(localAmbiguous);
+     assertTrue("Offset must be 0 or +01:00 for ambiguous time",
+             offset == 0 || offset == DateTimeConstants.MILLIS_PER_HOUR);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 8
+ - org.joda.time.TestDateTimeZoneBug19::testGetOffsetFromLocal_GapStart_01_00
+ - org.joda.time.TestDateTimeZoneBug19::testConvertLocalToUTC_GapTime_strict
+ - org.joda.time.TestDateTimeZoneBug19::testDateTimeCreation_LondonGap_1891
+Failing generated tests: org.joda.time.TestDateTimeZoneBug19::testConvertLocalToUTC_GapTime_nonStrict, org.joda.time.TestDateTimeZoneBug19::testConvertLocalToUTC_GapTime_strict, org.joda.time.TestDateTimeZoneBug19::testDateTimeCreation_LondonGap_1891, org.joda.time.TestDateTimeZoneBug19::testGetOffsetFromLocal_AfterGap_02_30, org.joda.time.TestDateTimeZoneBug19::testGetOffsetFromLocal_GapEnd_02_00, org.joda.time.TestDateTimeZoneBug19::testGetOffsetFromLocal_GapMiddle_01_15, org.joda.time.TestDateTimeZoneBug19::testGetOffsetFromLocal_GapStart_01_00, org.joda.time.TestDateTimeZoneBug19::testGetOffset_UTC_midnight_transitionDay

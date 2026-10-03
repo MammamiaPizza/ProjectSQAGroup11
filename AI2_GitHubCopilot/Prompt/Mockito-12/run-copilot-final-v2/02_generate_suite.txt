@@ -1,0 +1,73 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 12  Version: Mockito-12b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.util.reflection.GenericMaster
+Modified: org.mockito.internal.util.reflection.GenericMaster
+Triggers: org.mockito.internal.util.reflection.GenericMasterTest::shouldDealWithNestedGenerics, org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldUseAnnotatedCaptor, org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldUseCaptorInOrdinaryWay, org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldCaptureGenericList, org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldUseGenericlessAnnotatedCaptor, org.mockitousage.annotation.CaptorAnnotationTest::shouldScreamWhenWrongTypeForCaptor, org.mockitousage.annotation.CaptorAnnotationTest::testNormalUsage, org.mockitousage.annotation.CaptorAnnotationTest::shouldScreamWhenMoreThanOneMockitoAnnotaton, org.mockitousage.annotation.CaptorAnnotationTest::shouldScreamWhenInitializingCaptorsForNullClass, org.mockitousage.annotation.CaptorAnnotationTest::shouldLookForAnnotatedCaptorsInSuperClasses
+
+Bug/specification summary:
+Bug report: 188
+Trigger failures:
+- org.mockito.internal.util.reflection.GenericMasterTest::shouldDealWithNestedGenerics
+ --> java.lang.ClassCastException: sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl cannot be cast to java.lang.Class
+ - org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldUseAnnotatedCaptor
+ --> java.lang.ClassCastException: sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl cannot be cast to java.lang.Class
+ - org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldUseCaptorInOrdinaryWay
+ --> java.lang.ClassCastException: sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl cannot be cast to java.lang.Class
+ - org.mockitousage.annotation.CaptorAnnotationBasicTest::shouldCaptureGenericList
+ --> java.lang.ClassCastException: sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl cannot be cast to java.lang.Class
+ - org
+...[truncated deterministically]...
+otation.CaptorAnnotationTest::shouldScreamWhenInitializingCaptorsForNullClass
+ --> java.lang.ClassCastException: sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl cannot be cast to java.lang.Class
+ - org.mockitousage.annotation.CaptorAnnotationTest::shouldLookForAnnotatedCaptorsInSuperClasses
+ --> java.lang.ClassCastException: sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl cannot be cast to java.lang.Class
+Modified: org.mockito.internal.util.reflection.GenericMaster
+
+Prompt-01 test plan:
+TARGETS: GenericMaster.getGenericType(Field) should resolve raw Class from fields with generic
+types.
+ORACLES: For Field with List<String> → getGenericType must return List.class; no ClassCastException.
+ORACLES: For Field with simple type String → getGenericType must return String.class.
+CASES: Parameterized type: List<String> (1 level), nested generics: List<Set<String>>.
+CASES: Non-generic field: normal, null type (should not happen), or raw type field.
+CASES: Edge: field with wildcard bounds (? extends Number) – raw type expected from upper bound
+class.
+RISKS: The snippet returns Object.class; the actual buggy version (missing) might do unsafe (Class)
+cast on getGenericType().
+RISKS: Potential for TypeVariable or GenericArrayType in field, but captor usage likely avoids them.
+RISKS: No access to original failing code; behavior inferred from ClassCastException and test names.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.util.reflection.GenericMaster (java) =====
+package org.mockito.internal.util.reflection;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+
+@SuppressWarnings("unchecked")
+public class GenericMaster {
+
+ /**
+ * Finds the generic type (parametrized type) of the field. If the field is not generic it returns Object.class. 
+ * 
+ * @param field
+ * @return
+ */
+ public Class getGenericType(Field field) { 
+ Type generic = field.getGenericType();
+ if (generic != null && generic instanceof ParameterizedType) {
+ Type actual = ((ParameterizedType) generic).getActualTypeArguments()[0];
+ return (Class) actual;
+ //in case of nested generics we don't go deep
+ }
+ 
+ return Object.class;
+ }
+}

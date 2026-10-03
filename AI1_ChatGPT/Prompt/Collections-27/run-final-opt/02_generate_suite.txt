@@ -1,0 +1,437 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Collections  Bug: 27  Version: Collections-27b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.collections4.map.MultiValueMap
+Modified: org.apache.commons.collections4.map.MultiValueMap
+Triggers: org.apache.commons.collections4.map.MultiValueMapTest::testUnsafeDeSerialization
+
+Bug/specification summary:
+Bug report: COLLECTIONS-580
+Trigger failures:
+- org.apache.commons.collections4.map.MultiValueMapTest::testUnsafeDeSerialization
+ --> junit.framework.AssertionFailedError: unsafe clazz accepted when de-serializing MultiValueMap
+Modified: org.apache.commons.collections4.map.MultiValueMap
+
+Prompt-01 test plan:
+TARGETS: MultiValueMap.readObject(ObjectInputStream) deserialization safety validation. 
+ORACLES: Trigger test expects unsafe clazz rejection during MultiValueMap deserialization. 
+CASES: Deserialize a normally serialized MultiValueMap using its supported default collection factory. 
+CASES: Deserialize serialized state containing an unsafe collection class; expect failure/rejection. 
+RISKS: readObject is private; test through Java serialization round-trip only. 
+RISKS: Available context omits the exact safe-class policy and exception type/message.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.collections4.map.MultiValueMap (java) =====
+/* API SIGNATURES */
+package org.apache.commons.collections4.map;
+@Deprecated
+public class MultiValueMap<K, V> extends AbstractMapDecorator<K, Object> implements MultiMap<K, V>, Serializable {
+@SuppressWarnings({ "unchecked", "rawtypes" })
+public static <K, V> MultiValueMap<K, V> multiValueMap(final Map<K, ? super Collection<V>> map) {
+return MultiValueMap.<K, V, ArrayList> multiValueMap((Map<K, ? super Collection>) map, ArrayList.class);
+public MultiValueMap() {
+this(new HashMap<K, V>(), new ReflectionFactory(ArrayList.class));
+@SuppressWarnings("unchecked")
+private void writeObject(final ObjectOutputStream out) throws IOException {
+@SuppressWarnings("unchecked") // (1) should only fail if input stream is incorrect
+private void readObject(final ObjectInputStream in) throws IOException, ClassNotFoundException {
+@Override
+public void clear() {
+public boolean removeMapping(final Object key, final Object value) {
+final Collection<V> valuesForKey = getCollection(key);
+final boolean removed = valuesForKey.remove(value);
+public boolean containsValue(final Object value) {
+final Set<Map.Entry<K, Object>> pairs = decorated().entrySet();
+for (final Map.Entry<K, Object> entry : pairs) {
+public Object put(final K key, final Object value) {
+public void putAll(final Map<? extends K, ?> map) {
+for (final Map.Entry<? extends K, Object> entry : ((MultiMap<? extends K, V>) map).entrySet()) {
+for (final Map.Entry<? extends K, ?> entry : map.entrySet()) {
+public Set<Entry<K, Object>> entrySet() {
+public Collection<Object> values() {
+public boolean containsValue(final Object key, final Object value) {
+final Collection<V> coll = getCollection(key);
+public Collection<V> getCollection(final Object key) {
+public int size(final Object key) {
+public boolean putAll(final K key, final Collection<V> values) {
+public Iterator<V> iterator(final Object key) {
+public Iterator<Entry<K, V>> iterator() {
+final Collection<K> allKeys = new ArrayList<K>(keySet());
+final Iterator<K> keyIterator = allKeys.iterator();
+protected Iterator<? extends Entry<K, V>> nextIterator(int count) {
+final K key = keyIterator.next();
+final Transformer<V, Entry<K, V>> transformer = new Transformer<V, Entry<K, V>>() {
+public Entry<K, V> transform(final V input) {
+public K getKey() {
+public V getValue() {
+public V setValue(V value) {
+public int totalSize() {
+for (final Object v : decorated().values()) {
+protected Collection<V> createCollection(final int size) {
+private class Values extends AbstractCollection<V> {
+public Iterator<V> iterator() {
+final IteratorChain<V> chain = new IteratorChain<V>();
+for (final K k : keySet()) {
+public int size() {
+private class ValuesIterator implements Iterator<V> {
+public ValuesIterator(final Object key) {
+public void remove() {
+public boolean hasNext() {
+public V next() {
+private static class ReflectionFactory<T extends Collection<?>> implements Factory<T>, Serializable {
+public ReflectionFactory(final Class<T> clazz) {
+public T create() {
+} catch (final Exception ex) {
+throw new FunctorException("Cannot instantiate class: " + clazz, ex);
+
+/* HEADER */
+package org.apache.commons.collections4.map;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.Factory;
+import org.apache.commons.collections4.FunctorException;
+import org.apache.commons.collections4.MultiMap;
+import org.apache.commons.collections4.Transformer;
+import org.apache.commons.collections4.iterators.EmptyIterator;
+import org.apache.commons.collections4.iterators.IteratorChain;
+import org.apache.commons.collections4.iterators.LazyIteratorChain;
+import org.apache.commons.collections4.iterators.TransformIterator;
+public class MultiValueMap<K, V> extends AbstractMapDecorator<K, Object> implements MultiMap<K, V>, Serializable {
+
+/* METHOD multiValueMap */
+public static <K, V, C extends Collection<V>> MultiValueMap<K, V> multiValueMap(final Map<K, ? super C> map,
+ final Class<C> collectionClass) {
+ return new MultiValueMap<K, V>(map, new ReflectionFactory<C>(collectionClass));
+ }
+
+/* METHOD multiValueMap */
+public static <K, V, C extends Collection<V>> MultiValueMap<K, V> multiValueMap(final Map<K, ? super C> map,
+ final Factory<C> collectionFactory) {
+ return new MultiValueMap<K, V>(map, collectionFactory);
+ }
+
+/* METHOD MultiValueMap */
+@SuppressWarnings("unchecked")
+ protected <C extends Collection<V>> MultiValueMap(final Map<K, ? super C> map,
+ final Factory<C> collectionFactory) {
+ super((Map<K, Object>) map);
+ if (collectionFactory == null) {
+ throw new IllegalArgumentException("The factory must not be null");
+ }
+ this.collectionFactory = collectionFactory;
+ }
+
+/* METHOD multiValueMap */
+@SuppressWarnings({ "unchecked", "rawtypes" }
+
+/* METHOD MultiValueMap */
+@SuppressWarnings({ "unchecked", "rawtypes" }
+
+/* METHOD clear */
+@Override
+ public void clear() {
+ // If you believe that you have GC issues here, try uncommenting this code
+// Set pairs = getMap().entrySet();
+// Iterator pairsIterator = pairs.iterator();
+// while (pairsIterator.hasNext()) {
+// Map.Entry keyValuePair = (Map.Entry) pairsIterator.next();
+// Collection coll = (Collection) keyValuePair.getValue();
+// coll.clear();
+// }
+ decorated().clear();
+ }
+
+/* METHOD clear */
+@Override
+ public void clear() {
+ MultiValueMap.this.clear();
+ }
+
+/* METHOD remove */
+@Override
+ public void remove() {
+ iterator.remove();
+ if (values.isEmpty()) {
+ MultiValueMap.this.remove(key);
+ }
+ }
+
+/* METHOD removeMapping */
+@Override
+ public boolean removeMapping(final Object key, final Object value) {
+ final Collection<V> valuesForKey = getCollection(key);
+ if (valuesForKey == null) {
+ return false;
+ }
+ final boolean removed = valuesForKey.remove(value);
+ if (removed == false) {
+ return false;
+ }
+ if (valuesForKey.isEmpty()) {
+ remove(key);
+ }
+ return true;
+ }
+
+/* METHOD containsValue */
+@Override
+ @SuppressWarnings("unchecked")
+ public boolean containsValue(final Object value) {
+ final Set<Map.Entry<K, Object>> pairs = decorated().entrySet();
+ if (pairs != null) {
+ for (final Map.Entry<K, Object> entry : pairs) {
+ if (((Collection<V>) entry.getValue()).contains(value)) {
+ return true;
+ }
+ }
+ }
+ return false;
+ }
+
+/* METHOD put */
+@Override
+ @SuppressWarnings("unchecked")
+ public Object put(final K key, final Object value) {
+ boolean result = false;
+ Collection<V> coll = getCollection(key);
+ if (coll == null) {
+ coll = createCollection(1); // might produce a non-empty collection
+ coll.add((V) value);
+ if (coll.size() > 0) {
+ // only add if non-zero size to maintain class state
+ decorated().put(key, coll);
+ result = true; // map definitely changed
+ }
+ } else {
+ result = coll.add((V) value);
+ }
+ return result ? value : null;
+ }
+
+/* METHOD putAll */
+@Override
+ @SuppressWarnings("unchecked")
+ public void putAll(final Map<? extends K, ?> map) {
+ if (map instanceof MultiMap) {
+ for (final Map.Entry<? extends K, Object> entry : ((MultiMap<? extends K, V>) map).entrySet()) {
+ putAll(entry.getKey(), (Collection<V>) entry.getValue());
+ }
+ } else {
+ for (final Map.Entry<? extends K, ?> entry : map.entrySet()) {
+ put(entry.getKey(), entry.getValue());
+ }
+ }
+ }
+
+/* METHOD putAll */
+public boolean putAll(final K key, final Collection<V> values) {
+ if (values == null || values.size() == 0) {
+ return false;
+ }
+ boolean result = false;
+ Collection<V> coll = getCollection(key);
+ if (coll == null) {
+ coll = createCollection(values.size()); // might produce a non-empty collection
+ coll.addAll(values);
+ if (coll.size() > 0) {
+ // only add if non-zero size to maintain class state
+ decorated().put(key, coll);
+ result = true; // map definitely changed
+ }
+ } else {
+ result = coll.addAll(values);
+ }
+ return result;
+ }
+
+/* METHOD iterator */
+public Iterator<Entry<K, V>> iterator() {
+ final Collection<K> allKeys = new ArrayList<K>(keySet());
+ final Iterator<K> keyIterator = allKeys.iterator();
+
+ return new LazyIteratorChain<Entry<K, V>>() {
+ @Override
+ protected Iterator<? extends Entry<K, V>> nextIterator(int count) {
+ if ( ! keyIterator.hasNext() ) {
+ return null;
+ }
+ final K key = keyIterator.next();
+ final Transformer<V, Entry<K, V>> transformer = new Transformer<V, Entry<K, V>>() {
+ @Override
+ public Entry<K, V> transform(final V input) {
+ return new Entry<K, V>() {
+ @Override
+ public K getKey() {
+ return key;
+ }
+ @Override
+ public V getValue() {
+ return input;
+ }
+ @Override
+ public V setValue(V value) {
+ throw new UnsupportedOperationException();
+ }
+ };
+ }
+ };
+ return new TransformIterator<V, Entry<K, V>>(new ValuesIterator(key), transformer);
+ }
+ };
+ }
+
+/* METHOD ReflectionFactory */
+public ReflectionFactory(final Class<T> clazz) {
+ this.clazz = clazz;
+ }
+
+/* METHOD create */
+@Override
+ public T create() {
+ try {
+ return clazz.newInstance();
+ } catch (final Exception ex) {
+ throw new FunctorException("Cannot instantiate class: " + clazz, ex);
+ }
+ }
+
+/* METHOD entrySet */
+@Override
+ public Set<Entry<K, Object>> entrySet() {
+ return super.entrySet();
+ }
+
+/* METHOD values */
+@Override
+ @SuppressWarnings("unchecked")
+ public Collection<Object> values() {
+ final Collection<V> vs = valuesView;
+ return (Collection<Object>) (vs != null ? vs : (valuesView = new Values()));
+ }
+
+/* METHOD containsValue */
+public boolean containsValue(final Object key, final Object value) {
+ final Collection<V> coll = getCollection(key);
+ if (coll == null) {
+ return false;
+ }
+ return coll.contains(value);
+ }
+
+/* METHOD getCollection */
+@SuppressWarnings("unchecked")
+ public Collection<V> getCollection(final Object key) {
+ return (Collection<V>) decorated().get(key);
+ }
+
+/* METHOD size */
+public int size(final Object key) {
+ final Collection<V> coll = getCollection(key);
+ if (coll == null) {
+ return 0;
+ }
+ return coll.size();
+ }
+
+/* METHOD iterator */
+public Iterator<V> iterator(final Object key) {
+ if (!containsKey(key)) {
+ return EmptyIterator.<V>emptyIterator();
+ }
+ return new ValuesIterator(key);
+ }
+
+/* METHOD nextIterator */
+@Override
+ protected Iterator<? extends Entry<K, V>> nextIterator(int count) {
+ if ( ! keyIterator.hasNext() ) {
+ return null;
+ }
+ final K key = keyIterator.next();
+ final Transformer<V, Entry<K, V>> transformer = new Transformer<V, Entry<K, V>>() {
+ @Override
+ public Entry<K, V> transform(final V input) {
+ return new Entry<K, V>() {
+ @Override
+ public K getKey() {
+ return key;
+ }
+ @Override
+ public V getValue() {
+ return input;
+ }
+ @Override
+ public V setValue(V value) {
+ throw new UnsupportedOperationException();
+ }
+ };
+ }
+ };
+ return new TransformIterator<V, Entry<K, V>>(new ValuesIterator(key), transformer);
+ }
+
+/* METHOD transform */
+@Override
+ public Entry<K, V> transform(final V input) {
+ return new Entry<K, V>() {
+ @Override
+ public K getKey() {
+ return key;
+ }
+ @Override
+ public V getValue() {
+ return input;
+ }
+ @Override
+ public V setValue(V value) {
+ throw new UnsupportedOperationException();
+ }
+ };
+ }
+
+/* METHOD getKey */
+@Override
+ public K getKey() {
+ return key;
+ }
+
+/* METHOD getValue */
+@Override
+ public V getValue() {
+ return input;
+ }
+
+/* METHOD setValue */
+@Override
+ public V setValue(V value) {
+ throw new UnsupportedOperationException();
+ }
+
+/* METHOD totalSize */
+public int totalSize() {
+ int total = 0;
+ for (final Object v : decorated().values()) {
+ total += CollectionUtils.size(v);
+ }
+ return total;
+ }
+
+/* METHOD createCollection */
+protected Collection<V> createCollection(final int size) {
+ return collectionFactory.create();
+ }

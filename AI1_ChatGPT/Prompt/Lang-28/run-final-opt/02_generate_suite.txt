@@ -1,0 +1,98 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Lang  Bug: 28  Version: Lang-28b
+JUnit: junit-4.7.jar  Build: Maven
+Target: org.apache.commons.lang3.text.translate.NumericEntityUnescaper
+Modified: org.apache.commons.lang3.text.translate.NumericEntityUnescaper
+Triggers: org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testSupplementaryUnescaping
+
+Bug/specification summary:
+Bug report: LANG-617
+Trigger failures:
+- org.apache.commons.lang3.text.translate.NumericEntityUnescaperTest::testSupplementaryUnescaping
+ --> junit.framework.ComparisonFailure: Failed to unescape numeric entities supplementary characters expected:<[𐰢]> but was:<[ఢ]>
+Modified: org.apache.commons.lang3.text.translate.NumericEntityUnescaper
+
+Prompt-01 test plan:
+TARGETS: NumericEntityUnescaper.translate(CharSequence,int,Writer) numeric entity decoding
+ORACLES: Existing trigger test testSupplementaryUnescaping expected supplementary character 𐰢
+CASES: Decimal numeric entity for 𐰢; verify produced UTF-16 surrogate pair, not truncated BMP char
+CASES: Hexadecimal numeric entity for supplementary code point, if accepted by current parser
+CASES: BMP numeric entity remains decoded correctly
+CASES: Non-entity/plain input leaves translation behavior unchanged
+RISKS: Context provides only one trigger; option handling and malformed-entity behavior are unspecified
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.lang3.text.translate.NumericEntityUnescaper (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.lang3.text.translate;
+
+import java.io.IOException;
+import java.io.Writer;
+
+/**
+ * Translate XML numeric entities of the form &#[xX]?\d+; to 
+ * the specific codepoint.
+ * 
+ * @author Apache Software Foundation
+ * @since 3.0
+ */
+public class NumericEntityUnescaper extends CharSequenceTranslator {
+
+ /**
+ * {@inheritDoc}
+ */
+ @Override
+ public int translate(CharSequence input, int index, Writer out) throws IOException {
+ // TODO: Protect from ArrayIndexOutOfBounds
+ if(input.charAt(index) == '&' && input.charAt(index + 1) == '#') {
+ int start = index + 2;
+ boolean isHex = false;
+
+ char firstChar = input.charAt(start);
+ if(firstChar == 'x' || firstChar == 'X') {
+ start++;
+ isHex = true;
+ }
+
+ int end = start;
+ while(input.charAt(end) != ';') {
+ end++;
+ }
+
+ int entityValue;
+ try {
+ if(isHex) {
+ entityValue = Integer.parseInt(input.subSequence(start, end).toString(), 16);
+ } else {
+ entityValue = Integer.parseInt(input.subSequence(start, end).toString(), 10);
+ }
+ } catch(NumberFormatException nfe) {
+ return 0;
+ }
+
+ out.write(entityValue);
+ return 2 + (end - start) + (isHex ? 1 : 0) + 1;
+ }
+ return 0;
+ }
+}

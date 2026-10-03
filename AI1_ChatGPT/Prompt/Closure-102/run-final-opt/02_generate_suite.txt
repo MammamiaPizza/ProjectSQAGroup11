@@ -1,0 +1,462 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 102  Version: Closure-102b
+JUnit: junit4-core.jar  Build: Ant
+Target: com.google.javascript.jscomp.Normalize
+Modified: com.google.javascript.jscomp.Normalize
+Triggers: com.google.javascript.jscomp.CompilerRunnerTest::testIssue115
+
+Bug/specification summary:
+Bug report: 115
+Trigger failures:
+- com.google.javascript.jscomp.CompilerRunnerTest::testIssue115
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.Normalize
+
+Prompt-01 test plan:
+TARGETS: Normalize.process; traversal callbacks shouldTraverse, visit, enterScope, exitScope 
+TARGETS: Statement normalization: labels, var splitting, named-function movement, duplicate declarations 
+ORACLES: CompilerRunnerTest.testIssue115 assertion is the available expected-result source 
+CASES: Compile the issue-115 input through Normalize and compare the trigger’s expected compiler result 
+CASES: Exercise declarations, labels, and named functions in nested scopes 
+CASES: Include duplicate declarations and constants across scope boundaries 
+RISKS: Most relevant helpers are private; test via compiler/pass integration rather than direct calls 
+RISKS: Bug report supplies no issue-115 source or expected output beyond the failing trigger
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.Normalize (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class Normalize implements CompilerPass, Callback {
+private void reportCodeChange(String changeDescription) {
+@Override
+public void process(Node externs, Node root) {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+public static class PropogateConstantAnnotations
+public void visit(NodeTraversal t, Node n, Node parent) {
+static class VerifyConstants extends AbstractPostOrderCallback
+private Map<String,Boolean> constantMap = Maps.newHashMap();
+private void doStatementNormalizations(NodeTraversal t, Node n, Node parent) {
+private void normalizeLabels(Node n) {
+private void splitVarDeclarations(Node n) {
+private void moveNamedFunctions(Node functionBody) {
+private Node addToFront(Node parent, Node newChild, Node after) {
+private void removeDuplicateDeclarations(Node root) {
+private final class DuplicateDeclarationHandler implements
+private final class ScopeTicklingCallback
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.Callback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Map;
+class Normalize implements CompilerPass, Callback {
+
+/* METHOD Normalize */
+Normalize(AbstractCompiler compiler, boolean assertOnChange) {
+ this.compiler = compiler;
+ this.assertOnChange = assertOnChange;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ // Note: Constant properties annotations are not propagated.
+ if (n.getType() == Token.NAME) {
+ if (n.getString().isEmpty()) {
+ return;
+ }
+
+ JSDocInfo info = null;
+ // Find the JSDocInfo for a top level variable.
+ Var var = t.getScope().getVar(n.getString());
+ if (var != null) {
+ info = var.getJSDocInfo();
+ }
+
+ if ((info != null && info.isConstant()) &&
+ !n.getBooleanProp(Node.IS_CONSTANT_NAME)) {
+ n.putBooleanProp(Node.IS_CONSTANT_NAME, true);
+ if (assertOnChange) {
+ String name = n.getString();
+ throw new IllegalStateException(
+ "Unexpected const change.\n" +
+ " name: "+ name + "\n" +
+ " gramps:" + n.getParent().getParent().toStringTree());
+ }
+ // Even though the AST has changed (an annotation was added),
+ // the annotations are not compared so don't report the change.
+ // reportCodeChange("constant annotation");
+ }
+ }
+ }
+ }
+
+ /**
+ * Walk the AST tree and verify that constant names are used consistently.
+ */
+ static class VerifyConstants extends AbstractPostOrderCallback
+ implements CompilerPass {
+
+ final private AbstractCompiler compiler;
+ final private boolean checkUserDeclarations;
+
+ VerifyConstants(AbstractCompiler compiler, boolean checkUserDeclarations) {
+ this.compiler = compiler;
+ this.checkUserDeclarations = checkUserDeclarations;
+ }
+
+ @Override
+ public void process(Node externs, Node root) {
+ Node externsAndJs = root.getParent();
+ Preconditions.checkState(externsAndJs != null);
+ Preconditions.checkState(externsAndJs.hasChild(externs));
+
+ NodeTraversal.traverseRoots(
+ compiler, Lists.newArrayList(externs, root), this);
+ }
+
+ private Map<String,Boolean> constantMap = Maps.newHashMap();
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.NAME) {
+ String name = n.getString();
+ if (n.getString().isEmpty()) {
+ return;
+ }
+
+ boolean isConst = n.getBooleanProp(Node.IS_CONSTANT_NAME);
+ if (checkUserDeclarations) {
+ boolean expectedConst = false;
+ if (NodeUtil.isConstantName(n)
+ || compiler.getCodingConvention().isConstant(n.getString())) {
+ expectedConst = true;
+ } else {
+ expectedConst = false;
+
+ JSDocInfo info = null;
+ Var var = t.getScope().getVar(n.getString());
+ if (var != null) {
+ info = var.getJSDocInfo();
+ }
+
+ if (info != null && info.isConstant()) {
+ expectedConst = true;
+ } else {
+ expectedConst = false;
+ }
+ }
+
+ if (expectedConst) {
+ Preconditions.checkState(expectedConst == isConst,
+ "The name " + name + " is not annotated as constant.");
+ } else {
+ Preconditions.checkState(expectedConst == isConst,
+ "The name " + name + " should not be annotated as constant.");
+ }
+ }
+
+ Boolean value = constantMap.get(name);
+ if (value == null) {
+ constantMap.put(name, isConst);
+ } else {
+ Preconditions.checkState(value.booleanValue() == isConst,
+ "The name " + name + " is not consistently annotated as " +
+ "constant.");
+ }
+ }
+ }
+ }
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ switch (n.getType()) {
+ case Token.WHILE:
+ if (CONVERT_WHILE_TO_FOR) {
+ Node expr = n.getFirstChild();
+ n.setType(Token.FOR);
+ n.addChildBefore(new Node(Token.EMPTY), expr);
+ n.addChildAfter(new Node(Token.EMPTY), expr);
+ reportCodeChange("WHILE node");
+ }
+ break;
+ }
+ }
+
+ /**
+ * Do normalizations that introduce new siblings or parents.
+ */
+ private void doStatementN
+...[truncated deterministically]...
+tType() == Token.VAR) {
+ if (assertOnChange && !c.hasChildren()) {
+ throw new IllegalStateException("Empty VAR node.");
+ }
+
+ while (c.getFirstChild() != c.getLastChild()) {
+ Node name = c.getFirstChild();
+ c.removeChild(name);
+ Node newVar = new Node(Token.VAR, name, n.getLineno(), n.getCharno());
+ n.addChildBefore(newVar, c);
+ reportCodeChange("VAR with multiple children");
+ }
+ }
+ }
+ }
+
+ /**
+ * Move all the functions that are valid at the execution of the first
+ * statement of the function to the beginning of the function definition.
+ */
+ private void moveNamedFunctions(Node functionBody) {
+ Preconditions.checkState(
+ functionBody.getParent().getType() == Token.FUNCTION);
+ Node previous = null;
+ Node current = functionBody.getFirstChild();
+ // Skip any declarations at the beginning of the function body, they
+ // are already in the right place.
+ while (current != null && NodeUtil.isFunctionDeclaration(current)) {
+ previous = current;
+ current = current.getNext();
+ }
+
+ // Find any remaining declarations and move them.
+ Node insertAfter = previous;
+ while (current != null) {
+ // Save off the next node as the current node maybe removed.
+ Node next = current.getNext();
+ if (NodeUtil.isFunctionDeclaration(current)) {
+ // Remove the declaration from the body.
+ Preconditions.checkNotNull(previous);
+ functionBody.removeChildAfter(previous);
+
+ // Readd the function at the top of the function body (after any
+ // previous declarations).
+ insertAfter = addToFront(functionBody, current, insertAfter);
+ compiler.reportCodeChange();
+ } else {
+ // Update the previous only if the current node hasn't been moved.
+ previous = current;
+ }
+ current = next;
+ }
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ Node externsAndJs = root.getParent();
+ Preconditions.checkState(externsAndJs != null);
+ Preconditions.checkState(externsAndJs.hasChild(externs));
+
+ NodeTraversal.traverseRoots(
+ compiler, Lists.newArrayList(externs, root), this);
+ }
+
+/* METHOD reportCodeChange */
+private void reportCodeChange(String changeDescription) {
+ if (assertOnChange) {
+ throw new IllegalStateException(
+ "Normalize constraints violated:\n" + changeDescription);
+ }
+ compiler.reportCodeChange();
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ NodeTraversal.traverse(compiler, root, this);
+ if (MAKE_LOCAL_NAMES_UNIQUE) {
+ MakeDeclaredNamesUnique renamer = new MakeDeclaredNamesUnique();
+ NodeTraversal t = new NodeTraversal(compiler, renamer);
+ t.traverseRoots(externs, root);
+ }
+ removeDuplicateDeclarations(root);
+ new PropogateConstantAnnotations(compiler, assertOnChange)
+ .process(externs, root);
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ new NodeTraversal(compiler, this).traverseRoots(externs, root);
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ switch (n.getType()) {
+ case Token.WHILE:
+ if (CONVERT_WHILE_TO_FOR) {
+ Node expr = n.getFirstChild();
+ n.setType(Token.FOR);
+ n.addChildBefore(new Node(Token.EMPTY), expr);
+ n.addChildAfter(new Node(Token.EMPTY), expr);
+ reportCodeChange("WHILE node");
+ }
+ break;
+ }
+ }
+
+/* METHOD PropogateConstantAnnotations */
+public PropogateConstantAnnotations(
+ AbstractCompiler compiler, boolean forbidChanges) {
+ this.compiler = compiler;
+ this.assertOnChange = forbidChanges;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.getType() == Token.NAME) {
+ String name = n.getString();
+ if (n.getString().isEmpty()) {
+ return;
+ }
+
+ boolean isConst = n.getBooleanProp(Node.IS_CONSTANT_NAME);
+ if (checkUserDeclarations) {
+ boolean expectedConst = false;
+ if (NodeUtil.isConstantName(n)
+ || compiler.getCodingConvention().isConstant(n.getString())) {
+ expectedConst = true;
+ } else {
+ expectedConst = false;
+
+ JSDocInfo info = null;
+ Var var = t.getScope().getVar(n.getString());
+ if (var != null) {
+ info = var.getJSDocInfo();
+ }
+
+ if (info != null && info.isConstant()) {
+ expectedConst = true;
+ } else {
+ expectedConst = false;
+ }
+ }
+
+ if (expectedConst) {
+ Preconditions.checkState(expectedConst == isConst,
+ "The name " + name + " is not annotated as constant.");
+ } else {
+ Preconditions.checkState(expectedConst == isConst,
+ "The name " + name + " should not be annotated as constant.");
+ }
+ }
+
+ Boolean value = constantMap.get(name);
+ if (value == null) {
+ constantMap.put(name, isConst);
+ } else {
+ Preconditions.checkState(value.booleanValue() == isConst,
+ "The name " + name + " is not consistently annotated as " +
+ "constant.");
+ }
+ }
+ }
+
+/* METHOD enterScope */
+@Override
+ public void enterScope(NodeTraversal t) {
+ // Cause the scope to be created, which will cause duplicate
+ // to be found.
+ t.getScope();
+ }
+
+/* METHOD shouldTraverse */
+@Override
+ public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+ doStatementNormalizations(t, n, parent);
+
+ return true;
+ }
+
+/* METHOD normalizeLabels */
+private void normalizeLabels(Node n) {
+ Preconditions.checkArgument(n.getType() == Token.LABEL);
+
+ Node last = n.getLastChild();
+ switch (last.getType()) {
+ case Token.LABEL:
+ case Token.BLOCK:
+ case Token.FOR:
+ case Token.WHILE:
+ case Token.DO:
+ return;
+ default:
+ Node block = new Node(Token.BLOCK);
+ n.replaceChild(last, block);
+ block.addChildToFront(last);
+ reportCodeChange("LABEL normalization");
+ return;
+ }
+ }
+
+/* METHOD exitScope */
+@Override
+ public void exitScope(NodeTraversal t) {
+ // Nothing to do.
+ }
+
+/* METHOD shouldTraverse */
+@Override
+ public boolean shouldTraverse(
+ NodeTraversal nodeTraversal, Node n, Node parent) {
+ return true;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ // Nothing to do.
+ }
+
+/* METHOD extractForInitializer */
+private void extractForInitializer(
+ Node n, Node before, Node beforeParent) {
+
+ for (Node next, c = n.getFirstChild(); c != null; c = next) {
+ next = c.getNext();
+ Node insertBefore = (before == null) ? c : before;
+ Node insertBeforeParent = (before == null) ? n : beforeParent;
+ switch (c.getType()) {
+ case Token.LABEL:
+ extractForInitializer(c, insertBefore, insertBeforeParent);
+ break;
+ case Token.FOR:
+ if (!NodeUtil.isForIn(c)
+ && c.getFirstChild().getType() != Token.EMPTY) {
+ Node init = c.getFirstChild();
+ c.replaceChild(init, new Node(Token.EMPTY));
+
+ Node newStatement;
+ // Only VAR statements, and expressions are allowed,
+ // but are handled differently.
+ if (init.getType() == Token.VAR) {
+ newStatement = init;
+ } else {
+ newStatement = NodeUtil.newExpr(init);
+ }
+
+ insertBeforeParent.addChildBefore(newStatement, insertBefore);
+ reportCodeChange("FOR initializer");
+ }
+ break;
+ }
+ }
+ }

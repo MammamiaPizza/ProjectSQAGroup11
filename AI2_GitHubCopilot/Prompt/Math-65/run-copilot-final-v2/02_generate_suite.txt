@@ -1,0 +1,290 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 65  Version: Math-65b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.optimization.general.AbstractLeastSquaresOptimizer
+Modified: org.apache.commons.math.optimization.general.AbstractLeastSquaresOptimizer
+Triggers: org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerTest::testCircleFitting
+
+Bug/specification summary:
+Bug report: MATH-377
+Trigger failures:
+- org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerTest::testCircleFitting
+ --> junit.framework.AssertionFailedError: expected:<0.004> but was:<0.0019737107108948474>
+Modified: org.apache.commons.math.optimization.general.AbstractLeastSquaresOptimizer
+
+Prompt-01 test plan:
+TARGETS: getRMS(), getChiSquare(), updateResidualsAndCost(), guessParametersErrors()
+TARGETS: updateJacobian() applies -sqrt(weight) scaling, which alters optimization path.
+ORACLES: testCircleFitting asserts optimizer.getRMS() == 0.004; known reference from
+LevenbergMarquardt.
+ORACLES: Chi-square = sum(weight_i * residual_i^2); RMS = sqrt(chiSquare/(rows-cols)) per typical
+formula.
+CASES: Normal: circle fit with 10-100 noisy points; boundary: zero weights cause NaN in Jacobian.
+CASES: Error: singular Jacobian leads to cost spikes; max iterations reached; negative weight breaks
+math.
+RISKS: Exact test code absent; bug likely in weight handling or RMS denominator (rows vs rows-cols).
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.optimization.general.AbstractLeastSquaresOptimizer (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.optimization.general;
+public abstract class AbstractLeastSquaresOptimizer implements DifferentiableMultivariateVectorialOptimizer {
+public static final int DEFAULT_MAX_ITERATIONS = 100;
+protected VectorialConvergenceChecker checker;
+protected double[][] jacobian;
+protected int cols;
+protected int rows;
+protected double[] targetValues;
+protected double[] residualsWeights;
+protected double[] point;
+protected double[] objective;
+protected double[] residuals;
+protected double cost;
+protected AbstractLeastSquaresOptimizer() {
+public void setMaxIterations(int maxIterations) {
+public int getMaxIterations() {
+public int getIterations() {
+public void setMaxEvaluations(int maxEvaluations) {
+public int getMaxEvaluations() {
+public int getEvaluations() {
+public int getJacobianEvaluations() {
+public void setConvergenceChecker(VectorialConvergenceChecker convergenceChecker) {
+public VectorialConvergenceChecker getConvergenceChecker() {
+protected void incrementIterationsCounter()
+protected void updateJacobian() throws FunctionEvaluationException {
+final double factor = -Math.sqrt(residualsWeights[i]);
+protected void updateResidualsAndCost()
+public double getRMS() {
+public double getChiSquare() {
+public double[][] getCovariances()
+public double[] guessParametersErrors()
+final double c = Math.sqrt(getChiSquare() / (rows - cols));
+protected abstract VectorialPointValuePair doOptimize()
+
+/* HEADER */
+package org.apache.commons.math.optimization.general;
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.MaxEvaluationsExceededException;
+import org.apache.commons.math.MaxIterationsExceededException;
+import org.apache.commons.math.analysis.DifferentiableMultivariateVectorialFunction;
+import org.apache.commons.math.analysis.MultivariateMatrixFunction;
+import org.apache.commons.math.exception.LocalizedFormats;
+import org.apache.commons.math.linear.InvalidMatrixException;
+import org.apache.commons.math.linear.LUDecompositionImpl;
+import org.apache.commons.math.linear.MatrixUtils;
+import org.apache.commons.math.linear.RealMatrix;
+import org.apache.commons.math.optimization.OptimizationException;
+import org.apache.commons.math.optimization.SimpleVectorialValueChecker;
+import org.apache.commons.math.optimization.VectorialConvergenceChecker;
+import org.apache.commons.math.optimization.DifferentiableMultivariateVectorialOptimizer;
+import org.apache.commons.math.optimization.VectorialPointValuePair;
+
+/* METHOD AbstractLeastSquaresOptimizer */
+protected AbstractLeastSquaresOptimizer() {
+ setConvergenceChecker(new SimpleVectorialValueChecker());
+ setMaxIterations(DEFAULT_MAX_ITERATIONS);
+ setMaxEvaluations(Integer.MAX_VALUE);
+ }
+
+/* METHOD getCovariances */
+public double[][] getCovariances()
+ throws FunctionEvaluationException, OptimizationException {
+
+ // set up the jacobian
+ updateJacobian();
+
+ // compute transpose(J).J, avoiding building big intermediate matrices
+ double[][] jTj = new double[cols][cols];
+ for (int i = 0; i < cols; ++i) {
+ for (int j = i; j < cols; ++j) {
+ double sum = 0;
+ for (int k = 0; k < rows; ++k) {
+ sum += jacobian[k][i] * jacobian[k][j];
+ }
+ jTj[i][j] = sum;
+ jTj[j][i] = sum;
+ }
+ }
+
+ try {
+ // compute the covariances matrix
+ RealMatrix inverse =
+ new LUDecompositionImpl(MatrixUtils.createRealMatrix(jTj)).getSolver().getInverse();
+ return inverse.getData();
+ } catch (InvalidMatrixException ime) {
+ throw new OptimizationException(LocalizedFormats.UNABLE_TO_COMPUTE_COVARIANCE_SINGULAR_PROBLEM);
+ }
+
+ }
+
+/* METHOD updateJacobian */
+protected void updateJacobian() throws FunctionEvaluationException {
+ ++jacobianEvaluations;
+ jacobian = jF.value(point);
+ if (jacobian.length != rows) {
+ throw new FunctionEvaluationException(point, LocalizedFormats.DIMENSIONS_MISMATCH_SIMPLE,
+ jacobian.length, rows);
+ }
+ for (int i = 0; i < rows; i++) {
+ final double[] ji = jacobian[i];
+ final double factor = -Math.sqrt(residualsWeights[i]);
+ for (int j = 0; j < cols; ++j) {
+ ji[j] *= factor;
+ }
+ }
+ }
+
+/* METHOD updateResidualsAndCost */
+protected void updateResidualsAndCost()
+ throws FunctionEvaluationException {
+
+ if (++objectiveEvaluations > maxEvaluations) {
+ throw new FunctionEvaluationException(new MaxEvaluationsExceededException(maxEvaluations),
+ point);
+ }
+ objective = function.value(point);
+ if (objective.length != rows) {
+ throw new FunctionEvaluationException(point, LocalizedFormats.DIMENSIONS_MISMATCH_SIMPLE,
+ objective.length, rows);
+ }
+ cost = 0;
+ int index = 0;
+ for (int i = 0; i < rows; i++) {
+ final double residual = targetValues[i] - objective[i];
+ residuals[i] = residual;
+ cost += residualsWeights[i] * residual * residual;
+ index += cols;
+ }
+ cost = Math.sqrt(cost);
+
+ }
+
+/* METHOD guessParametersErrors */
+public double[] guessParametersErrors()
+ throws FunctionEvaluationException, OptimizationException {
+ if (rows <= cols) {
+ throw new OptimizationException(
+ LocalizedFormats.NO_DEGREES_OF_FREEDOM,
+ rows, cols);
+ }
+ double[] errors = new double[cols];
+ final double c = Math.sqrt(getChiSquare() / (rows - cols));
+ double[][] covar = getCovariances();
+ for (int i = 0; i < errors.length; ++i) {
+ errors[i] = Math.sqrt(covar[i][i]) * c;
+ }
+ return errors;
+ }
+
+/* METHOD incrementIterationsCounter */
+protected void incrementIterationsCounter()
+ throws OptimizationException {
+ if (++iterations > maxIterations) {
+ throw new OptimizationException(new MaxIterationsExceededException(maxIterations));
+ }
+ }
+
+/* METHOD getRMS */
+public double getRMS() {
+ double criterion = 0;
+ for (int i = 0; i < rows; ++i) {
+ final double residual = residuals[i];
+ criterion += residual * residual * residualsWeights[i];
+ }
+ return Math.sqrt(criterion / rows);
+ }
+
+/* METHOD optimize */
+public VectorialPointValuePair optimize(final DifferentiableMultivariateVectorialFunction f,
+ final double[] target, final double[] weights,
+ final double[] startPoint)
+ throws FunctionEvaluationException, OptimizationException, IllegalArgumentException {
+
+ if (target.length != weights.length) {
+ throw new OptimizationException(LocalizedFormats.DIMENSIONS_MISMATCH_SIMPLE,
+ target.length, weights.length);
+ }
+
+ // reset counters
+ iterations = 0;
+ objectiveEvaluations = 0;
+ jacobianEvaluations = 0;
+
+ // store least squares problem characteristics
+ function = f;
+ jF = f.jacobian();
+ targetValues = target.clone();
+ residualsWeights = weights.clone();
+ this.point = startPoint.clone();
+ this.residuals = new double[target.length];
+
+ // arrays shared with the other private methods
+ rows = target.length;
+ cols = point.length;
+ jacobian = new double[rows][cols];
+
+ cost = Double.POSITIVE_INFINITY;
+
+ return doOptimize();
+
+ }
+
+/* METHOD setMaxIterations */
+public void setMaxIterations(int maxIterations) {
+ this.maxIterations = maxIterations;
+ }
+
+/* METHOD getMaxIterations */
+public int getMaxIterations() {
+ return maxIterations;
+ }
+
+/* METHOD getIterations */
+public int getIterations() {
+ return iterations;
+ }
+
+/* METHOD setMaxEvaluations */
+public void setMaxEvaluations(int maxEvaluations) {
+ this.maxEvaluations = maxEvaluations;
+ }
+
+/* METHOD getMaxEvaluations */
+public int getMaxEvaluations() {
+ return maxEvaluations;
+ }
+
+/* METHOD getEvaluations */
+public int getEvaluations() {
+ return objectiveEvaluations;
+ }
+
+/* METHOD getJacobianEvaluations */
+public int getJacobianEvaluations() {
+ return jacobianEvaluations;
+ }
+
+/* METHOD setConvergenceChecker */
+public void setConvergenceChecker(VectorialConvergenceChecker convergenceChecker) {
+ this.checker = convergenceChecker;
+ }
+
+/* METHOD getConvergenceChecker */
+public VectorialConvergenceChecker getConvergenceChecker() {
+ return checker;
+ }
+
+/* METHOD getChiSquare */
+public double getChiSquare() {
+ double chiSquare = 0;
+ for (int i = 0; i < rows; ++i) {
+ final double residual = residuals[i];
+ chiSquare += residual * residual / residualsWeights[i];
+ }
+ return chiSquare;
+ }

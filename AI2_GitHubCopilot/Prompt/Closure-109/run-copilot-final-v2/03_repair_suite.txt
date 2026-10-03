@@ -1,0 +1,224 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 109  Version: Closure-109b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1105
+Trigger failures:
+- com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testStructuralConstructor2
+ --> junit.framework.AssertionFailedError: extra warning: Bad type annotation. type not recognized due to syntax error
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testStructuralConstructor3
+ --> junit.framework.AssertionFailedError: extra warning: Bad type annotation. type not recognized due to syntax error
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+
+Available API/signatures:
+[com.google.javascript.jscomp.parsing.JsDocInfoParser | java]
+package com.google.javascript.jscomp.parsing;
+public final class JsDocInfoParser {
+private final ErrorReporterParser parser = new ErrorReporterParser();
+private class ErrorReporterParser {
+private enum State {
+private String getSourceName() {
+public JSDocInfo parseInlineTypeDoc() {
+public static Node parseTypeString(String typeString) {
+parser.addTypeWarning("msg.jsdoc.interface.constructor",
+private JsDocToken recordDescription(JsDocToken token) {
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+private JsDocToken parseSuppressTag(JsDocToken token) {
+private JsDocToken parseModifiesTag(JsDocToken token) {
+private JsDocToken parseIdGeneratorTag(JsDocToken token) {
+private Node parseAndRecordParamTypeNode(JsDocToken token) {
+private String toString(JsDocToken token) {
+private static class ExtractionInfo {
+public ExtractionInfo(String string, JsDocToken token) {
+private static class ExtendedTypeInfo {
+public ExtendedTypeInfo(JSTypeExpression type, int lineno, int charno) {
+private ExtractionInfo extractSingleLineBlock() {
+private ExtractionInfo extractMultilineTextualBlock(JsDocToken token) {
+private enum WhitespaceOption {
+@SuppressWarnings("fallthrough")
+private ExtractionInfo extractBlockComment(JsDocToken token) {
+private static String trimEnd(String s) {
+private Node parseTypeExpressionAnnotation(JsDocToken token) {
+private Node parseParamTypeExpressionAnnotation(JsDocToken token) {
+private Node parseTypeNameAnnotation(JsDocToken token) {
+private Node parseTopLevelTypeExpression(JsDocToken token) {
+private Node parseTypeExpressionList(JsDocToken token)
+...[truncated deterministically]...
+s, int lineno, int charno) {
+private Node createTemplateNode() {
+private Node reportTypeSyntaxWarning(String warning) {
+private Node reportGenericTypeSyntaxWarning() {
+private JsDocToken eatUntilEOLIfNotAnnotation() {
+private JsDocToken eatUntilEOLIfNotAnnotation(JsDocToken token) {
+private JsDocToken eatTokensUntilEOL() {
+private JsDocToken eatTokensUntilEOL(JsDocToken token) {
+private void restoreLookAhead(JsDocToken token) {
+private boolean match(JsDocToken token) {
+private boolean match(JsDocToken token1, JsDocToken token2) {
+private JsDocToken next() {
+private JsDocToken current() {
+private void skipEOLs() {
+private String getRemainingJSDocLine() {
+private boolean hasParsedFileOverviewDocInfo() {
+private boolean lookAheadForType() {
+private boolean lookAheadForAnnotation() {
+private boolean lookAheadFor(char expect) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp.parsing;
+
+ import com.google.common.collect.Sets;
+ import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+ import com.google.javascript.rhino.head.ErrorReporter;
+ import com.google.javascript.rhino.head.EvaluatorException;
+
+ import junit.framework.TestCase;
+
+ import java.util.ArrayList;
+ import java.util.List;
+
+ public class JsDocInfoParserTest extends TestCase {
+
+     private static final Config CONFIG = new Config(
+             Sets.<String>newHashSet(),
+             Sets.<String>newHashSet(),
+             false,
+             LanguageMode.ECMASCRIPT3,
+             false);
+
+     private static class RecordingErrorReporter implements ErrorReporter {
+         private final List<String> warnings = new ArrayList<>();
+         private final List<String> errors = new ArrayList<>();
+
+         @Override
+         public void warning(String message, String sourceName, int line,
+                             String lineSource, int lineOffset) {
+             warnings.add(message);
+         }
+
+         @Override
+         public void error(String message, String sourceName, int line,
+                           String lineSource, int lineOffset) {
+             errors.add(message);
+         }
+
+         @Override
+         public EvaluatorException runtimeError(String message, String sourceName,
+                                                int line, String lineSource,
+                                                int lineOffset) {
+             return new EvaluatorException(null, null);
+         }
+
+         public List<String> getWarnings() {
+             return warnings;
+         }
+
+         public List<String> getErrors() {
+             return errors;
+         }
+
+         public int getWarningCount() {
+             return warnings.size();
+         }
+
+         public int getErrorCount() {
+             return errors.size();
+         }
+     }
+
+     private JsDocInfoParser createParser(String typeString, RecordingErrorReporter reporter) {
+         JsDocTokenStream stream = new JsDocTokenStream(typeString);
+         return new JsDocInfoParser(stream, null, null, CONFIG, reporter);
+     }
+
+     private void assertNoWarnings(String typeString) {
+         RecordingErrorReporter reporter = new RecordingErrorReporter();
+         JsDocInfoParser parser = createParser(typeString, reporter);
+         parser.parseTopLevelTypeExpression(parser.next());
+         assertEquals("Warnings produced for: " + typeString,
+                 0, reporter.getWarningCount());
+         assertEquals("Errors produced for: " + typeString,
+                 0, reporter.getErrorCount());
+     }
+
+     private void assertWarningCount(String typeString, int expectedWarnings) {
+         RecordingErrorReporter reporter = new RecordingErrorReporter();
+         JsDocInfoParser parser = createParser(typeString, reporter);
+         parser.parseTopLevelTypeExpression(parser.next());
+         assertEquals("Unexpected number of warnings for: " + typeString,
+                 expectedWarnings, reporter.getWarningCount());
+     }
+
+     public void testFunctionNewTakesSimpleType() {
+         assertNoWarnings("function(new:Object)");
+     }
+
+     public void testFunctionNewWithReturnType() {
+         assertNoWarnings("function(new:Object):string");
+     }
+
+     public void testFunctionMultipleNew() {
+         assertNoWarnings("function(new:Object, new:String):number");
+     }
+
+     public void testFunctionNewMixedWithNamedParams() {
+         assertNoWarnings("function(new:Object, x:number):void");
+     }
+
+     public void testFunctionNewWithUnionType() {
+         assertNoWarnings("function(new:(Object|String)):boolean");
+     }
+
+     public void testFunctionNewWithRecordParam() {
+         assertNoWarnings("function(new:Object, opts:{x:number}):void");
+     }
+
+     public void testFunctionNewNested() {
+         assertNoWarnings("function(function(new:Object):void):void");
+     }
+
+     public void testFunctionNewWithOptionalParam() {
+         assertNoWarnings("function(new:Object, ...args:number):void");
+     }
+
+     public void testFunctionNewWithWhitespace() {
+         assertNoWarnings("function( new : Object )");
+     }
+
+     public void testFunctionPlainNoNewProducesNoWarnings() {
+         assertNoWarnings("function():void");
+     }
+
+     public void testSyntaxErrorGeneratesWarning() {
+         // Truly malformed syntax should still produce warnings
+         assertWarningCount("function(new:)", 1);
+     }
+
+     public void testFunctionNewMissingColonGeneratesWarning() {
+         // Missing colon after new is a syntax error
+         assertWarningCount("function(new Object)", 1);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-109f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-109f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-109f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-109f-copilot/.test_suite/com/google/javascript/jscomp/parsing/JsDocInfoParserTest.java:23: error: diamond operator is not supported in -source 6
+ [javac] private final List<String> warnings = new ArrayList<>();
+ [javac] ^
+ [javac] (use -source 7 or higher to enable diamond operator)
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

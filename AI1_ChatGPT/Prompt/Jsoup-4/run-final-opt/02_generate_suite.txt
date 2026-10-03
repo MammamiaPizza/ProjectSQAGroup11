@@ -1,0 +1,74 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 4  Version: Jsoup-4b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.Entities
+Modified: org.jsoup.nodes.Entities
+Triggers: org.jsoup.nodes.EntitiesTest::escape, org.jsoup.nodes.EntitiesTest::caseSensitive
+
+Bug/specification summary:
+Bug report: 31
+Trigger failures:
+- org.jsoup.nodes.EntitiesTest::escape
+ --> junit.framework.AssertionFailedError: expected:<...ello &amp;&lt;&gt; &[A]ring; &aring; &#960;...> but was:<...ello &amp;&lt;&gt; &[a]ring; &aring; &#960;...>
+ - org.jsoup.nodes.EntitiesTest::caseSensitive
+ --> junit.framework.AssertionFailedError: expected:<&[U]uml; &uuml; &amp; &a...> but was:<&[u]uml; &uuml; &amp; &a...>
+Modified: org.jsoup.nodes.Entities
+
+Prompt-01 test plan:
+TARGETS: Entities.escape(String, CharsetEncoder, EscapeMode) named-entity selection and entity-name case 
+TARGETS: Entities.escape(String, Document.OutputSettings) delegation/output settings behavior 
+ORACLES: Trigger assertions require Å -> &Aring; and Ü -> &Uuml; (not lowercase names) 
+ORACLES: Existing EntitiesTest::escape and ::caseSensitive provide expected escaping behavior 
+CASES: Escape mixed text containing &, <, >, Å, å, π and verify exact entity output 
+CASES: Verify uppercase/lowercase accented characters select distinct case-sensitive named entities 
+CASES: Exercise named escaping under available EscapeMode values and a charset encoder 
+RISKS: Entity maps may contain duplicate upper/lowercase names; reverse lookup can choose wrong casing 
+RISKS: OutputSettings construction/configuration is not provided in context; avoid assuming its API
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Entities (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+public class Entities {
+public enum EscapeMode {
+private static final Pattern unescapePattern = Pattern.compile("&(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]+);?");
+static String escape(String string, Document.OutputSettings out) {
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+static String unescape(String string) {
+
+/* HEADER */
+package org.jsoup.nodes;
+import java.nio.charset.CharsetEncoder;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+public class Entities {
+
+/* METHOD escape */
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+ StringBuilder accum = new StringBuilder(string.length() * 2);
+ Map<Character, String> map = escapeMode == EscapeMode.extended ? fullByVal : baseByVal;
+
+ for (int pos = 0; pos < string.length(); pos++) {
+ Character c = string.charAt(pos);
+ if (map.containsKey(c))
+ accum.append('&').append(map.get(c)).append(';');
+ else if (encoder.canEncode(c))
+ accum.append(c.charValue());
+ else
+ accum.append("&#").append((int) c).append(';');
+ }
+
+ return accum.toString();
+ }
+
+/* METHOD escape */
+static String escape(String string, Document.OutputSettings out) {
+ return escape(string, out.encoder(), out.escapeMode());
+ }

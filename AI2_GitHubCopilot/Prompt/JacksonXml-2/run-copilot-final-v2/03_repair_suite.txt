@@ -1,0 +1,231 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonXml  Bug: 2  Version: JacksonXml-2b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 196
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.misc.XmlTextTest::testMixedContent
+ --> junit.framework.AssertionFailedError: expected:<27> but was:<0>
+Modified: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream
+
+Available API/signatures:
+[com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream | java]
+package com.fasterxml.jackson.dataformat.xml.deser;
+public class XmlTokenStream
+public final static int XML_START_ELEMENT = 1;
+public final static int XML_END_ELEMENT = 2;
+public final static int XML_ATTRIBUTE_NAME = 3;
+public final static int XML_ATTRIBUTE_VALUE = 4;
+public final static int XML_TEXT = 5;
+public final static int XML_END = 6;
+final protected XMLStreamReader2 _xmlReader;
+final protected Object _sourceReference;
+protected int _currentState;
+protected int _attributeCount;
+protected int _nextAttributeIndex = 0;
+protected String _localName;
+protected String _namespaceURI;
+protected String _textValue;
+protected int _repeatElement;
+protected ElementWrapper _currentWrapper;
+protected String _nextLocalName;
+protected String _nextNamespaceURI;
+public XmlTokenStream(XMLStreamReader xmlReader, Object sourceRef)
+public XMLStreamReader2 getXmlReader() {
+public int next() throws IOException
+public void skipEndElement() throws IOException
+public int getCurrentToken() { return _currentState; }
+public String getText() { return _textValue; }
+public String getLocalName() { return _localName; }
+public String getNamespaceURI() { return _namespaceURI; }
+public boolean hasAttributes() {
+public void closeCompletely() throws IOException
+public void close() throws IOException
+public JsonLocation getCurrentLocation() {
+public JsonLocation getTokenLocation() {
+protected void repeatStartElement()
+protected void skipAttributes()
+protected String convertToString() throws IOException
+private final int _next() throws XMLStreamException
+private final String _collectUntilTag() throws XMLStreamException
+private final int _skipUntilTag() throws XMLStreamException
+private final int _initStartElement() throws XMLStreamException
+final String ns = _xmlReader.getNamespaceURI();
+final String localName = _xmlReader.getLocalName();
+protected int _handleRepeatElement() throws IOException
+private final int _handleEndElement()
+private JsonLocation _extractLocation(XMLStreamLocation2 location)
+@Override
+public String toString()
+
+Generated JUnit Test:
+package com.fasterxml.jackson.dataformat.xml.deser;
+
+ import static org.junit.Assert.*;
+ import java.io.StringReader;
+ import javax.xml.stream.*;
+ import org.codehaus.stax2.XMLStreamReader2;
+ import com.ctc.wstx.stax.WstxInputFactory;
+
+ import org.junit.Test;
+
+ public class XmlTokenStreamTest {
+
+     private XmlTokenStream createStream(String xml) throws Exception {
+         XMLInputFactory f = new WstxInputFactory();
+         XMLStreamReader2 sr = (XMLStreamReader2) f.createXMLStreamReader(new StringReader(xml));
+         return new XmlTokenStream(sr, null);
+     }
+
+     @Test
+     public void testSimpleTextContent() throws Exception {
+         XmlTokenStream ts = createStream("<root>hello</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals("root", ts.getLocalName());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("hello", ts.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testTextBeforeChildElement() throws Exception {
+         XmlTokenStream ts = createStream("<root>27<child/></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("27", ts.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals("child", ts.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testTextBeforeAndAfterChild() throws Exception {
+         XmlTokenStream ts = createStream("<root>before<child/>after</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("before", ts.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("after", ts.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testWhitespaceOnlyText() throws Exception {
+         XmlTokenStream ts = createStream("<root>   </root>");
+         ts.next(); // start
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("   ", ts.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testEmptyElement() throws Exception {
+         XmlTokenStream ts = createStream("<root/>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testAttributesFollowedByText() throws Exception {
+         XmlTokenStream ts = createStream("<root attr='val'>data</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertTrue(ts.hasAttributes());
+         // skip attributes to reach text
+         ts.skipAttributes();
+         // now expect text
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("data", ts.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testNestedElementsWithText() throws Exception {
+         XmlTokenStream ts = createStream("<outer>text<inner/</outer>");
+         // outer start
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("text", ts.getText());
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals("inner", ts.getLocalName());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+  // inner end
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next()); // outer end
+     }
+
+     @Test
+     public void testCDataText() throws Exception {
+         XmlTokenStream ts = createStream("<root><![CDATA[data in cdata]></root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals("data in cdata", ts.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testMultipleCharacterEventsConcatenation() throws Exception {
+         // Woodstox may split long text or text with special characters into multiple
+         // CHARACTERS events; this test ensures concatenation works.
+         // Use a moderately long text with newline to encourage split.
+         String longText = "line1\nline2\nline3";
+         XmlTokenStream ts = createStream("<root>" + longText + "</root>");
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals(XmlTokenStream.XML_TEXT, ts.next());
+         assertEquals(longText, ts.getText());
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testRepeatStartElement() throws Exception {
+         XmlTokenStream ts = createStream("<root><child/><root>");
+         ts.next(); // root start
+         ts.next(); // child start
+         // current state is START_ELEMENT for child; repeat it
+         ts.repeatStartElement();
+         assertEquals(XmlTokenStream.XML_START_ELEMENT, ts.next());
+         assertEquals("child", ts.getLocalName());
+         // then actual child end should come
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.next());
+     }
+
+     @Test
+     public void testSkipEndElement() throws Exception {
+         XmlTokenStream ts = createStream("<root></root>");
+         ts.next(); // root start
+         ts.skipEndElement(); // skips END_ELEMENT
+         assertEquals(XmlTokenStream.XML_END_ELEMENT, ts.getCurrentToken());
+     }
+
+     @Test(expected = IOException.class)
+     public void testSkipEndElementWhenNotEnd() throws Exception {
+         XmlTokenStream ts = createStream("<root>data</root>");
+         ts.next(); // start
+         // next token is TEXT, not END_ELEMENT, so skipEndElement should throw
+         ts.skipEndElement();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonXml-2f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonXml-2f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonXml-2f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonXml-2f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonXml-2f-copilot/.test_suite/com/fasterxml/jackson/dataformat/xml/deser/XmlTokenStreamTest.java:140: error: cannot find symbol
+ [javac] @Test(expected = IOException.class)
+ [javac] ^
+ [javac] symbol: class IOException
+ [javac] location: class XmlTokenStreamTest
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 second
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

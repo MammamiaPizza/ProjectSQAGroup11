@@ -1,0 +1,225 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 138  Version: Closure-138b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 124
+Trigger failures:
+- com.google.javascript.jscomp.ClosureReverseAbstractInterpreterTest::testGoogIsArrayOnNull
+ --> junit.framework.AssertionFailedError: expected:<Array> but was:<null>
+ - com.google.javascript.jscomp.ClosureReverseAbstractInterpreterTest::testGoogIsFunctionOnNull
+ --> junit.framework.AssertionFailedError: expected:<Function> but was:<null>
+ - com.google.javascript.jscomp.ClosureReverseAbstractInterpreterTest::testGoogIsObjectOnNull
+ --> junit.framework.AssertionFailedError: expected:<Object> but was:<null>
+ - com.google.javascript.jscomp.TypeCheckTest::testIssue124b
+ --> junit.framework.ComparisonFailure: expected:<...tes to false
+ - com.google.javascript.jscomp.TypeCheckTest::testIssue124
+ --> junit.framework.AssertionFailedError: unexpected warnings(s):
+Modified: com.google.javascript.jscomp.ClosureReverseAbstractInterpreter, com.google.javascript.jscomp.TypeInference
+
+Available API/signatures:
+[com.google.javascript.jscomp.ClosureReverseAbstractInterpreter | java]
+package com.google.javascript.jscomp;
+class ClosureReverseAbstractInterpreter
+@Override
+protected JSType caseTopType(JSType topType) {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseFunctionType(FunctionType type) {
+public JSType apply(TypeRestriction p) {
+private static class TypeRestriction {
+private TypeRestriction(JSType type, boolean outcome) {
+
+[com.google.javascript.jscomp.TypeInference | java]
+package com.google.javascript.jscomp;
+class TypeInference
+private final Set<String> unflowableVarNames = Sets.newHashSet();
+@Override
+@SuppressWarnings("fallthrough")
+private FlowScope traverse(Node n, FlowScope scope) {
+private FlowScope traverseCatch(Node n, FlowScope scope) {
+private FlowScope traverseAssign(Node n, FlowScope scope) {
+private void ensurePropertyDefined(Node getprop, JSType rightType) {
+private void ensurePropertyDeclared(Node getprop) {
+private FlowScope traverseName(Node n, FlowScope scope) {
+private FlowScope traverseArrayLiteral(Node n, FlowScope scope) {
+private FlowScope traverseObjectLiteral(Node n, FlowScope scope) {
+private FlowScope traverseAdd(Node n, FlowScope scope) {
+private boolean isAddedAsNumber(JSType type) {
+private FlowScope traverseHook(Node n, FlowScope scope) {
+private FlowScope t
+...[truncated deterministically]...
+ode n, FlowScope scope) {
+private FlowScope traverseGetProp(Node n, FlowScope scope) {
+private FlowScope dereferencePointer(Node n, FlowScope scope) {
+private BooleanOutcomePair traverseOr(Node n, FlowScope scope) {
+private final class BooleanOutcomePair {
+private void redeclare(FlowScope scope, String varName, JSType varType) {
+private JSType getJSType(Node n) {
+private JSType getNativeType(JSTypeNative typeId) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static com.google.javascript.rhino.jstype.JSTypeNative.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.UnknownType;
+
+import junit.framework.TestCase;
+
+/**
+
+ - Tests for ClosureReverseAbstractInterpreter bug 138.
+ - Ensures that goog.isArray, goog.isFunction, and goog.isObject correctly narrow null/void types.
+  */
+ public class ClosureReverseAbstractInterpreterBug138Test extends TestCase {
+
+  private Compiler compiler; private JSTypeRegistry registry; private
+ClosureReverseAbstractInterpreter reverseInterpreter; private CodingConvention convention;
+
+  // Commonly used native types private JSType nullType; private JSType voidType; private JSType
+arrayType; private JSType functionType; private JSType objectType;
+
+  @Override protected void setUp() throws Exception {
+    super.setUp();
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    registry = compiler.getTypeRegistry();
+    convention = compiler.getCodingConvention();
+    reverseInterpreter = new ClosureReverseAbstractInterpreter(convention, registry);
+
+ nullType   = registry.getNativeType(NULL_TYPE);
+ voidType   = registry.getNativeType(VOID_TYPE);
+ arrayType  = registry.getNativeType(ARRAY_TYPE);
+ functionType = registry.getNativeType(FUNCTION_INSTANCE_TYPE);
+ objectType = registry.getNativeType(OBJECT_TYPE); }
+
+  /* ---------- goog.isArray ---------- */
+
+  /** goog.isArray on null with true outcome must yield Array. */ public void
+testGoogIsArrayOnNullTrue() {
+    JSType result = getRestrictedType("isArray", nullType, true);
+    assertEquals(arrayType, result); }
+
+  /** goog.isArray on null with false outcome should remain null (unchanged). */ public void
+testGoogIsArrayOnNullFalse() {
+    JSType result = getRestrictedType("isArray", nullType, false);
+    assertEquals(nullType, result); }
+
+  /** goog.isArray on void (undefined) with true outcome must yield Array. */ public void
+testGoogIsArrayOnVoidTrue() {
+    JSType result = getRestrictedType("isArray", voidType, true);
+    // Expected: Array, because true outcome forces the value to be an array.
+    assertEquals(arrayType, result); }
+
+  /** goog.isArray on a union of null and Array with true outcome removes null. */ public void
+testGoogIsArrayOnNullArrayUnionTrue() {
+    JSType union = registry.createUnionType(nullType, arrayType);
+    JSType result = getRestrictedType("isArray", union, true);
+    assertEquals(arrayType, result); }
+
+  /** goog.isArray on a non-null type (e.g. Array) with true outcome stays Array. */ public void
+testGoogIsArrayOnArrayTrue() {
+    JSType result = getRestrictedType("isArray", arrayType, true);
+    assertEquals(arrayType, result); }
+
+  /* ---------- goog.isFunction ---------- */
+
+  /** goog.isFunction on null with true outcome must yield Function. */ public void
+testGoogIsFunctionOnNullTrue() {
+    JSType result = getRestrictedType("isFunction", nullType, true);
+    assertEquals(functionType, result); }
+
+  /** goog.isFunction on null with false outcome should stay null. */ public void
+testGoogIsFunctionOnNullFalse() {
+    JSType result = getRestrictedType("isFunction", nullType, false);
+    assertEquals(nullType, result); }
+
+  /** goog.isFunction on void with true outcome must yield Function. */ public void
+testGoogIsFunctionOnVoidTrue() {
+    JSType result = getRestrictedType("isFunction", voidType, true);
+    assertEquals(functionType, result); }
+
+  /* ---------- goog.isObject ---------- */
+
+  /** goog.isObject on null with true outcome must yield Object. */ public void
+testGoogIsObjectOnNullTrue() {
+    JSType result = getRestrictedType("isObject", nullType, true);
+    assertEquals(objectType, result); }
+
+  /** goog.isObject on null with false outcome should stay null. */ public void
+testGoogIsObjectOnNullFalse() {
+    JSType result = getRestrictedType("isObject", nullType, false);
+    assertEquals(nullType, result); }
+
+  /** goog.isObject on void with true outcome must yield Object. */ public void
+testGoogIsObjectOnVoidTrue() {
+    JSType result = getRestrictedType("isObject", voidType, true);
+    assertEquals(objectType, result); }
+
+  /** goog.isObject on a union of null and Object with true outcome removes null. */ public void
+testGoogIsObjectOnNullObjectUnionTrue() {
+    JSType union = registry.createUnionType(nullType, objectType);
+    JSType result = getRestrictedType("isObject", union, true);
+    assertEquals(objectType, result); }
+
+  // ---------- helper ----------
+
+  /**
+
+ - Builds a {@code goog.isXxx(x)} call node and a scope where {@code x} has the
+ - given input type, then asks the reverse interpreter for the narrowed type of
+ - {@code x} under the given outcome.
+ -
+ - @return the type of variable {@code x} after applying the condition, or
+ -      {@code null} if the scope was not modified.
+
+   */
+  private JSType getRestrictedType(String googFuncName, JSType inputType, boolean outcome) {
+    Node condition = new Node(Token.CALL,
+        new Node(Token.GETPROP,
+            Node.newString(Token.NAME, "goog"),
+            Node.newString(Token.STRING, googFuncName)),
+        Node.newString(Token.NAME, "x"));
+
+ Node script = new Node(Token.SCRIPT);
+ Scope functionScope = new Scope(script, null);
+ functionScope.declare("x", null, inputType, null);
+
+ FlowScope blindScope = LinkedFlowScope.createEntryLattice(functionScope);
+ FlowScope precise = reverseInterpreter.getPreciserScopeKnowingConditionOutcome(
+     condition, blindScope, outcome);
+ if (precise == null) {
+   return null;
+ }
+ StaticSlot<JSType> slot = precise.getSlot("x");
+ return slot == null ? null : slot.getType(); }
+
+}
+```
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-138f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-138f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-138f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-138f-copilot/.test_suite/com/google/javascript/jscomp/ClosureReverseAbstractInterpreterBug138Test.java:25: error: <identifier> expected
+ [javac] arrayType; private JSType functionType; private JSType objectType;
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

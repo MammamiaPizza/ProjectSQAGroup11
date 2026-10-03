@@ -1,0 +1,238 @@
+```java
+package org.apache.commons.codec.binary;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.UnsupportedEncodingException;
+
+import org.junit.Test;
+
+public class Base32GeneratedTest {
+
+    private static byte[] ascii(final String value) {
+        try {
+            return value.getBytes("US-ASCII");
+        } catch (final UnsupportedEncodingException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    @Test
+    public void testDefaultBase32Rfc4648VectorsEncodeAndDecode() {
+        final Base32 codec = new Base32();
+
+        final String[] plainText = { "", "f", "fo", "foo", "foob", "fooba", "foobar" };
+        final String[] encodedText = {
+                "",
+                "MY======",
+                "MZXQ====",
+                "MZXW6===",
+                "MZXW6YQ=",
+                "MZXW6YTB",
+                "MZXW6YTBOI======"
+        };
+
+        for (int i = 0; i < plainText.length; i++) {
+            assertArrayEquals("Unexpected Base32 encoding for " + plainText[i],
+                    ascii(encodedText[i]), codec.encode(ascii(plainText[i])));
+            assertArrayEquals("Unexpected Base32 decoding for " + encodedText[i],
+                    ascii(plainText[i]), codec.decode(ascii(encodedText[i])));
+        }
+    }
+
+    @Test
+    public void testDecodeAcceptsOptionalPaddingAndIgnoresNonAlphabetCharacters() {
+        final Base32 codec = new Base32();
+
+        assertArrayEquals(ascii("foo"), codec.decode(ascii("MZ!XW6===")));
+        assertArrayEquals(ascii("foo"), codec.decode(ascii(" MZ XW6===\r\n")));
+        assertArrayEquals(ascii("f"), codec.decode(ascii("MZX")));
+        assertArrayEquals(ascii("foo"), codec.decode(ascii("MZXW6Y")));
+        assertArrayEquals(new byte[0], codec.decode(ascii("M")));
+    }
+
+    @Test
+    public void testDecodeIgnoresNonAsciiAndOutOfDecodeTableBytes() {
+        final Base32 codec = new Base32();
+        final byte[] encoded = {
+                'M', 'Z',
+                0x7f,
+                (byte) 0xff,
+                'X', 'W', '6', '=', '=', '='
+        };
+
+        assertArrayEquals(ascii("foo"), codec.decode(encoded));
+    }
+
+    @Test
+    public void testDecodeDoesNotProcessInputAfterContextReachedEof() {
+        final Base32 codec = new Base32();
+        final BaseNCodec.Context context = new BaseNCodec.Context();
+
+        codec.decode(ascii("MY======"), 0, 8, context);
+        codec.decode(ascii("MZXQ===="), 0, 8, context);
+
+        assertTrue(context.eof);
+        assertEquals(1, context.pos);
+        assertEquals((byte) 'f', context.buffer[0]);
+    }
+
+    @Test
+    public void testBase32HexUsesRfc4648HexAlphabet() {
+        final Base32 codec = new Base32(true);
+
+        assertArrayEquals(ascii("CPNMUOJ1E8======"), codec.encode(ascii("foobar")));
+        assertArrayEquals(ascii("foobar"), codec.decode(ascii("CPNMUOJ1E8======")));
+
+        assertTrue(codec.isInAlphabet((byte) '0'));
+        assertTrue(codec.isInAlphabet((byte) 'V'));
+        assertFalse(codec.isInAlphabet((byte) 'W'));
+    }
+
+    @Test
+    public void testBase32HexAllowsWAsCustomPaddingBecauseItIsNotInHexAlphabet() {
+        final Base32 codec = new Base32(true, (byte) 'W');
+
+        assertArrayEquals(ascii("COWWWWWW"), codec.encode(ascii("f")));
+        assertArrayEquals(ascii("f"), codec.decode(ascii("COWWWWWW")));
+    }
+
+    @Test
+    public void testSingleArgumentPaddingConstructorRejectsAlphabetPaddingAndSupportsSafePadding() {
+        try {
+            new Base32((byte) 'A');
+            fail("A Base32 alphabet character must not be accepted as padding");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("pad"));
+        }
+
+        final Base32 codec = new Base32((byte) '!');
+        assertArrayEquals(ascii("MY!!!!!!"), codec.encode(ascii("f")));
+        assertArrayEquals(ascii("f"), codec.decode(ascii("MY!!!!!!")));
+    }
+
+    @Test
+    public void testRejectsPaddingThatIsAlphabetCharacterOrWhitespace() {
+        assertInvalidPad(false, (byte) 'A');
+        assertInvalidPad(false, (byte) ' ');
+        assertInvalidPad(true, (byte) 'V');
+    }
+
+    @Test
+    public void testChunkedEncodingRoundsLineLengthDownToBase32BlockSize() {
+        final Base32 codec = new Base32(10);
+        final byte[] input = new byte[10];
+
+        assertArrayEquals(ascii("AAAAAAAA\r\nAAAAAAAA\r\n"), codec.encode(input));
+        assertArrayEquals(input, codec.decode(ascii("AAAAAAAA\r\nAAAAAAAA\r\n")));
+    }
+
+    @Test
+    public void testChunkedEncodingDoesNotSeparateBeforeConfiguredLineLength() {
+        final Base32 codec = new Base32(16);
+        final byte[] input = new byte[10];
+
+        assertArrayEquals(ascii("AAAAAAAAAAAAAAAA\r\n"), codec.encode(input));
+        assertArrayEquals(input, codec.decode(ascii("AAAAAAAAAAAAAAAA\r\n")));
+    }
+
+    @Test
+    public void testChunkedEncodingAppendsSeparatorAfterFinalPartialBlock() {
+        final Base32 codec = new Base32(8);
+
+        assertArrayEquals(ascii("MY======\r\n"), codec.encode(ascii("f")));
+        assertArrayEquals(ascii("f"), codec.decode(ascii("MY======\r\n")));
+    }
+
+    @Test
+    public void testRejectsInvalidChunkingConfiguration() {
+        try {
+            new Base32(8, ascii("A"));
+            fail("A line separator containing a Base32 alphabet character must be rejected");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("lineSeparator"));
+        }
+
+        try {
+            new Base32(8, null, false);
+            fail("A positive line length requires a line separator");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("lineSeparator"));
+        }
+    }
+
+    @Test
+    public void testRejectsHexAlphabetCharacterInHexLineSeparator() {
+        try {
+            new Base32(8, ascii("0"), true);
+            fail("A Base32 Hex alphabet character must not be accepted in a line separator");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("lineSeparator"));
+        }
+    }
+
+    @Test
+    public void testZeroLineLengthIgnoresProvidedSeparatorAndDoesNotChunkOutput() {
+        final Base32 codec = new Base32(0, ascii("A"), false, (byte) '!');
+
+        assertArrayEquals(ascii("MY!!!!!!"), codec.encode(ascii("f")));
+        assertArrayEquals(ascii("f"), codec.decode(ascii("MY!!!!!!")));
+    }
+
+    @Test
+    public void testRoundTripPreservesUnsignedAndNegativeByteValues() {
+        final Base32 codec = new Base32();
+        final byte[] input = { 0, (byte) 0xff, 0x10, (byte) 0x80, 0x7f };
+
+        assertArrayEquals(input, codec.decode(codec.encode(input)));
+    }
+
+    @Test
+    public void testNullInputIsReturnedAsNull() {
+        final Base32 codec = new Base32();
+
+        assertNull(codec.encode((byte[]) null));
+        assertNull(codec.decode((byte[]) null));
+    }
+
+    private static void assertInvalidPad(final boolean useHex, final byte pad) {
+        try {
+            new Base32(useHex, pad);
+            fail("Padding byte should be rejected: " + pad);
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("pad"));
+        }
+    }
+}
+```
+
+New test coverage and fault-detection targets:
+
+- `testDecodeIgnoresNonAsciiAndOutOfDecodeTableBytes`
+  - Covers decoding paths where an input byte is negative (`0xff`) and where it is non-negative but outside the decode-table range (`0x7f`).
+  - Verifies the documented behavior that non-Base32 input is ignored.
+
+- `testDecodeDoesNotProcessInputAfterContextReachedEof`
+  - Covers the early-return branch in `decode` when `context.eof` is already true.
+  - Verifies stream-decoding state is not modified by subsequent input after padding has terminated decoding.
+
+- `testSingleArgumentPaddingConstructorRejectsAlphabetPaddingAndSupportsSafePadding`
+  - Directly targets the single-argument `Base32(byte pad)` constructor associated with Codec-200.
+  - Distinguishes the buggy behavior—accepting an alphabet character as padding—from the expected `IllegalArgumentException`.
+  - Also covers successful construction and encoding with a safe custom padding byte.
+
+- `testChunkedEncodingDoesNotSeparateBeforeConfiguredLineLength`
+  - Covers the false branch of the chunk-boundary condition after a complete Base32 block but before the configured line length is reached.
+
+- `testChunkedEncodingAppendsSeparatorAfterFinalPartialBlock`
+  - Covers EOF encoding for a partial input block with chunking enabled.
+  - Verifies that the line separator is appended after final padded output.
+
+- `testRejectsHexAlphabetCharacterInHexLineSeparator`
+  - Covers Base32 Hex-specific line-separator validation.
+  - Ensures separator validation uses the selected hexadecimal alphabet rather than only the normal Base32 alphabet.

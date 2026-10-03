@@ -1,0 +1,168 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: Jsoup  Bug: 59  Version: Jsoup-59b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.parser.Token
+Bug/specification summary:
+Bug report: 793
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::handlesControlCodeInAttributeName
+ --> java.lang.IllegalArgumentException: String must not be empty
+ - org.jsoup.safety.CleanerTest::handlesControlCharactersAfterTagName
+ --> java.lang.IllegalArgumentException: String must not be empty
+Modified: org.jsoup.parser.Token
+
+Available API/signatures:
+[org.jsoup.parser.Token | java]
+package org.jsoup.parser;
+abstract class Token {
+private Token() {
+abstract Token reset();
+static void reset(StringBuilder sb) {
+static final class Doctype extends Token {
+final StringBuilder name = new StringBuilder();
+final StringBuilder publicIdentifier = new StringBuilder();
+final StringBuilder systemIdentifier = new StringBuilder();
+@Override
+public String getSystemIdentifier() {
+public boolean isForceQuirks() {
+static abstract class Tag extends Token {
+protected String tagName;
+protected String normalName; // lc version of tag name, for case insensitive tree build
+private StringBuilder pendingAttributeValue = new StringBuilder(); // but values are accumulated, from e.g. & in hrefs
+final void newAttribute() {
+final void finaliseTag() {
+final String name() { // preserves case, for input into Tag.valueOf (which may drop case)
+final String normalName() { // loses case, used in tree building for working out where in tree it should go
+final Tag name(String name) {
+final boolean isSelfClosing() {
+@SuppressWarnings({"TypeMayBeWeakened"})
+final Attributes getAttributes() {
+final void appendTagName(String append) {
+final void appendTagName(char append) {
+final void appendAttributeName(String append) {
+final void appendAttributeName(char append) {
+final void appendAttributeValue(String append) {
+final void appendAttributeValue(char append) {
+final void appendAttributeValue(char[] append) {
+final void appendAttributeValue(int[] appendCodepoints) {
+final void setEmptyAttributeValue() {
+private void ensureAttributeValue() {
+final static class StartTag extends Tag {
+public String toString() {
+final static class EndTag extends Tag{
+final static class Comment extends Token {
+final StringBuilder data = new StringBuilder();
+final static class Character extends Token {
+final static class EOF extends Token {
+final boolean isDoctype() {
+final Doctype asDoctype() {
+final boolean isStartTag() {
+final StartTag asStartTag() {
+final boolean isEndTag() {
+final EndTag asEndTag() {
+final boolean isComment() {
+final Comment asComment() {
+final boolean isCharacter() {
+final Character asCharacter() {
+final boolean isEOF() {
+enum TokenType {
+
+Existing test summary (method names/assertions only):
+Test methods: finaliseTagIgnoresControlOnlyAttributeName, newAttributeSkipsControlOnlyNameAndAllowsFollowingAttribute, parserHandlesControlCharacterInAttributeName, cleanerHandlesControlCharacterAfterTagName, normalAttributesAndValuesArePreservedAcrossNewAttribute, explicitEmptyAndBooleanAttributesRemainDistinctEntries, tagNameAppendMaintainsOriginalAndNormalizedNames, resetClearsTagStateAndRestoresStartTagAttributes
+Representative assertions:
+assertEquals(0, tag.getAttributes().size());
+assertEquals(1, tag.getAttributes().size());
+assertTrue(tag.getAttributes().hasKey("title"));
+assertEquals("example", tag.getAttributes().get("title"));
+assertEquals("value", document.select("div").first().attr("title"));
+assertEquals(1, document.select("div").first().attributes().size());
+assertEquals("text", document.select("div").first().text());
+assertEquals("One", cleaned.body().text());
+assertEquals(2, tag.getAttributes().size());
+assertEquals("one", tag.getAttributes().get("first"));
+assertEquals("two", tag.getAttributes().get("second"));
+assertEquals(2, tag.getAttributes().size());
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+161,121,46,27
+
+Line/branch gaps:
+Class: org.jsoup.parser.Token
+Uncovered lines: 353, 329, 365, 18, 18, 329, 353, 365
+Partially covered branch lines: 349 (50% (1/2)), 325 (50% (1/2)), 341 (50% (1/2)), 333 (50% (1/2)), 28 (50% (1/2)), 28 (50% (1/2)), 325 (50% (1/2)), 333 (50% (1/2)), 341 (50% (1/2)), 349 (50% (1/2))
+
+Relevant buggy-source snippets around reported gaps:
+[org.jsoup.parser.Token]
+351: return (Comment) this;
+352: }
+353: 
+354: final boolean isCharacter() {
+355: return type == TokenType.Character;
+---
+327: return (Doctype) this;
+328: }
+329: 
+330: final boolean isStartTag() {
+331: return type == TokenType.StartTag;
+---
+363: return type == TokenType.EOF;
+364: }
+365: 
+366: enum TokenType {
+367: Doctype,
+---
+16: 
+17: String tokenType() {
+18: return this.getClass().getSimpleName();
+19: }
+20: 
+---
+347: return type == TokenType.Comment;
+348: }
+349: 
+350: final Comment asComment() {
+351: return (Comment) this;
+---
+48: reset(publicIdentifier);
+49: reset(systemIdentifier);
+50: forceQuirks = false;
+51: return this;
+52: }
+---
+1: package org.jsoup.parser;
+2: 
+3: import org.jsoup.helper.Validate;
+---
+1: package org.jsoup.parser;
+2: 
+3: import org.jsoup.helper.Validate;
+4: import org.jsoup.nodes.Attribute;
+---
+323: return type == TokenType.Doctype;
+324: }
+325: 
+326: final Doctype asDoctype() {
+327: return (Doctype) this;
+---
+339: return type == TokenType.EndTag;
+340: }
+341: 
+342: final EndTag asEndTag() {
+343: return (EndTag) this;
+---
+331: return type == TokenType.StartTag;
+332: }
+333: 
+334: final StartTag asStartTag() {
+335: return (StartTag) this;
+---
+26: 
+27: static void reset(StringBuilder sb) {
+28: if (sb != null) {
+29: sb.delete(0, sb.length());
+30: }

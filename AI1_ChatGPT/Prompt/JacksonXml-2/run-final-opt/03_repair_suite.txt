@@ -1,0 +1,239 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY a valid unified diff against the supplied Generated JUnit Test (---/+++ and @@ hunks). No Markdown and no explanation. Do not return the whole file unless a unified diff is impossible. This is the single allowed repair round.
+
+Project: JacksonXml  Bug: 2  Version: JacksonXml-2b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 196
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.misc.XmlTextTest::testMixedContent
+ --> junit.framework.AssertionFailedError: expected:<27> but was:<0>
+Modified: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream
+
+Available API/signatures:
+[com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStream | java]
+package com.fasterxml.jackson.dataformat.xml.deser;
+public class XmlTokenStream
+public final static int XML_START_ELEMENT = 1;
+public final static int XML_END_ELEMENT = 2;
+public final static int XML_ATTRIBUTE_NAME = 3;
+public final static int XML_ATTRIBUTE_VALUE = 4;
+public final static int XML_TEXT = 5;
+public final static int XML_END = 6;
+final protected XMLStreamReader2 _xmlReader;
+final protected Object _sourceReference;
+protected int _currentState;
+protected int _attributeCount;
+protected int _nextAttributeIndex = 0;
+protected String _localName;
+protected String _namespaceURI;
+protected String _textValue;
+protected int _repeatElement;
+protected ElementWrapper _currentWrapper;
+protected String _nextLocalName;
+protected String _nextNamespaceURI;
+public XmlTokenStream(XMLStreamReader xmlReader, Object sourceRef)
+public XMLStreamReader2 getXmlReader() {
+public int next() throws IOException
+public void skipEndElement() throws IOException
+public int getCurrentToken() { return _currentState; }
+public String getText() { return _textValue; }
+public String getLocalName() { return _localName; }
+public String getNamespaceURI() { return _namespaceURI; }
+public boolean hasAttributes() {
+public void closeCompletely() throws IOException
+public void close() throws IOException
+public JsonLocation getCurrentLocation() {
+public JsonLocation getTokenLocation() {
+protected void repeatStartElement()
+protected void skipAttributes()
+protected String convertToString() throws IOException
+private final int _next() throws XMLStreamException
+private final String _collectUntilTag() throws XMLStreamException
+private final int _skipUntilTag() throws XMLStreamException
+private final int _initStartElement() throws XMLStreamException
+final String ns = _xmlReader.getNamespaceURI();
+final String localName = _xmlReader.getLocalName();
+protected int _handleRepeatElement() throws IOException
+private final int _handleEndElement()
+private JsonLocation _extractLocation(XMLStreamLocation2 location)
+@Override
+public String toString()
+
+Generated JUnit Test:
+package com.fasterxml.jackson.dataformat.xml.deser;
+
+import java.io.IOException;
+import java.io.StringReader;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class XmlTokenStreamMixedContentTest
+{
+    private XmlTokenStream streamFor(String xml) throws Exception {
+        XMLStreamReader reader = XMLInputFactory.newInstance()
+                .createXMLStreamReader(new StringReader(xml));
+        return new XmlTokenStream(reader, xml);
+    }
+
+    private void assertNext(XmlTokenStream stream, int expectedToken) throws Exception {
+        assertEquals(expectedToken, stream.next());
+        assertEquals(expectedToken, stream.getCurrentToken());
+    }
+
+    @Test
+    public void mixedTextBeforeAndAfterEmptyChildIsPreservedInOrder() throws Exception {
+        XmlTokenStream stream = streamFor("<root>left<child/>right</root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("left", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("right", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_END);
+    }
+
+    @Test
+    public void mixedTextAroundNonEmptyChildRetainsAllTextTokens() throws Exception {
+        XmlTokenStream stream = streamFor("<root>before<child>inside</child>after</root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("before", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("inside", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("after", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertNext(stream, XmlTokenStream.XML_END);
+    }
+
+    @Test
+    public void adjacentCharacterAndCdataSegmentsAreCollectedAsOneTextValue() throws Exception {
+        XmlTokenStream stream = streamFor("<root>one<!-- ignored --><![CDATA[two]]>three</root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("onetwothree", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertNext(stream, XmlTokenStream.XML_END);
+    }
+
+    @Test
+    public void emptyElementsDoNotProduceSyntheticTextTokens() throws Exception {
+        XmlTokenStream stream = streamFor("<root><child/></root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertFalse(stream.hasAttributes());
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_END);
+    }
+
+    @Test
+    public void attributesAreReturnedBeforeFollowingText() throws Exception {
+        XmlTokenStream stream = streamFor("<root id=\"7\">value</root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertTrue(stream.hasAttributes());
+
+        assertNext(stream, XmlTokenStream.XML_ATTRIBUTE_NAME);
+        assertEquals("id", stream.getLocalName());
+
+        assertNext(stream, XmlTokenStream.XML_ATTRIBUTE_VALUE);
+        assertEquals("7", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_TEXT);
+        assertEquals("value", stream.getText());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertNext(stream, XmlTokenStream.XML_END);
+    }
+
+    @Test
+    public void elementNamesAndNamespacesAreAvailableForStartAndEndTokens() throws Exception {
+        XmlTokenStream stream = streamFor("<root xmlns=\"urn:test\"><child/></root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertEquals("urn:test", stream.getNamespaceURI());
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+        assertEquals("urn:test", stream.getNamespaceURI());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("child", stream.getLocalName());
+        assertEquals("urn:test", stream.getNamespaceURI());
+
+        assertNext(stream, XmlTokenStream.XML_END_ELEMENT);
+        assertEquals("root", stream.getLocalName());
+        assertEquals("urn:test", stream.getNamespaceURI());
+
+        assertNext(stream, XmlTokenStream.XML_END);
+    }
+
+    @Test(expected = IOException.class)
+    public void skipEndElementRejectsAFollowingStartElement() throws Exception {
+        XmlTokenStream stream = streamFor("<root><child/></root>");
+
+        assertNext(stream, XmlTokenStream.XML_START_ELEMENT);
+        stream.skipEndElement();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 7
+ - com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::elementNamesAndNamespacesAreAvailableForStartAndEndTokens
+ - com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::adjacentCharacterAndCdataSegmentsAreCollectedAsOneTextValue
+ - com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::mixedTextAroundNonEmptyChildRetainsAllTextTokens
+Failing generated tests: com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::adjacentCharacterAndCdataSegmentsAreCollectedAsOneTextValue, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::attributesAreReturnedBeforeFollowingText, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::elementNamesAndNamespacesAreAvailableForStartAndEndTokens, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::emptyElementsDoNotProduceSyntheticTextTokens, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::mixedTextAroundNonEmptyChildRetainsAllTextTokens, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::mixedTextBeforeAndAfterEmptyChildIsPreservedInOrder, com.fasterxml.jackson.dataformat.xml.deser.XmlTokenStreamMixedContentTest::skipEndElementRejectsAFollowingStartElement

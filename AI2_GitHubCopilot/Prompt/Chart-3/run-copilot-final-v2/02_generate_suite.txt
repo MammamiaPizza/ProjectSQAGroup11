@@ -1,0 +1,402 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Chart  Bug: 3  Version: Chart-3b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Target: org.jfree.data.time.TimeSeries
+Modified: org.jfree.data.time.TimeSeries
+Triggers: org.jfree.data.time.junit.TimeSeriesTests::testCreateCopy3
+
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.data.time.junit.TimeSeriesTests::testCreateCopy3
+ --> junit.framework.AssertionFailedError: expected:<101.0> but was:<102.0>
+Modified: org.jfree.data.time.TimeSeries
+
+Prompt-01 test plan:
+TARGETS: createCopy(RegularTimePeriod,RegularTimePeriod) end-boundary handling; createCopy(int,int)
+index off-by-one; minY/maxY after copy.
+ORACLES: testCreateCopy3 expected maxY=101 vs 102; copied series must contain exactly items in
+period range inclusive; copy bounds update.
+CASES: empty source; copy single-item; copy full range; start=end; copy before/after data; copy
+1st/last; partial overlap; varied period classes.
+RISKS: same off-by-one may affect delete(start,end,notify), getValue(index), hashCode; limited to
+supplied API (no source), cannot inspect impl.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jfree.data.time.TimeSeries (java) =====
+/* API SIGNATURES */
+package org.jfree.data.time;
+public class TimeSeries extends Series implements Cloneable, Serializable {
+protected static final String DEFAULT_DOMAIN_DESCRIPTION = "Time";
+protected static final String DEFAULT_RANGE_DESCRIPTION = "Value";
+protected Class timePeriodClass;
+protected List data;
+public TimeSeries(Comparable name) {
+public TimeSeries(Comparable name, String domain, String range) {
+public String getDomainDescription() {
+public void setDomainDescription(String description) {
+public String getRangeDescription() {
+public void setRangeDescription(String description) {
+public int getItemCount() {
+public List getItems() {
+public int getMaximumItemCount() {
+public void setMaximumItemCount(int maximum) {
+public long getMaximumItemAge() {
+public void setMaximumItemAge(long periods) {
+public double getMinY() {
+public double getMaxY() {
+public Class getTimePeriodClass() {
+public TimeSeriesDataItem getDataItem(int index) {
+public TimeSeriesDataItem getDataItem(RegularTimePeriod period) {
+public RegularTimePeriod getTimePeriod(int index) {
+public RegularTimePeriod getNextTimePeriod() {
+public Collection getTimePeriods() {
+public Collection getTimePeriodsUniqueToOtherSeries(TimeSeries series) {
+public int getIndex(RegularTimePeriod period) {
+public Number getValue(int index) {
+public Number getValue(RegularTimePeriod period) {
+public void add(TimeSeriesDataItem item) {
+public void add(TimeSeriesDataItem item, boolean notify) {
+b.append("You are trying to add data where the time period class ");
+public void add(RegularTimePeriod period, double value) {
+public void add(RegularTimePeriod period, double value, boolean notify) {
+public void add(RegularTimePeriod period, Number value) {
+public void add(RegularTimePeriod period, Number value, boolean notify) {
+public void update(RegularTimePeriod period, Number value) {
+public void update(int index, Number value) {
+public TimeSeries addAndOrUpdate(TimeSeries series) {
+public TimeSeriesDataItem addOrUpdate(TimeSeriesDataItem item) {
++ "period class is " + periodClass.getName()
+public void removeAgedItems(boolean notify) {
+public void removeAgedItems(long latest, boolean notify) {
+Method m = RegularTimePeriod.class.getDeclaredMethod(
+"createInstance", new Class[] {Class.class, Date.class,
+TimeZone.class});
+public void clear() {
+public void delete(RegularTimePeriod period) {
+public void delete(int start, int end) {
+public void delete(int start, int end, boolean notify) {
+public Object clone() throws CloneNotSupportedException {
+public TimeSeries createCopy(int start, int end)
+public TimeSeries createCopy(RegularTimePeriod start, RegularTimePeriod end)
+public boolean equals(Object obj) {
+public int hashCode() {
+private void updateBoundsForAddedItem(TimeSeriesDataItem item) {
+private void updateBoundsForRemovedItem(TimeSeriesDataItem item) {
+private void findBoundsByIteration() {
+private double minIgnoreNaN(double a, double b) {
+private double maxIgnoreNaN(double a, double b) {
+
+/* HEADER */
+package org.jfree.data.time;
+import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.TimeZone;
+import org.jfree.chart.util.ObjectUtilities;
+import org.jfree.data.general.Series;
+import org.jfree.data.event.SeriesChangeEvent;
+import org.jfree.data.general.SeriesException;
+public class TimeSeries extends Series implements Cloneable, Serializable {
+
+/* METHOD TimeSeries */
+public TimeSeries(Comparable name, String domain, String range) {
+ super(name);
+ this.domain = domain;
+ this.range = range;
+ this.timePeriodClass = null;
+ this.data = new java.util.ArrayList();
+ this.maximumItemCount = Integer.MAX_VALUE;
+ this.maximumItemAge = Long.MAX_VALUE;
+ this.minY = Double.NaN;
+ this.maxY = Double.NaN;
+ }
+
+/* METHOD TimeSeries */
+public TimeSeries(Comparable name) {
+ this(name, DEFAULT_DOMAIN_DESCRIPTION, DEFAULT_RANGE_DESCRIPTION);
+ }
+
+/* METHOD update */
+public void update(RegularTimePeriod period, Number value) {
+ TimeSeriesDataItem temp = new TimeSeriesDataItem(period, value);
+ int index = Collections.binarySearch(this.data, temp);
+ if (index < 0) {
+ throw new SeriesException("There is no existing value for the "
+ + "specified 'period'.");
+ }
+ update(index, value);
+ }
+
+/* METHOD update */
+public void update(int index, Number value) {
+ TimeSeriesDataItem item = (TimeSeriesDataItem) this.data.get(index);
+ boolean iterate = false;
+ Number oldYN = item.getValue();
+ if (oldYN != null) {
+ double oldY = oldYN.doubleValue();
+ if (!Double.isNaN(oldY)) {
+ iterate = oldY <= this.minY || oldY >= this.maxY;
+ }
+ }
+ item.setValue(value);
+ if (iterate) {
+ findBoundsByIteration();
+ }
+ else if (value != null) {
+ double yy = value.doubleValue();
+ this.minY = minIgnoreNaN(this.minY, yy);
+ this.maxY = maxIgnoreNaN(this.maxY, yy);
+ }
+ fireSeriesChanged();
+ }
+
+/* METHOD addOrUpdate */
+public TimeSeriesDataItem addOrUpdate(RegularTimePeriod period,
+ Number value) {
+ return addOrUpdate(new TimeSeriesDataItem(period, value));
+ }
+
+/* METHOD addOrUpdate */
+public TimeSeriesDataItem addOrUpdate(TimeSeriesDataItem item) {
+
+ if (item == null) {
+ throw new IllegalArgumentException("Null 'period' argument.");
+ }
+ Class periodClass = item.getPeriod().getClass();
+ if (this.timePeriodClass == null) {
+ this.timePeriodClass = periodClass;
+ }
+ else if (!this.timePeriodClass.equals(periodClass)) {
+ String msg = "You are trying to add data where the time "
+ + "period class is " + periodClass.getName()
+ + ", but the TimeSeries is expecting an instance of "
+ + this.timePeriodClass.getName() + ".";
+ throw new SeriesException(msg);
+ }
+ TimeSeriesDataItem overwritten = null;
+ int index = Collections.binarySearch(this.data, item);
+ if (index >= 0) {
+ TimeSeriesDataItem existing
+ = (TimeSeriesDataItem) this.data.get(index);
+ overwritten = (TimeSeriesDataItem) existing.clone();
+ // figure out if we need to iterate through all the y-values
+ // to find the revised minY / maxY
+ boolean iterate = false;
+ Number oldYN = existing.getValue();
+ double oldY = oldYN != null ? oldYN.doubleValue() : Double.NaN;
+ if (!Double.isNaN(oldY)) {
+ iterate = oldY <= this.minY || oldY >= this.maxY;
+ }
+ existing.setValue(item.getValue());
+ if (iterate) {
+ findBoundsByIteration();
+ }
+ else if (item.getValue() != null) {
+ double yy = item.getValue().doubleValue();
+ this.minY = minIgnoreNaN(this.minY, yy);
+ this.maxY = minIgnoreNaN(this.maxY, yy);
+ }
+ }
+ else {
+ item = (TimeSeriesDataItem) item.clone();
+ this.data.add(-index - 1, item);
+ updateBoundsForAddedItem(item);
+
+ // check if this addition will exceed the maximum item count...
+ if (getItemCount() > this.maximumItemCount) {
+ TimeSeriesDataItem d = (TimeSeriesDataItem) this.data.remove(0);
+ updateBoundsForRemovedItem(d);
+ }
+ }
+ removeAgedItems(false); // remove old items if necessary, but
+ // don't notify anyone, because that
+ // happens next anyway...
+ fireSeriesChanged();
+ return overwritten;
+
+ }
+
+ /**
+ * Age items in the series. Ensure that the timespan from the youngest to
+ * the oldest record in the series does not exceed maximumItemAge time
+ * periods. Oldest items will be removed if required.
+ *
+ * @param notify controls whether or not a {@link SeriesChangeEvent} is
+ * sent to registered listeners IF any items are removed.
+ */
+ public void removeAgedItems(boolean notify) {
+ // check if there are any values earlier than specified by the history
+ // count...
+ if (getItemCount() > 1) {
+ long latest = getTimePeriod(getItemCount() - 1).getSerialIndex();
+ boolean removed = false;
+ while ((latest - getTimePeriod(0).getSerialIndex())
+ > this.maximumItemAge) {
+ this.data.remove(0);
+ removed = true;
+ }
+ if (removed) {
+ findBoundsByIteration();
+ if (notify) {
+ fireSeriesChanged();
+ }
+ }
+ }
+ }
+
+ /**
+ * Age items in the series. Ensure that the timespan from the supplied
+ * time to the
+...[truncated deterministically]...
+est the time to be compared against when aging data
+ * (specified in milliseconds).
+ * @param notify controls whether or not a {@link SeriesChangeEvent} is
+ * sent to registered listeners IF any items are removed.
+ */
+ public void removeAgedItems(long latest, boolean notify) {
+ if (this.data.isEmpty()) {
+ return; // nothing to do
+ }
+ // find the serial index of the period specified by 'latest'
+ long index = Long.MAX_VALUE;
+...[truncated deterministically]...
+eturn false;
+ }
+ TimeSeries that = (TimeSeries) obj;
+ if (!ObjectUtilities.equal(getDomainDescription(),
+ that.getDomainDescription())) {
+ return false;
+ }
+ if (!ObjectUtilities.equal(getRangeDescription(),
+ that.getRangeDescription())) {
+ return false;
+ }
+ if (!ObjectUtilities.equal(this.timePeriodClass,
+ that.timePeriodClass)) {
+ return false;
+ }
+ if (getMaximumItemAge() != that.getMaximumItemAge()) {
+ return false;
+ }
+ if (getMaximumItemCount() != that.getMaximumItemCount()) {
+ return false;
+ }
+ int count = getItemCount();
+ if (count != that.getItemCount()) {
+ return false;
+ }
+ if (!ObjectUtilities.equal(this.data, that.data)) {
+ return false;
+ }
+ return super.equals(obj);
+ }
+
+ /**
+ * Returns a hash code value for the object.
+ *
+ * @return The hashcode
+ */
+ public int hashCode() {
+ int result = super.hashCode();
+ result = 29 * result + (this.domain != null ? this.domain.hashCode()
+ : 0);
+ result = 29 * result + (this.range != null ? this.range.hashCode() : 0);
+ result = 29 * result + (this.timePeriodClass != null
+ ? this.timePeriodClass.hashCode() : 0);
+ // it is too slow to look at every data item, so let's just look at
+ // the first, middle and last items...
+ int count = getItemCount();
+ if (count > 0) {
+ TimeSeriesDataItem item = getRawDataItem(0);
+ result = 29 * result + item.hashCode();
+ }
+ if (count > 1) {
+ TimeSeriesDataItem item = getRawDataItem(count - 1);
+ result = 29 * result + item.hashCode();
+ }
+ if (count > 2) {
+ TimeSeriesDataItem item = getRawDataItem(count / 2);
+ result = 29 * result + item.hashCode();
+ }
+ result = 29 * result + this.maximumItemCount;
+ result = 29 * result + (int) this.maximumItemAge;
+ return result;
+ }
+
+/* METHOD add */
+public void add(TimeSeriesDataItem item, boolean notify) {
+ if (item == null) {
+ throw new IllegalArgumentException("Null 'item' argument.");
+ }
+ item = (TimeSeriesDataItem) item.clone();
+ Class c = item.getPeriod().getClass();
+ if (this.timePeriodClass == null) {
+ this.timePeriodClass = c;
+ }
+ else if (!this.timePeriodClass.equals(c)) {
+ StringBuffer b = new StringBuffer();
+ b.append("You are trying to add data where the time period class ");
+ b.append("is ");
+ b.append(item.getPeriod().getClass().getName());
+ b.append(", but the TimeSeries is expecting an instance of ");
+ b.append(this.timePeriodClass.getName());
+ b.append(".");
+ throw new SeriesException(b.toString());
+ }
+
+ // make the change (if it's not a duplicate time period)...
+ boolean added = false;
+ int count = getItemCount();
+ if (count == 0) {
+ this.data.add(item);
+ added = true;
+ }
+ else {
+ RegularTimePeriod last = getTimePeriod(getItemCount() - 1);
+ if (item.getPeriod().compareTo(last) > 0) {
+ this.data.add(item);
+ added = true;
+ }
+ else {
+ int index = Collections.binarySearch(this.data, item);
+ if (index < 0) {
+ this.data.add(-index - 1, item);
+ added = true;
+ }
+ else {
+ StringBuffer b = new StringBuffer();
+ b.append("You ar
+...[truncated deterministically]...
+n");
+ b.append(" for that time period. Duplicates are not ");
+ b.append("permitted. Try using the addOrUpdate() method.");
+ throw new SeriesException(b.toString());
+ }
+ }
+ }
+ if (added) {
+ updateBoundsForAddedItem(item);
+ // check if this addition will exceed the maximum item count...
+ if (getItemCount() > this.maximumItemCount) {
+ TimeSeriesDataItem d = (TimeSeriesDataItem) this.data.remove(0);
+ updateBoundsForRemovedItem(d);
+ }
+
+ removeAgedItems(false); // remove old items if necessary, but
+ // don't notify anyone, because that
+ // happens next anyway...
+ if (notify) {
+ fireSeriesChanged();
+ }
+ }

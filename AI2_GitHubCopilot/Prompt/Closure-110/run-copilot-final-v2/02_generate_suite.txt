@@ -1,0 +1,422 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 110  Version: Closure-110b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.ScopedAliases, com.google.javascript.rhino.Node
+Modified: com.google.javascript.jscomp.ScopedAliases, com.google.javascript.rhino.Node
+Triggers: com.google.javascript.jscomp.ScopedAliasesTest::testHoistedFunctionDeclaration, com.google.javascript.jscomp.ScopedAliasesTest::testFunctionDeclaration
+
+Bug/specification summary:
+Bug report: 1111
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testHoistedFunctionDeclaration
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable f is in a goog.scope and is not an alias. at testcode line 1 : 39 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.ScopedAliasesTest::testFunctionDeclaration
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable f is in a goog.scope and is not an alias. at testcode line 1 : 41 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.ScopedAliases, com.google.javascript.rhino.Node
+
+Prompt-01 test plan:
+TARGETS: ScopedAliases.Traversal.validateScopeCall flags function declarations as non-alias.
+ScopedAliases.Traversal.findAliases maybe misidentifies aliases. Node type checks (FUNCTION) may be
+involved.
+ORACLES: 0 errors expected; diagnostic JSC_GOOG_SCOPE_NON_ALIAS_LOCAL must not fire for function
+declarations inside goog.scope.
+CASES: Hoisted function declaration, non-hoisted function declaration, function expression (should
+still error?), var assignment that is not an alias (still error).
+CASES: Multiple functions, mixed with valid alias assignments, nested scopes, edge of goog.scope
+boundary.
+RISKS: API hides validateScopeCall implementation; TARGETS may miss other locals (class/let/const)
+wrongly flagged. Test code not provided.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.ScopedAliases (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class ScopedAliases implements HotSwapCompilerPass {
+private Multiset<String> scopedAliasNames = HashMultiset.create();
+@Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node root, Node originalRoot) {
+private abstract class AliasUsage {
+public boolean referencesOtherAlias() {
+public abstract void applyAlias();
+private class AliasedNode extends AliasUsage {
+public void applyAlias() {
+private class AliasedTypeNode extends AliasUsage {
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> aliasUsages = Lists.newArrayList();
+private final Map<String, Var> aliases = Maps.newHashMap();
+private final Set<String> forbiddenLocals = Sets.newHashSet("$jscomp");
+private List<AliasUsage> getAliasUsages() {
+private boolean isCallToScopeMethod(Node n) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+public final boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+private SourcePosition<AliasTransformation> getSourceRegion(Node n) {
+private void findAliases(NodeTraversal t) {
+private void recordAlias(Var aliasVar) {
+private void findNamespaceShadows(NodeTraversal t) {
+private void renameNamespaceShadows(NodeTraversal t) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformation;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformationHandler;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.SourcePosition;
+import com.google.javascript.rhino.Token;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import javax.annotation.Nullable;
+class ScopedAliases implements HotSwapCompilerPass {
+
+/* METHOD hotSwapScript */
+@Override
+ public void hotSwapScript(Node root, Node originalRoot) {
+ Traversal traversal = new Traversal();
+ NodeTraversal.traverse(compiler, root, traversal);
+
+ if (!traversal.hasErrors()) {
+
+ // Apply the aliases.
+ List<AliasUsage> aliasWorkQueue =
+ Lists.newArrayList(traversal.getAliasUsages());
+ while (!aliasWorkQueue.isEmpty()) {
+ List<AliasUsage> newQueue = Lists.newArrayList();
+ for (AliasUsage aliasUsage : aliasWorkQueue) {
+ if (aliasUsage.referencesOtherAlias()) {
+ newQueue.add(aliasUsage);
+ } else {
+ aliasUsage.applyAlias();
+ }
+ }
+
+ // Prevent an infinite loop.
+ if (newQueue.size() == aliasWorkQueue.size()) {
+ Var cycleVar = newQueue.get(0).aliasVar;
+ compiler.report(JSError.make(
+ cycleVar.getNode(), GOOG_SCOPE_ALIAS_CYCLE, cycleVar.getName()));
+ break;
+ } else {
+ aliasWorkQueue = newQueue;
+ }
+ }
+
+ // Remove the alias definitions.
+ for (Node aliasDefinition : traversal.getAliasDefinitionsInOrder()) {
+ if (aliasDefinition.getParent().isVar() &&
+ aliasDefinition.getParent().hasOneChild()) {
+ aliasDefinition.getParent().detachFromParent();
+ } else {
+ aliasDefinition.detachFromParent();
+ }
+ }
+
+ // Collapse the scopes.
+ for (Node scopeCall : traversal.getScopeCalls()) {
+ Node expressionWithScopeCall = scopeCall.getParent();
+ Node scopeClosureBlock = scopeCall.getLastChild().getLastChild();
+ scopeClosureBlock.detachFromParent();
+ expressionWithScopeCall.getParent().r
+...[truncated deterministically]...
+til.tryMergeBlock(scopeClosureBlock);
+ }
+
+ if (traversal.getAliasUsages().size() > 0 ||
+ traversal.getAliasDefinitionsInOrder().size() > 0 ||
+ traversal.getScopeCalls().size() > 0) {
+ compiler.reportCodeChange();
+ }
+ }
+ }
+
+/* METHOD report */
+private void report(NodeTraversal t, Node n, DiagnosticType error,
+ String... arguments) {
+ compiler.report(t.makeError(n, error, arguments));
+ hasErrors = true;
+ }
+
+/* METHOD ScopedAliases */
+ScopedAliases(AbstractCompiler compiler,
+ @Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+ AliasTransformationHandler transformationHandler) {
+ this.compiler = compiler;
+ this.preprocessorSymbolTable = preprocessorSymbolTable;
+ this.transformationHandler = transformationHandler;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (isCallToScopeMethod(n)) {
+ validateScopeCall(t, n, n.getParent());
+ }
+
+ if (t.getScopeDepth() < 2) {
+ return;
+ }
+
+ int type = n.getType();
+ Var aliasVar = null;
+ if (type == Token.NAME) {
+ String name = n.getString();
+ Var lexicalVar = t.getScope().getVar(n.getString());
+ if (lexicalVar != null && lexicalVar == aliases.get(name)) {
+ aliasVar = lexicalVar;
+ }
+ }
+
+ // Validate the top-level of the goog.scope block.
+ if (t.getScopeDepth() == 2) {
+ if (aliasVar != null && NodeUtil.isLValue(n)) {
+ if (aliasVar.getNode() == n) {
+ aliasDefinitionsInOrder.add(n);
+
+ // Return early, to ensure that we don't record a definition
+ // twice.
+ return;
+ } else {
+ report(t, n, GOOG_SCOPE_ALIAS_REDEFINED, n.getString());
+ }
+ }
+
+ if (type == T
+...[truncated deterministically]...
+typeNode.getString();
+ int endIndex = name.indexOf('.');
+ if (endIndex == -1) {
+ endIndex = name.length();
+ }
+ String baseName = name.substring(0, endIndex);
+ Var aliasVar = aliases.get(baseName);
+ if (aliasVar != null) {
+ aliasUsages.add(new AliasedTypeNode(aliasVar, typeNode));
+ }
+ }
+
+ for (Node child = typeNode.getFirstChild(); child != null;
+ child = child.getNext()) {
+ fixTypeNode(child);
+ }
+ }
+ }
+
+===== com.google.javascript.rhino.Node (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino;
+public class Node implements Cloneable, Serializable {
+private static final String propToString(int propType) {
+private static class NumberNode extends Node {
+public NumberNode(double number, int lineno, int charno) {
+@Override
+public double getDouble() {
+public void setDouble(double d) {
+private static class StringNode extends Node {
+public String getString() {
+public void setString(String str) {
+public boolean isQuotedString() {
+public void setQuotedString() {
+private interface PropListItem {
+private abstract static class AbstractPropListItem
+public int getType() {
+public PropListItem getNext() {
+public abstract PropListItem chain(PropListItem next);
+private static class ObjectPropListItem
+public int getIntValue() {
+public Object getObjectValue() {
+public String toString() {
+public PropListItem chain(PropListItem next) {
+private static class IntPropListItem extends AbstractPropListItem {
+public Node(int nodeType) {
+public Node(int nodeType, Node child) {
+public Node(int nodeType, Node left, Node right) {
+public Node(int nodeType, Node left, Node mid, Node right) {
+public Node(int nodeType, Node left, Node mid, Node mid2, Node right) {
+public Node(int nodeType, int lineno, int charno) {
+public Node(int nodeType, Node child, int lineno, int charno) {
+public Node(int nodeType,
+...[truncated deterministically]...
+lean isName() {
+public boolean isNE() {
+public boolean isNew() {
+public boolean isNot() {
+public boolean isNull() {
+public boolean isNumber() {
+public boolean isObjectLit() {
+public boolean isOr() {
+public boolean isParamList() {
+public boolean isRegExp() {
+public boolean isReturn() {
+public boolean isScript() {
+public boolean isSetterDef() {
+public boolean isString() {
+public boolean isStringKey() {
+public boolean isSwitch() {
+public boolean isThis()
+...[truncated deterministically]...
+lic boolean isWith() {
+
+/* HEADER */
+package com.google.javascript.rhino;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.SimpleSourceFile;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.Set;
+public class Node implements Cloneable, Serializable {
+
+/* METHOD Node */
+public Node(int nodeType, int lineno, int charno) {
+ type = nodeType;
+ parent = null;
+ sourcePosition = mergeLineCharNo(lineno, charno);
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node child, int lineno, int charno) {
+ this(nodeType, child);
+ sourcePosition = mergeLineCharNo(lineno, charno);
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node left, Node right, int lineno, int charno) {
+ this(nodeType, left, right);
+ sourcePosition = mergeLineCharNo(lineno, charno);
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node left, Node mid, Node right,
+ int lineno, int charno) {
+ this(nodeType, left, mid, right);
+ sourcePosition = mergeLineCharNo(lineno, charno);
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node left, Node mid, Node mid2, Node right,
+ int lineno, int charno) {
+ this(nodeType, left, mid, mid2, right);
+ sourcePosition = mergeLineCharNo(lineno, charno);
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node[] children, int lineno, int charno) {
+ this(nodeType, children);
+ sourcePosition = mergeLineCharNo(lineno, charno);
+ }
+
+/* METHOD Node */
+public Node(int nodeType) {
+ type = nodeType;
+ parent = null;
+ sourcePosition = -1;
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node child) {
+ Preconditions.checkArgument(child.parent == null,
+ "new child has existing parent");
+...[truncated deterministically]...
+ing");
+
+ type = nodeType;
+ parent = null;
+ first = last = child;
+ child.next = null;
+ child.parent = this;
+ sourcePosition = -1;
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node left, Node right) {
+ Preconditions.checkArgument(left.parent == null,
+ "first new child has existing parent");
+ Preconditions.checkArgument(left.next == null,
+ "first new child has existing sibling");
+ Preconditions.checkArgument(right.parent == null,
+ "second new child has existing parent");
+ Preconditions.checkArgument(right.next == null,
+ "second new child has existing sibling");
+ type = nodeType;
+ parent = null;
+ first = left;
+ last = right;
+ left.next = right;
+ left.parent = this;
+ right.next = null;
+ right.parent = this;
+ sourcePosition = -1;
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node left, Node mid, Node right) {
+ Preconditions.checkArgument(left.parent == null);
+ Preconditions.checkArgument(left.next == null);
+ Preconditions.checkArgument(mid.parent == null);
+ Preconditions.checkArgument(mid.next == null);
+ Preconditions.checkArgument(right.parent == null);
+ Preconditions.checkArgument(right.next == null);
+ type = nodeType;
+ parent = null;
+ first = left;
+ last = right;
+ left.next = mid;
+ left.parent = this;
+ mid.next = right;
+ mid.parent = this;
+ right.next = null;
+ right.parent = this;
+ sourcePosition = -1;
+ }
+
+/* METHOD Node */
+public Node(int nodeType, Node left, Node mid, Node mid2, Node right) {
+ Preconditions.checkArgument(left.parent == null);
+ Preconditions.checkArgument(left.next == null);
+ Preconditions.checkArgument(mid.parent == null);
+ Preconditions.checkArgument(mid.next == null);
+ Preconditions.checkArgument(mid2.parent == null);
+ Preconditions.checkArgument(mid2.next == null);
+ Preconditions.checkArgument(right.paren
+...[truncated deterministically]...
+left;
+ last = right;
+ left.next = mid;
+ left.parent = this;
+ mid.next = mid2;
+ mid.parent = this;
+ mid2.next = right;
+ mid2.parent = this;
+ right.next = null;
+ right.parent = this;
+ sourcePosition = -1;
+ }

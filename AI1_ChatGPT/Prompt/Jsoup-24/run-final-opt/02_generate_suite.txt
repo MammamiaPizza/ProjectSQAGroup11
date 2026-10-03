@@ -1,0 +1,627 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 24  Version: Jsoup-24b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.parser.TokeniserState
+Modified: org.jsoup.parser.TokeniserState
+Triggers: org.jsoup.parser.HtmlParserTest::handlesQuotesInCommentsInScripts
+
+Bug/specification summary:
+Bug report: 115
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::handlesQuotesInCommentsInScripts
+ --> junit.framework.AssertionFailedError: expected:<...ocument.write('</scr['] + 'ipt>');
+Modified: org.jsoup.parser.TokeniserState
+
+Prompt-01 test plan:
+TARGETS: TokeniserState.read(Tokeniser, CharacterReader) during script parsing with comment text and quotes. 
+ORACLES: HtmlParserTest::handlesQuotesInCommentsInScripts expected script text/tokenization output. 
+CASES: Script containing comment-like text with quotes around fragments resembling closing </script>. 
+CASES: Boundary where quoted comment content includes split or embedded </script> sequence. 
+RISKS: Only TokeniserState signatures are available; exact state transitions and public parser API are not provided.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.TokeniserState (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+enum TokeniserState {
+private void anythingElse(Tokeniser t, CharacterReader r) {
+abstract void read(Tokeniser t, CharacterReader r);
+private static final String replacementStr = String.valueOf(Tokeniser.replacementChar);
+
+/* HEADER */
+package org.jsoup.parser;
+enum TokeniserState {
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\f':
+ case ' ':
+ t.transition(BeforeDoctypePublicIdentifier);
+ break;
+ case '"':
+ t.error(this);
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ t.error(this);
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\f':
+ case ' ':
+ break;
+ case '"':
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\f':
+ case ' ':
+ break;
+ case '"':
+ // set system id to empty string
+ t.transition(DoctypeSystemIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ // set public id to empty string
+ t.transition(DoctypeSystemIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ switch (r.current()) {
+ case '<':
+ t.advanceTransition(ScriptDataLessthanSign);
+ break;
+ case nullChar:
+ t.error(this);
+ r.advance();
+ t.emit(replacementChar);
+ break;
+ case eof:
+ t.emit(new Token.EOF());
+ break;
+ default:
+ String data = r.consumeToAny('<', nullChar);
+ t.emit(data);
+ break;
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ switch (r.consume()) {
+ case '/':
+ t.createTempBuffer();
+ t.transition(ScriptDataEndTagOpen);
+ break;
+ case '!':
+ t.emit("<!");
+ t.transition(ScriptDataEscapeStart);
+ break;
+ default:
+ t.emit("<");
+ r.unconsume();
+ t.transition(ScriptData);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ t.createTagPending(false);
+ t.transition(ScriptDataEndTagName);
+ } else {
+ t.emit("</");
+ t.transition(ScriptData);
+ }
+
+ }
+
+/* METHOD anythingElse */
+private void anythingElse(Tokeniser t, CharacterReader r) {
+ t.emit("</" + t.dataBuffer.toString());
+ t.transition(ScriptData);
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matches('-')) {
+ t.emit('-');
+ t.advanceTransition(ScriptDataEscapeStartDash);
+ } else {
+ t.transition(ScriptData);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matches('-')) {
+ t.emit('-');
+ t.advanceTransition(ScriptDataEscapedDashDash);
+ } else {
+ t.transition(ScriptData);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.isEmpty()) {
+ t.eofError(this);
+ t.transition(Data);
+ return;
+ }
+
+ switch (r.current()) {
+ case '-':
+ t.emit('-');
+ t.advanceTransition(ScriptDataEscapedDash);
+ break;
+ case '<':
+ t.advanceTransition(ScriptDataEscapedLessthanSign);
+ break;
+ case nullChar:
+ t.error(this);
+ r.advance();
+ t.emit(replacementChar);
+ break;
+ default:
+ String data = r.consumeToAny('-', '<', nullChar);
+ t.emit(data);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.isEmpty()) {
+ t.eofError(this);
+ t.transition(Data);
+ return;
+ }
+
+ char c = r.consume();
+ switch (c) {
+ case '-':
+ t.emit(c);
+ t.transition(ScriptDataEscapedDashDash);
+ break;
+ case '<':
+ t.transition(ScriptDataEscapedLessthanSign);
+ break;
+ case nullChar:
+ t.error(this);
+ t.emit(replacementChar);
+ t.transition(ScriptDataEscaped);
+ break;
+ default:
+ t.emit(c);
+ t.transition(ScriptDataEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.isEmpty()) {
+ t.eofError(this);
+ t.transition(Data);
+ return;
+ }
+
+ char c = r.consume();
+ switch (c) {
+ case '-':
+ t.emit(c);
+ break;
+ case '<':
+ t.transition(ScriptDataEscapedLessthanSign);
+ break;
+ case '>':
+ t.emit(c);
+ t.transition(ScriptData);
+ break;
+ case nullChar:
+ t.error(this);
+ t.emit(replacementChar);
+ t.transition(ScriptDataEscaped);
+ break;
+ default:
+ t.emit(c);
+ t.transition(ScriptDataEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ t.createTempBuffer();
+ t.dataBuffer.append(Character.toLowerCase(r.current()));
+ t.emit("<" + r.current());
+ t.advanceTransition(ScriptDataDoubleEscapeStart);
+ } else if (r.matches('/')) {
+ t.createTempBuffer();
+ t.advanceTransition(ScriptDataEscapedEndTagOpen);
+ } else {
+ t.emit('<');
+ t.transition(ScriptDataEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ t.createTagPending(false);
+ t.tagPending.appendTagName(Character.toLowerCase(r.current()));
+ t.dataBuffer.append(r.current());
+ t.advanceTransition(ScriptDataEscapedEndTagName);
+ } else {
+ t.emit("</");
+ t.transition(ScriptDataEscaped);
+ }
+ }
+
+/* METHOD anythingElse */
+private void anythingElse(Tokeniser t, CharacterReader r) {
+ t.emit("</" + t.dataBuffer.toString());
+ t.transition(ScriptDataEscaped);
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ String name = r.consumeLetterSequence();
+ t.dataBuffer.append(name.toLowerCase());
+ t.emit(name);
+ return;
+ }
+
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\f':
+ case ' ':
+ case '/':
+ case '>':
+ if (t.dataBuffer.toString().equals("script"))
+ t.transition(ScriptDataDoubleEscaped);
+ else
+ t.transition(ScriptDataEscaped);
+ t.emit(c);
+ break;
+ default:
+ r.unconsume();
+ t.transition(ScriptDataEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.current();
+ switch (c) {
+ case '-':
+ t.emit(c);
+ t.advanceTransition(ScriptDataDoubleEscapedDash);
+ break;
+ case '<':
+ t.emit(c);
+ t.advanceTransition(ScriptDataDoubleEscapedLessthanSign);
+ break;
+ case nullChar:
+ t.error(this);
+ r.advance();
+ t.emit(replacementChar);
+ break;
+ case eof:
+ t.eofError(this);
+ t.transition(Data);
+ break;
+ default:
+ String data = r.consumeToAny('-', '<', nullChar);
+ t.emit(data);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '-':
+ t.emit(c);
+ t.transition(ScriptDataDoubleEscapedDashDash);
+ break;
+ case '<':
+ t.emit(c);
+ t.transition(ScriptDataDoubleEscapedLessthanSign);
+ break;
+ case nullChar:
+ t.error(this);
+ t.emit(replacementChar);
+ t.transition(ScriptDataDoubleEscaped);
+ break;
+ case eof:
+ t.eofError(this);
+ t.transition(Data);
+ break;
+ default:
+ t.emit(c);
+ t.transition(ScriptDataDoubleEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '-':
+ t.emit(c);
+ break;
+...[truncated deterministically]...
+t.error(this);
+ t.emit(replacementChar);
+ t.transition(ScriptDataDoubleEscaped);
+ break;
+ case eof:
+ t.eofError(this);
+ t.transition(Data);
+ break;
+ default:
+ t.emit(c);
+ t.transition(ScriptDataDoubleEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matches('/')) {
+ t.emit('/');
+ t.createTempBuffer();
+ t.advanceTransition(ScriptDataDoubleEscapeEnd);
+ } else {
+ t.transition(ScriptDataDoubleEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matchesLetter()) {
+ String name = r.consumeLetterSequence();
+ t.dataBuffer.append(name.toLowerCase());
+ t.emit(name);
+ return;
+ }
+
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\f':
+ case ' ':
+ case '/':
+ case '>':
+ if (t.dataBuffer.toString().equals("script"))
+ t.transition(ScriptDataEscaped);
+ else
+ t.transition(ScriptDataDoubleEscaped);
+ t.emit(c);
+ break;
+ default:
+ r.unconsume();
+ t.transition(ScriptDataDoubleEscaped);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ switch (r.current()) {
+ case '!':
+ t.advanceTransition(MarkupDeclarationOpen);
+ break;
+ case '/':
+ t.advanceTransition(EndTagOpen);
+ break;
+ case '?':
+ t.advanceTransition(BogusComment);
+ break;
+ default:
+ if (r.matchesLetter()) {
+ t.createTagPending(true);
+ t.transition(TagName);
+ } else {
+ t.error(this);
+ t.emit('<'); // char that got us here
+ t.transition(Data);
+ }
+ break;
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.isEmpty()) {
+ t.eofError(this);
+ t.emit("</");
+ t.transition(Data);
+ } else if (r.matchesLetter()) {
+ t.createTagPending(false);
+ t.transition(TagName);
+ } else if (r.matches('>')) {
+ t.error(this);
+ t.advanceTransition(Data);
+ } else {
+ t.error(this);
+ t.advanceTransition(BogusComment);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ // todo: handle bogus comment starting from eof. when does that trigger?
+ // rewind to capture character that lead us here
+ r.unconsume();
+ Token.Comment comment = new Token.Comment();
+ comment.data.append(r.consumeTo('>'));
+ // todo: replace nullChar with replaceChar
+ t.emit(comment);
+ t.advanceTransition(Data);
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.matchConsume("--")) {
+ t.createCommentPending();
+ t.transition(CommentStart);
+ } else if (r.matchConsumeIgnoreCase("DOCTYPE")) {
+ t.transition(Doctype);
+ } else if (r.matchConsume("[CDATA[")) {
+ // todo: should actually check current namepspace, and only non-html allows cdata. until namespace
+ // is implemented properly, keep handling as cdata
+ //} else if (!t.currentNodeInHtmlNS() && r.matchConsume("[CDATA[")) {
+ t.transition(CdataSection);
+ } else {
+ t.error(this);
+ t.advanceTransition(BogusComment); // advance so this character gets in bogus comment data's rewind
+ }
+ }
+ },
+ CommentStart {
+ void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '-':
+ t.transition(CommentStartDash);
+ break;
+ case nullChar:
+ t.error(this);
+ t.commentPending.data.append(replacementChar);
+ t.transition(Comment);
+ break;
+ case '>':
+ t.error(this);
+ t.emitCommentPending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.emitCommentPending();
+ t.transition(Data);
+ break;
+ default:
+ t.commentPending.data.append(c);
+ t.transition(Comment);
+ }
+ }
+ },
+ CommentStartDash {
+ void read(Tokeniser t, Ch
+...[truncated deterministically]...
+ase '\n':
+ case '\f':
+ case ' ':
+ break;
+ case '"':
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }

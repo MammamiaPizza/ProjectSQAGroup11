@@ -1,0 +1,156 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 173  Version: Closure-173b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1062
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testPrint
+ --> junit.framework.ComparisonFailure: expected:<var a,b,c;a||[(b||c);a*(b*c);a|(b|c)]> but was:<var a,b,c;a||[b||c;a*b*c;a|b|c]>
+ - com.google.javascript.jscomp.CodePrinterTest::testIssue1062
+ --> junit.framework.ComparisonFailure: expected:<3*[(4%3*5)]> but was:<3*[4%3*5]>
+ - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxTest::testAssocitivity
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.CodeGenerator, com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+
+Available API/signatures:
+[com.google.javascript.jscomp.CodeGenerator | java]
+package com.google.javascript.jscomp;
+class CodeGenerator {
+private final Map<String, String> escapedJsStrings = Maps.newHashMap();
+private CodeGenerator(CodeConsumer consumer) {
+static CodeGenerator forCostEstimation(CodeConsumer consumer) {
+public void tagAsStrict() {
+private void addIdentifier(String identifier) {
+if (n.getClass() != Node.class) {
+static boolean isSimpleNumber(String s) {
+static double getSimpleNumber(String s) {
+private boolean isIndirectEval(Node n) {
+private boolean isOneExactlyFunctionOrDo(Node n) {
+private void addExpr(Node n, int minPrecedence, Context context) {
+private void addJsString(Node n) {
+private String jsString(String s, boolean useSlashV) {
+static String identifierEscape(String s) {
+private static int getNonEmptyChildCount(Node n, int maxCount) {
+private static Node getFirstNonEmptyChild(Node n) {
+enum Context {
+private Context getContextForNonEmptyExpression(Context currentContext) {
+private Context getContextForNoInOperator(Context context) {
+
+[com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax | java]
+package com.google.javascript.jscomp;
+class PeepholeSubstituteAlternateSyntax
+private static final int STRING_SPLIT_OVERHEAD = ".split('.')".length();
+@Override
+@SuppressWarnings("fallthrough")
+public Node optimizeSubtree(Node node) {
+private Node tryFoldSimpleFunctionCall(Node n) {
+private Node tryFoldImmediateCallToBoundFunction(Node n) {
+private void addParameterAfter(Node parameterList, Node after) {
+private Node trySplitComma(Node n) {
+private Node tryReplaceUndefined(Node n) {
+private Node tryReduceReturn(Node n) {
+private Node tryFoldStandardConstructors(Node n) {
+private Node tryFoldLiteralConstructor(Node n) {
+private static enum FoldArrayAction {
+private static FoldArrayAction isSafeToFoldArrayConstructor(Node arg) {
+private Node tryFoldRegularExpressionConstructor(Node n) {
+private Node reduceTrueFalse(Node n)
+...[truncated deterministically]...
+teral(Node n) {
+private Node tryMinimizeStringArrayLiteral(Node n) {
+private static String pickDelimiter(String[] strings) {
+private static final Pattern REGEXP_FLAGS_RE = Pattern.compile("^[gmi]*$");
+private static boolean areValidRegexpFlags(String flags) {
+private boolean areSafeFlagsToFold(String flags) {
+private static Node makeForwardSlashBracketSafe(Node n) {
+static boolean containsUnicodeEscape(String s) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import org.junit.Test;
+
+public class CodeGeneratorAssociativityRegressionTest {
+
+  @Test
+  public void testPrintPreservesRightNestedOperatorGrouping() {
+    Node script = new Node(Token.SCRIPT);
+
+    Node var = new Node(Token.VAR);
+    var.addChildToBack(name("a"));
+    var.addChildToBack(name("b"));
+    var.addChildToBack(name("c"));
+    script.addChildToBack(var);
+
+    script.addChildToBack(expr(binary(
+        Token.OR, name("a"), binary(Token.OR, name("b"), name("c")))));
+    script.addChildToBack(expr(binary(
+        Token.MUL, name("a"), binary(Token.MUL, name("b"), name("c")))));
+    script.addChildToBack(expr(binary(
+        Token.BITOR, name("a"), binary(Token.BITOR, name("b"), name("c")))));
+
+    assertEquals(
+        "var a,b,c;a||(b||c);a*(b*c);a|(b|c);",
+        new CodePrinter.Builder(script).build());
+  }
+
+  @Test
+  public void testPrintPreservesMixedModuloAndMultiplyGrouping() {
+    Node nestedMultiply = binary(
+        Token.MUL,
+        binary(Token.MOD, number(4), number(3)),
+        number(5));
+    Node script = new Node(Token.SCRIPT);
+    script.addChildToBack(expr(binary(Token.MUL, number(3), nestedMultiply)));
+
+    assertEquals("3*(4%3*5);", new CodePrinter.Builder(script).build());
+  }
+
+  @Test
+  public void testPeepholeOptimizationDoesNotDiscardAssociativeGrouping() {
+    Node expression = binary(
+        Token.OR, name("a"), binary(Token.OR, name("b"), name("c")));
+
+    PeepholeSubstituteAlternateSyntax optimizer =
+        new PeepholeSubstituteAlternateSyntax(false);
+    Node optimized = optimizer.optimizeSubtree(expression);
+
+    assertSame(expression, optimized);
+
+    Node script = new Node(Token.SCRIPT);
+    script.addChildToBack(expr(optimized));
+    assertEquals("a||(b||c);", new CodePrinter.Builder(script).build());
+  }
+
+  private static Node expr(Node expression) {
+    return new Node(Token.EXPR_RESULT, expression);
+  }
+
+  private static Node binary(int token, Node left, Node right) {
+    return new Node(token, left, right);
+  }
+
+  private static Node name(String value) {
+    return Node.newString(Token.NAME, value);
+  }
+
+  private static Node number(double value) {
+    return Node.newNumber(value);
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - com.google.javascript.jscomp.CodeGeneratorAssociativityRegressionTest::testPeepholeOptimizationDoesNotDiscardAssociativeGrouping
+ - com.google.javascript.jscomp.CodeGeneratorAssociativityRegressionTest::testPrintPreservesMixedModuloAndMultiplyGrouping
+ - com.google.javascript.jscomp.CodeGeneratorAssociativityRegressionTest::testPrintPreservesRightNestedOperatorGrouping
+Failing generated tests: com.google.javascript.jscomp.CodeGeneratorAssociativityRegressionTest::testPeepholeOptimizationDoesNotDiscardAssociativeGrouping, com.google.javascript.jscomp.CodeGeneratorAssociativityRegressionTest::testPrintPreservesMixedModuloAndMultiplyGrouping, com.google.javascript.jscomp.CodeGeneratorAssociativityRegressionTest::testPrintPreservesRightNestedOperatorGrouping

@@ -1,0 +1,230 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 108  Version: JacksonDatabind-108b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2211
+Trigger failures:
+- com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEOFWithParserAndReader
+ --> junit.framework.AssertionFailedError: Should get `null` for reads with `JsonParser`, instead got: com.fasterxml.jackson.databind.node.MissingNode
+Modified: com.fasterxml.jackson.databind.ObjectReader
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ObjectReader | java]
+package com.fasterxml.jackson.databind;
+public class ObjectReader
+private final static JavaType JSON_NODE_TYPE = SimpleType.constructUnsafe(JsonNode.class);
+protected final DeserializationConfig _config;
+protected final DefaultDeserializationContext _context;
+protected final JsonFactory _parserFactory;
+protected final boolean _unwrapRoot;
+protected final JavaType _valueType;
+protected final JsonDeserializer<Object> _rootDeserializer;
+protected final Object _valueToUpdate;
+protected final FormatSchema _schema;
+protected final InjectableValues _injectableValues;
+protected final DataFormatReaders _dataFormatReaders;
+final protected ConcurrentHashMap<JavaType, JsonDeserializer<Object>> _rootDeserializers;
+protected ObjectReader(ObjectMapper mapper, DeserializationConfig config) {
+protected ObjectReader(ObjectReader base, DeserializationConfig config)
+protected ObjectReader(ObjectReader base, JsonFactory f)
+protected ObjectReader(ObjectReader base, TokenFilter filter) {
+@Override
+public Version version() {
+protected ObjectReader _new(ObjectReader base, JsonFactory f) {
+protected ObjectReader _new(ObjectReader base, DeserializationConfig config) {
+protected JsonToken _initForReading(DeserializationContext ctxt, JsonParser p)
+protected void _initForMultiRead(DeserializationContext ctxt, JsonParser p)
+public ObjectReader with(DeserializationFeature feature) {
+public ObjectReader withFeatures(DeserializationFeature... features) {
+public ObjectReader without(DeserializationFeature feature) {
+public ObjectReader withoutFeatures(DeserializationFeature... features) {
+public ObjectReader with(JsonPar
+...[truncated deterministically]...
+es(DataFormatReaders.Match match, boolean forceClosing)
+protected JsonNode _detectBindAndCloseAsTree(InputStream in) throws IOException
+protected void _reportUnkownFormat(DataFormatReaders detector, DataFormatReaders.Match match)
+protected void _verifySchemaType(FormatSchema schema)
+protected DefaultDeserializationContext createDeserializationContext(JsonParser p) {
+protected InputStream _inputStream(URL src) throws IOException {
+protected InputStream _inputStream(File f) throws IOException {
+protected void _reportUndetectableSource(Object src) throws JsonProcessingException
+protected JsonDeserializer<Object> _findRootDeserializer(DeserializationContext ctxt)
+protected JsonDeserializer<Object> _findTreeDeserializer(DeserializationContext ctxt)
+protected JsonDeserializer<Object> _prefetchRootDeserializer(JavaType valueType)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.node;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.InputStream;
+ import java.io.Reader;
+ import java.io.StringReader;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.JsonFactory;
+ import com.fasterxml.jackson.core.JsonParser;
+ import com.fasterxml.jackson.databind.JsonNode;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+
+ import static org.junit.Assert.*;
+
+ public class EmptyContentAsTreeTest {
+
+     private final ObjectMapper mapper = new ObjectMapper();
+     private final JsonFactory factory = new JsonFactory();
+
+     @Test
+     public void testNullFromEOFWithParserAndReader() throws Exception {
+         // JsonParser from empty string: should return null, not MissingNode
+         JsonParser p = factory.createParser("");
+         JsonNode result = mapper.reader().readTree(p);
+         assertNull("Should get null for reads with JsonParser at EOf", result);
+         p.close();
+
+         // Empty Reader: should also return null
+         Reader reader = new StringReader("");
+         JsonNode result2 = mapper.reader().readTree(reader);
+         assertNull("Should get null for reads with empty Reader", result2);
+     }
+
+     @Test
+     public void testNullFromEmptyInputStream() throws Exception {
+         InputStream in = new ByteArrayInputStream(new byte[0]);
+         JsonNode result = mapper.reader().readTree(in);
+         assertNull("Should get null for empty InputStream", result);
+     }
+
+     @Test
+     public void testNullFromEmptyByteArray() throws Exception {
+         JsonNode result = mapper.reader().readTree(new byte[0]);
+         assertNull("Should get null for empty byte array", result);
+     }
+
+     @Test
+     public void testNullFromEmptyString() throws Exception {
+         JsonNode result = mapper.reader().readTree("");
+         assertNull("Should get null for empty string", result);
+     }
+
+     @Test
+     public void testNullFromParserAfterAllTokensConsumed() throws Exception {
+         JsonParser p = factory.createParser("42");
+         p.nextToken(); // consume the number token
+         p.nextToken(); // returns null (EOf)
+         JsonNode result = mapper.reader().readTree(p);
+         assertNull("Should get null when parser has no remaining tokens", result);
+         p.close();
+     }
+
+     @Test
+     public void testReadTreeWithObjectNode() throws Exception {
+         JsonParser p = factory.createParser("{\"nam\":\"value\"}");
+         JsonNode result = mapper.reader().readTree(p);
+         assertNotNull("Should get non-null for valid JSON object", result);
+         assertTrue("Result should be ObjectNode", result.isObject());
+         assertEquals("value", result.get("nam").asText());
+         p.close();
+     }
+
+     @Test
+     public void testReadTreeWithArrayNode() throws Exception {
+         JsonParser p = factory.createParser("[1,2,3]");
+         JsonNode result = mapper.reader().readTree(p);
+         assertNotNull("Should get non-null for valid JSON array", result);
+         assertTrue("Result should be ArrayNode", result.isArray());
+         assertEquals(3, result.size());
+         p.close();
+     }
+
+     @Test
+     public void testReadTreeWithNullValue() throws Exception {
+         JsonParser p = factory.createParser("null");
+         JsonNode result = mapper.reader().readTree(p);
+         assertNotNull("Should get non-null for JSON null literal", result);
+         assertTrue("Result should be NullNode for JSON null", result.isNull());
+         p.close();
+     }
+
+     @Test
+     public void testReadTreeWithScalarValues() throws Exception {
+         // Text value
+         JsonParser p1 = factory.createParser("\"hello\"");
+         JsonNode textResult = mapper.reader().readTree(p1);
+         assertTrue("Should be text node", textResult.isTextual());
+         assertEquals("hello", textResult.asText());
+         p1.close();
+
+         // Number value
+         JsonParser p2 = factory.createParser("42");
+         JsonNode numResult = mapper.reader().readTree(p2);
+         assertTrue("Should be number node", numResult.isNumber());
+         assertEquals(42, numResult.asInt());
+         p2.close();
+
+         // Boolean value
+         JsonParser p3 = factory.createParser("false");
+         JsonNode boolResult = mapper.reader().readTree(p3);
+         assertTrue("Should be boolean node", boolResult.isBoolean());
+         assertFalse(boolResult.asBoolean());
+         p3.close();
+     }
+
+     @Test
+     public void testEmptyInputReturnsNullNotMisingNode() throws Exception {
+         // Explicitly verify empty parser returns null, demonstrating the fix
+         JsonParser p = factory.createParser("");
+         JsonNode result = mapper.reader().readTree(p);
+         assertNull("Empty content must return null, not MissingNode", result);
+         p.close();
+
+         // Verify that non-empty input still works correctly after the fix
+         JsonParser p2 = factory.createParser("{\"ok\":true}");
+         JsonNode validResult = mapper.reader().readTree(p2);
+         assertNotNull(validResult);
+         assertTrue(validResult.isObject());
+         assertTrue(validResult.get("ok").asBoolean());
+         p2.close();
+     }
+
+     @Test
+     public void testReadTreeWithNestedStructure() throws Exception {
+         JsonParser p = factory.createParser(
+             "{\"arr\":[{\"id\":1},{\"id\":2}],\"flag\":true,\"val\":null,\"nam\":\"test\"}");
+         JsonNode result = mapper.reader().readTree(p);
+         assertNotNull(result);
+         assertTrue(result.isObject());
+         assertEquals(2, result.get("arr").size());
+         assertEquals(1, result.get("arr").get(0).get("id").asInt());
+         assertTrue(result.get("flag").asBoolean());
+         assertTrue(result.get("val").isNull());
+         assertEquals("test", result.get("nam").asText());
+         p.close();
+     }
+
+     @Test
+     public void testEmptyContentWithMultipleReadTreeOverloads() throws Exception {
+         // Consistency check: all zero-length inputs should return null
+         assertNull(mapper.reader().readTree(new byte[0]));
+         assertNull(mapper.reader().readTree(""));
+         assertNull(mapper.reader().readTree(new StringReader("")));
+         assertNull(mapper.reader().readTree(new ByteArrayInputStream(new byte[0])));
+
+         // After empty check, non-empty content should still parse normally
+         JsonNode node = mapper.reader().readTree("42");
+         assertNotNull(node);
+         assertTrue(node.isNumber());
+         assertEquals(42, node.asInt());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEmptyString
+ - com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEmptyInputStream
+ - com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEOFWithParserAndReader
+Failing generated tests: com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testEmptyContentWithMultipleReadTreeOverloads, com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEOFWithParserAndReader, com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEmptyByteArray, com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEmptyInputStream, com.fasterxml.jackson.databind.node.EmptyContentAsTreeTest::testNullFromEmptyString

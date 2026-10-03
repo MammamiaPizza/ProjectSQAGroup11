@@ -1,0 +1,171 @@
+Add at most 4 meaningful NEW JUnit test methods needed for the listed coverage gaps or fault-related behavior. Preserve the existing suite; do not duplicate existing tests; use only the supplied API and buggy-version source snippets; do not invent expected behavior. New types not already imported must use fully-qualified names. Keep tests independent and deterministic.
+
+Return ONLY Java class members to insert before the existing class closing brace (new @Test methods and only necessary helper methods). Do not return package/import/class wrappers, Markdown, or explanation. If no meaningful syntactically complete addition is supported, return exactly: NO_CHANGE. Never return a partial method.
+
+Project: JacksonDatabind  Bug: 91  Version: JacksonDatabind-91b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.DeserializerCache
+Bug/specification summary:
+Bug report: 1809
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.jdk.MapDeserializerCachingTest::testCachedSerialize
+ --> junit.framework.AssertionFailedError: Not using custom key deserializer for input: {"data":{"1st":"onedata","2nd":"twodata"}}; resulted in: {1st=onedata, 2nd=twodata}
+Modified: com.fasterxml.jackson.databind.deser.DeserializerCache
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.DeserializerCache | java]
+package com.fasterxml.jackson.databind.deser;
+public final class DeserializerCache
+public DeserializerCache() { }
+public int cachedDeserializersCount() {
+public void flushCachedDeserializers() {
+protected JsonDeserializer<Object> _findCachedDeserializer(JavaType type)
+synchronized (_incompleteDeserializers) {
+@SuppressWarnings("unchecked")
+final DeserializationConfig config = ctxt.getConfig();
+if (JsonNode.class.isAssignableFrom(type.getRawClass())) {
+Class<?> cdClass = _verifyAsClass(cdDef, "findContentDeserializer", JsonDeserializer.None.class);
+private boolean _hasCustomHandlers(JavaType t) {
+private Class<?> _verifyAsClass(Object src, String methodName, Class<?> noneClass)
+protected JsonDeserializer<Object> _handleUnknownValueDeserializer(DeserializationContext ctxt, JavaType type)
+ctxt.reportMappingException("Can not find a Value deserializer for abstract type %s", type);
+protected KeyDeserializer _handleUnknownKeyDeserializer(DeserializationContext ctxt, JavaType type)
+
+Existing test summary (method names/assertions only):
+Test methods: customKeyDeserializerIsUsedAfterPlainMapDeserializerWasCached, repeatedCustomKeyMapDeserializationRetainsCustomKeyHandling, customKeyDeserializerDoesNotLeakIntoPlainMaps
+Representative assertions:
+assertEquals("value", plain.get("plain"));
+assertNotNull(result.data);
+assertEquals(2, result.data.size());
+assertEquals("onedata", result.data.get("custom-1st"));
+assertEquals("twodata", result.data.get("custom-2nd"));
+assertFalse(result.data.containsKey("1st"));
+assertEquals("onedata", first.data.get("custom-1st"));
+assertFalse(first.data.containsKey("1st"));
+assertEquals("twodata", second.data.get("custom-2nd"));
+assertFalse(second.data.containsKey("2nd"));
+assertEquals("value", customized.data.get("custom-key"));
+assertEquals(1, plain.size());
+
+Actual compact coverage report:
+Actual coverage summary:
+LinesTotal,LinesCovered,ConditionsTotal,ConditionsCovered
+169,87,126,59
+
+Line/branch gaps:
+Class: com.fasterxml.jackson.databind.deser.DeserializerCache
+Uncovered lines: 265, 268, 271, 232, 239, 248, 250, 251, 329, 335, 336, 342, 352, 354, 355, 357, 358, 368, 372, 379, 381, 387, 388, 389, 390, 391, 393, 398, 401, 205 ... (+134 more)
+Partially covered branch lines: 270 (50% (1/2)), 277 (75% (3/4)), 231 (50% (1/2)), 238 (50% (1/2)), 247 (75% (3/4)), 321 (66% (4/6)), 328 (50% (1/2)), 334 (50% (1/2)), 341 (50% (1/2)), 348 (50% (1/2)), 367 (50% (1/2)), 371 (50% (1/2)), 374 (50% (1/2)), 376 (50% (1/2)), 397 (50% (1/2)), 400 (50% (1/2)), 204 (50% (1/2)), 540 (50% (1/2)), 541 (50% (2/4)), 546 (50% (1/2)), 416 (50% (1/2)), 167 (50% (1/2)), 171 (50% (1/2)), 143 (50% (1/2)), 473 (50% (1/2)), 485 (75% (3/4)), 487 (50% (1/2)), 498 (50% (1/2)), 500 (50% (1/2)), 143 (50% (1/2)) ... (+28 more)
+
+Relevant buggy-source snippets around reported gaps:
+[com.fasterxml.jackson.databind.deser.DeserializerCache]
+263: try {
+264: deser = _createDeserializer(ctxt, factory, type);
+265: } catch (IllegalArgumentException iae) {
+266: // We better only expose checked exceptions, since those
+267: // are what caller is expected to handle
+---
+266: // We better only expose checked exceptions, since those
+267: // are what caller is expected to handle
+268: throw JsonMappingException.from(ctxt, iae.getMessage(), iae);
+269: }
+270: if (deser == null) {
+---
+269: }
+270: if (deser == null) {
+271: return null;
+272: }
+273: /* cache resulting deserializer? always true for "plain" BeanDeserializer
+---
+230: JsonDeserializer<Object> deser = _findCachedDeserializer(type);
+231: if (deser != null) {
+232: return deser;
+233: }
+234: int count = _incompleteDeserializers.size();
+---
+237: deser = _incompleteDeserializers.get(type);
+238: if (deser != null) {
+239: return deser;
+240: }
+241: }
+---
+246: // also: any deserializers that have been created are complete by now
+247: if (count == 0 && _incompleteDeserializers.size() > 0) {
+248: _incompleteDeserializers.clear();
+249: }
+250: }
+---
+248: _incompleteDeserializers.clear();
+249: }
+250: }
+251: }
+252: }
+---
+249: }
+250: }
+251: }
+252: }
+253: 
+---
+327: beanDesc.getClassInfo());
+328: if (deser != null) {
+329: return deser;
+330: }
+331: 
+---
+333: JavaType newType = modifyTypeByAnnotation(ctxt, beanDesc.getClassInfo(), type);
+334: if (newType != type) {
+335: type = newType;
+336: beanDesc = config.introspect(newType);
+337: }
+---
+334: if (newType != type) {
+335: type = newType;
+336: beanDesc = config.introspect(newType);
+337: }
+338: 
+---
+340: Class<?> builder = beanDesc.findPOJOBuilder();
+341: if (builder != null) {
+342: return (JsonDeserializer<Object>) factory.createBuilderBasedDeserializer(
+343: ctxt, type, beanDesc, builder);
+344: }
+---
+350: }
+351: // otherwise need to do bit of introspection
+352: JavaType delegateType = conv.getInputType(ctxt.getTypeFactory());
+353: // One more twist, as per [databind#288]; probably need to get new BeanDesc
+354: if (!delegateType.hasRawClass(type.getRawClass())) {
+---
+352: JavaType delegateType = conv.getInputType(ctxt.getTypeFactory());
+353: // One more twist, as per [databind#288]; probably need to get new BeanDesc
+354: if (!delegateType.hasRawClass(type.getRawClass())) {
+355: beanDesc = config.intros
+...[truncated deterministically]...
+serializer(ctxt, mlt, beanDesc);
+380: }
+381: if (type.isCollectionLikeType()) {
+---
+379: return factory.createMapLikeDeserializer(ctxt, mlt, beanDesc);
+380: }
+381: if (type.isCollectionLikeType()) {
+382: /* 03-Aug-2012, tatu: As per [databind#40], one exception is if shape
+383: * is to be Shape.OBJECT. Ideally we'd determine it bit later on
+---
+385: * reasons. So do it here.
+386: */
+387: JsonFormat.Value format = beanDesc.findExpectedFormat(null);
+388: if ((format == null) || format.getShape() != JsonFormat.Shape.OBJECT) {
+389: CollectionLikeType clt = (CollectionLikeType) type;
+---
+386: */
+387: JsonFormat.Value format = beanDesc.findExpectedFormat(null);
+388: if ((format == null) || format.getShape() != JsonFormat.Shape.OBJECT) {
+389: CollectionLikeType clt = (CollectionLikeType) type;
+390: if (clt.isTrueCollectionType()) {
+---
+387: JsonFormat.Value format = beanDesc.findExpectedFormat(null);
+388: if ((format == null) || format.getShape() != JsonFormat.Shape.OBJECT) {
+389: CollectionLikeType clt = (CollectionLikeType) type;
+390: if (clt.isTrueCollectionType()) {
+391: return factory.createCollectionDeserializer(ctxt, (CollectionType) clt, beanDesc);

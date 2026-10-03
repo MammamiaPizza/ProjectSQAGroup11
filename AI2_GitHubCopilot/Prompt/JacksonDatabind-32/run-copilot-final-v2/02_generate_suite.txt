@@ -1,0 +1,365 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 32  Version: JacksonDatabind-32b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.std.UntypedObjectDeserializer
+Modified: com.fasterxml.jackson.databind.deser.std.UntypedObjectDeserializer
+Triggers: com.fasterxml.jackson.databind.deser.TestUntypedDeserialization::testNestedUntyped989
+
+Bug/specification summary:
+Bug report: 989
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestUntypedDeserialization::testNestedUntyped989
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not deserialize instance of java.lang.Object out of END_OBJECT token
+Modified: com.fasterxml.jackson.databind.deser.std.UntypedObjectDeserializer
+
+Prompt-01 test plan:
+TARGETS: UntypedObjectDeserializer.deserialize, mapObject, mapArray; handle END_OBJECT inside nested
+ORACLES: nested untyped JSON (e.g., {"a":{"b":1}}) deserializes to Map with nested Map without
+exception
+CASES: map containing map, map containing list, deeply nested, empty nested object, array of maps
+CASES: boundary: JSON with unmatched braces, null values, keys that are strings, numbers as values
+RISKS: need DeserializationContext mock; no direct access to inner Vanilla class behavior;
+mapObject/mapArray protected
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.std.UntypedObjectDeserializer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class UntypedObjectDeserializer
+protected final static Object[] NO_OBJECTS = new Object[0];
+@Deprecated
+public final static UntypedObjectDeserializer instance = new UntypedObjectDeserializer(null, null);
+protected JsonDeserializer<Object> _mapDeserializer;
+protected JsonDeserializer<Object> _listDeserializer;
+protected JsonDeserializer<Object> _stringDeserializer;
+protected JsonDeserializer<Object> _numberDeserializer;
+protected JavaType _listType;
+protected JavaType _mapType;
+public UntypedObjectDeserializer() {
+public UntypedObjectDeserializer(JavaType listType, JavaType mapType) {
+super(Object.class);
+@SuppressWarnings("unchecked")
+@Override
+public void resolve(DeserializationContext ctxt) throws JsonMappingException
+JavaType obType = ctxt.constructType(Object.class);
+JavaType stringType = ctxt.constructType(String.class);
+_listDeserializer = _clearIfStdImpl(_findCustomDeser(ctxt, tf.constructCollectionType(List.class, obType)));
+_mapDeserializer = _clearIfStdImpl(_findCustomDeser(ctxt, tf.constructMapType(Map.class, stringType, obType)));
+_numberDeserializer = _clearIfStdImpl(_findCustomDeser(ctxt, tf.constructType(Number.class)));
+protected JsonDeserializer<Object> _findCustomDeser(DeserializationContext ctxt, JavaType type)
+protected JsonDeserializer<Object> _clearIfStdImpl(JsonDeserializer<Object> deser) {
+&& getClass() == UntypedObjectDeserializer.class) {
+public boolean isCachable() {
+public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+throw ctxt.mappingException(Object.class);
+public Object deserializeWithType(JsonParser p, DeserializationContext ctxt, TypeDeserializer typeDeserializer) throws IOException
+protected Object mapArray(JsonParser jp, DeserializationContext ctxt) throws IOException
+protected Object mapObject(JsonParser p, DeserializationContext ctxt) throws IOException
+protected Object[] mapArrayToArray(JsonParser jp, DeserializationContext ctxt) throws IOException
+public static class Vanilla
+public final static Vanilla std = new Vanilla();
+public Vanilla() { super(Object.class); }
+public Object deserializeWithType(JsonParser jp, DeserializationContext ctxt, TypeDeserializer typeDeserializer) throws IOException
+protected Object[] mapArrayToArray(JsonParser jp, DeserializationContext ctxt) throws IOException {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser.std;
+import java.io.IOException;
+import java.util.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.BeanProperty;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+import com.fasterxml.jackson.databind.deser.ContextualDeserializer;
+import com.fasterxml.jackson.databind.deser.ResolvableDeserializer;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.ObjectBuffer;
+public class UntypedObjectDeserializer
+
+/* METHOD UntypedObjectDeserializer */
+@SuppressWarnings("unchecked")
+ public UntypedObjectDeserializer(UntypedObjectDeserializer base,
+ JsonDeserializer<?> mapDeser, JsonDeserializer<?> listDeser,
+ JsonDeserializer<?> stringDeser, JsonDeserializer<?> numberDeser)
+ {
+ super(Object.class);
+ _mapDeserializer = (JsonDeserializer<Object>) mapDeser;
+ _listDeserializer = (JsonDeserializer<Object>) listDeser;
+ _stringDeserializer = (JsonDeserializer<Object>) stringDeser;
+ _numberDeserializer = (JsonDeserializer<Object>) numberDeser;
+ _listType = base._listType;
+ _mapType = base._mapType;
+ }
+
+/* METHOD deserialize */
+@Override
+ public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+ {
+ switch (p.getCurrentTokenId()) {
+ case JsonTokenId.ID_START_OBJECT:
+ case JsonTokenId.ID_FIELD_NAME:
+ // 28-Oct-2015, tatu: [databind#989] We may also be given END_OBJECT (similar to FIELD_NAME),
+ // if caller has advanced to the first token of Object, but for empty Object
+ if (_mapDeserializer != null) {
+ return _mapDeserializer.deserialize(p, ctxt);
+ }
+ return mapObject(p, ctxt);
+ case JsonTokenId.ID_START_ARRAY:
+ if (ctxt.isEnabled(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY)) {
+ return mapArrayToArray(p, ctxt);
+ }
+ if (_listDeserializer != null) {
+ return _listDeserializer.deserialize(p, ctxt);
+ }
+ return mapArray(p, ctxt);
+ case JsonTokenId.ID_EMBEDDED_OBJECT:
+ return p.getEmbeddedObject();
+ case JsonTokenId.ID_STRING:
+ if (_stringDeserializer != null) {
+ return _stringDeserializer.deserialize(p, ctxt);
+ }
+ return p.getText();
+
+ case JsonTokenId.ID_NUMBER_INT:
+ if (_numberDeserializer != null) {
+ return _numberDeserializer.deserialize(p, ctxt);
+ }
+ /* Caller may want to get all integral values returned as {@link java.math.BigInteger},
+ * or {@link java.lang.Long} for consistency
+ */
+ if (ctxt.hasSomeOfFeatures(F_MASK_INT_COERCIONS)) {
+ return _coerceIntegral(p, ctxt);
+ }
+ return p.getNumberValue(); // should be optimal, whatever it is
+
+ case JsonTokenId.ID_NUMBER_FLOAT:
+ if (_numberDeserializer != null) {
+ return _numberDeserializer.deserialize(p, ctxt);
+ }
+ /* [JACKSON-72]: need to allow overriding the behavior regarding
+ * which type to use
+ */
+ if (ctxt.isEnabled(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)) {
+ return p.getDecimalValue();
+ }
+ return p.getDoubleValue();
+
+ case JsonTokenId.ID_TRUE:
+ return Boolean.TRUE;
+ case JsonTokenId.ID_FALSE:
+ return Boolean.FALSE;
+
+ case JsonTokenId.ID_NULL: // should not get this but...
+ return null;
+
+// case JsonTokenId.ID_END_ARRAY: // invalid
+ default:
+ }
+ throw ctxt.mappingException(Object.class);
+ }
+
+/* METHOD deserialize */
+@Override
+ public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+ {
+ switch (p.getCurrentTokenId()) {
+ case JsonTokenId.ID_START_OBJECT:
+ {
+ JsonToken t = p.nextToken();
+ if (t == JsonToken.END_OBJECT) {
+ return new LinkedHashMap<String,Object>(2);
+ }
+ }
+ case JsonTokenId.ID_FIELD_NAME:
+ return mapObject(p, ctxt);
+ case JsonTokenId.ID_START_ARRAY:
+ {
+ JsonToken t = p.nextToken();
+ if (t == JsonToken.END_ARRAY) { // and empty one too
+ if (ctxt.isEnabled(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY)) {
+ return NO_OBJECTS;
+ }
+ return new ArrayList<Object>(2);
+ }
+ }
+ if (ctxt.isEnabled(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY)) {
+ return mapArrayToArray(p, ctxt);
+ }
+ return mapArray(p, ctxt);
+ case JsonTokenId.ID_EMBEDDED_OBJECT:
+ return p.getEmbeddedObject();
+ case JsonTokenId.ID_STRING:
+ return p.getText();
+
+ case JsonTokenId.ID_NUMBER_INT:
+ if (ctxt.hasSomeOfFeatures(F_MASK_INT_COERCIONS)) {
+ return _coerceIntegral(p, ctxt);
+ }
+ return p.getNumberValue(); // should be optimal, whatever it is
+
+ case JsonTokenId.ID_NUMBER_FLOAT:
+ if (ctxt.isEnabled(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)) {
+ return p.getDecimalValue();
+ }
+ return Double.valueOf(p.getDoubleValue());
+
+ case JsonTokenId.ID_TRUE:
+ return Boolean.TRUE;
+ case JsonTokenId.ID_FALSE:
+ return Boolean.FALSE;
+
+ case JsonTokenId.ID_NULL: // should not get this but...
+ return null;
+
+ // 28-Oct-2015, tatu: [databind#989] We may also be given END_OBJECT (similar to FIELD_NAME),
+ // if caller has advanced to the first token of Object, but for empty Object
+
+ //case JsonTokenId.ID_END_ARRAY: // invalid
+ default:
+ throw ctxt.mappingException(Object.class);
+ }
+ }
+
+/* METHOD UntypedObjectDeserializer */
+public UntypedObjectDeserializer(JavaType listType, JavaType mapType) {
+ super(Object.class);
+ _listType = listType;
+ _mapType = mapType;
+ }
+
+/* METHOD UntypedObjectDese
+...[truncated deterministically]...
+al(DeserializationContext ctxt,
+ BeanProperty property) throws JsonMappingException
+ {
+ // 20-Apr-2014, tatu: If nothing custom, let's use "vanilla" instance,
+ // simpler and can avoid some of delegation
+ if ((_stringDeserializer == null) && (_numberDeserializer == null)
+ && (_mapDeserializer == null) && (_listDeserializer == null)
+ && getClass() == UntypedObjectDeserializer.class) {
+ return Vanilla.std;
+ }
+ return this;
+ }
+
+ protected JsonDeserializer<?> _withResolved(JsonDeserializer<?> mapDeser,
+ JsonDeserializer<?> listDeser,
+ JsonDeserializer<?> stringDeser, JsonDeserializer<?> numberDeser) {
+ return new UntypedObjectDeserializer(this,
+ mapDeser, listDeser, stringDeser, numberDeser);
+ }
+
+ /*
+ /**********************************************************
+ /* Deserializer API
+ /**********************************************************
+ */
+
+ /* 07-Nov-2014, tatu: When investigating [databind#604], realized that it makes
+ * sense to also mark this is cachable, since lookup not exactly free, and
+ * since it's not uncommon to "read anything"
+ */
+ @Override
+ public boolean isCachable() {
+ /* 26-Mar-2015, tatu: With respect to [databind#735], there are concerns over
+ * cachability. It seems like we SHOULD be safe here; but just in case there
+ * are problems with false sharing, this may need to be revisited.
+ */
+ return true;
+ }
+
+ @Override
+ public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+ {
+ switch (p.getCurrentTokenId()) {
+ case JsonTokenId.ID_START_OBJECT:
+ case JsonTokenId.ID_FIELD_NAME:
+ // 28-Oct-2015, tatu: [databind#989] We may also be given END_OBJECT (similar to FIELD_NAME),
+ // if caller has advanced to the first token of Object, but for empty Object
+ if (_mapDeserializer != null) {
+ return _mapDeserializer.deserialize(p, ctxt);
+ }
+ return mapObject(p, ctxt);
+ case JsonTokenId.ID_START_ARRAY:
+ if (ctxt.isEnabled(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY)) {
+ return mapArrayToArray(p, ctxt);
+ }
+ if (_listDeserializer != null) {
+ return _listDeserializer.deserialize(p, ctxt);
+ }
+ return mapArray(p, ctxt);
+ case JsonTokenId.ID_EMBEDDED_OBJECT:
+ return p.getEmbeddedObject();
+ case JsonTokenId.ID_STRING:
+ if (_stringDeserializer != null) {
+ return _stringDeserializer.deserialize(p, ctxt);
+ }
+ return p.getText();
+
+ case JsonTokenId.ID_NUMBER_INT:
+ if (_numberDeserializer != null) {
+ return _numberDeserializer.deserialize(p, ctxt);
+ }
+ /* Caller may want to get all integral values returned as {@link java.math.BigInteger},
+ * or {@link java.lang.Long} for consistency
+ */
+ if (ctxt.hasSomeOfFeatures(F_MASK_INT_COERCIONS)) {
+ retur
+...[truncated deterministically]...
+key2 = p.nextFieldName();
+ if (key2 == null) { // single entry; but we want modifiable
+ LinkedHashMap<String, Object> result = new LinkedHashMap<String, Object>(2);
+ result.put(key1, value1);
+ return result;
+ }
+ p.nextToken();
+ Object value2 = deserialize(p, ctxt);
+
+ String key = p.nextFieldName();
+ if (key == null) {
+ LinkedHashMap<String, Object> result = new LinkedHashMap<String, Object>(4);
+ result.put(key1, value1);
+ result.put(key2, value2);
+ return result;
+ }
+ // And then the general case; default map size is 16
+ LinkedHashMap<String, Object> result = new LinkedHashMap<String, Object>();
+ result.put(key1, value1);
+ result.put(key2, value2);
+ do {
+ p.nextToken();
+ result.put(key, deserialize(p, ctxt));
+ } while ((key = p.nextFieldName()) != null);
+ return result;
+ }
+
+ /**
+ * Method called to map a JSON Array into a Java Object array (Object[]).
+ */
+ protected Object[] mapArrayToArray(JsonParser jp, DeserializationContext ctxt) throws IOException {
+ ObjectBuffer buffer = ctxt.leaseObjectBuffer();
+ Object[] values = buffer.resetAndStart();
+ int ptr = 0;
+ do {
+ Object value = deserialize(jp, ctxt);
+ if (ptr >= values.length) {
+ values = buffer.appendCompletedChunk(values);
+ ptr = 0;
+ }
+ values[ptr++] = value;
+ } while (jp.nextToken() != JsonToken.END_ARRAY);
+ return buffer.completeAndClearBuffer(values, ptr);
+ }
+ }

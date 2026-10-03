@@ -1,0 +1,85 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 94  Version: JacksonDatabind-94b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1931
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.IllegalTypesCheckTest::testC3P0Types
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([Illegal type]): got one with message "Can not instantiate value of type [simple type, class com.mchange.v2.c3p0.jacksontest.ComboPooledDataSource] from String value ('/tmp/foobar.txt'); no single-String constructor/factory method
+Modified: com.fasterxml.jackson.databind.jsontype.impl.SubTypeValidator
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.jsontype.impl.SubTypeValidator | java]
+package com.fasterxml.jackson.databind.jsontype.impl;
+public class SubTypeValidator
+protected final static String PREFIX_SPRING = "org.springframework.";
+protected final static Set<String> DEFAULT_NO_DESER_CLASS_NAMES;
+protected Set<String> _cfgIllegalClassNames = DEFAULT_NO_DESER_CLASS_NAMES;
+private final static SubTypeValidator instance = new SubTypeValidator();
+protected SubTypeValidator() { }
+public static SubTypeValidator instance() { return instance; }
+public void validateSubType(DeserializationContext ctxt, JavaType type) throws JsonMappingException
+final Class<?> raw = type.getRawClass();
+for (Class<?> cls = raw; (cls != null) && (cls != Object.class); cls = cls.getSuperclass()){
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.interop;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.SubTypeValidator;
+import org.junit.Test;
+
+public class SubTypeValidatorC3P0Test
+{
+    private static final String C3P0_TYPE =
+            "com.mchange.v2.c3p0.jacksontest.ComboPooledDataSource";
+
+    @Test
+    public void defaultTypingRejectsC3P0TypeBeforeStringInstantiation() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping();
+
+        try {
+            mapper.readValue("[\"" + C3P0_TYPE + "\",\"/tmp/foobar.txt\"]", Object.class);
+            fail("Expected C3P0 subtype to be rejected as illegal");
+        } catch (JsonMappingException e) {
+            assertTrue("Expected security rejection, got: " + e.getMessage(),
+                    e.getMessage().contains("Illegal type"));
+        }
+    }
+
+    @Test
+    public void validatorRejectsC3P0RawJavaType() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+        Class<?> c3p0Type = Class.forName(C3P0_TYPE);
+        JavaType type = mapper.constructType(c3p0Type);
+        DeserializationContext context = mapper.getDeserializationContext();
+
+        try {
+            SubTypeValidator.instance().validateSubType(context, type);
+            fail("Expected C3P0 raw type to be rejected as illegal");
+        } catch (JsonMappingException e) {
+            assertTrue("Expected security rejection, got: " + e.getMessage(),
+                    e.getMessage().contains("Illegal type"));
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.interop.SubTypeValidatorC3P0Test::defaultTypingRejectsC3P0TypeBeforeStringInstantiation
+ - com.fasterxml.jackson.databind.interop.SubTypeValidatorC3P0Test::validatorRejectsC3P0RawJavaType
+
+Failing generated tests: com.fasterxml.jackson.databind.interop.SubTypeValidatorC3P0Test::defaultTypingRejectsC3P0TypeBeforeStringInstantiation, com.fasterxml.jackson.databind.interop.SubTypeValidatorC3P0Test::validatorRejectsC3P0RawJavaType

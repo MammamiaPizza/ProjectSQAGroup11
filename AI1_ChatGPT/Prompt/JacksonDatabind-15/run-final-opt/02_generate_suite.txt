@@ -1,0 +1,297 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 15  Version: JacksonDatabind-15b
+JUnit: junit-4.11.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.ser.BeanSerializerFactory, com.fasterxml.jackson.databind.ser.std.BeanSerializerBase, com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer, com.fasterxml.jackson.databind.ser.std.StdSerializer
+Modified: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.ser.BeanSerializerFactory, com.fasterxml.jackson.databind.ser.std.BeanSerializerBase, com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer, com.fasterxml.jackson.databind.ser.std.StdSerializer
+Triggers: com.fasterxml.jackson.databind.convert.TestConvertingSerializer::testIssue731
+
+Bug/specification summary:
+Bug report: 731
+Trigger failures:
+- com.fasterxml.jackson.databind.convert.TestConvertingSerializer::testIssue731
+ --> com.fasterxml.jackson.databind.JsonMappingException: No serializer found for class com.fasterxml.jackson.databind.convert.TestConvertingSerializer$DummyBean and no properties discovered to create BeanSerializer (to avoid exception, disable SerializationFeature.FAIL_ON_EMPTY_BEANS) )
+Modified: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.ser.BeanSerializerFactory, com.fasterxml.jackson.databind.ser.std.BeanSerializerBase, com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer, com.fasterxml.jackson.databind.ser.std.StdSerializer
+
+Prompt-01 test plan:
+TARGETS: StdDelegatingSerializer conversion and delegate serializer resolution for converted values 
+TARGETS: BeanSerializerFactory/BeanSerializerBase serializer lookup after conversion type changes 
+TARGETS: JavaType handler/static-typing preservation during narrowing/widening 
+ORACLES: Existing TestConvertingSerializer.testIssue731 expected serialization behavior 
+ORACLES: Absence of JsonMappingException for converted DummyBean with no discovered properties 
+CASES: Convert a value to DummyBean and serialize through StdDelegatingSerializer 
+CASES: Converted type differs from declared type; verify serializer is resolved for converted type 
+CASES: Empty converted bean under default FAIL_ON_EMPTY_BEANS behavior 
+RISKS: Exact JSON output and converter setup are not provided in the context 
+RISKS: Do not infer behavior for unshown JavaType subclasses or custom serializer APIs
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.JavaType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public abstract class JavaType
+protected final Class<?> _class;
+protected final int _hash;
+protected final Object _valueHandler;
+protected final Object _typeHandler;
+protected final boolean _asStatic;
+public abstract JavaType withTypeHandler(Object h);
+public abstract JavaType withContentTypeHandler(Object h);
+public abstract JavaType withValueHandler(Object h);
+public abstract JavaType withContentValueHandler(Object h);
+public abstract JavaType withStaticTyping();
+public JavaType narrowBy(Class<?> subclass)
+p
+...[truncated deterministically]...
+dSignature() {
+public abstract StringBuilder getErasedSignature(StringBuilder sb);
+protected void _assertSubclass(Class<?> subclass, Class<?> superClass) {
+public abstract String toString();
+public abstract boolean equals(Object o);
+public final int hashCode() { return _hash; }
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.lang.reflect.Modifier;
+import com.fasterxml.jackson.core.type.ResolvedType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+
+/* METHOD JavaType */
+protected JavaType(Class<?> raw, int additionalHash,
+ Object valueHandler, Object typeHandler, boolean asStatic)
+ {
+ _class = raw;
+ _hash = raw.getName().hashCode() + additionalHash;
+ _valueHandler = valueHandler;
+ _typeHandler = typeHandler;
+ _asStatic = asStatic;
+ }
+
+/* METHOD narrowBy */
+public JavaType narrowBy(Class<?> subclass)
+ {
+ // First: if same raw class, just return this instance
+ if (subclass == _class) { return this; }
+ // Otherwise, ensure compatibility
+ _assertSubclass(subclass, _class);
+ JavaType result = _narrow(subclass);
+
+ // TODO: these checks should NOT actually be needed; above should suffice:
+ if (_valueHandler != result.<Object>getValueHandler()) {
+ result = result.withValueHandler(_valueHandler);
+ }
+ if (_typeHandler != result.<Object>getTypeHandler()) {
+ result = result.withTypeHandler(_typeHandler);
+ }
+ return result;
+ }
+
+/* METHOD widenBy */
+public JavaType widenBy(Class<?> superclass) {
+ // First: if same raw class, just return this instance
+ if (superclass == _class) { return this; }
+ // Otherwise, ensure compatibility
+ _assertSubclass(_class, superclass);
+ return _widen(superclass);
+ }
+
+===== com.fasterxml.jackson.databind.ser.BeanSerializerFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser;
+public class BeanSerializerFactory
+public final static BeanSerializerFactory instance = new BeanSerializerFactory(null);
+protected BeanSerializerFactory(SerializerFactoryConfig config)
+@Override
+public SerializerFactory withConfig(SerializerFactoryConfig config)
+if (getClass() != BeanSerializerFactory.class) {
+protected Iterable<Serializers> customSerializers() {
+@SuppressWarnings("unchecked")
+final SerializationConfig config = prov.getConfig();
+if (type == origType) { // no changes, won't force static typ
+...[truncated deterministically]...
+tected boolean isPotentialBeanType(Class<?> type)
+final AnnotatedMember accessor = property.getAccessor();
+protected void processViews(SerializationConfig config, BeanSerializerBuilder builder)
+final int propCount = props.size();
+final PropertyName name = propDef.getFullName();
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser;
+import java.util.*;
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.cfg.SerializerFactoryConfig;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.NamedType;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.ser.impl.FilteredBeanPropertyWriter;
+import com.fasterxml.jackson.databind.ser.impl.ObjectIdWriter;
+import com.fasterxml.jackson.databind.ser.impl.PropertyBasedObjectIdGenerator;
+import com.fasterxml.jackson.databind.ser.std.MapSerializer;
+import com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer;
+import com.fasterxml.jackson.databind.type.*;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.Converter;
+public class BeanSerializerFactory
+
+===== com.fasterxml.jackson.databind.ser.std.BeanSerializerBase (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser.std;
+@SuppressWarnings("serial")
+public abstract class BeanSerializerBase
+protected final static PropertyName NAME_FOR_OBJECT_REF = new PropertyName("#object-ref");
+final protected static BeanPropertyWriter[] NO_PROPS = new BeanPropertyWriter[0];
+final protected BeanPropertyWriter[] _props;
+final protected BeanPropertyWriter[] _filteredProps;
+final protected AnyGetterWriter _anyGetterWriter;
+final protected Object _propertyFilterId;
+final protected AnnotatedMember _typeId;
+final protected ObjectIdWriter _ob
+...[truncated deterministically]...
+ertyFilterId, bean);
+@Deprecated
+public JsonNode getSchema(SerializerProvider provider, Type typeHint)
+JsonSerializableSchema ann = _handledType.getAnnotation(JsonSerializableSchema.class);
+public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser.std;
+import java.io.IOException;
+import java.lang.reflect.Type;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.introspect.Annotated;
+import com.fasterxml.jackson.databind.introspect.AnnotatedMember;
+import com.fasterxml.jackson.databind.introspect.ObjectIdInfo;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitable;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonObjectFormatVisitor;
+import com.fasterxml.jackson.databind.jsonschema.JsonSerializableSchema;
+import com.fasterxml.jackson.databind.jsonschema.SchemaAware;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ser.*;
+import com.fasterxml.jackson.databind.ser.impl.ObjectIdWriter;
+import com.fasterxml.jackson.databind.ser.impl.PropertyBasedObjectIdGenerator;
+import com.fasterxml.jackson.databind.ser.impl.WritableObjectId;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.Converter;
+import com.fasterxml.jackson.databind.util.NameTransformer;
+
+===== com.fasterxml.jackson.databind.ser.std.StdDelegatingSerializer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser.std;
+@SuppressWarnings("serial")
+public class StdDelegatingSerializer
+protected final Converter<Object,?> _converter;
+protected final JavaType _delegateType;
+protected final JsonSerializer<Object> _delegateSerializer;
+@SuppressWarnings("unchecked")
+public StdDelegatingSerializer(Converter<?,?> converter)
+super(Object.class);
+public <T> StdDelegatingSerializer(Class<T> cls, Converter<T,?> converter)
+if (getClass() != StdDelegatingSerializer.class) {
+throw new IllegalStateException("Sub-class "+getClass().get
+...[truncated deterministically]...
+ject value)
+public boolean isEmpty(SerializerProvider prov, Object value)
+public JsonNode getSchema(SerializerProvider provider, Type typeHint)
+public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint)
+protected Object convertValue(Object value) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser.std;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitable;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+import com.fasterxml.jackson.databind.jsonschema.SchemaAware;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.ser.ContextualSerializer;
+import com.fasterxml.jackson.databind.ser.ResolvableSerializer;
+import com.fasterxml.jackson.databind.util.Converter;
+import java.io.IOException;
+import java.lang.reflect.Type;
+public class StdDelegatingSerializer
+
+/* METHOD StdDelegatingSerializer */
+@SuppressWarnings("unchecked")
+ public StdDelegatingSerializer(Converter<Object,?> converter,
+ JavaType delegateType, JsonSerializer<?> delegateSerializer)
+ {
+ super(delegateType);
+ _converter = converter;
+ _delegateType = delegateType;
+ _delegateSerializer = (JsonSerializer<Object>) delegateSerializer;
+ }
+
+/* METHOD StdDelegatingSerializer */
+@SuppressWarnings("unchecked")
+ public StdDelegatingSerializer(Converter<?,?> converter)
+ {
+ super(Object.class);
+ _converter = (Converter<Object,?>)converter;
+ _delegateType = null;
+ _delegateSerializer = null;
+ }
+
+===== com.fasterxml.jackson.databind.ser.std.StdSerializer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.ser.std;
+public abstract class StdSerializer<T>
+protected final Class<T> _handledType;
+protected StdSerializer(Class<T> t) {
+@SuppressWarnings("unchecked")
+protected StdSerializer(JavaType type) {
+protected StdSerializer(Class<?> t, boolean dummy) {
+@Override
+public Class<T> handledType() { return _handledType; }
+public abstract void serialize(T value, JsonGenerator jgen, SerializerProvider provider)
+public JsonNode getSchema(SerializerProvider provider, Type typeHint)
+public JsonNode getSchema(SerializerProvid
+...[truncated deterministically]...
+teSchemaNode(String type, boolean isOptional)
+public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint)
+protected boolean isDefaultSerializer(JsonSerializer<?> serializer) {
+final AnnotationIntrospector intr = provider.getAnnotationIntrospector();
+
+/* HEADER */
+package com.fasterxml.jackson.databind.ser.std;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Type;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JacksonStdImpl;
+import com.fasterxml.jackson.databind.introspect.AnnotatedMember;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitable;
+import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+import com.fasterxml.jackson.databind.jsonschema.SchemaAware;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ser.FilterProvider;
+import com.fasterxml.jackson.databind.ser.PropertyFilter;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.Converter;
+
+/* METHOD StdSerializer */
+@SuppressWarnings("unchecked")
+ protected StdSerializer(JavaType type) {
+ _handledType = (Class<T>) type.getRawClass();
+ }
+
+/* METHOD StdSerializer */
+protected StdSerializer(Class<T> t) {
+ _handledType = t;
+ }

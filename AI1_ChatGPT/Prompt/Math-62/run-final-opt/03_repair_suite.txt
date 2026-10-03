@@ -1,0 +1,151 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 62  Version: Math-62b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-413
+Trigger failures:
+- org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizerTest::testQuinticMin
+ --> junit.framework.AssertionFailedError: expected:<-0.2719561293> but was:<-0.2719561278056452>
+Modified: org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizer
+
+Available API/signatures:
+[org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizer | java]
+package org.apache.commons.math.optimization.univariate;
+public class MultiStartUnivariateRealOptimizer<FUNC extends UnivariateRealFunction>
+public void setConvergenceChecker(ConvergenceChecker<UnivariateRealPointValuePair> checker) {
+public ConvergenceChecker<UnivariateRealPointValuePair> getConvergenceChecker() {
+public int getMaxEvaluations() {
+public int getEvaluations() {
+public void setMaxEvaluations(int maxEvaluations) {
+public UnivariateRealPointValuePair[] getOptima() {
+final double bound1 = (i == 0) ? min : min + generator.nextDouble() * (max - min);
+final double bound2 = (i == 0) ? max : min + generator.nextDouble() * (max - min);
+final int usedEvaluations = optimizer.getEvaluations();
+private void sortPairs(final GoalType goal) {
+final double v1 = o1.getValue();
+final double v2 = o2.getValue();
+
+Generated JUnit Test:
+package org.apache.commons.math.optimization.univariate;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.exception.MathIllegalStateException;
+import org.apache.commons.math.optimization.GoalType;
+import org.apache.commons.math.random.JDKRandomGenerator;
+import org.junit.Test;
+
+public class MultiStartUnivariateRealOptimizerGeneratedTest {
+
+    @Test
+    public void testQuinticMinimumHasRequiredPrecisionAcrossStarts()
+        throws FunctionEvaluationException {
+        JDKRandomGenerator generator = new JDKRandomGenerator();
+        generator.setSeed(123456789L);
+
+        MultiStartUnivariateRealOptimizer<UnivariateRealFunction> optimizer =
+            new MultiStartUnivariateRealOptimizer<UnivariateRealFunction>(
+                new BrentOptimizer(1.0e-10, 1.0e-14), 10, generator);
+        optimizer.setMaxEvaluations(300);
+
+        UnivariateRealPointValuePair optimum = optimizer.optimize(
+            new QuinticFunction(), GoalType.MINIMIZE, -0.3, -0.2);
+
+        assertEquals(-0.2719561293, optimum.getPoint(), 1.0e-9);
+        assertEquals(-0.0443342695, optimum.getValue(), 1.0e-9);
+        assertTrue(optimizer.getEvaluations() > 0);
+        assertTrue(optimizer.getEvaluations() <= 300);
+    }
+
+    @Test
+    public void testOptimaAreSortedForMinimizationAndReturnedArrayIsDefensive()
+        throws FunctionEvaluationException {
+        JDKRandomGenerator generator = new JDKRandomGenerator();
+        generator.setSeed(987654321L);
+
+        MultiStartUnivariateRealOptimizer<UnivariateRealFunction> optimizer =
+            new MultiStartUnivariateRealOptimizer<UnivariateRealFunction>(
+                new BrentOptimizer(1.0e-10, 1.0e-14), 4, generator);
+        optimizer.setMaxEvaluations(300);
+
+        UnivariateRealPointValuePair best = optimizer.optimize(
+            new UnivariateRealFunction() {
+                public double value(double x) {
+                    return x * x;
+                }
+            },
+            GoalType.MINIMIZE, -1.0, 1.0);
+
+        UnivariateRealPointValuePair[] optima = optimizer.getOptima();
+        assertEquals(4, optima.length);
+        assertNotNull(optima[0]);
+        assertEquals(best.getValue(), optima[0].getValue(), 0.0);
+        for (int i = 1; i < optima.length; ++i) {
+            if (optima[i] != null) {
+                assertTrue(optima[i - 1].getValue() <= optima[i].getValue());
+            }
+        }
+
+        optima[0] = null;
+        assertNotNull(optimizer.getOptima()[0]);
+    }
+
+    @Test
+    public void testOptimaAreSortedForMaximization()
+        throws FunctionEvaluationException {
+        JDKRandomGenerator generator = new JDKRandomGenerator();
+        generator.setSeed(246813579L);
+
+        MultiStartUnivariateRealOptimizer<UnivariateRealFunction> optimizer =
+            new MultiStartUnivariateRealOptimizer<UnivariateRealFunction>(
+                new BrentOptimizer(1.0e-10, 1.0e-14), 4, generator);
+        optimizer.setMaxEvaluations(300);
+
+        UnivariateRealPointValuePair best = optimizer.optimize(
+            new UnivariateRealFunction() {
+                public double value(double x) {
+                    return x;
+                }
+            },
+            GoalType.MAXIMIZE, -1.0, 1.0);
+
+        UnivariateRealPointValuePair[] optima = optimizer.getOptima();
+        assertEquals(1.0, best.getPoint(), 1.0e-10);
+        assertEquals(1.0, optima[0].getValue(), 1.0e-10);
+        for (int i = 1; i < optima.length; ++i) {
+            if (optima[i] != null) {
+                assertTrue(optima[i - 1].getValue() >= optima[i].getValue());
+            }
+        }
+    }
+
+    @Test(expected = MathIllegalStateException.class)
+    public void testGetOptimaBeforeOptimizationThrows() {
+        MultiStartUnivariateRealOptimizer<UnivariateRealFunction> optimizer =
+            new MultiStartUnivariateRealOptimizer<UnivariateRealFunction>(
+                new BrentOptimizer(1.0e-10, 1.0e-14), 2, new JDKRandomGenerator());
+
+        optimizer.getOptima();
+    }
+
+    private static class QuinticFunction implements UnivariateRealFunction {
+        public double value(double x) {
+            return (x - 1.0) * (x - 0.5) * x * (x + 0.5) * (x + 1.0);
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizerGeneratedTest::testOptimaAreSortedForMaximization
+ - org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizerGeneratedTest::testQuinticMinimumHasRequiredPrecisionAcrossStarts
+
+Failing generated tests: org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizerGeneratedTest::testOptimaAreSortedForMaximization, org.apache.commons.math.optimization.univariate.MultiStartUnivariateRealOptimizerGeneratedTest::testQuinticMinimumHasRequiredPrecisionAcrossStarts

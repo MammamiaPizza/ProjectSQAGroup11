@@ -1,0 +1,198 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 90  Version: Math-90b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-259
+Trigger failures:
+- org.apache.commons.math.stat.FrequencyTest::testAddNonComparable
+ --> java.lang.IllegalArgumentException: Value not comparable to existing values.
+Modified: org.apache.commons.math.stat.Frequency
+
+Available API/signatures:
+[org.apache.commons.math.stat.Frequency | java]
+package org.apache.commons.math.stat;
+public class Frequency implements Serializable {
+public Frequency() {
+public Frequency(Comparator comparator) {
+@Override
+public String toString() {
+@Deprecated
+public void addValue(Object v) {
+public void addValue(int v) {
+public void addValue(Integer v) {
+public void addValue(long v) {
+public void addValue(char v) {
+public void clear() {
+public Iterator valuesIterator() {
+public long getSumFreq() {
+public long getCount(Object v) {
+public long getCount(int v) {
+public long getCount(long v) {
+public long getCount(char v) {
+public double getPct(Object v) {
+final long sumFreq = getSumFreq();
+public double getPct(int v) {
+public double getPct(long v) {
+public double getPct(char v) {
+public long getCumFreq(Object v) {
+public long getCumFreq(int v) {
+public long getCumFreq(long v) {
+public long getCumFreq(char v) {
+public double getCumPct(Object v) {
+public double getCumPct(int v) {
+public double getCumPct(long v) {
+public double getCumPct(char v) {
+private static class NaturalComparator implements Comparator, Serializable {
+public int compare(Object o1, Object o2) {
+
+Generated JUnit Test:
+package org.apache.commons.math.stat;
+
+import static org.junit.Assert.*;
+
+import java.util.Iterator;
+
+import org.junit.Test;
+
+/**
+
+ - Tests for {@link Frequency} that expose bug MATH-259: non-Comparable values
+ - should be accepted by addValue(Object) without throwing an unwanted
+ - IllegalArgumentException, and getCount(Object) should return the
+ - correct frequency for such values.
+  */
+ public class FrequencyTest {
+  @Test
+  public void testAddNonComparableToEmptyFrequency() {
+  Frequency f = new Frequency();
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  assertEquals(1, f.getCount(nonComp));
+  }
+  @Test
+  public void testAddNonComparableAfterComparable() {
+  Frequency f = new Frequency();
+  f.addValue(10);
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  assertEquals(1, f.getCount(nonComp));
+  assertEquals(2, f.getSumFreq());
+  }
+  @Test
+  public void testAddMultipleNonComparables() {
+  Frequency f = new Frequency();
+  for (int i = 0; i < 5; i++) {
+      f.addValue(new Object());
+  }
+  // All distinct objects, each count should be 1
+  assertEquals(5, f.getSumFreq());
+  }
+  @Test
+  public void testAddNullThrowsNullPointerException() {
+  Frequency f = new Frequency();
+  try {
+      f.addValue(null);
+      fail("Expected NullPointerException");
+  } catch (NullPointerException e) {
+      // expected
+  } catch (IllegalArgumentException e) {
+      fail("Threw wrong exception: " + e);
+  }
+  }
+  @Test
+  public void testAddNullAfterComparableThrowssNullPointerException() {
+  Frequency f = new Frequency();
+  f.addValue(1);
+  try {
+      f.addValue(null);
+      fail("Expected NullPointerException");
+  } catch (NullPointerException e) {
+      // expected
+  } catch (IllegalArgumentException e) {
+      fail("Threw wrong exception: " + e);
+  }
+  }
+  @Test
+  public void testGetCountOfNonComparable() {
+  Frequency f = new Frequency();
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  f.addValue(nonComp); // add same object again
+  assertEquals(2, f.getCount(nonComp));
+  }
+  @Test
+  public void testGetCountOfNonComparableReturnsZeroForMissing() {
+  Frequency f = new Frequency();
+  f.addValue(42);
+  assertEquals(0, f.getCount(new Object()));
+  }
+  @Test
+  public void testClearAfterNonComparable() {
+  Frequency f = new Frequency();
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  f.clear();
+  assertEquals(0, f.getCount(nonComp));
+  assertEquals(0, f.getSumFreq());
+  }
+  @Test
+  public void testvaluesIteratorContainsNonComparable() {
+  Frequency f = new Frequency();
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  Iterator<?> it = f.valuesIterator();
+  assertTrue(it.hasNext());
+  Object next = it.next();
+  assertSame(nonComp, next);
+  assertFalse(it.hasNext());
+  }
+  @Test
+  public void testAddNonComparableWithCustomComparator() {
+  // Use a comparator that can compare any object by identity
+  Frequency f = new Frequency(new java.util.Comparator() {
+      public int compare(Object o1, Object o2) {
+          if (o1 == o2) return 0;
+          // consistent but total ordering: use hash code
+          int h1 = System.identityHashCode(o1);
+          int h2 = System.identityHashCode(o2);
+          return h1 < h2 ? -1 : (h1 > h2 ?1 : 0);
+      }
+      public boolean equals(Object obj) { return false; }
+  });
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  assertEquals(1, f.getCount(nonComp));
+  }
+  @Test
+  public void testAddNonComparableDoesNotAffectComparableCounts() {
+  Frequency f = new Frequency();
+  f.addValue(1);
+  f.addValue(1);
+  Object nonComp = new Object();
+  f.addValue(nonComp);
+  assertEquals(2, f.getCount(1));
+  assertEquals(1, f.getCount(nonComp));
+  }
+  @Test
+  public void testAddNonComparableToFrequencyThatAlreadyContAinsOnlyNonComprable() {
+  Frequency f = new Frequency();
+  Object o1 = new Object();
+  Object o2 = new Object();
+  f.addValue(o1);
+  f.addValue(o2);
+  assertEquals(1, f.getCount(o1));
+  assertEquals(1, f.getCount(o2));
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 9
+ - org.apache.commons.math.stat.FrequencyTest::testAddNonComparableDoesNotAffectComparableCounts
+ - org.apache.commons.math.stat.FrequencyTest::testAddNonComparableAfterComparable
+ - org.apache.commons.math.stat.FrequencyTest::testvaluesIteratorContainsNonComparable
+Failing generated tests: org.apache.commons.math.stat.FrequencyTest::testAddMultipleNonComparables, org.apache.commons.math.stat.FrequencyTest::testAddNonComparableAfterComparable, org.apache.commons.math.stat.FrequencyTest::testAddNonComparableDoesNotAffectComparableCounts, org.apache.commons.math.stat.FrequencyTest::testAddNonComparableToEmptyFrequency, org.apache.commons.math.stat.FrequencyTest::testAddNonComparableToFrequencyThatAlreadyContAinsOnlyNonComprable, org.apache.commons.math.stat.FrequencyTest::testAddNonComparableWithCustomComparator, org.apache.commons.math.stat.FrequencyTest::testClearAfterNonComparable, org.apache.commons.math.stat.FrequencyTest::testGetCountOfNonComparable, org.apache.commons.math.stat.FrequencyTest::testvaluesIteratorContainsNonComparable

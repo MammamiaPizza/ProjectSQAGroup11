@@ -1,0 +1,431 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 76  Version: JacksonDatabind-76b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1573
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorSingleParameterAtBeginning
+ --> junit.framework.ComparisonFailure: expected:<John> but was:<null>
+ - com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorMultipleParametersAtBeginning
+ --> junit.framework.ComparisonFailure: expected:<John> but was:<null>
+ - com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorSingleParameterInMiddle
+ --> junit.framework.AssertionFailedError: expected:<30> but was:<0>
+ - com.fasterxml.jackson.databind.deser.builder.BuilderWithUnwrappedTest::testWithUnwrappedAndCreatorMultipleParametersInMiddle
+ --> junit.framework.AssertionFailedError: expected:<30> but was:<0>
+Modified: com.fasterxml.jackson.databind.deser.BuilderBasedDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BuilderBasedDeserializer | java]
+package com.fasterxml.jackson.databind.deser;
+public class BuilderBasedDeserializer
+protected final AnnotatedMethod _buildMethod;
+protected BuilderBasedDeserializer(BuilderBasedDeserializer src)
+protected BuilderBasedDeserializer(BuilderBasedDeserializer src, boolean ignoreAllUnknown)
+protected BuilderBasedDeserializer(BuilderBasedDeserializer src, NameTransformer unwrapper) {
+public BuilderBasedDeserializer(BuilderBasedDeserializer src, ObjectIdReader oir) {
+public BuilderBasedDeserializer(BuilderBasedDeserializer src, Set<String> ignorableProps) {
+public BuilderBasedDeserializer(BuilderBasedDeserializer src, BeanPropertyMap props) {
+@Override
+public JsonDeserializer<Object> unwrappingDeserializer(NameTransformer unwrapper)
+public BeanDeserializerBase withObjectIdReader(ObjectIdReader oir) {
+public BeanDeserializerBase withIgnorableProperties(Set<String> ignorableProps) {
+public BeanDeserializerBase withBeanProperties(BeanPropertyMap props) {
+protected BeanDeserializerBase asArrayDeserializer() {
+protected final Object finishBuild(DeserializationContext ctxt, Object builder)
+public final Object deserialize(JsonParser p, DeserializationContext ctxt)
+public Object deserializeFromObject(JsonParser p, DeserializationContext ctxt)
+@SuppressWarnings("resource")
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+protected Object deserializeWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.builder;
+
+ import static org.junit.Assert.*;
+
+ import com.fasterxml.jackson.annotation.*;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import java.io.IOException;
+
+ import org.junit.Test;
+
+ /**
+  * Tests for interaction between {@code @JsonUnwrapped} and {@code @JsonCreator}
+  * with builder-based deserialization (issues #1573 / databind#76).
+  */
+ public class BuilderWithUnwrappedTest {
+
+     private final ObjectMapper MAPPER = new ObjectMapper();
+
+     // ---- single creator param at beginning ----
+
+     @JsonDeserialize(builder = SingleAtBeginBean.SingleAtBeginBuilder.class)
+     static class SingleAtBeginBean {
+         final String name;
+         final Extra extra;
+         SingleAtBeginBean(String name, Extra extra) {
+             this.name = name;
+             this.extra = extra;
+         }
+         public String getName() { return name; }
+         public Extra getExtra() { return extra; }
+
+         static class SingleAtBeginBuilder {
+             private String name;
+             private Extra extra;
+
+             @JsonCreator
+             public SingleAtBeginBuilder(@JsonProperty("name") String name) {
+                 this.name = name;
+             }
+
+             @JsonUnwrapped
+             public void setExtra(Extra extra) { this.extra = extra; }
+
+             public SingleAtBeginBean build() {
+                 return new SingleAtBeginBean(name, extra);
+             }
+         }
+     }
+
+     static class Extra {
+         int age;
+         public int getAge() { return age; }
+         public void setAge(int age) { this.age = age; }
+     }
+
+     @Test
+     public void testWithUnwrappedAndCreatorSingleParameterAtBeginning() throws Exception {
+         String json = "{\"name\":\"John\",\"age\":30}";
+         SingleAtBeginBean bean = MAPPER.readValue(json, SingleAtBeginBean.class);
+         assertEquals("John", bean.getName());
+         assertNotNull(bean.getExtra());
+         assertEquals(30, bean.getExtra().getAge());
+     }
+
+     // ---- multiple creator params at beginning ----
+
+     @JsonDeserialize(builder = MultiAtBeginBean.MultiAtBeginBuilder.class)
+     static class MultiAtBeginBean {
+         final String firstName;
+         final String lastName;
+         final Extra extra;
+         MultiAtBeginBean(String firstName, String lastName, Extra extra) {
+             this.firstName = firstName;
+             this.lastName = lastName;
+             this.extra = extra;
+         }
+         public String getFirstName() { return firstName; }
+         public String getLastName() { return lastName; }
+         public Extra getExtra() { return extra; }
+
+         static class MultiAtBeginBuilder {
+             private String firstName;
+             private String lastName;
+             private Extra extra;
+
+             @JsonCreator
+             public MultiAtBeginBuilder(@JsonProperty("firstName") String firstName,
+                                       @JsonProperty("lastName") String lastName) {
+                 this.firstName = firstName;
+                 this.lastName = lastName;
+             }
+             @JsonUnwrapped
+             public void setExtra(Extra extra) { this.extra = extra; }
+             public MultiAtBeginBean build() {
+                 return new MultiAtBeginBean(firstName, lastName, extra);
+             }
+         }
+     }
+
+     @Test
+     public void testWithUnwrappedAndCreatorMultipleParametersAtBeginning() throws Exception {
+         String json = "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"age\":30}";
+         MultiAtBeginBean bean = MAPPER.readValue(json, MultiAtBeginBean.class);
+         assertEquals("John", bean.getFirstName());
+         assertEquals("Doe", bean.getLastName());
+         assertNotNull(bean.getExtra());
+         assertEquals(30, bean.getExtra().getAge());
+     }
+
+     // ---- single creator param in middle (age before name) ----
+
+     @JsonDeserialize(builder = SingleMiddleBean.SingleMiddleBuilder.class)
+     static class SingleMiddleBean {
+         final int age;
+         final NameAndExtra extra;
+         SingleMiddleBean(int age, NameAndExtra extra) {
+             this.age = age;
+             this.extra = extra;
+         }
+         public int getAge() { return age; }
+         public NameAndExtra getExtra() { return extra; }
+
+         static class SingleMiddleBuilder {
+             private int age;
+             private NameAndExtra extra;
+
+             @JsonCreator
+             public SingleMiddleBuilder(@JsonProperty("age") int age) {
+                 this.age = age;
+             }
+             @JsonUnwrapped
+             public void setExtra(NameAndExtra extra) { this.extra = extra; }
+             public SingleMiddleBean build() { return new SingleMiddleBean(age, extra); }
+         }
+     }
+
+     static class NameAndExtra {
+         String name;
+         public String getName() { return name; }
+         public void setName(String name) { this.name = name; }
+     }
+
+     @Test
+     public void testWithUnwrappedAndCreatorSingleParameterInMiddle() throws Exception {
+         String json = "{\"name\":\"John\",\"age\":30}";
+         SingleMiddleBean bean = MAPPER.readValue(json, SingleMiddleBean.class);
+         assertEquals(30, bean.getAge());
+         assertNotNull(bean.getExtra());
+         assertEquals("John", bean.getExtra().getName());
+     }
+
+     // ---- multiple creator params in middle (unwrapped before and after) ----
+
+     @JsonDeserialize(builder = MultiMiddleBean.MultiMiddleBuilder.class)
+     static class MultiMiddleBean {
+         final int age;
+         final int height;
+         final NameAndExtra extra;
+         MultiMiddleBean(int age, int height, NameAndExtra extra) {
+             this.age = age;
+             this.height = height;
+             this.extra = extra;
+         }
+         public int getAge() { return age; }
+         public int getHeight() { return height; }
+         public NameAndExtra getExtra() { return extra; }
+
+         static class MultiMiddleBuilder {
+             private int age;
+             private int height;
+             private NameAndExtra extra;
+
+             @JsonCreator
+             public MultiMiddleBuilder(@JsonProperty("age") int age,
+                                      @JsonProperty("height") int height) {
+                 this.age = age;
+                 this.height = height;
+             }
+             @JsonUnwrapped
+             public void setExtra(NameAndExtra extra) { this.extra = extra; }
+             public MultiMiddleBean build() {
+                 return new MultiMiddleBean(age, height, extra);
+             }
+         }
+     }
+
+     @Test
+     public void testWithUnwrappedAndCreatorMultipleParametersInMiddle() throws Exception {
+         String json = "{\"name\":\"John\",\"age\":30,\"height\":180}";
+         MultiMiddleBean bean = MAPPER.readValue(json, MultiMiddleBean.class);
+         assertEquals(30, bean.getAge());
+         assertEquals(180, bean.getHeight());
+         assertNotNull(bean.getExtra());
+         assertEquals("John", bean.getExtra().getName());
+     }
+
+     // ---- non-unwrapped regression: build-based deserialization still works ----
+
+     @JsonDeserialize(builder = SimpleBuilderBean.Builder.class)
+     static class SimpleBuilderBean {
+         final String name;
+         final int age;
+         SimpleBuilderBean(String name, int age) { this.name = name; this.age = age; }
+         public String getName() { return name; }
+         public int getAge() { return age; }
+
+         static class Builder {
+             private String name;
+             private int age;
+             @JsonCreator
+             public Builder(@JsonProperty("name") String name,
+                           @JsonProperty("age") int age) {
+                 this.name = name;
+                 this.age = age;
+             }
+             public SimpleBuilderBean build() { return new SimpleBuilderBean(name, age); }
+         }
+     }
+
+     @Test
+     public void testBuilderWithCreatorNoUnwrapped() throws Exception {
+         String json = "{\"name\":\"Alice\",\"age\":25}";
+         SimpleBuilderBean bean = MAPPER.readValue(json, SimpleBuilderBean.class);
+         assertEquals("Alice", bean.getName());
+         assertEquals(25, bean.getAge());
+     }
+
+     // ---- empty unwrapped ----
+
+     @JsonDeserialize(builder = EmptyExtraBean.Builder.class)
+     static class EmptyExtraBean {
+         final String name;
+         final Extra extra;
+         EmptyExtraBean(String name, Extra extra) { this.name = name; this.extra = extra; }
+         public String getName() { return name; }
+         public Extra getExtra() { return extra; }
+
+         static class Builder {
+             private String name;
+             private Extra extra;
+             @JsonCreator
+             public Builder(@JsonProperty("name") String name) { this.name = name; }
+             @JsonUnwrapped
+             public void setExtra(Extra extra) { this.extra = extra; }
+             public EmptyExtraBean build() { return new EmptyExtraBean(name, extra); }
+         }
+     }
+
+     @Test
+     public void testUnwrappedWithNoExtraFields() throws Exception {
+         String json = "{\"name\":\"Bob\"}";
+         EmptyExtraBean bean = MAPPER.readValue(json, EmptyExtraBean.class);
+         assertEquals("Bob", bean.getName());
+         assertNull(bean.getExtra()); // no JSON fields → setter not called
+     }
+
+     // ---- null unwrapped value ----
+
+     @Test
+     public void testUnwrappedWithNullValue() throws Exception {
+         String json = "{\"name\":\"Eve\",\"age\":null}";
+         EmptyExtraBean bean = MAPPER.readValue(json, EmptyExtraBean.class);
+         assertEquals("Eve", bean.getName());
+         assertNotNull(bean.getExtra());
+         assertEquals(0, bean.getExtra().getAge()); // null coerces to default
+     }
+
+     // ---- explicit missing unwrapped field ----
+
+     @Test
+     public void testUnwrappedWithPartialFields() throws Exception {
+         String json = "{\"name\":\"Pat\",\"age\":40}";  // default name is only field in Extra
+         SingleAtBeginBean bean = MAPPER.readValue(json, SingleAtBeginBean.class);
+         assertEquals("Pat", bean.getName());
+         assertNotNull(bean.getExtra());
+         assertEquals(40, bean.getExtra().getAge());
+     }
+
+     // ---- multiple unwrapped properties (two separate @JsonUnwrapped) ----
+
+     @JsonDeserialize(builder = TwoExtraBean.Builder.class)
+     static class TwoExtraBean {
+         final Extra first;
+         final Extra second;
+         final String id;
+         TwoExtraBean(Extra first, Extra second, String id) {
+             this.first = first; this.second = second; this.id = id;
+         }
+         public Extra getFirst() { return first; }
+         public Extra getSecond() { return second; }
+         public String getId() { return id; }
+
+         static class Builder {
+             private Extra first;
+             private Extra second;
+             private String id;
+             @JsonCreator
+             public Builder(@JsonProperty("id") String id) { this.id = id; }
+             @JsonUnwrapped
+             public void setFirst(Extra e) { this.first = e; }
+             @JsonUnwrapped(prefix = "second")
+             public void setSecond(Extra e) { this.second = e; }
+             public TwoExtraBean build() { return new TwoExtraBean(first, second, id); }
+         }
+     }
+
+     @Test
+     public void testMultipleUnwrappedProperties() throws Exception {
+         String json = "{\"id\":\"abc\",\"age\":10,\"secondage\":20}";
+         TwoExtraBean bean = MAPPER.readValue(json, TwoExtraBean.class);
+         assertEquals("abc", bean.getId());
+         assertNotNull(bean.getFirst());
+         assertEquals(10, bean.getFirst().getAge());
+         assertNotNull(bean.getSecond());
+         assertEquals(20, bean.getSecond().getAge());
+     }
+
+     // ---- interaction with @JsonView (optional, demonstrating it doesn't break) ----
+
+     static class Views {
+         static class Public {}
+     }
+
+     @JsonDeserialize(builder = ViewBean.Builder.class)
+     static class ViewBean {
+         final String name;
+         final Extra extra;
+         ViewBean(String name, Extra extra) {
+             this.name = name; this.extra = extra;
+         }
+         public String getName() { return name; }
+         public Extra getExtra() { return extra; }
+
+         static class Builder {
+             private String name;
+             private Extra extra;
+
+             @JsonCreator
+             public Builder(@JsonProperty("name") String name) { this.name = name; }
+             @JsonUnwrapped
+             @JsonView(Views.Public.class)
+             public void setExtra(Extra e) { this.extra = e; }
+
+             @JsonView(Views.Public.class)
+             public ViewBean build() { return new ViewBean(name, extra); }
+         }
+     }
+
+     @Test
+     public void testUnwrappedWithJsonView() throws Exception {
+         String json = "{\"name\":\"Alice\",\"age\":99}";
+         String result = MAPPER
+                 .writerWithView(Views.Public.class)
+                 .writeValueAsString(MAPPER.readerFor(ViewBean.class)
+                         .withView(Views.Public.class).readValue(json));
+         // serialization must contain name and age
+         assertTrue(result.contains("\"name\":\"Alice\""));
+         assertTrue(result.contains("\"age\":99"));
+         // deserialization without view should ignore unwrapped field -> age=0
+         ViewBean beanNoView = MAPPER.readValue(json, ViewBean.class);
+         assertEquals("Alice", beanNoView.getName());
+         assertNotNull(beanNoView.getExtra());
+         assertEquals(0, beanNoView.getExtra().getAge());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-76f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-76f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-76f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-76f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-76f-copilot/.test_suite/com/fasterxml/jackson/databind/deser/builder/BuilderWithUnwrappedTest.java:21: error: cannot find symbol
+ [javac] @JsonDeserialize(builder = SingleAtBeginBean.SingleAtBeginBuilder.class)
+ [javac] ^
+ [javac] symbol: class JsonDeserialize
+ [javac] location: class BuilderWithUnwrappedTest
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 13 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,248 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JxPath  Bug: 9  Version: JxPath-9b
+JUnit: junit-3.8.1.jar  Build: Ant
+Target: org.apache.commons.jxpath.ri.compiler.CoreOperationCompare, org.apache.commons.jxpath.ri.compiler.CoreOperationEqual, org.apache.commons.jxpath.ri.compiler.CoreOperationNotEqual
+Modified: org.apache.commons.jxpath.ri.compiler.CoreOperationCompare, org.apache.commons.jxpath.ri.compiler.CoreOperationEqual, org.apache.commons.jxpath.ri.compiler.CoreOperationNotEqual
+Triggers: org.apache.commons.jxpath.ri.compiler.CoreOperationTest::testNan
+
+Bug/specification summary:
+Bug report: JXPATH-95
+Trigger failures:
+- org.apache.commons.jxpath.ri.compiler.CoreOperationTest::testNan
+ --> junit.framework.AssertionFailedError: Evaluating <$nan = $nan> expected:<false> but was:<true>
+Modified: org.apache.commons.jxpath.ri.compiler.CoreOperationCompare, org.apache.commons.jxpath.ri.compiler.CoreOperationEqual, org.apache.commons.jxpath.ri.compiler.CoreOperationNotEqual
+
+Prompt-01 test plan:
+TARGETS: CoreOperationCompare.equal(Object,Object)
+TARGETS: CoreOperationEqual.computeValue(EvalContext)
+TARGETS: CoreOperationNotEqual.computeValue(EvalContext)
+ORACLES: NaN != NaN (IEEE 754): = must return false, != must return true
+ORACLES: Non‑NaN values compare via equals() with symmetric & null checks
+CASES: both NaN; NaN+nonNaN; equal numbers; equal strings; different values
+CASES: both null; one null; infinities; 0.0 vs -0.0; mixed types; same object
+RISKS: Only NaN fix is known; findMatch/contains may also need NaN‑awareness
+RISKS: BigDecimal/BigInteger equality semantics via equals() may be affected
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.jxpath.ri.compiler.CoreOperationCompare (java) =====
+/* API SIGNATURES */
+package org.apache.commons.jxpath.ri.compiler;
+public abstract class CoreOperationCompare extends CoreOperation {
+public CoreOperationCompare(Expression arg1, Expression arg2) {
+protected int getPrecedence() {
+protected boolean isSymmetric() {
+protected boolean contains(Iterator it, Object value) {
+protected boolean findMatch(Iterator lit, Iterator rit) {
+protected boolean equal(Object l, Object r) {
+
+/* HEADER */
+package org.apache.commons.jxpath.ri.compiler;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.EvalContext;
+import org.apache.commons.jxpath.ri.InfoSetUtil;
+import org.apache.commons.jxpath.ri.axes.InitialContext;
+import org.apache.commons.jxpath.ri.axes.SelfContext;
+
+/* METHOD CoreOperationCompare */
+public CoreOperationCompare(Expression arg1, Expression arg2) {
+
+ super(new Expression[] { arg1, arg2 });
+ }
+
+/* METHOD contains */
+protected boolean contains(Iterator it, Object value) {
+ while (it.hasNext()) {
+ Object element = it.next();
+ if (equal(element, value)) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+/* METHOD findMatch */
+protected boolean findMatch(Iterator lit, Iterator rit) {
+ HashSet left = new HashSet();
+ while (lit.hasNext()) {
+ left.add(lit.next());
+ }
+ while (rit.hasNext()) {
+ if (contains(left.iterator(), rit.next())) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+/* METHOD equal */
+protected boolean equal(Object l, Object r) {
+ if (l instanceof Pointer && r instanceof Pointer) {
+ if (l.equals(r)) {
+ return true;
+ }
+ }
+ if (l instanceof Pointer) {
+ l = ((Pointer) l).getValue();
+ }
+
+ if (r instanceof Pointer) {
+ r = ((Pointer) r).getValue();
+ }
+
+ if (l == r) {
+ return true;
+ }
+ if (l instanceof Boolean || r instanceof Boolean) {
+ return (InfoSetUtil.booleanValue(l) == InfoSetUtil.booleanValue(r));
+ }
+ //if either side is NaN, no comparison returns true:
+ if (l instanceof Number || r instanceof Number) {
+ return (InfoSetUtil.doubleValue(l) == InfoSetUtil.doubleValue(r));
+ }
+ if (l instanceof String || r instanceof String) {
+ return (
+ InfoSetUtil.stringValue(l).equals(InfoSetUtil.stringValue(r)));
+ }
+ return l != null && l.equals(r);
+ }
+
+/* METHOD isSymmetric */
+protected boolean isSymmetric() {
+ return true;
+ }
+
+/* METHOD getPrecedence */
+protected int getPrecedence() {
+ return 2;
+ }
+
+/* METHOD equal */
+protected boolean equal(
+ EvalContext context,
+ Expression left,
+ Expression right) 
+ {
+ Object l = left.compute(context);
+ Object r = right.compute(context);
+
+ if (l instanceof InitialContext) {
+ ((EvalContext) l).reset();
+ }
+
+ if (l instanceof SelfContext) {
+ l = ((EvalContext) l).getSingleNodePointer();
+ }
+
+ if (r instanceof InitialContext) {
+ ((EvalContext) r).reset();
+ }
+
+ if (r instanceof SelfContext) {
+ r = ((EvalContext) r).getSingleNodePointer();
+ }
+
+ if (l instanceof Collection) {
+ l = ((Collection) l).iterator();
+ }
+
+ if (r instanceof Collection) {
+ r = ((Collection) r).iterator();
+ }
+
+ if (l instanceof Iterator && r instanceof Iterator) {
+ return findMatch((Iterator) l, (Iterator) r);
+ }
+ if (l instanceof Iterator) {
+ return contains((Iterator) l, r);
+ }
+ if (r instanceof Iterator) {
+ return contains((Iterator) r, l);
+ }
+ return equal(l, r);
+ }
+
+===== org.apache.commons.jxpath.ri.compiler.CoreOperationEqual (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.compiler;
+
+/**
+ * Implementation of Expression for the operation "=".
+ *
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public class CoreOperationEqual extends CoreOperationCompare {
+
+ public CoreOperationEqual(Expression arg1, Expression arg2) {
+ super(arg1, arg2);
+ }
+
+ public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+ return equal(context, args[0], args[1]) ? Boolean.TRUE : Boolean.FALSE;
+ }
+ public String getSymbol() {
+ return "=";
+ }
+}
+
+===== org.apache.commons.jxpath.ri.compiler.CoreOperationNotEqual (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.jxpath.ri.compiler;
+
+/**
+ * Implementation of Expression for the operation "!=".
+ *
+ * @author Dmitri Plotnikov
+ * @version $Revision$ $Date$
+ */
+public class CoreOperationNotEqual extends CoreOperationCompare {
+
+ public CoreOperationNotEqual(Expression arg1, Expression arg2) {
+ super(arg1, arg2);
+ }
+
+ public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+ return equal(context, args[0], args[1]) ? Boolean.FALSE : Boolean.TRUE;
+ }
+ public String getSymbol() {
+ return "!=";
+ }
+}

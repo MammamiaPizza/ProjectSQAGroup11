@@ -1,0 +1,404 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 132  Version: Closure-132b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+Modified: com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+Triggers: com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxTest::testIssue925
+
+Bug/specification summary:
+Bug report: 925
+Trigger failures:
+- com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxTest::testIssue925
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax
+
+Prompt-01 test plan:
+TARGETS: PeepholeSubstituteAlternateSyntax.optimizeSubtree behavior exercised by testIssue925. 
+ORACLES: Existing PeepholeSubstituteAlternateSyntaxTest::testIssue925 assertions are the result source. 
+CASES: Reproduce Issue 925 input through the peephole optimization test harness. 
+CASES: Add nearby normal and boundary syntax variants only when supported by existing test conventions. 
+RISKS: Context omits Issue 925 source input, expected transformed output, and relevant test helper APIs.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntax (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class PeepholeSubstituteAlternateSyntax
+private static final int AND_PRECEDENCE = NodeUtil.precedence(Token.AND);
+private static final int OR_PRECEDENCE = NodeUtil.precedence(Token.OR);
+private static final int NOT_PRECEDENCE = NodeUtil.precedence(Token.NOT);
+private final int STRING_SPLIT_OVERHEAD = ".split('.')".length();
+@Override
+public boolean apply(Node input) {
+@SuppressWarnings("fallthrough")
+public Node optimizeSubtree(Node node) {
+private void tryJoinForCondition(Node n) {
+private Node tryFoldSimpleFunctionCall(Node n) {
+private Node tryFoldImmediateCallToBoundFunction(Node n) {
+private void addParameterAfter(Node parameterList, Node after) {
+private Node trySplitComma(Node n) {
+private Node tryReplaceIf(Node n) {
+private boolean statementMustExitParent(Node n) {
+private Node tryReplaceUndefined(Node n) {
+private Node tryReduceReturn(Node n) {
+private Node tryReplaceExitWithBreak(Node n) {
+private Node tryRemoveRedundantExit(Node n) {
+private Node tryMinimizeNot(Node n) {
+private Node tryMinimizeIf(Node n) {
+private void tryRemoveRepeatedStatements(Node n) {
+private boolean isFoldableExpressBlock(Node n) {
+private Node getBlockExpression(Node n) {
+private boolean isReturnBlock(Node n) {
+private boolean isReturnExpressBlock(Node n) {
+private boolean isReturnExpression(Node n) {
+private Node getBlockReturnExpression(Node n) {
+private boolean isVarBlock(Node n) {
+private Node getBlockVar(Node n) {
+private boolean consumesDanglingElse(Node n) {
+private boolean isLowerPrecedence(Node n, final int precedence) {
+private boolean isHigherPrecedence(Node n, final int precedence) {
+private boolean isPropertyAssignmentInExpression(Node n) {
+private Node tryMinimizeCondition(Node n) {
+private Node maybeReplaceChildWithNumber(Node n, Node parent, int num) {
+private Node tryFoldStandardConstructors(Node n) {
+private Node tryFoldLiteralConstructor(Node n) {
+private static enum FoldArrayAction {
+private FoldArrayAction isSafeToFoldArrayConstructor(Node arg) {
+private Node tryFoldRegularExpressionConstructor(Node n) {
+private Node reduceTrueFalse(Node n) {
+private Node tryMinimizeArrayLiteral(Node n) {
+private Node tryMinimizeStringArrayLiteral(Node n) {
+private String pickDelimiter(String[] strings) {
+private static final Pattern REGEXP_FLAGS_RE = Pattern.compile("^[gmi]*$");
+private static boolean areValidRegexpFlags(String flags) {
+private boolean areSafeFlagsToFold(String flags) {
+private static Node makeForwardSlashBracketSafe(Node n) {
+static boolean containsUnicodeEscape(String s) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableSet;
+import com.google.javascript.jscomp.CodingConvention.Bind;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.TernaryValue;
+import java.util.regex.Pattern;
+class PeepholeSubstituteAlternateSyntax
+
+/* METHOD PeepholeSubstituteAlternateSyntax */
+PeepholeSubstituteAlternateSyntax(boolean late) {
+ this.late = late;
+ }
+
+/* METHOD tryFoldSimpleFunctionCall */
+private Node tryFoldSimpleFunctionCall(Node n) {
+ Preconditions.checkState(n.isCall());
+ Node callTarget = n.getFirstChild();
+ if (callTarget != null && callTarget.isName() &&
+ callTarget.getString().equals("String")) {
+ // Fold String(a) to '' + (a) on immutable literals,
+ // which allows further optimizations
+ //
+ // We can't do this in the general case, because String(a) has
+ // slightly different semantics than '' + (a). See
+ // http://code.google.com/p/closure-compiler/issues/detail?id=759
+ Node value = callTarget.getNext();
+ if (value != null && value.getNext() == null &&
+ NodeUtil.isImmutableValue(value)) {
+ Node addition = IR.add(
+ IR.string("").srcref(callTarget),
+ value.detachFromParent());
+ n.getParent().replaceChild(n, addition);
+ reportCodeChange();
+ return addition;
+ }
+ }
+ return n;
+ }
+
+ private Node tryFoldImmediateCallToBoundFunction(Node n) {
+ // Rewriting "(fn.bind(a,b))()" to "fn.call(a,b)" makes it inlinable
+ Preconditions.checkState(n.isCall());
+ Node callTarget = n.getFirstChild();
+ Bind bind = getCodingConvention().describeFunctionBind(callTarget, false);
+ if (bind != null) {
+ // replace the call target
+ bind.target.detachFromParent();
+ n.replaceChild(callTarget, bind.target);
+ callTarget = bind.target;
+
+ // push the parameters
+ addParameterAfter(bind.parameters, callTarget);
+
+ // add the this value before the parameters if necessary
+ if (bind.thisValue != null && !NodeUtil.isUndefined(bind.thisValue)) {
+ // rewrite from "fn(a, b)" to "fn.call(thisValue, a, b)"
+ Node newCallTarget = IR.getprop(
+ callTarget.cloneTree(),
+ IR.string("call").srcref(callTarget));
+ n.replaceChild(callTarget, newCallTarget);
+ n.addChildAfter(bind.thisValue.cloneTree(), newCallTarget);
+ n.putBooleanProp(Node.FREE_CALL, false);
+ } else {
+ n.putBooleanProp(Node.FREE_CALL, true);
+ }
+ reportCodeChange();
+ }
+ return n;
+ }
+
+ private void addParameterAfter(Node parameterList, Node after) {
+ if (parameterList != null) {
+ // push the last parameter to the head of the list first.
+ addParameterAfter(parameterList.getNext(), after);
+ after.getParent().addChildAfter(parameterList.cloneTree(), after);
+ }
+ }
+
+ private Node trySplitComma(Node n) {
+ if (late) {
+ return n;
+ }
+ Node parent = n.getParent();
+ Node left = n.getFirstChild();
+ Node right = n.getLastChild();
+
+ if (parent.isExprResult()
+ && !parent.getParent().isLabel()) {
+ // split comma
+ n.detachChildren();
+ // Replace the original expression with the left operand.
+ parent.replaceChild(n, left);
+ // Add the right expression afterward.
+ Node newStatement = IR.exprResult(right);
+ newStatement.copyInformationFrom(n);
+
+ //This modifies outside the subtree, which is not
+ //desirable in a peephole optimization.
+ parent.getParent().addChildAfter(newStatement, parent);
+ reportCodeChange();
+ return left;
+ } else {
+ return n;
+ }
+ }
+
+ /**
+ * Use "return x?1:2;" in place of "if(x)return 1;return 2;"
+ */
+ private Node tryReplaceIf(Node n) {
+
+ for (Node child = n.getFirstChild();
+ child != null; child = child.getNext()){
+ if (child.isIf()){
+ Node cond = child.getFirstChild();
+ Node thenBranch = cond.getNext();
+ Node elseBranch = thenBranch.getNext();
+ Node nextNode = child.getNext();
+
+ if (nextNode != null && elseBranch == null
+ && isReturnBlock(thenBranch)
+ && nextNode.isIf()) {
+ Node nextCond = nextNode.getFirstChild();
+ Node nextThen = nextCo
+...[truncated deterministically]...
+name = result.getString();
+ if (name.equals("undefined")) {
+ n.removeFirstChild();
+ reportCodeChange();
+ }
+ break;
+ }
+ }
+
+ return n;
+ }
+
+ /**
+ * Replace duplicate exits in control structures. If the node following
+ * the exit node expression has the same effect as exit node, the node can
+ * be replaced or removed.
+ * For example:
+ * "while (a) {return f()} return f();" ==> "while (a) {break} return f();"
+ * "while (a) {throw 'ow'} throw 'ow';" ==> "while (a) {break} throw 'ow';"
+ *
+ * @param n An follow control exit expression (a THROW or RETURN node)
+ * @return The replacement for n, or the original if no change was made.
+ */
+ private Node tryReplaceExitWithBreak(Node n) {
+ Node result = n.getFirstChild();
+
+ // Find the enclosing control structure, if any, that a "break" would exit
+ // from.
+ Node breakTarget = n;
+ for (;!ControlFlowAnalysis.isBreakTarget(breakTarget, null /* no label */);
+ breakTarget = breakTarget.getParent()) {
+ if (breakTarget.isFunction() || breakTarget.isScript()) {
+ // No break target.
+ return n;
+ }
+ }
+
+ Node follow = ControlFlowAnalysis.computeFollowNode(breakTarget);
+
+ // Skip pass all the finally blocks because both the break and return will
+ // also trigger all the finally blocks. However, the order of execution is
+ // sl
+...[truncated deterministically]...
+ill result in calling b().
+
+ Node prefinallyFollows = follow;
+ follow = skipFinallyNodes(follow);
+
+ if (prefinallyFollows != follow) {
+ // There were finally clauses
+ if (!isPure(result)) {
+ // Can't defer the exit
+ return n;
+ }
+ }
+
+/* METHOD isFoldableExpressBlock */
+private boolean isFoldableExpressBlock(Node n) {
+ if (n.isBlock()) {
+ if (n.hasOneChild()) {
+ Node maybeExpr = n.getFirstChild();
+ if (maybeExpr.isExprResult()) {
+ // IE has a bug where event handlers behave differently when
+ // their return value is used vs. when their return value is in
+ // an EXPR_RESULT. It's pretty freaking weird. See:
+ // http://code.google.com/p/closure-compiler/issues/detail?id=291
+ // We try to detect this case, and not fold EXPR_RESULTs
+ // into other expressions.
+ if (maybeExpr.getFirstChild().isCall()) {
+ Node calledFn = maybeExpr.getFirstChild().getFirstChild();
+
+ // We only have to worry about methods with an implicit 'this'
+ // param, or this doesn't happen.
+ if (calledFn.isGetElem()) {
+ return false;
+ } else if (calledFn.isGetProp() &&
+ calledFn.getLastChild().getString().startsWith("on")) {
+ return false;
+ }
+ }
+
+ return true;
+ }
+ return false;
+ }
+ }
+
+/* METHOD tryRemoveRedundantExit */
+private Node tryRemoveRedundantExit(Node n) {
+ Node exitExpr = n.getFirstChild();
+
+ Node follow = ControlFlowAnalysis.computeFollowNode(n);
+
+ // Skip pass all the finally blocks because both the fall through and return
+ // will also trigger all the finally blocks.
+ Node prefinallyFollows = follow;
+ follow = skipFinallyNodes(follow);
+ if (prefinallyFollows != follow) {
+ // There were finally clauses
+ if (!isPure(exitExpr)) {
+ // Can't replace the return
+ return n;
+ }
+ }
+
+ if (follow == null && (n.isThrow() || exitExpr != null)) {
+ // Can't complete remove a throw here or a return with a result.
+ return n;
+ }
+
+ // When follow is null, this mean the follow of a break target is the
+ // end of a function. This means a break is same as return.
+ if (follow == null || areMatchingExits(n, follow)) {
+ n.detachFromParent();
+ reportCodeChange();
+ return null;
+ }
+
+ return n;
+ }
+
+ /**
+ * @return Whether the expression does not produces and can not be affected
+ * by side-effects.
+ */
+ boolean isPure(Node n) {
+ return n == null
+ || (!NodeUtil.canBeSideEffected(n)
+ && !mayHaveSideEffects(n));
+ }
+
+ /**
+ * @return n or the node following any following finally nodes.
+ */
+ Node skipFinallyNodes(Node n) {
+ while (n != null && NodeUtil.isTryFinallyNode(n.getParent(), n)) {
+ n = ControlFlowAnalysis.computeFollowNode(n);
+ }
+ return n;
+ }
+
+ /**
+ * Check whether one exit can be replaced with another. Verify:
+ * 1) They are identical expressions
+ * 2) If an exception is possible that the statements, the original
+ * and the potential replacement are in the same exception handler.
+ */
+ boolean areMatchingExits(Node nodeThis, Node nodeThat) {
+ return nodeThis.isEquivalentTo(nodeThat)
+ && (!isExceptionPossible(nodeThis)
+ || getExceptionHandler(nodeThis) == getExceptionHandler(nodeThat));
+ }
+
+ boolean isExceptionPossible(Node n) {
+ // TODO(j
+...[truncated deterministically]...
+f (NodeUtil.isLiteralValue(cond, true)) {
+ return n;
+ }
+
+ Node thenBranch = cond.getNext();
+ Node elseBranch = thenBranch.getNext();
+
+ if (elseBranch == null) {
+ if (isFoldableExpressBlock(thenBranch)) {
+ Node expr = getBlockExpression(thenBranch);
+ if (!late && isPropertyAssignmentInExpression(expr)) {
+ // Keep opportunities for CollapseProperties such as
+ // a.longIdentifier || a.longIdentifier = ... -> var a = ...;
+ // until CollapseProperties has been run.
+ return n;
+ }
+
+ if (cond.isNot()) {
+ // if(!x)bar(); -> x||bar();
+ if (isLowerPrecedenceInExpression(cond, OR_PRECEDENCE) &&
+ isLowerPrecedenceInExpression(expr.getFirstChild(),
+ OR_PRECEDENCE)) {
+ // It's not okay to add two sets of parentheses.
+ return n;
+ }
+
+ Node or = IR.or(
+ cond.removeFirstChild(),
+ expr.removeFirstChild()).srcref(n);
+ Node newExpr = NodeUtil.newExpr(or);
+ parent.replaceChild(n, newExpr);
+ reportCodeChange();
+
+ return newExpr;
+ }

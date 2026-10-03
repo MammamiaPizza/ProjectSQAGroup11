@@ -1,0 +1,407 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 167  Version: Closure-167b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter, com.google.javascript.rhino.jstype.JSType
+Modified: com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter, com.google.javascript.rhino.jstype.JSType
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testIssue783, com.google.javascript.jscomp.TypeCheckTest::testMissingProperty20, com.google.javascript.rhino.jstype.JSTypeTest::testRestrictedTypeGivenToBoolean
+
+Bug/specification summary:
+Bug report: 783
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue783
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.jscomp.TypeCheckTest::testMissingProperty20
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.rhino.jstype.JSTypeTest::testRestrictedTypeGivenToBoolean
+ --> junit.framework.AssertionFailedError: Expected: ??
+Modified: com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter, com.google.javascript.rhino.jstype.JSType
+
+Prompt-01 test plan:
+TARGETS: RestrictByTrueInstanceOfResultVisitor.caseTopType/Unknown/Object/Union/Function,
+applyCommonRestriction
+TARGETS: RestrictByFalseInstanceOfResultVisitor.caseTopType/Unknown/Object/Union/Function,
+applyCommonRestriction
+ORACLES: TypeCheckTest expects TYPE_MISMATCH warning; JSType.toAnnotationString() matches narrowed
+type (not "??")
+CASES: union(Object|null) truthy → Object, falsy → null; union(Function|undefined) truthy → Function
+CASES: unknown→unknown; all→all; top→top; nested union(union(A,B)|C) flattens
+CASES: incompatible target (e.g., null instanceof Number) should not restrict type
+RISKS: need mocked FlowScope/TypePair or TypeCheck integration; annotation string format may be
+internal
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.type;
+public class SemanticReverseAbstractInterpreter
+@Override
+public TypePair apply(TypePair p) {
+private FlowScope caseIn(Node object, String propertyName, FlowScope blindScope) {
+private class RestrictByTrueInstanceOfResultVisitor
+protected JSType caseTopType(JSType type) {
+public JSType caseUnknownType() {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseUnionType(UnionType type) {
+public JSType caseFunctionType(FunctionType type) {
+private JSType applyCommonRestriction(JSType type) {
+private class RestrictByFalseInstanceOfResultVisitor
+
+/* HEADER */
+package com.google.javascript.jscomp.type;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import com.google.common.base.Function;
+import com.google.javascript.jscomp.CodingConvention;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSType.TypePair;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.StaticSlot;
+import com.google.javascript.rhino.jstype.UnionType;
+import com.google.javascript.rhino.jstype.Visitor;
+public class SemanticReverseAbstractInterpreter
+
+/* METHOD SemanticReverseAbstractInterpreter */
+public SemanticReverseAbstractInterpreter(CodingConvention convention,
+ JSTypeRegistry typeRegistry) {
+ super(convention, typeRegistry);
+ }
+
+/* METHOD getPreciserScopeKnowingConditionOutcome */
+@Override
+ public FlowScope getPreciserScopeKnowingConditionOutcome(Node condition,
+ FlowScope blindScope, boolean outcome) {
+ // Check for the typeof operator.
+ int operatorToken = condition.getType();
+ switch (operatorToken) {
+ case Token.EQ:
+ case Token.NE:
+ case Token.SHEQ:
+ case Token.SHNE:
+ case Token.CASE:
+ Node left;
+ Node right;
+ if (operatorToken == Token.CASE) {
+ left = condition.getParent().getFirstChild(); // the switch condition
+ right = condition.getFirstChild();
+ } else {
+ left = condition.getFirstChild();
+ right = condition.getLastChild();
+ }
+
+ Node typeOfNode = null;
+ Node stringNode = null;
+ if (left.isTypeOf() && right.isString()) {
+ typeOfNode = left;
+ stringNode = right;
+ } else if (right.isTypeOf() &&
+ left.isString()) {
+ typeOfNode = right;
+ stringNode = left;
+ }
+ if (typeOfNode != null && stringNode != null) {
+ Node operandNode = typeOfNode.getFirstChild();
+ JSType operandType = getTypeIfRefinable(operandNode, blindScope);
+ if (operandType != null) {
+ boolean resultEqualsValue = operatorToken == Token.EQ ||
+ operatorToken == Token.SHEQ || operatorToken == Token.CASE;
+ if (!outcome) {
+ resultEqualsValue = !resultEqualsValue;
+ }
+ return caseTypeOf(operandNode, operandType, stringNode.getString(),
+ resultEqualsValue, blindScope);
+ }
+ }
+ }
+ switch (operatorToken) {
+ case Token.AND:
+ if (outcome) {
+ return caseAndOrNotShortCircuiting(condition.getFirstChild(),
+ condition.getLastChild(), blindScope, true);
+ } else {
+ return caseAndOrMaybeShortCircuiting(condition.getFirstChild(),
+ condition.getLastChild(), blindScope, true);
+ }
+
+ case Token.OR:
+ if (!outcome) {
+ return caseAndOrNotShortCircuiting(condition.getFirstChild(),
+ condition.getLastChild(), blindScope, false);
+ } else {
+ return caseAndOrMaybeShortCircuiting(condition.getFirstChild(),
+ condition.getLastChild(), blindScope, false);
+ }
+
+ case Token.EQ:
+ if (outcome) {
+ return caseEquality(condition, blindScope, EQ);
+ } else {
+ return caseEquality(condition, blindScope, NE);
+ }
+
+ case Token.NE:
+ if (outcome) {
+ return caseEquality(condition, blindScope, NE);
+ } else {
+ return caseEquality(condition, blindScope, EQ);
+ }
+
+ case Token.SHEQ:
+ if (outcome) {
+ return caseEquality(condition, blindScope, SHEQ);
+ } else {
+ return caseEquality(condition, blindScope, SHNE);
+ }
+
+ case Token.SHNE:
+ if (outcome) {
+ return caseEquality(condition, blindScope, SHNE);
+ } else {
+ return caseEquality(condition, blindScope, SHEQ);
+ }
+
+ case Token.NAME:
+ case Token.GETPROP:
+ return caseNameOrGetProp(condition, blindScope, outcome);
+
+ case Token.ASSIGN:
+ return firstPreciserScopeKnowingConditionOutcome(
+ condition.getFirstChild(),
+ firstPreciserScopeKnowingConditionOutcome(
+ condition.getFirstChild().getNext(), blindScope, outcome),
+ outcome);
+
+ case Token.NOT:
+ return firstPreciserScopeKnowingConditionOutcome(
+ condition.getFirstChild(), blindScope, !outcome);
+
+ case Token.LE:
+ case Token.LT:
+ case Token.GE:
+ case Token.GT:
+ if (outcome) {
+ return caseEquality(condition, blindScope, INEQ);
+ }
+ break;
+
+ case Token.INSTANCEOF:
+ return caseInstanceOf(
+ condition.getFirstChild(), condition.getLastChild(), blindScope,
+ outcome);
+
+ case Token.IN:
+ if (outcome && condition.getFirstChild().isString()) {
+ return caseIn(condition.getLastChild(),
+ condition.getFirstChild().getString(), blindScope);
+ }
+ break;
+
+ case Token.CASE:
+ Node left =
+ condition.getParent().getFirstChild(); // the switch condition
+ Node right = condition.getFirstChild();
+ if (outcome) {
+ return caseEquality(left, right, blindScope, SHEQ);
+ } else {
+ return caseEquality(left, right, blindScope, SHNE);
+ }
+ }
+ return nextPreciserScopeKnowingConditionOutcome(
+ condition, blindScope, outcome);
+ }
+
+/* METHOD caseTopType */
+@Override
+ protected JSType caseTopType(JSType type) {
+ return applyCommonRestriction(type);
+ }
+
+===== com.google.javascript.rhino.jstype.JSType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public abstract class JSType implements Serializable {
+"Unknown class name";
+static final Comparator<JSType> ALPHA = new Comparator<JSType>() {
+@Override
+public int compare(JSType t1, JSType t2) {
+public static final int ENUMDECL = 1;
+public static final int NOT_ENUMDECL = 0;
+public JSDocInfo getJSDocInfo() {
+public String getDisplayName() {
+public boolean hasDisplayName() {
+public boolean isNoType() {
+public boolean isNoResolvedType() {
+public boolean isNoObjectType() {
+public final boolean isEmptyType() {
+public boolean isNumberObjectType() {
+public boolean isNumberValueType() {
+public boolean isFunctionPrototypeType() {
+public boolean isStringObjectType() {
+public boolean isStringValueType() {
+public final boolean isString() {
+public final boolean isNumber() {
+public boolean isArrayType() {
+public boolean isBooleanObjectType() {
+public boolean isBooleanValueType() {
+public boolean isRegexpType() {
+public boolean isDateType() {
+public boolean isNullType() {
+public boolean isVoidType() {
+public boolean isAllType() {
+public boolean isUnknownType() {
+public boolean isCheckedUnknownType() {
+public final boolean isUnionType() {
+public UnionType toMaybeUnionType() {
+public final boolean isGlobalThisType() {
+public final boolean isFunctionType() {
+public FunctionType toMayb
+...[truncated deterministically]...
+porter t, StaticScope<JSType> scope) {
+public final JSType resolve(ErrorReporter t, StaticScope<JSType> scope) {
+abstract JSType resolveInternal(ErrorReporter t, StaticScope<JSType> scope);
+public final boolean isResolved() {
+public final void clearResolved() {
+public boolean setValidator(Predicate<JSType> validator) {
+public static class TypePair {
+public final JSType typeA;
+public final JSType typeB;
+public TypePair(JSType typeA, JSType typeB) {
+public String toString() {
+public String toDebugHashCodeString() {
+public final String toAnnotationString() {
+abstract String toStringHelper(boolean forAnnotations);
+public void matchConstraint(JSType constraint) {}
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.TernaryValue.UNKNOWN;
+import com.google.common.base.Predicate;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.jstype.JSTypeRegistry.ResolveMode;
+import java.io.Serializable;
+import java.util.Comparator;
+
+/* METHOD JSType */
+JSType(JSTypeRegistry registry) {
+ this.registry = registry;
+ }
+
+/* METHOD forceResolve */
+public final JSType forceResolve(ErrorReporter t, StaticScope<JSType> scope) {
+ ResolveMode oldResolveMode = registry.getResolveMode();
+ registry.setResolveMode(ResolveMode.IMMEDIATE);
+ JSType result = resolve(t, scope);
+ registry.setResolveMode(oldResolveMode);
+ return result;
+ }
+
+/* METHOD resolve */
+public final JSType resolve(ErrorReporter t, StaticScope<JSType> scope) {
+ if (resolved) {
+ // TODO(nicksantos): Check to see if resolve() looped back on itself.
+ // Preconditions.checkNotNull(resolveResult);
+ if (resolveResult == null) {
+ return registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+ }
+ return resolveResult;
+ }
+ resolved = true;
+ resolveResult = resolveInternal(t, scope);
+ resolveResult.setResolvedTypeInternal(resolveResult);
+ return resolveResult;
+ }
+
+/* METHOD compare */
+@Override
+ public int compare(JSType t1, JSType t2) {
+ return t1.toString().compareTo(t2.toString());
+ }
+
+/* METHOD isNumber */
+public final boolean isNumber() {
+ return this.isSubtype(
+ getNativeType(JSTypeNative.NUMBER_VALUE_OR_OBJECT_TYPE));
+ }
+
+/* METHOD isEquivalentTo */
+public boolean isEquivalentTo(JSType jsType) {
+ if (jsType instanceof ProxyObjectType) {
+ return jsType.isEquivalentTo(this);
+ }
+ // Relies on the fact that for the base {@link JSType}, only one
+ // instance of each sub-type will ever be created in a given registry, so
+ // there is no need to verify members. If the object pointers are not
+ // identical, then t
+...[truncated deterministically]...
+allowEqualityWith */
+public final boolean canTestForShallowEqualityWith(JSType that) {
+ if (isEmptyType() || that.isEmptyType()) {
+ return isSubtype(that) || that.isSubtype(this);
+ }
+
+ JSType inf = getGreatestSubtype(that);
+ return !inf.isEmptyType() ||
+ // Our getGreatestSubtype relation on functions is pretty bad.
+ // Let's just say it's always ok to compare two functions.
+ // Once the TODO in FunctionType is fixed, we should be able to
+ // remove this.
+ inf == registry.getNativeType(JSTypeNative.LEAST_FUNCTION_TYPE);
+ }
+
+/* METHOD getRestrictedTypeGivenToBooleanOutcome */
+public JSType getRestrictedTypeGivenToBooleanOutcome(boolean outcome) {
+
+ BooleanLiteralSet literals = getPossibleToBooleanOutcomes();
+ if (literals.contains(outcome)) {
+ return this;
+ } else {
+ return getNativeType(JSTypeNative.NO_TYPE);
+ }
+ }
+
+/* METHOD getTypesUnderShallowEquality */
+public TypePair getTypesUnderShallowEquality(JSType that) {
+ JSType commonType = getGreatestSubtype(that);
+ return new TypePair(commonType, commonType);
+ }
+
+/* METHOD differsFrom */
+public boolean differsFrom(JSType that) {
+ // if there are no unknowns, just use normal equality.
+ if (!this.isUnknownType() && !that.isUnknownType()) {
+ return !this.isEquivalentTo(that);
+ }
+ // otherwise, they're different iff one is unknown and the other is not.
+ return this.isUnknownType() ^ that.isUnknownType();
+ }
+
+ /**
+ * A generic implementation meant to be used as a helper for common subtyping
+ * cases.
+ */
+ static boolean isSubtypeHelper(JSType thisType, JSType thatType) {
+ // unknown
+ if (thatType.isUnknownType()) {
+ return true;
+ }
+ // equality
+ if (thisType.isEquivalentTo(thatType)) {
+ r
+...[truncated deterministically]...
+ype so that it matches the specified type.
+ *
+ * This is useful for reverse type-inference, where we want to
+ * infer that an object literal matches its constraint (much like
+ * how the java compiler does reverse-inference to figure out generics).
+ */
+ public void matchConstraint(JSType constraint) {}
+}

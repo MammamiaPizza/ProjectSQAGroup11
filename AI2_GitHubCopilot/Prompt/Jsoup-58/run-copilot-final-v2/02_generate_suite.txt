@@ -1,0 +1,355 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 58  Version: Jsoup-58b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.Jsoup, org.jsoup.parser.Parser, org.jsoup.safety.Cleaner
+Modified: org.jsoup.Jsoup, org.jsoup.parser.Parser, org.jsoup.safety.Cleaner
+Triggers: org.jsoup.safety.CleanerTest::testIsValidBodyHtml, org.jsoup.safety.CleanerTest::testIsValidDocument
+
+Bug/specification summary:
+Bug report: 245
+Trigger failures:
+- org.jsoup.safety.CleanerTest::testIsValidBodyHtml
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.safety.CleanerTest::testIsValidDocument
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.Jsoup, org.jsoup.parser.Parser, org.jsoup.safety.Cleaner
+
+Prompt-01 test plan:
+TARGETS: Jsoup.isValid(String,Whitelist),Cleaner.isValid(Document),Cleaner.clean(Document)
+ORACLES: clean output equals input → isValid true; else false. Whitelist controls allowed
+tags/attrs.
+CASES: valid body fragment (no disallowed tags), invalid (has <b> or <script> per whitelist),
+empty/whitespace-only input, document with <head> + <body>, only text nodes.
+RISKS: Only testIsValidBodyHtml and testIsValidDocument fail; related
+Jsoup.isValid(String,Whitelist) may also be affected. The bug likely in Cleaner.isValid returning
+wrong boolean.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.Jsoup (java) =====
+/* API SIGNATURES */
+package org.jsoup;
+@author Jonathan Hedley */
+public class Jsoup {
+private Jsoup() {}
+@param html HTML to parse
+@param baseUri The URL where the HTML was retrieved from. Used to resolve relative URLs to absolute URLs, that occur
+@return sane HTML
+public static Document parse(String html, String baseUri) {
+@param parser alternate {@link Parser#xmlParser() parser} to use.
+public static Document parse(String html, String baseUri, Parser parser) {
+@param html HTML to parse
+@see #parse(String, String)
+public static Document parse(String html) {
+public static Connection connect(String url) {
+@param in file to load HTML from
+@param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
+@param baseUri The URL where the HTML was retrieved from, to resolve relative links against.
+@throws IOException if the file could
+...[truncated deterministically]...
+blic static String clean(String bodyHtml, Whitelist whitelist) {
+public static String clean(String bodyHtml, String baseUri, Whitelist whitelist, Document.OutputSettings outputSettings) {
+@param bodyHtml HTML to test
+@param whitelist whitelist to test against
+@return true if no tags or attributes were removed; false otherwise
+@see #clean(String, org.jsoup.safety.Whitelist)
+public static boolean isValid(String bodyHtml, Whitelist whitelist) {
+
+/* HEADER */
+package org.jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
+import org.jsoup.safety.Cleaner;
+import org.jsoup.safety.Whitelist;
+import org.jsoup.helper.DataUtil;
+import org.jsoup.helper.HttpConnection;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+public class Jsoup {
+
+/* METHOD Jsoup */
+private Jsoup() {}
+
+/* METHOD clean */
+public static String clean(String bodyHtml, String baseUri, Whitelist whitelist) {
+ Document dirty = parseBodyFragment(bodyHtml, baseUri);
+ Cleaner cleaner = new Cleaner(whitelist);
+ Document clean = cleaner.clean(dirty);
+ return clean.body().html();
+ }
+
+/* METHOD clean */
+public static String clean(String bodyHtml, String baseUri, Whitelist whitelist, Document.OutputSettings outputSettings) {
+ Document dirty = parseBodyFragment(bodyHtml, baseUri);
+ Cleaner cleaner = new Cleaner(whitelist);
+ Document clean = cleaner.clean(dirty);
+ clean.outputSettings(outputSettings);
+ return clean.body().html();
+ }
+
+/* METHOD parse */
+public static Document parse(String html, String baseUri) {
+ return Parser.parse(html, baseUri);
+ }
+
+/* METHOD parse */
+public static Document parse(String html, String baseUri, Parser parser) {
+ return parser.parseInput(html, baseUri);
+ }
+
+/* METHOD parse */
+public static Document parse(File in, String charsetName, String baseUri) throws IOException {
+ return DataUtil.load(in, charsetName, baseUri);
+ }
+
+/* METHOD parse */
+public static Document parse(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+ return DataUtil.load(in, charsetName, baseUri, parser);
+ }
+
+/* METHOD parseBodyFragment */
+public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+ return Parser.parseBodyFragment(bodyHtml, baseUri);
+ }
+
+/* METHOD isValid */
+public static boolean isValid(String bodyHtml, Whitelist whitelist) {
+ return new Cleaner(whitelist).isValid(parseBodyFragment(bodyHtml, ""));
+ }
+
+/* METHOD parse */
+public static Document parse(String html) {
+ return Parser.parse(html, "");
+ }
+
+/* METHOD connect */
+public static Connection connect(String url) {
+ return HttpConnection.connect(url);
+ }
+
+===== org.jsoup.parser.Parser (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class Parser {
+public Parser(TreeBuilder treeBuilder) {
+public Document parseInput(String html, String baseUri) {
+public TreeBuilder getTreeBuilder() {
+public Parser setTreeBuilder(TreeBuilder treeBuilder) {
+public boolean isTrackErrors() {
+public Parser setTrackErrors(int maxErrors) {
+public List<ParseError> getErrors() {
+public Parser settings(ParseSettings settings) {
+public ParseSettings settings() {
+public static Document parse(String html, String baseUri) {
+public static List<Node> parseFragment(String fragmentHtml, Element context, String baseUri) {
+public static List<Node> parseXmlFragment(String fragmentXml, String baseUri) {
+public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+public static String unescapeEntities(String string, boolean inAttribute) {
+public static Document parseBodyFragmentRelaxed(String bodyHtml, String baseUri) {
+public static Parser htmlParser() {
+public static Parser xmlParser() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import java.util.List;
+public class Parser {
+
+/* METHOD Parser */
+public Parser(TreeBuilder treeBuilder) {
+ this.treeBuilder = treeBuilder;
+ settings = treeBuilder.defaultSettings();
+ }
+
+/* METHOD parseXmlFragment */
+public static List<Node> parseXmlFragment(String fragmentXml, String baseUri) {
+ XmlTreeBuilder treeBuilder = new XmlTreeBuilder();
+ return treeBuilder.parseFragment(fragmentXml, baseUri, ParseErrorList.noTracking(), treeBuilder.defaultSettings());
+ }
+
+/* METHOD parseInput */
+public Document parseInput(String html, String baseUri) {
+ errors = isTrackErrors() ? ParseErrorList.tracking(maxErrors) : ParseErrorList.noTracking();
+ return treeBuilder.parse(html, baseUri, errors, settings);
+ }
+
+/* METHOD parse */
+public static Document parse(String html, String baseUri) {
+ TreeBuilder treeBuilder = new HtmlTreeBuilder();
+ return treeBuilder.parse(html, baseUri, ParseErrorList.noTracking(), treeBuilder.defaultSettings());
+ }
+
+/* METHOD parseFragment */
+public static List<Node> parseFragment(String fragmentHtml, Element context, String baseUri) {
+ HtmlTreeBuilder treeBuilder = new HtmlTreeBuilder();
+ return treeBuilder.parseFragment(fragmentHtml, context, baseUri, ParseErrorList.noTracking(), treeBuilder.defaultSettings());
+ }
+
+/* METHOD parseBodyFragment */
+public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+ Document doc = Document.createShell(baseUri);
+ Element body = doc.body();
+ List<Node> nodeList = parseFragment(bodyHtml, body, baseUri);
+ Node[] nodes = nodeList.toArray(new Node[nodeList.size()]); // the node list gets modified when re-parented
+ for (int i = nodes.length - 1; i > 0; i--) {
+ nodes[i].remove();
+ }
+ for (Node node : nodes) {
+ body.appendChild(node);
+ }
+ return doc;
+ }
+
+/* METHOD xmlParser */
+public static Parser xmlParser() {
+ return new Parser(new XmlTreeBuilder());
+ }
+
+/* METHOD setTreeBuilder */
+public Parser setTreeBuilder(TreeBuilder treeBuilder) {
+ this.treeBuilder = treeBuilder;
+ return this;
+ }
+
+/* METHOD htmlParser */
+public static Parser htmlParser() {
+ return new Parser(new HtmlTreeBuilder());
+ }
+
+/* METHOD getTreeBuilder */
+public TreeBuilder getTreeBuilder() {
+ return treeBuilder;
+ }
+
+/* METHOD setTrackErrors */
+public Parser setTrackErrors(int maxErrors) {
+ this.maxErrors = maxErrors;
+ return this;
+ }
+
+/* METHOD getErrors */
+public List<ParseError> getErrors() {
+ return errors;
+ }
+
+/* METHOD settings */
+public Parser settings(ParseSettings settings) {
+ this.settings = settings;
+ return this;
+ }
+
+===== org.jsoup.safety.Cleaner (java) =====
+/* API SIGNATURES */
+package org.jsoup.safety;
+public class Cleaner {
+@param whitelist white-list to clean with
+public Cleaner(Whitelist whitelist) {
+@param dirtyDocument Untrusted base document to clean.
+@return cleaned document.
+public Document clean(Document dirtyDocument) {
+@param dirtyDocument document to test
+@return true if no tags or attributes need to be removed; false if they do
+public boolean isValid(Document dirtyDocument) {
+private final class CleaningVisitor implements NodeVisitor {
+private CleaningVisitor(Element root, Element destination) {
+public void head(Node source, int depth) {
+public void tail(Node source, int depth) {
+private int copySafeNodes(Element source, Element dest) {
+private ElementMeta createSafeElement(Element sourceEl) {
+private static class ElementMeta {
+
+/* HEADER */
+package org.jsoup.safety;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.parser.ParseErrorList;
+import org.jsoup.parser.Parser;
+import org.jsoup.parser.Tag;
+import org.jsoup.select.NodeTraversor;
+import org.jsoup.select.NodeVisitor;
+public class Cleaner {
+
+/* METHOD Cleaner */
+public Cleaner(Whitelist whitelist) {
+ Validate.notNull(whitelist);
+ this.whitelist = whitelist;
+ }
+
+/* METHOD clean */
+public Document clean(Document dirtyDocument) {
+ Validate.notNull(dirtyDocument);
+
+ Document clean = Document.createShell(dirtyDocument.baseUri());
+ if (dirtyDocument.body() != null) // frameset documents won't have a body. the clean doc will have empty body.
+ copySafeNodes(dirtyDocument.body(), clean.body());
+
+ return clean;
+ }
+
+ /**
+ Determines if the input document <b>body</b>is valid, against the whitelist. It is considered valid if all the tags and attributes
+ in the input HTML are allowed by the whitelist, and that there is no content in the <code>head</code>.
+ <p>
+ This method can be used as a validator for user input. An invalid document will still be cleaned successfully
+ using the {@link #clean(Document)} document. If using as a validator, it is recommended to still clean the document
+ to ensure enforced attributes are set correctly, and that the output is tidied.
+ </p>
+ @param dirtyDocument document to test
+ @return true if no tags or attributes need to be removed; false if they do
+ */
+ public boolean isValid(Document dirtyDocument) {
+ Validate.notNull(dirtyDocument);
+
+ Document clean = Document.createShell(dirtyDocument.baseUri());
+ int numDiscarded = copySafeNodes(dirtyDocument.body(), cle
+...[truncated deterministically]...
+input and copies trusted nodes (tags, attributes, text) into the destination.
+ */
+ private final class CleaningVisitor implements NodeVisitor {
+ private int numDiscarded = 0;
+ private final Element root;
+ private Element destination; // current element to append nodes to
+
+ private CleaningVisitor(Element root, Element destination) {
+ this.root = root;
+ this.destination = destination;
+ }
+
+ public void head(Node source, int depth) {
+ i
+...[truncated deterministically]...
+fe attrs
+ ElementMeta meta = createSafeElement(sourceEl);
+ Element destChild = meta.el;
+ destination.appendChild(destChild);
+
+ numDiscarded += meta.numAttribsDiscarded;
+ destination = destChild;
+ } else if (source != root) { // not a safe tag, so don't add. don't count root against discarded.
+ numDiscarded++;
+ }
+ } else if (source instanceof TextNode) {
+ TextNode sourceText = (TextNode) source;
+ TextNode destText = new TextNode(sourceText.getWholeText(), source.baseUri());
+ destination.appendChild(destText);
+ } else if (source instanceof DataNode && whitelist.isSafeTag(source.parent().nodeName())) {
+ DataNode sourceData = (DataNode) source;
+ DataNode destData = new DataNode(sourceData.getWholeData(), source.baseUri());
+ destination.appendChild(destData);
+ } else { // else, we don't care about comments, xml proc instructions, etc
+ numDiscarded++;
+ }

@@ -1,0 +1,327 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 57  Version: JacksonDatabind-57b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.ObjectReader
+Modified: com.fasterxml.jackson.databind.ObjectReader
+Triggers: com.fasterxml.jackson.databind.seq.ReadValuesTest::testRootBeans
+
+Bug/specification summary:
+Bug report: 1362
+Trigger failures:
+- com.fasterxml.jackson.databind.seq.ReadValuesTest::testRootBeans
+ --> java.io.CharConversionException: Invalid UTF-32 character 0x2261223a(above 10ffff) at char #1, byte #7)
+Modified: com.fasterxml.jackson.databind.ObjectReader
+
+Prompt-01 test plan:
+TARGETS: ObjectReader._initForMultiRead, _bindAndReadValues, readValues(InputStream),
+readValues(byte[])
+ORACLES: readValues must not throw CharConversionException for valid root-bean sequences
+ORACLES: MappingIterator yields correct number and content of deserialized root beans
+CASES: Empty input; single root; multiple root values separated by whitespace; root name wrapping
+on/off
+CASES: Valid surrogate pair (0xD800 0xDC00); lone high/low surrogate; code point exactly U+10FFFF;
+U+10FFFE
+CASES: Multi-byte BOM prefix; large buffer testing boundary reads; malformed byte sequence producing
+0x2261223a
+RISKS: UTF-32 decoding may live in Jackson Core, not ObjectReader – only limited fix possible in
+databind
+RISKS: No access to original test fixture; must reconstruct trigger from error message char #1, byte
+#7
+RISKS: Behavior may vary with parser features (JsonParser.Feature) or factory settings, not fully
+covered here
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.ObjectReader (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public class ObjectReader
+private final static JavaType JSON_NODE_TYPE = SimpleType.constructUnsafe(JsonNode.class);
+protected final DeserializationConfig _config;
+protected final DefaultDeserializationContext _context;
+protected final JsonFactory _parserFactory;
+protected final boolean _unwrapRoot;
+protected final JavaType _valueType;
+protected final JsonDeserializer<Object> _rootDeserializer;
+protected final Object _valueToUpdate;
+protected final FormatSchema _schema;
+protected final InjectableValues _injectableValues;
+protected final DataFormatReaders _dataFormatReaders;
+final protected ConcurrentHashMap<JavaType, JsonDeserializer<Object>> _rootDeserializers;
+protected ObjectReader(ObjectMapper mapper, DeserializationConfig config) {
+protected ObjectReader(ObjectReader base, DeserializationConfig config)
+protected ObjectReader(ObjectReader base, JsonFactory f)
+protected ObjectReader(ObjectReader base, TokenFilter filter) {
+@Override
+public Version version() {
+protected ObjectReader _new(ObjectReader base, JsonFactory f) {
+protected ObjectReader _new(ObjectReader base, DeserializationConfig config) {
+protected JsonToken _initForReading(JsonParser p) throws IOException
+protected void _initForMultiRead(JsonParser p) throws IOException {
+public ObjectReader with(DeserializationFeature feature) {
+public ObjectReader withFeatures(DeserializationFeature... features) {
+public ObjectReader without(DeserializationFeature feature) {
+public ObjectReader withoutFeatures(DeserializationFeature... features) {
+public ObjectReader with(JsonParser.Feature feature) {
+public ObjectReader withFeatures(JsonParser.Feature... features) {
+public ObjectReader without(JsonParser.Feature feature) {
+public ObjectReader withoutFeatures(JsonParser.Feature... features) {
+public ObjectReader with(FormatFeature feature) {
+public ObjectReader withFeatures(FormatFeature... features) {
+public ObjectReader without(FormatFeature feature) {
+public ObjectReader withoutFeatures(FormatFeature... features) {
+public ObjectReader with(DeserializationConfig config) {
+public ObjectReader with(InjectableValues injectableValues)
+public ObjectReader with(JsonNodeFactory f) {
+public ObjectReader with(JsonFactory f) {
+public ObjectReader withRootName(String rootName) {
+public ObjectReader withRootName(PropertyName rootName) {
+public ObjectReader withoutRootName() {
+public ObjectReader with(FormatSchema schema)
+public ObjectReader forType(JavaType valueType)
+public ObjectReader forType(Class<?> valueType) {
+public ObjectReader forType(TypeReference<?> valueTypeRef) {
+@Deprecated
+public ObjectReader withType(JavaType valueType) {
+...[truncated deterministically]...
+Node _bindAsTree(JsonParser p) throws IOException
+protected <T> MappingIterator<T> _bindAndReadValues(JsonParser p) throws IOException
+protected Object _detectBindAndClose(byte[] src, int offset, int length) throws IOException
+protected Object _detectBindAndClose(DataFormatReaders.Match match, boolean forceClosing)
+protected <T> MappingIterator<T> _detectBindAndReadValues(DataFormatReaders.Match match, boolean forceClosing)
+protected JsonNode _detectBindAndCloseAsTree(InputStream in) throws IOException
+protected void _reportUnkownFormat(DataFormatReaders detector, DataFormatReaders.Match match) throws JsonProcessingException
+protected void _verifySchemaType(FormatSchema schema)
+protected DefaultDeserializationContext createDeserializationContext(JsonParser p) {
+protected void _reportUndetectableSource(Object src) throws JsonProcessingException
+protected InputStream _inputStream(URL src) throws IOException {
+protected InputStream _inputStream(File f) throws IOException {
+protected JsonDeserializer<Object> _findRootDeserializer(DeserializationContext ctxt)
+protected JsonDeserializer<Object> _findTreeDeserializer(DeserializationContext ctxt)
+protected JsonDeserializer<Object> _prefetchRootDeserializer(JavaType valueType)
+public ObjectReader at(final String value) {
+public ObjectReader at(final JsonPointer pointer) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.io.*;
+import java.net.URL;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.JsonPointerBasedFilter;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.core.type.ResolvedType;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.cfg.ContextAttributes;
+import com.fasterxml.jackson.databind.deser.DataFormatReaders;
+import com.fasterxml.jackson.databind.deser.DefaultDeserializationContext;
+import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.TreeTraversingParser;
+import com.fasterxml.jackson.databind.type.SimpleType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+public class ObjectReader
+
+/* METHOD ObjectReader */
+protected ObjectReader(ObjectReader base, DeserializationConfig config,
+ JavaType valueType, JsonDeserializer<Object> rootDeser, Object valueToUpdate,
+ FormatSchema schema, InjectableValues injectableValues,
+ DataFormatReaders dataFormatReaders)
+ {
+ _config = config;
+ _context = base._context;
+
+ _rootDeserializers = base._rootDeserializers;
+ _parserFactory = base._parserFactory;
+
+ _valueType = valueType;
+ _rootDeserializer = rootDeser;
+ _valueToUpdate = valueToUpdate;
+ if (valueToUpdate != null && valueType.isArrayType()) {
+ throw new IllegalArgumentException("Can not update an array value");
+ }
+ _schema = schema;
+ _injectableValues = injectableValues;
+ _unwrapRoot = config.useRootWrapping();
+ _dataFormatReaders = dataFormatReaders;
+ _filter = base._filter;
+ }
+
+/* METHOD ObjectReader */
+protected ObjectReader(ObjectReader base, DeserializationConfig config)
+ {
+ _config = config;
+ _context = base._context;
+
+ _rootDeserializers = base._rootDeserializers;
+ _parserFactory = base._parserFactory;
+
+ _valueType = base._valueType;
+ _rootDeserializer = base._rootDeserializer;
+ _valueToUpdate = base._valueToUpdate;
+ _schema = base._schema;
+ _injectableValues = base._injectableValues;
+ _unwrapRoot = config.useRootWrapping();
+ _dataFormatReaders = base._dataFormatReaders;
+ _filter = base._filter;
+ }
+
+/* METHOD ObjectReader */
+protected ObjectReader(ObjectReader base, JsonFactory f)
+ {
+ // may need to override ordering, based on data format capabilities
+ _config = base._config
+ .with(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, f.requiresPropertyOrdering());
+ _context = base._context;
+
+ _rootDeserializers = base._rootDeserializers;
+ _parserFactory = f;
+
+ _valueType = base._valueType;
+ _rootDeserializer = base._rootDeserializer;
+ _valueToUpdate = base._valueToUpdate;
+ _schema = base._schema;
+ _injectableValues = base._injectableValues;
+ _unwrapRoot = base._unwrapRoot;
+ _dataFormatReaders = base._dataFormatReaders;
+ _filter = base._filter;
+ }
+
+/* METHOD ObjectReader */
+protected ObjectReader(ObjectReader base, TokenFilter filter) {
+ _config = base._config;
+ _context = base._context;
+ _rootDeserializers = base._rootDeserializers;
+ _parserFactory = base._parserFactory;
+ _valueType = base._valueType;
+ _rootDeserializer = base._rootDeserializer;
+ _valueToUpdate = base._valueToUpdate;
+ _schema = base._schema;
+ _injectableValues = base._injectableValues;
+ _unwrapRoot = base._unwrapRoot;
+ _dataFormatReaders = base._dataFormatReaders;
+ _filter = filter;
+ }
+
+/* METHOD ObjectReader */
+protected ObjectReader(ObjectMapper mapper, DeserializationConfig config,
+ JavaType valueType, Object valueToUpdate,
+ FormatSchema schema, InjectableValues injectableValues)
+ {
+ _config = config;
+ _context = mapper._deserializationContext;
+ _rootDeserializers = mapper._rootDeserializers;
+ _parserFactory = mapper._jsonFactory;
+ _valueType = valueType;
+ _valueToUpdate = valueToUpdate;
+ if (valueToUpdate != null && valueType.isArrayType()) {
+ throw new IllegalArgumentException("Can not update an array value");
+ }
+ _schema = schema;
+ _injectableValues = injectableValues;
+ _unwrapRoot = config.useRootWrapping();
+
+ _rootDeserializer = _prefetchRootDeserializer(valueType);
+ _dataFormatReaders = null; 
+ _filter = null;
+ }
+
+/* METHOD ObjectReader */
+protected ObjectReader(ObjectMapper mapper, DeserializationConfig config) {
+ this(mapper, config, null, null, null, null);
+ }
+
+/* METHOD version */
+@Override
+ public Version version() {
+ return com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION;
+ }
+
+/* METHOD _reportUndetectableSource */
+protected void _reportUndetectableSource(Object src) throws JsonProcessingException
+ {
+ // 17-Aug-2015, tatu: Unfortunately, no parser/generator available so:
+ throw new JsonParseException(null, "Can not use source of type "
+ +src.getClass().getName()+" with format auto-detection: must be byte- not char-based");
+ }
+
+/* METHOD _new */
+protected ObjectReader _new(ObjectReader base, DeserializationConfig config,
+ JavaType valueType, JsonDeserializer<Object> rootDeser, Object valueToUpdate,
+ FormatSchema schema, InjectableValues injectableValues,
+ DataFormatReaders dataFormatReaders) {
+ return new ObjectReader(base, config, valueType, rootDeser, valueToUpdate,
+ schema, injectableValues, dataFormatReaders);
+ }
+
+/* METHOD readValues */
+@SuppressWarnings("resource")
+ public <T> MappingIterator<T> readValues(Reader src)
+ throws IOException, JsonProcessingException
+ {
+ if (_dataFormatReaders != null) {
+ _reportUndetectableSource(src);
+ }
+ JsonParser p = _considerFilter(_parserFactory.createParser(src), true);
+ _initForMultiRead(p);
+ p.nextToken();
+ DeserializationContext ctxt = createDeserializationContext(p);
+ return _newIterator(p, ctxt, _findRootDeserializer(ctxt), true);
+ }
+
+/* METHOD readValues */
+@SuppressWarnings("resource")
+ public <T> MappingIterator<T> readValues(String json)
+ throws IOException, JsonProcessingException
+ {
+ if (_dataFormatReaders != null) {
+ _reportUndetectableSource(json);
+ }
+ JsonParser p = _considerFilter(_parserFactory.createParser(json), true);
+ _initForMultiRead(p);
+ p.nextToken();
+ DeserializationContext ctxt = createDeserializationContext(p);
+ return _newIterator(p, ctxt, _findRootDeserializer(ctxt), true);
+ }
+
+/* METHOD _detectBindAndClose */
+@SuppressWarnings("resource")
+ protected Object _detectBindAndClose(DataFormatReaders.Match match, boolean forceClosing)
+ throws IOException
+ {
+ if (!match.hasMatch()) {
+ _reportUnkownFormat(_dataFormatReaders, match);
+ }
+ JsonParser p = match.createParserWithMatch();
+ // One more thing: we Own the input stream now; and while it's 
+ // not super clean way to do it, we must ensure closure so:
+ if (forceClosing) {
+ p.enable(JsonParser.Feature.AUTO_CLOSE_SOURCE);
+ }
+ // important: use matching ObjectReader (may not be 'this')
+ return match.getReader()._bindAndClose(p);
+ }
+
+ @SuppressWarnings("resource")
+ protected <T> MappingIterator<T> _detectBindAndReadValues(DataFormatReaders.Match match, boolean forceClosing)
+ throws IOException, JsonProcessingException
+ {
+ if (!match.hasMatch()) {
+ _reportUnkownFormat(_dataFormatReaders, match);
+ }
+ JsonParser p = match.createParserWithMatch();
+ // One more thing: we Own the input stream now; and while it's 
+ // not super clean way to do it, we must ensure closure so:
+ if (forceClosing) {
+ p.enable(JsonParser.Feature.AUTO_CLOSE_SOURCE);
+ }
+ // important: use matching ObjectReader (may not be 'this')
+ return match.getReader()._bindAndReadValues(p);
+ }

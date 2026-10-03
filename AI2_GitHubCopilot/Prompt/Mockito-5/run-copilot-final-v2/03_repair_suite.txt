@@ -1,0 +1,205 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 5  Version: Mockito-5b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 152
+Trigger failures:
+- org.mockitointegration.NoJUnitDependenciesTest::pure_mockito_should_not_depend_JUnit
+ --> junit.framework.AssertionFailedError: 'org.mockito.internal.verification.VerificationOverTimeImpl' has some dependency to JUnit
+Modified: org.mockito.internal.verification.VerificationOverTimeImpl
+
+Available API/signatures:
+[org.mockito.internal.verification.VerificationOverTimeImpl | java]
+package org.mockito.internal.verification;
+public class VerificationOverTimeImpl implements VerificationMode {
+public VerificationOverTimeImpl(long pollingPeriodMillis, long durationMillis, VerificationMode delegate, boolean returnOnSuccess) {
+public VerificationOverTimeImpl(long pollingPeriodMillis, long durationMillis, VerificationMode delegate, boolean returnOnSuccess, Timer timer) {
+public void verify(VerificationData data) {
+private AssertionError handleVerifyException(AssertionError e) {
+protected boolean canRecoverFromFailure(VerificationMode verificationMode) {
+private void sleep(long sleep) {
+public long getPollingPeriod() {
+public long getDuration() {
+public VerificationMode getDelegate() {
+
+Generated JUnit Test:
+package org.mockito.internal.verification;
+
+ import static org.junit.Assert.*;
+ import static org.mockito.Mockito.*;
+
+ import java.util.Arrays;
+
+ import org.junit.Test;
+ import org.junit.runner.RunWith;
+ import org.mockito.Mock;
+ import org.mockito.exceptions.base.MockitoAssertionError;
+ import org.mockito.exceptions.verification.junit.ArgumentsAreDifferent;
+ import org.mockito.internal.util.Timer;
+ import org.mockito.internal.verification.api.VerificationData;
+ import org.mockito.invocation.Invocation;
+ import org.mockito.runners.MockitoJUnitRunner;
+ import org.mockito.verification.VerificationMode;
+
+ /**
+  * Tests for {@link VerificationOverTimeImpl} covering polling retry logic,
+  * immediate and delayed success, exception propagation, recoverable vs
+  * unrecoverable delegates, and constructor variants.
+  */
+ @RunWith(MockitoJUnitRunner.class)
+ public class VerificationOverTimeImplTest {
+
+     @Mock
+     private Timer timer;
+
+     @Mock
+     private VerificationData data;
+
+     @Mock
+     private VerificationMode delegate;
+
+     @Mock
+     private Invocation invocation;
+
+     @Test
+     public void whenDelegatePassesAndReturnOnSuccessTrue_thenReturnsImmediately() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(10, 100, delegate, true,
+timer);
+         when(timer.isCounting()).thenReturn(true);
+         doNothing().when(delegate).verify(data);
+
+         impl.verify(data);
+
+         verify(timer).start();
+         verify(delegate).verify(data);
+     }
+
+     @Test
+     public void whenDelegatePassesAndReturnOnSuccessFalse_thenRetriesUntilTimerStops() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(10, 100, delegate, false,
+timer);
+         doNothing().when(delegate).verify(data);
+         when(timer.isCounting()).thenReturn(true, true, false);
+
+         impl.verify(data);
+
+         verify(timer).start();
+         verify(delegate, times(2)).verify(data);
+     }
+
+     @Test
+     public void whenDelegateFailsThenPassesWithReturnOnSuccessTrue_thenRetriesAndReturns() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(1, 100, delegate, true,
+timer);
+         MockitoAssertionError firstError = new MockitoAssertionError("first failure");
+         doThrow(firstError).doNothing().when(delegate).verify(data);
+         when(timer.isCounting()).thenReturn(true, true);
+
+         impl.verify(data);
+
+         verify(delegate, times(2)).verify(data);
+     }
+
+     @Test
+     public void whenDelegateAlwaysFails_thenThrowsLastErrorAfterTimeout() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(1, 100, delegate, false,
+timer);
+         MockitoAssertionError lastError = new MockitoAssertionError("final error");
+         doThrow(lastError).when(delegate).verify(data);
+         when(timer.isCounting()).thenReturn(true, true, false);
+
+         try {
+             impl.verify(data);
+             fail("Expected MockitoAssertionError");
+         } catch (MockitoAssertionError e) {
+             assertSame(lastError, e);
+         }
+
+         verify(delegate, times(2)).verify(data);
+     }
+
+     @Test
+     public void whenDelegateIsUnrecoverable_thenThrowsImmediatelyWithoutSleeping() {
+         AtMost atMost = new AtMost(0);
+         when(data.getAllInvocations()).thenReturn(Arrays.asList(invocation));
+
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(10, 100, atMost, true, timer);
+         when(timer.isCounting()).thenReturn(true);
+
+         try {
+             impl.verify(data);
+             fail("Expected MockitoAssertionError");
+         } catch (MockitoAssertionError e) {
+             // expected because AtMost(0) fails with any invocation and is unrecoverable
+         }
+
+         verify(timer).start();
+     }
+
+     @Test
+     public void whenDelegateThrowsArgumentsAreDifferent_thenHandledAsRecoverableError() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(1, 100, delegate, true,
+timer);
+         ArgumentsAreDifferent diffError = new ArgumentsAreDifferent("arg differ", "expected",
+"actual");
+         doThrow(diffError).doNothing().when(delegate).verify(data);
+         when(timer.isCounting()).thenReturn(true, true);
+
+         // should not throw because the error is caught and a retry succeeds
+         impl.verify(data);
+
+         verify(delegate, times(2)).verify(data);
+     }
+
+     @Test
+     public void whenDurationIsZero_thenDelegateNeverCalled() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(10, 0, delegate, true, timer);
+         when(timer.isCounting()).thenReturn(false);
+
+         impl.verify(data);
+
+         verify(delegate, never()).verify(data);
+     }
+
+     @Test
+     public void whenDelegateFailsAndReturnOnSuccessFalse_thenContinuesPollingUntilTimeout() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(1, 100, delegate, false,
+timer);
+         MockitoAssertionError first = new MockitoAssertionError("first");
+         doThrow(first).doThrow(first).doNothing().when(delegate).verify(data);
+         when(timer.isCounting()).thenReturn(true, true, true, false);
+
+         impl.verify(data);
+
+         verify(delegate, times(3)).verify(data);
+     }
+
+     @Test
+     public void getPollingPeriodAndDurationShouldReturnConstructorValues() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(17, 35, delegate, true);
+         assertEquals(17, impl.getPollingPeriod());
+         assertEquals(35, impl.getDuration());
+         assertSame(delegate, impl.getDelegate());
+     }
+
+     @Test
+     public void defaultTimerConstructorShouldWorkWhenDelegatePasses() {
+         VerificationOverTimeImpl impl = new VerificationOverTimeImpl(10, 100, delegate, true);
+         doNothing().when(delegate).verify(data);
+
+         impl.verify(data);
+
+         verify(delegate).verify(data);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.mockito.internal.verification.VerificationOverTimeImplTest::whenDelegateIsUnrecoverable_thenThrowsImmediatelyWithoutSleeping
+
+Extract test suite......................................................... OK
+Failing generated tests: org.mockito.internal.verification.VerificationOverTimeImplTest::whenDelegateIsUnrecoverable_thenThrowsImmediatelyWithoutSleeping

@@ -1,0 +1,169 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 42  Version: Lang-42b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-480
+Trigger failures:
+- org.apache.commons.lang.StringEscapeUtilsTest::testEscapeHtmlHighUnicode
+ --> junit.framework.ComparisonFailure: High unicode was not escaped correctly expected:<&#[119650];> but was:<&#[55348;&#57186];>
+Modified: org.apache.commons.lang.Entities
+
+Available API/signatures:
+[org.apache.commons.lang.Entities | java]
+package org.apache.commons.lang;
+class Entities {
+public static final Entities XML;
+public static final Entities HTML32;
+public static final Entities HTML40;
+static void fillWithHtml40Entities(Entities entities) {
+static interface EntityMap {
+static class PrimitiveEntityMap implements EntityMap {
+private Map mapNameToValue = new HashMap();
+private IntHashMap mapValueToName = new IntHashMap();
+public void add(String name, int value) {
+public String name(int value) {
+public int value(String name) {
+static abstract class MapIntMap implements Entities.EntityMap {
+protected Map mapNameToValue;
+protected Map mapValueToName;
+static class HashEntityMap extends MapIntMap {
+public HashEntityMap() {
+static class TreeEntityMap extends MapIntMap {
+public TreeEntityMap() {
+static class LookupEntityMap extends PrimitiveEntityMap {
+private String[] lookupTable() {
+private void createLookupTable() {
+static class ArrayEntityMap implements EntityMap {
+protected int growBy = 100;
+protected int size = 0;
+protected String[] names;
+protected int[] values;
+public ArrayEntityMap() {
+public ArrayEntityMap(int growBy) {
+protected void ensureCapacity(int capacity) {
+static class BinaryEntityMap extends ArrayEntityMap {
+public BinaryEntityMap() {
+public BinaryEntityMap(int growBy) {
+private int binarySearch(int key) {
+public void addEntities(String[][] entityArray) {
+public void addEntity(String name, int value) {
+public String entityName(int value) {
+public int entityValue(String name) {
+public String escape(String str) {
+public void escape(Writer writer, String str) throws IOException {
+public String unescape(String str) {
+private StringWriter createStringWriter(String str) {
+public void unescape(Writer writer, String str) throws IOException {
+private void doUnescape(Writer writer, String str, int firstAmp) throws IOException {
+
+Generated JUnit Test:
+package org.apache.commons.lang;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+public class EntitiesTest {
+
+ private final Entities entities = Entities.HTML40;
+
+ @Test
+ public void testEscapeSupplementaryU1D476() {
+     String input = new String(Character.toChars(0x1D476));
+     String escaped = entities.escape(input);
+     assertEquals("&#119650;", escaped);
+ }
+
+ @Test
+ public void testEscapeSupplementaryU10000() {
+     String input = new String(Character.toChars(0x10000));
+     String escaped = entities.escape(input);
+     assertEquals("&#65536;", escaped);
+ }
+
+ @Test
+ public void testEscapeMaxCodePoint() {
+     String input = new String(Character.toChars(0x10FFFF));
+     String escaped = entities.escape(input);
+     assertEquals("&#1114111;", escaped);
+ }
+
+ @Test
+ public void testEscapeBoundaryBMP() {
+     String input = new String(Character.toChars(0xFFFF));
+     String escaped = entities.escape(input);
+     assertEquals("&#65535;", escaped);
+ }
+
+ @Test
+ public void testEscapeMixedBMPAndSupplementary() {
+     String input = "A" + "\u00E9" + new String(Character.toChars(0x1D476)) + "B";
+     String escaped = entities.escape(input);
+     assertTrue(escaped.contains("&#119650;"));
+     assertFalse("Must not contain surrogate pair &#55348;",
+             escaped.contains("&#55348;") || escaped.contains("&#57186;"));
+     assertTrue(escaped.startsWith("A"));
+     assertTrue(escaped.endsWith("B"));
+ }
+
+ @Test(expected = NullPointerException.class)
+ public void testEscapeNull() {
+     entities.escape(null);
+ }
+
+ @Test
+ public void testEscapeEmpty() {
+     assertEquals("", entities.escape(""));
+ }
+
+ @Test
+ public void testEntityNameForSupplementary() {
+     assertNull(entities.entityName(0x1D476));
+ }
+
+ @Test
+ public void testEntityNameForBMP() {
+     assertEquals("lt", entities.entityName('<'));
+ }
+
+ @Test
+ public void testUnescapeSupplementaryNumericEntity() {
+     String entityStr = "&#119650;";
+     String unescaped = entities.unescape(entityStr);
+     assertEquals(entityStr, unescaped);
+ }
+
+ @Test
+ public void testRoundTripSupplementary() {
+     String input = new String(Character.toChars(0x1D476));
+     String escaped = entities.escape(input);
+     String unescaped = entities.unescape(escaped);
+     assertNotEquals("Round-trip should fail for unescape with value > 0xFFFF",
+             input, unescaped);
+     assertEquals(escaped, unescaped);
+ }
+
+ @Test
+ public void testEscapeMultipleSupplementary() {
+     String input = new String(Character.toChars(0x1D476))
+             + new String(Character.toChars(0x10000))
+             + new String(Character.toChars(0x10FFFF));
+     String escaped = entities.escape(input);
+     assertFalse("Must not contain split surrogates",
+             escaped.contains("&#55348;") || escaped.contains("&#57186;"));
+     assertTrue(escaped.contains("&#119650;"));
+     assertTrue(escaped.contains("&#65536;"));
+     assertTrue(escaped.contains("&#1114111;"));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - org.apache.commons.lang.EntitiesTest::testEscapeSupplementaryU1D476
+ - org.apache.commons.lang.EntitiesTest::testEscapeMultipleSupplementary
+ - org.apache.commons.lang.EntitiesTest::testEscapeMixedBMPAndSupplementary
+Failing generated tests: org.apache.commons.lang.EntitiesTest::testEscapeMixedBMPAndSupplementary, org.apache.commons.lang.EntitiesTest::testEscapeMultipleSupplementary, org.apache.commons.lang.EntitiesTest::testEscapeSupplementaryU1D476

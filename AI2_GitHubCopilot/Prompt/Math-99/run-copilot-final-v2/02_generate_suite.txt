@@ -1,0 +1,467 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 99  Version: Math-99b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math.util.MathUtils
+Modified: org.apache.commons.math.util.MathUtils
+Triggers: org.apache.commons.math.util.MathUtilsTest::testGcd, org.apache.commons.math.util.MathUtilsTest::testLcm
+
+Bug/specification summary:
+Bug report: MATH-243
+Trigger failures:
+- org.apache.commons.math.util.MathUtilsTest::testGcd
+ --> junit.framework.AssertionFailedError: expecting ArithmeticException
+ - org.apache.commons.math.util.MathUtilsTest::testLcm
+ --> junit.framework.AssertionFailedError: Expecting ArithmeticException
+Modified: org.apache.commons.math.util.MathUtils
+
+Prompt-01 test plan:
+TARGETS: gcd(int,int) overflow detection for Integer.MIN_VALUE and other boundary args.
+TARGETS: lcm(int,int) overflow detection in multiplication and internal gcd.
+ORACLES: Failing tests expect ArithmeticException on overflow; document or prior behavior.
+CASES: gcd: Integer.MIN_VALUE, negative, zero, both zero, both same, coprimes.
+CASES: lcm: a*b overflows int, one arg MIN_VALUE, large values, zero inputs.
+RISKS: No explicit spec; only tests clue exact overflow triggers; unclear msg.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math.util.MathUtils (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math.util;
+public final class MathUtils {
+public static final double EPSILON = 0x1.0p-53;
+public static final double SAFE_MIN = 0x1.0p-1022;
+private static final byte NB = (byte)-1;
+private static final short NS = (short)-1;
+private static final byte PB = (byte)1;
+private static final short PS = (short)1;
+private static final byte ZB = (byte)0;
+private static final short ZS = (short)0;
+private MathUtils() {
+public static int addAndCheck(int x, int y) {
+public static long addAndCheck(long a, long b) {
+private static long addAndCheck(long a, long b, String msg) {
+public static long binomialCoefficient(final int n, final int k) {
+public static double binomialCoefficientDouble(final int n, final int k) {
+public static double binomialCoefficientLog(final int n, final int k) {
+public static double cosh(double x) {
+public static boolean equals(double x, double y) {
+public static boolean equals(double x, double y, double eps) {
+public static boolean equals(double[] x, double[] y) {
+public static long factorial(final int n) {
+public static double factorialDouble(final int n) {
+public static double factorialLog(final int n) {
+public static int gcd(final int p, final int q) {
+public static int hash(double value) {
+public static int hash(double[] value) {
+public static byte indicator(final byte x) {
+public static double indicator(final double x) {
+public static float indicator(final float x) {
+public static int indicator(final int x) {
+public static long indicator(final long x) {
+public static short indicator(final short x) {
+public static int lcm(int a, int b) {
+public static double log(double base, double x) {
+public static int mulAndCheck(int x, int y) {
+public static long mulAndCheck(long a, long b) {
+public static double nextAfter(double d, double direction) {
+public static double scalb(final double d, final int scaleFactor) {
+final long bits = Double.doubleToLongBits(d);
+final long newBits = rest | (exponent + (((long) scaleFactor) << 52));
+public static double normalizeAngle(double a, double center) {
+public static double round(double x, int scale) {
+public static double round(double x, int scale, int roundingMethod) {
+public static float round(float x, int scale) {
+public static float round(float x, int scale, int roundingMethod) {
+public static byte sign(final byte x) {
+public static double sign(final double x) {
+public static float sign(final float x) {
+public static int sign(final int x) {
+public static long sign(final long x) {
+public static short sign(final short x) {
+public static double sinh(double x) {
+public static int subAndCheck(int x, int y) {
+public static long subAndCheck(long a, long b) {
+
+/* HEADER */
+package org.apache.commons.math.util;
+import java.math.BigDecimal;
+import java.util.Arrays;
+import org.apache.commons.math.MathException;
+import org.apache.commons.math.MathRuntimeException;
+
+/* METHOD MathUtils */
+private MathUtils() {
+ super();
+ }
+
+/* METHOD log */
+public static double log(double base, double x) {
+ return Math.log(x)/Math.log(base);
+ }
+
+/* METHOD nextAfter */
+public static double nextAfter(double d, double direction) {
+
+ // handling of some important special cases
+ if (Double.isNaN(d) || Double.isInfinite(d)) {
+ return d;
+ } else if (d == 0) {
+ return (direction < 0) ? -Double.MIN_VALUE : Double.MIN_VALUE;
+ }
+ // special cases MAX_VALUE to infinity and MIN_VALUE to 0
+ // are handled just as normal numbers
+
+ // split the double in raw components
+ long bits = Double.doubleToLongBits(d);
+ long sign = bits & 0x8000000000000000L;
+ long exponent = bits & 0x7ff0000000000000L;
+ long mantissa = bits & 0x000fffffffffffffL;
+
+ if (d * (direction - d) >= 0) {
+ // we should increase the mantissa
+ if (mantissa == 0x000fffffffffffffL) {
+ return Double.longBitsToDouble(sign |
+ (exponent + 0x0010000000000000L));
+ } else {
+ return Double.longBitsToDouble(sign |
+ exponent | (mantissa + 1));
+ }
+ } else {
+ // we should decrease the mantissa
+ if (mantissa == 0L) {
+ return Double.longBitsToDouble(sign |
+ (exponent - 0x0010000000000000L) |
+ 0x000fffffffffffffL);
+ } else {
+ return Double.longBitsToDouble(sign |
+ exponent | (mantissa - 1));
+ }
+ }
+
+ }
+
+/* METHOD addAndCheck */
+public static int addAndCheck(int x, int y) {
+ long s = (long)x + (long)y;
+ if (s < Integer.MIN_VALUE || s > Integer.MAX_VALUE) {
+ throw new ArithmeticException("overflow: add");
+ }
+ return (int)s;
+ }
+
+/* METHOD binomialCoefficientDouble */
+public static double binomialCoefficientDouble(final int n, final int k) {
+ if (n < k) {
+ throw new IllegalArgumentException(
+ "must have n >= k for binomial coefficient (n,k)");
+ }
+ if (n < 0) {
+ throw new IllegalArgumentException(
+ "must have n >= 0 for binomial coefficient (n,k)");
+ }
+ if ((n == k) || (k == 0)) {
+ return 1d;
+ }
+ if ((k == 1) || (k == n - 1)) {
+ return n;
+ }
+ if (k > n/2) {
+ return binomialCoefficientDouble(n, n - k);
+ }
+ if (n < 67) {
+ return binomialCoefficient(n,k);
+ }
+ 
+ double result = 1d;
+ for (int i = 1; i <= k; i++) {
+ result *= (double)(n - k + i) / (double)i;
+ }
+ 
+ return Math.floor(result + 0.5);
+ }
+
+/* METHOD binomialCoefficientLog */
+public static double binomialCoefficientLog(final int n, final int k) {
+ if (n < k) {
+ throw new IllegalArgumentException(
+ "must have n >= k for binomial coefficient (n,k)");
+ }
+ if (n < 0) {
+ throw new IllegalArgumentException(
+ "must have n >= 0 for binomial coefficient (n,k)");
+ }
+ if ((n == k) || (k == 0)) {
+ return 0;
+ }
+ if ((k == 1) || (k == n - 1)) {
+ return Math.log((double) n);
+ }
+ 
+ /*
+ * For values small enough to do exact integer computation,
+ * return the log of the exact value 
+ */
+ if (n < 67) { 
+ return Math.log(binomialCoefficient(n,k));
+ }
+ 
+ /*
+ * Return the log of binomialCoefficientDouble for values that will not
+ * overflow binomialCoefficientDouble
+ */
+ if (n < 1030) { 
+ return Math.log(binomialCoefficientDouble(n, k));
+ } 
+
+ if (k > n / 2) {
+ return binomialCoefficientLog(n, n - k);
+ }
+
+ /*
+ * Sum logs for values that could overflow
+ */
+ double logSum = 0;
+
+ // n!/(n-k)!
+ for (int i = n - k + 1; i <= n; i++) {
+ logSum += Math.log((double) i);
+ }
+
+ // divide by k!
+ for (int i = 2; i <= k; i++) {
+ logSum -= Math.log((double) i);
+ }
+
+ return logSum; 
+ }
+
+/* METHOD cosh */
+public static double cosh(double x) {
+ return (Math.exp(x) + Math.exp(-x)) / 2.0;
+ }
+
+/* METHOD factorial */
+public static long factorial(final int n) {
+ if (n < 0) {
+ throw new IllegalArgumentException("must have n >= 0 for n!");
+ }
+ if (n > 20) {
+ throw new ArithmeticException(
+ "factorial value is too large to fit in a long");
+ }
+ return factorials[n];
+ }
+
+/* METHOD factorialDouble */
+public static double factorialDouble(final int n) {
+ if (n < 0) {
+ throw new IllegalArgumentException("must have n >= 0 for n!");
+ }
+ if (n < 21) {
+ return factorial(n);
+ }
+ return Math.floor(Math.exp(factorialLog(n)) + 0.5);
+ }
+
+/* METHOD factorialLog */
+public static double factorialLog(final int n) {
+ if (n < 0) {
+ throw new IllegalArgumentException("must have n > 0 for n!");
+ }
+ if (n < 21) {
+ return Math.log(factorial(n));
+ }
+ double logSum = 0;
+ for (int i = 2; i <= n; i++) {
+ logSum += Math.log((double)i);
+ }
+ return logSum;
+ }
+
+/* METHOD lcm */
+public static int lcm(int a, int b) {
+ if (a==0 || b==0){
+ return 0;
+ }
+ int lcm = Math.abs(mulAndCheck(a / gcd(a, b), b));
+ return lcm;
+ }
+
+/* METHOD mulAndCheck */
+public static int mulAndCheck(int x, int y) {
+ long m = ((long)x) * ((long)y);
+ if (m < Integer.MIN_VALUE || m > Integer.MAX_VALUE) {
+ throw new ArithmeticException("overflow: mul");
+ }
+ return (int)m;
+ }
+
+/* METHOD mulAndCheck */
+public static long mulAndCheck(long a, long b) {
+ long ret;
+ String msg = "overflow: multiply";
+ if (a > b) {
+ // use symmetry to reduce boundary cases
+ ret = mulAndCheck(b, a);
+ } else {
+ if (a < 0) {
+ if (b < 0) {
+ // check for positive overflow with negative a, negative b
+ if (a >= Long.MAX_VALUE / b) {
+ ret = a * b;
+ } else {
+ throw new ArithmeticException(msg);
+ }
+ } else if (b > 0) {
+ // check for negative overflow with negative a, positive b
+ if (Long.MIN_VALUE / b <= a) {
+ ret = a * b;
+ } else {
+ throw new ArithmeticException(msg);
+ 
+ }
+ } else {
+ // assert b == 0
+ ret = 0;
+ }
+ } else if (a > 0) {
+ // assert a > 0
+ // assert b > 0
+ 
+ // check for positive overflow with positive a, positive b
+ if (a <= Long.MAX_VALUE / b) {
+ ret = a * b;
+ } else {
+ throw new ArithmeticException(msg);
+ }
+ } else {
+ // assert a == 0
+ ret = 0;
+ }
+ }
+ return ret;
+ }
+
+/* METHOD normalizeAngle */
+public static double normalizeAngle(double a, double center) {
+ return a - TWO_PI * Math.floor((a + Math.PI - center) / TWO_PI);
+ }
+
+/* METHOD round */
+public static double round(double x, int scale, int roundingMethod) {
+ try {
+ return (new BigDecimal
+ (Double.toString(x))
+ .setScale(scale, roundingMethod))
+ .doubleValue();
+ } catch (NumberFormatException ex) {
+ if (Double.isInfinite(x)) {
+ return x; 
+ } else {
+ return Double.NaN;
+ }
+ }
+ }
+
+/* METHOD round */
+public static float round(float x, int scale, int roundingMethod) {
+ float sign = indicator(x);
+ float factor = (float)Math.pow(10.0f, scale) * sign;
+ return (float)roundUnscaled(x * factor, sign, roundingMethod) / factor;
+ }
+
+/* METHOD sinh */
+public static double sinh(double x) {
+ return (Math.exp(x) - Math.exp(-x)) / 2.0;
+ }
+
+/* METHOD subAndCheck */
+public static int subAndCheck(int x, int y) {
+ long s = (long)x - (long)y;
+ if (s < Integer.MIN_VALUE || s > Integer.MAX_VALUE) {
+ throw new ArithmeticException("overflow: subtract");
+ }
+ return (int)s;
+ }
+
+/* METHOD subAndCheck */
+public static long subAndCheck(long a, long b) {
+ long ret;
+ String msg = "overflow: subtract";
+ if (b == Long.MIN_VALUE) {
+ if (a < 0) {
+ ret = a - b;
+ } else {
+ throw new ArithmeticException(msg);
+ }
+ } else {
+ // use additive inverse
+ ret = addAndCheck(a, -b, msg);
+ }
+ return ret;
+ }
+
+/* METHOD addAndCheck */
+public static long addAndCheck(long a, long b) {
+ return addAndCheck(a, b, "overflow: add");
+ }
+
+/* METHOD binomialCoefficient */
+public static long binomialCoefficient(final int n, final int k) {
+ if (n < k) {
+ throw new IllegalArgumentException(
+ "must have n >= k for binomial coefficient (n,k)");
+ }
+ if (n < 0) {
+ throw new IllegalArgumentException(
+ "must have n >= 0 for binomial coefficient (n,k)");
+ }
+ if ((n == k) || (k == 0)) {
+ return 1;
+ }
+ if ((k == 1) || (k == n - 1)) {
+ return n;
+ }
+ // Use symmetry for large k
+ if (k > n / 2)
+ return binomialCoefficient(n, n - k);
+ 
+ // We use the formula
+ // (n choose k) = n! / (n-k)! / k!
+ // (n choose k) == ((n-k+1)*...*n) / (1*...*k)
+ // which could be written
+ // (n choose k) == (n-1 choose k-1) * n / k
+ long result = 1;
+ if (n <= 61) {
+ // For n <= 61, the naive implementation cannot overflow.
+ for (int j = 1, i = n - k + 1; j <= k; i++, j++) {
+ result = result * i / j;
+ }
+ } else if (n <= 66) {
+ // For n > 61 but n <= 66, the result cannot overflow,
+ // but we must take care not to overflow intermediate values.
+ for (int j = 1, i = n - k + 1; j <= k; i++, j++) {
+ // We know that (result * i) is divisible by j,
+ // but (result * i) may overflow, so we split j:
+ // Filter out the gcd, d, so j/d and i/d are integer.
+ // result is divisible by (j/d) because (j/d)
+ // is relative prime to (i/d) and is a divisor of
+ // result * (i/d).
+ long d = gcd(i, j);
+ result = (result / (j / d)) * (i / d);
+ }
+ } else {
+ // For n > 66, a result overflow might occur, so we check
+ // the multiplication, taking care to not overflow
+ // unnecessary.
+ for (int j = 1, i = n - k + 1; j <= k; i++, j++) {
+ long d = gcd(i, j);
+ result = mulAndCheck((result / (j / d)), (i / d));
+ }
+ }
+ return result;
+ }

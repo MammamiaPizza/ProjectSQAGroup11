@@ -1,0 +1,233 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 89  Version: Closure-89b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 289
+Trigger failures:
+- com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToChildOfUncollapsibleFunctionInLocalScope
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth1_3
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleNamedCtorInLocalScopeDepth1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleFunctionInLocalScopeDepth1
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAddPropertyToUncollapsibleFunctionInLocalScopeDepth2
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CollapsePropertiesTest::testAliasCreatedForFunctionDepth2
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.CollapseProperties, com.google.javascript.jscomp.GlobalNamespace
+
+Available API/signatures:
+[com.google.javascript.jscomp.CollapseProperties | java]
+package com.google.javascript.jscomp;
+class CollapseProperties implements CompilerPass {
+@Override
+public void process(Node externs, Node root) {
+private void inlineAliases(GlobalNamespace namespace) {
+private boolean inlineAliasIfPossible(Ref alias, GlobalNamespace namespace) {
+private void checkNamespaces() {
+private void warnAboutNamespaceAliasing(Name nameObj, Ref ref) {
+private void warnAboutNamespaceRedefinition(Name nameObj, Ref ref) {
+private void flattenReferencesTo(Name n, String alias) {
+private void flattenPrefixes(String alias, Name n, int depth) {
+private void collapseDeclarationOfNameAndDescendants(Name n, String alias) {
+private void updateSimpleDeclaration(String alias, Name refName, Ref ref) {
+private void updateObjLitOrFunctionDeclaration(Name n, String alias) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void updateObjLitOrFunctionDeclarationAtVarNode(Name n) {
+private void updateFunctionDeclarationAtFunctionNode(Name n) {
+private static String appendPropForAlias(String root, String prop) {
+
+[com.google.javascript.jscomp.GlobalNamespace | java]
+package com.google.javascript.jscomp;
+class GlobalNamespace {
+private List<Name> globalNames = new ArrayList<Name>();
+private Map<String, Name> nameMap = new HashMap<String, Name>();
+private static class NodeFilter implements Predicate<Node> {
+public boolean apply(Node n) {
+private void process() {
+private boolean isGlobalNameReference(String name, Scope s) {
+private String getTopVarName(String name) {
+private boolean isGlobalVarReference(String name, Scope s) {
+private boolean isGlobalScope(Scope s) {
+private class BuildGlobalNamespace extends AbstractPostOrderCallback {
+@Override
+public void visit(NodeTraversal t, Node n, Node parent) {
+private boolean isConstructorOrEnumDeclaration(Node n, Node parent) {
+static class Name {
+enum Type {
+@Override public String toString() {
+private static JSDocInfo getDocInfoForDeclaration(Ref ref) {
+static class Ref {
+private Ref(Ref original, Type type) {
+private Ref(Type type) {
+static void markTwins(Ref a, Ref b) {
+static Ref createRefForTesting(Type type) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ /**
+  * Tests for CollapseProperties that target the bug described in issue 289.
+  * These tests verify correct inlining of aliases and collapsing of properties
+  * in the presence of local scope functions, especially when a property is added
+  * to an uncollapsible function or when an alias is created for a function at
+  * depth 1 or 2.
+  */
+ public class CollapsePropertiesBugTest extends CompilerTestCase {
+
+   @Override
+   protected CompilerPass getProcessor(Compiler compiler) {
+     return new CollapseProperties(compiler, false, true);
+   }
+
+   @Override
+   protected int getNumRepetitions() {
+     return 1;
+   }
+
+   public void testAddPropertyToChildOfUncollapsibleFunctionInLocalScope() {
+     // Adding a property to an uncollapsible function inside a local scope
+     // should leave the property access unchanged.
+     test(
+ "function f() {" +
+         "  var ns = {};" +
+         "  ns.F = function() {};" +
+         "  ns.F.a = 1;" +
+         "}",
+         "function f() {" +
+         "  var ns = {};" +
+         "  ns.F = function() {};" +
+         "  ns.F.a = 1;" +
+         "}");
+   }
+
+   public void testAliasCreatedForFunctionDepth1_1() {
+     // Alias of a function at depth 1 must be inlined so that calls
+     // are rewritten directly.
+     test(
+         "var ns = {};" +
+         "ns.f = function() {};" +
+         "var alias = ns.f;" +
+         "alias();",
+         "var ns = {};" +
+         "ns.f = function() {};" +
+         "ns.f();");
+   }
+
+   public void testAliasCreatedForFunctionDepth1_2() {
+     // Alias used to set a property: the set must be applied to the
+     // original qualified name after inlining.
+     test(
+         "var ns = {};" +
+         "ns.f = function() {};" +
+         "var alias = ns.f;" +
+         "alias.a = 1;" +
+         "ns.f.a;",
+         "var ns = {};" +
+         "ns.f = function() {};" +
+         "ns.f.a = 1;" +
+         "ns.f.a;");
+   }
+
+   public void testAliasCreatedForFunctionDepth1_3() {
+     // Alias used to set a prototype property after inlining.
+     test(
+         "var ns = {};" +
+         "ns.f = function() {};" +
+         "var alias = ns.f;" +
+         "alias.prototype.b = 2;",
+         "var ns = {};" +
+         "ns.f = function() {};" +
+         "ns.f.prototype.b = 2;");
+   }
+
+   public void testAddPropertyToUncollapsibleNamedCtorInLocalScopeDepth1() {
+     // A named constructor function in a local scope is uncollapsible;
+     // properties added to it must remain unmodified.
+     test(
+         "function outer() {" +
+         "  function Ctor() {}" +
+         "  Ctor.a = 1;" +
+         "}",
+         "function outer() {" +
+         "  function Ctor() {}" +
+         "  Ctor.a = 1;" +
+         "}");
+   }
+
+   public void testAddPropertyToUncollapsibleFunctionInLocalScopeDepth1() {
+     // Variable holding a function expression in local scope cannot be
+     // collapsed, nor can properties attached to it.
+     test(
+         "function f() {" +
+         "  var x = function() {};" +
+         "  x.a = 1;" +
+         "}",
+         "function f() {" +
+         "  var x = function() {};" +
+         "  x.a = 1;" +
+         "}");
+   }
+
+   public void testAddPropertyToUncollapsibleFunctionInLocalScopeDepth2() {
+     // Depth-2 property access on an uncollapsible, locally-scoped object
+     // that holds a function should not be collapsed.
+     test(
+         "function f() {" +
+         "  var x = {};" +
+         "  x.y = function() {};" +
+         "  x.y.z = 2;" +
+         "}",
+         "function f() {" +
+         "  var x = {};" +
+         "  x.y = function() {};" +
+         "  x.y.z = 2;" +
+         "}");
+   }
+
+   public void testAliasCreatedForFunctionDepth2() {
+     // Alias at depth 2 for a function must be inlined everywhere,
+     // including property sets and calls.
+     test(
+         "var ns = {};" +
+         "ns.a = {};" +
+         "ns.a.b = function() {};" +
+         "var alias = ns.a.b;" +
+         "alias.c = 1;" +
+         "alias();",
+         "var ns = {};" +
+         "ns.a = {};" +
+         "ns.a.b = function() {};" +
+         "ns.a.b.c = 1;" +
+         "ns.a.b();");
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-89f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-89f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-89f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-89f-copilot/.test_suite/com/google/javascript/jscomp/CollapsePropertiesBugTest.java:10: error: cannot find symbol
+ [javac] public class CollapsePropertiesBugTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 52 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

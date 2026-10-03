@@ -1,0 +1,144 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 43  Version: Lang-43b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-477
+Trigger failures:
+- org.apache.commons.lang.text.ExtendedMessageFormatTest::testEscapedQuote_LANG_477
+ --> java.lang.OutOfMemoryError: Java heap space
+Modified: org.apache.commons.lang.text.ExtendedMessageFormat
+
+Available API/signatures:
+[org.apache.commons.lang.text.ExtendedMessageFormat | java]
+package org.apache.commons.lang.text;
+public class ExtendedMessageFormat extends MessageFormat {
+public ExtendedMessageFormat(String pattern) {
+public ExtendedMessageFormat(String pattern, Locale locale) {
+public ExtendedMessageFormat(String pattern, Map registry) {
+public ExtendedMessageFormat(String pattern, Locale locale, Map registry) {
+public String toPattern() {
+public final void applyPattern(String pattern) {
+public void setFormat(int formatElementIndex, Format newFormat) {
+public void setFormatByArgumentIndex(int argumentIndex, Format newFormat) {
+public void setFormats(Format[] newFormats) {
+public void setFormatsByArgumentIndex(Format[] newFormats) {
+private Format getFormat(String desc) {
+private int readArgumentIndex(String pattern, ParsePosition pos) {
+private String parseFormatDescription(String pattern, ParsePosition pos) {
+private String insertFormats(String pattern, ArrayList customPatterns) {
+private void seekNonWs(String pattern, ParsePosition pos) {
+private ParsePosition next(ParsePosition pos) {
+private boolean containsElements(Collection coll) {
+
+Generated JUnit Test:
+package org.apache.commons.lang.text;
+
+ import java.util.HashMap;
+ import java.util.Map;
+
+ import org.junit.Assert;
+ import org.junit.Test;
+
+ public class ExtendedMessageFormatTest {
+
+     private Map<String, FormatFactory> createRegistry() {
+         return new HashMap<String, FormatFactory>();
+     }
+
+     @Test
+     public void testSimplePatternNoCustomRegistry() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("Hello {0}");
+         String pattern = emf.toPattern();
+         Assert.assertNotNull("toPattern should not be null", pattern);
+         Assert.assertTrue("Pattern should contain {0}", pattern.contains("{0}"));
+     }
+
+     @Test
+     public void testEscapedQuoteOutsideFormatNoRegistry() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("''{0}");
+         String pattern = emf.toPattern();
+         Assert.assertNotNull(pattern);
+         Assert.assertTrue("Pattern should contain escaped quote", pattern.contains("'"));
+     }
+
+     @Test(timeout = 2000)
+     public void testEscapedQuoteInsideFormatWithCustomRegistry() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,date,''}", createRegistry());
+         String pattern = emf.toPattern();
+         Assert.assertNotNull("toPattern should not be null", pattern);
+     }
+
+     @Test(timeout = 2000)
+     public void testMultipleFormatElementsWithEscapedQuote() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,number,''}{1,date,short}",
+createRegistry());
+         Assert.assertNotNull(emf.toPattern());
+     }
+
+     @Test(timeout = 2000)
+     public void testFormatDescriptionWithNestedQuotes() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,choice,0#''none''|1#''one''}",
+createRegistry());
+         Assert.assertNotNull(emf.toPattern());
+     }
+
+     @Test
+     public void testQuotesAtStartAndEndNoRegistry() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("''{0}''");
+         Assert.assertNotNull(emf.toPattern());
+     }
+
+     @Test
+     public void testApplyPatternChangesOutput() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("Hello {0}", createRegistry());
+         String original = emf.toPattern();
+         emf.applyPattern("World {1}");
+         String updated = emf.toPattern();
+         Assert.assertNotNull(updated);
+         Assert.assertFalse(updated.contains("Hello"));
+         Assert.assertTrue(updated.contains("World"));
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testUnterminatedQuotedStringThrowsException() {
+         new ExtendedMessageFormat("'{0}", createRegistry());
+     }
+
+     @Test(timeout = 2000)
+     public void testDeeplyNestedFormatElements() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,choice,0#{1,number,integer}|1#}",
+createRegistry());
+         Assert.assertNotNull(emf.toPattern());
+     }
+
+     @Test
+     public void testPlainTextWithRegistry() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("plain text", createRegistry());
+         Assert.assertNotNull(emf.toPattern());
+     }
+
+     @Test
+     public void testMultipleEscapedQuotes() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("''''{0}''''", createRegistry());
+         Assert.assertNotNull(emf.toPattern());
+     }
+
+     @Test(timeout = 2000)
+     public void testEscapedQuoteAtEndOfFormatDescription() {
+         ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,date,'''}", createRegistry());
+         Assert.assertNotNull(emf.toPattern());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.lang.text.ExtendedMessageFormatTest::testEscapedQuoteAtEndOfFormatDescription
+ - org.apache.commons.lang.text.ExtendedMessageFormatTest::testUnterminatedQuotedStringThrowsException
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.apache.commons.lang.text.ExtendedMessageFormatTest::testEscapedQuoteAtEndOfFormatDescription, org.apache.commons.lang.text.ExtendedMessageFormatTest::testUnterminatedQuotedStringThrowsException

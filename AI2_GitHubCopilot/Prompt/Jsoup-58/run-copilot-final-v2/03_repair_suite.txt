@@ -1,0 +1,177 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 58  Version: Jsoup-58b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 245
+Trigger failures:
+- org.jsoup.safety.CleanerTest::testIsValidBodyHtml
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.safety.CleanerTest::testIsValidDocument
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.Jsoup, org.jsoup.parser.Parser, org.jsoup.safety.Cleaner
+
+Available API/signatures:
+[org.jsoup.Jsoup | java]
+package org.jsoup;
+@author Jonathan Hedley */
+public class Jsoup {
+private Jsoup() {}
+@param html HTML to parse
+@param baseUri The URL where the HTML was retrieved from. Used to resolve relative URLs to absolute URLs, that occur
+@return sane HTML
+public static Document parse(String html, String baseUri) {
+@param parser alternate {@link Parser#xmlParser() parser} to use.
+public static Document parse(String html, String baseUri, Parser parser) {
+@param html HTML to parse
+@see #parse(String, String)
+public static Document parse(String html) {
+public static Connection connect(String url) {
+@param in file to load HTML from
+@param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
+@param baseUri The URL where the HTML was
+...[truncated deterministically]...
+telist whitelist) {
+public static String clean(String bodyHtml, String baseUri, Whitelist whitelist, Document.OutputSettings outputSettings) {
+@param bodyHtml HTML to test
+@param whitelist whitelist to test against
+@return true if no tags or attributes were removed; false otherwise
+@see #clean(String, org.jsoup.safety.Whitelist)
+public static boolean isValid(String bodyHtml, Whitelist whitelist) {
+
+[org.jsoup.parser.Parser | java]
+package org.jsoup.parser;
+public class Parser {
+public Parser(TreeBuilder treeBuilder) {
+public Document parseInput(String html, String baseUri) {
+public TreeBuilder getTreeBuilder() {
+public Parser setTreeBuilder(TreeBuilder treeBuilder) {
+public boolean isTrackErrors() {
+public Parser setTrackErrors(int maxErrors) {
+public List<ParseError> getErrors() {
+public Parse
+...[truncated deterministically]...
+Parser xmlParser() {
+
+[org.jsoup.safety.Cleaner | java]
+package org.jsoup.safety;
+public class Cleaner {
+@param whitelist white-list to clean with
+public Cleaner(Whitelist whitelist) {
+@param dirtyDocument Untrusted base document to clean.
+@return cleaned document.
+public Document clean(Document dirtyDocument) {
+@param dirtyDocument document to test
+@return true if no tags or attributes need to be removed; false if they do
+public boolean isValid(Document dirtyDocument) {
+private final class CleaningVisitor implements NodeVisitor {
+private CleaningVisitor(Element root, Element destination) {
+public void head(Node source, int depth) {
+public void tail(Node source, int depth) {
+private int copySafeNodes(Element source, Element dest) {
+private ElementMeta createSafeElement(Element sourceEl) {
+private static class ElementMeta {
+
+Generated JUnit Test:
+package org.jsoup.safety;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.safety.Cleaner;
+import org.jsoup.safety.Whitelist;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CleanerIsValidRegressionTest {
+
+ private static final Whitelist BASIC = Whitelist.basic();
+ private static final Whitelist NONE = Whitelist.none();
+ private static final Whitelist RELAXED = Whitelist.relaxed();
+
+ @Test
+ public void testIsValidBodyHtmlWithAllowedTags() {
+     String body = "<a href=\"http://example.com\">link</a>";
+     assertTrue("Valid body with allowed tags should be valid", Jsoup.isValid(body, BASIC));
+ }
+
+ @Test
+ public void testIsValidBodyHtmlWithDisallowedTag() {
+     String body = "<b>bold</b>";
+     assertFalse(Jsoup.isValid(body, NONE));
+ }
+
+ @Test
+ public void testIsValidBodyHtmlEmpty() {
+     assertTrue(Jsoup.isValid("", NONE));
+ }
+
+ @Test
+ public void testIsValidBodyHtmlWhitespaceOnly() {
+     assertTrue(Jsoup.isValid("   \n ", NONE));
+ }
+
+ @Test
+ public void testIsValidBodyHtmlTextOnly() {
+     assertTrue(Jsoup.isValid("just some text", NONE));
+ }
+
+ @Test
+ public void testIsValidBodyHtmlWithDisallowedAttribute() {
+     String body = "<a href=\"http://example.com\" id=\"myid\">link</a>";
+     assertFalse(Jsoup.isValid(body, BASIC));
+ }
+
+ @Test
+ public void testIsValidDocumentAllAllowed() {
+     Document doc = Document.createShell("");
+     doc.body().appendChild(new TextNode("Hello", ""));
+     Cleaner cleaner = new Cleaner(NONE);
+     assertTrue(cleaner.isValid(doc));
+ }
+
+ @Test
+ public void testIsValidDocumentWithDisallowedTag() {
+     Document doc = Document.createShell("");
+     doc.body().appendElement("b").text("bold");
+     Cleaner cleaner = new Cleaner(NONE);
+     assertFalse(cleaner.isValid(doc));
+ }
+
+ @Test
+ public void testIsValidDocumentWithHeadContent() {
+     Document doc = Document.createShell("");
+     doc.head().appendElement("title").text("Test");
+     Cleaner cleaner = new Cleaner(RELAXED);
+     assertFalse(cleaner.isValid(doc));
+ }
+
+ @Test(expected = IllegalArgumentException.class)
+ public void testIsValidNullBodyStringThrows() {
+     Jsoup.isValid(null, BASIC);
+ }
+
+ @Test(expected = IllegalArgumentException.class)
+ public void testIsValidNullDocumentThrows() {
+     new Cleaner(BASIC).isValid(null);
+ }
+
+ @Test
+ public void testCleanDoesNotAlterValidInput() {
+     String input = "<a href=\"http://example.com\">test</a>";
+     String cleaned = Jsoup.clean(input, BASIC);
+     assertEquals("Cleaned output should match input for valid body", input, cleaned);
+     assertTrue("Valid cleaned body should be isValid", Jsoup.isValid(cleaned, BASIC));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.safety.CleanerIsValidRegressionTest::testCleanDoesNotAlterValidInput
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.safety.CleanerIsValidRegressionTest::testCleanDoesNotAlterValidInput

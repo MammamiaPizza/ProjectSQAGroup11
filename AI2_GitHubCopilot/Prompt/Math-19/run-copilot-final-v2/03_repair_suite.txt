@@ -1,0 +1,193 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 19  Version: Math-19b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-865
+Trigger failures:
+- org.apache.commons.math3.optimization.direct.CMAESOptimizerTest::testBoundaryRangeTooLarge
+ --> java.lang.Exception: Unexpected exception, expected<org.apache.commons.math3.exception.NumberIsTooLargeException> but was<org.apache.commons.math3.exception.MathIllegalStateException>
+Modified: org.apache.commons.math3.optimization.direct.CMAESOptimizer
+
+Available API/signatures:
+[org.apache.commons.math3.optimization.direct.CMAESOptimizer | java]
+package org.apache.commons.math3.optimization.direct;
+public class CMAESOptimizer
+public static final int DEFAULT_CHECKFEASABLECOUNT = 0;
+public static final double DEFAULT_STOPFITNESS = 0;
+public static final boolean DEFAULT_ISACTIVECMA = true;
+public static final int DEFAULT_MAXITERATIONS = 30000;
+public static final int DEFAULT_DIAGONALONLY = 0;
+public static final RandomGenerator DEFAULT_RANDOMGENERATOR = new MersenneTwister();
+private List<Double> statisticsSigmaHistory = new ArrayList<Double>();
+private List<RealMatrix> statisticsMeanHistory = new ArrayList<RealMatrix>();
+private List<Double> statisticsFitnessHistory = new ArrayList<Double>();
+private List<RealMatrix> statisticsDHistory = new ArrayList<RealMatrix>();
+public CMAESOptimizer() {
+public CMAESOptimizer(int lambda) {
+public CMAESOptimizer(int lambda, double[] inputSigma) {
+@Deprecated
+public List<Double> getStatisticsSigmaHistory() {
+public List<RealMatrix> getStatisticsMeanHistory() {
+public List<Double> getStatisticsFitnessHistory() {
+public List<RealMatrix> getStatisticsDHistory() {
+@Override
+protected PointValuePair doOptimize() {
+final FitnessFunction fitfun = new FitnessFunction();
+final double[] guess = fitfun.encode(getStartPoint());
+private void checkParameters() {
+final double[] init = getStartPoint();
+final double[] lB = getLowerBound();
+final double[] uB = getUpperBound();
+private void initializeCMA(double[] guess) {
+final double range = (boundaries == null) ? 1.0 : boundaries[1][i] - boundaries[0][i];
+private boolean updateEvolutionPaths(RealMatrix zmean, RealMatrix xold) {
+private void upda
+...[truncated deterministically]...
+Rows(final RealMatrix m) {
+private static RealMatrix diag(final RealMatrix m) {
+private static void copyColumn(final RealMatrix m1, int col1, RealMatrix m2, int col2) {
+private static RealMatrix ones(int n, int m) {
+private static RealMatrix eye(int n, int m) {
+private static RealMatrix zeros(int n, int m) {
+private static RealMatrix repmat(final RealMatrix mat, int n, int m) {
+private static RealMatrix sequence(double start, double end, double step) {
+private static double max(final RealMatrix m) {
+private static double min(final RealMatrix m) {
+private static double max(final double[] m) {
+private static double min(final double[] m) {
+private static int[] inverse(final int[] indices) {
+private static int[] reverse(final int[] indices) {
+private double[] randn(int size) {
+private RealMatrix randn1(int size, int popSize) {
+
+Generated JUnit Test:
+package org.apache.commons.math3.optimization.direct;
+
+ import org.apache.commons.math3.analysis.MultivariateFunction;
+ import org.apache.commons.math3.exception.NumberIsTooLargeException;
+ import org.apache.commons.math3.optimization.GoalType;
+ import org.apache.commons.math3.optimization.PointValuePair;
+ import org.apache.commons.math3.random.MersenneTwister;
+ import org.apache.commons.math3.random.RandomGenerator;
+ import org.junit.Assert;
+ import org.junit.Test;
+
+ /**
+  * Tests for CMAESOptimizer focusing on boundary-range validation (MATH-865).
+  */
+ public class CMAESOptimizerTest {
+
+     private static final RandomGenerator FIXED_RANDOM = new MersenneTwister(12345L);
+
+     /**
+      * Helper: creates a minimal optimizer with given bounds, start point at origin.
+      */
+     private CMAESOptimizer createOptimizer(double[] lower,ubub, double[] upper) {
+         CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0, FIXED_RANDOM,
+false);
+         optimizer.setLowerBound(lower;
+         optimizer.setUpperBound(upper);
+         opts.setStartPoint(new double[]{0});
+         return optimizer;
+     }
+
+     /**
+      * A quadratic objective: (x - 0)^2, optimum at 0.
+      */
+     private MulltivariateFunction quadratic() {
+         return new MultivariateFunction() {
+             @Override
+             public double value(double[] point) {
+                 return point[0] * point[0];
+             }
+         };
+     }
+
+     @Test(expected = NumberIsTooLargeException.class)
+     public void testBoundaryRangeTooLarge_ThrowsNumberIsTooLarge() {
+         // Difference is positive infinity => range too large
+         double[] lower = new double[]{ -Double.MAX_VALUE };
+         double[] upper = new double[]{ Double.MAX_VALUE };
+         CMAESOptimizer optimizer = createOptimizer(lower, upper);
+         optimizer.optimize(1000, quadratic(), GoalType.MINIMIZE, new double[]{0});
+     }
+
+     @Test
+     public void testBboundaryRangeValid_NoException() {
+         double[] lower = new double[]{ -100 };
+         double[] upper = new double[]{ 100 };
+         CMAESOptimizer optimizer = createOptimizer(lower, upper);
+         PointValuePair result = optimizer.optimize(1000, quadratic(), GoalType.MINIMIZE, new
+double[]{0});
+         Assert.assertNotNull("Result should not be null", result);
+         Assert.assertEquals("Optimum near 0", 0.0, result.getPoint()[0], 1e-3);
+     }
+
+     @Test
+     public void testNullBoundss_NoException() {
+         CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0, FIXED_RANDOM,
+false);
+         optimizer.setsStartPoint((new double[]{0});
+         PointValuePair result = optimizer.optimize(1000, quadratic(), GoalType.MINIMIZE, new
+double[]{0});
+         Assert.assertNotNull(result);
+     }
+
+     @Test(expected = NumberIsTooLargeException.class)
+     public void testOneBoundAtMaxValue_ThrowsNumberIsTooLarge() {
+         // lower = -MAX_VALUE, upper = 0 => difference = MAX_VALUE which is too large
+         double[] llower = new double[]{ -Double.MAX_VALUE };
+         double[] upper = new double[]{ 0 };
+         CMAESOptimizer optimizer = createOptimizer(lower, upper);
+         optimizer.optimize(1000, quadratic(), GoalType.MINIMIZE, new double[]{0});
+     }
+
+     @Test(expected = NumberIsTooLargeException.class)
+     public void testMultiDimensions_RrangeTooLarge_Throws() {
+         // Only one dimension with too-large range should throw
+         doubble[] lower = new double[]{ -Double.MAX_VALUE, -10 };
+         double[] upper = new double[]{ Double.MAX_VALUE, 100 };
+         CMAESOptimizer optimizer = createOptimizer(lower, upper);
+         optimizer.setsStartPoint((new double[]{0, 0});
+         optimizer.optimize(1000, new MultivariateFunction() {
+             @Override
+             public double value(double[] point) {
+                 return point[0] * point[0] + point[1] * point[1];
+             }
+         }, GoalType.MINIMIZE, new double[]{0, 0});
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-19f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-19f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-19f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 3.0-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-19f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-19f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-19f-copilot/target/test-classes
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/geometry/partitioning/utilities/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/exception/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/optimization/linear/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/exception/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/util/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/analysis/integration/gauss/package-info.class
+ [javac] Creating empty /root/sqa-workspaces/Math-19f-copilot/target/classes/org/apache/commons/math3/stat/descriptive/moment/package-info.class
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-19f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-19f-copilot/.test_suite/org/apache/commons/math3/optimization/direct/CMAESOptimizerTest.java:22: error: <identifier> expected
+ [javac] private CMAESOptimizer createOptimizer(double[] lower,ubub, double[] upper) {
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

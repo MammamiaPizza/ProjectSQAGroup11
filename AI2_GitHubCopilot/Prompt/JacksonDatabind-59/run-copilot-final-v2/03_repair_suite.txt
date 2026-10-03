@@ -1,0 +1,281 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 59  Version: JacksonDatabind-59b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1384
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TypeRefinementForMapTest::testMapKeyRefinement1384
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not find a (Map) Key deserializer for type [simple type, class com.fasterxml.jackson.databind.jsontype.TypeRefinementForMapTest$CompoundKey]
+Modified: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.type.CollectionLikeType, com.fasterxml.jackson.databind.type.MapLikeType, com.fasterxml.jackson.databind.type.TypeFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.JavaType | java]
+package com.fasterxml.jackson.databind;
+public abstract class JavaType
+protected final Class<?> _class;
+protected final int _hash;
+protected final Object _valueHandler;
+protected final Object _typeHandler;
+protected final boolean _asStatic;
+protected JavaType(JavaType base)
+public abstract JavaType withTypeHandler(Object h);
+public abstract JavaType withContentTypeHandler(Object h);
+public abstract JavaType withValueHandler(Object h);
+public abstract JavaType withContentValueHandler(Object h);
+public abstract JavaType withContentType(JavaType contentType);
+public abstract JavaType withStaticTyping();
+@Deprecated
+public JavaType forcedNarrowBy(Class<?> subclass)
+@Deprecated // since 2.7
+protected abstract JavaType _narrow(Class<?> subclass);
+@Override
+public final Class<?> getRawClass() { r
+...[truncated deterministically]...
+{ return _valueHandler != null; }
+public boolean hasHandlers() {
+public String getGenericSignature() {
+public abstract StringBuilder getGenericSignature(StringBuilder sb);
+public String getErasedSignature() {
+public abstract StringBuilder getErasedSignature(StringBuilder sb);
+public abstract String toString();
+public abstract boolean equals(Object o);
+public final int hashCode() { return _hash; }
+
+[com.fasterxml.jackson.databind.type.CollectionLikeType | java]
+package com.fasterxml.jackson.databind.type;
+public class CollectionLikeType extends TypeBase
+protected final JavaType _elementType;
+protected CollectionLikeType(TypeBase base, JavaType elemT)
+@Deprecated // since 2.7
+public static CollectionLikeType construct(Class<?> rawType, JavaType elemT) {
+public static Coll
+...[truncated deterministically]...
+S_COMPARABLE = Comparable.class;
+private final static Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(CLS_INT);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(CLS_LONG);
+protected final static Simp
+...[truncated deterministically]...
+f (rawType == Collection.class) {
+if (rawType == AtomicReference.class) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+ import com.fasterxml.jackson.databind.JavaType;
+ import java.util.*;
+
+ @SuppressWarnings("deprecation")
+ public class MapCollectionLikeTypeNarrowingTest {
+
+     /**
+      * Key class that mirrors the CompoundKey from bug #1384.
+      * The bug caused key-type information to be lost after narrowing,
+      * leading to JsonMappingException during key deserialization.
+      */
+     public static class CompoundKey {
+         public final int id;
+         public CompoundKey(int id) { this.id = id; }
+         @Override
+         public boolean equals(Object o) {
+             if (!(o instanceof CompoundKey)) return false;
+             return ((CompoundKey) o).id == this.id;
+         }
+         @Override
+         public int hashCode() { return id; }
+     }
+
+     private static JavaType type(Class<?> clz) {
+         return SimpleType.constructUnsafe(clz);
+     }
+
+     // ---- Core bug-regression: Map narrowing must preserve key type ----
+
+     @Test
+     public void testNarrowMapPreservesKeyType() {
+         MapLikeType mapType = MapLikeType.construct(
+                 Hashap.class, type(CompoundKey.class), type(String.class));
+
+         JavaType narrowed = mapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertTrue("narrowed map should still be MapLikeType", narrowed.isMapLikeType());
+         assertNotNull("key type must not be null after narrowing", narrowed.getKeyType());
+         assertEquals("key type raw class must be CompoundKey",
+                 CompoundKey.class, narrowed.getKeyType().getRawClass());
+     }
+
+     @Test
+     public void testNarrowMapPreservesValueType() {
+         MapLikeType mapType = MapLikeType.construct(
+                 Hashap.class, type(CompoundKey.class), type(String.class));
+
+         JavaType narrowed = mapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertNotNull("content type must not be null after narrowing", narrowed.getContentType());
+         assertEquals("value type raw class must be String",
+                 String.class, narrowed.getContentType().getRawClass());
+     }
+
+     @Test
+     public void testNarrowMapIsMapLikeType() {
+         MapLikeType mapType = MapLikeType.construct(
+                 Hashap.class, type(Integer.class), type(Double.class));
+
+         JavaType narrowed = mapType.forcedNarrowBy(TreeMap.class);
+
+         assertTrue("isMapLikeType must remain true after narrowing", narrowed.isMapLikeType());
+     }
+
+     // ---- Collection narrowing ----
+
+     @Test
+     public void testNarrowCollectionPreservesElementType() {
+         CollectionLikeType collType = CollectionLikeType.construct(
+                 ArrayList.class, type(String.class));
+
+         JavaType narrowed = collType.forcedNarrowBy(LinkedList.class);
+
+         assertNotNull("content type must not be null after narrowing", narrowed.getContentType());
+         assertEquals("element type raw class must be String",
+                 String.class, narrowed.getContentType().getRawClass());
+     }
+
+     @Test
+     public void testNarrowCollectionIsCollectionLikeType() {
+         CollectionLikeType collType = CollectionLikeType.construct(
+                 HashSet.class, type(Long.class));
+
+         JavaType narrowed = collType.forcedNarrowBy(TreeSet.class);
+
+         assertTrue("isCollectionLikeType must remain true after narrowing",
+                 narrowed.isCollectionLikeType());
+     }
+
+     // ---- Handler preservation ----
+
+     @Test
+     public void testForcedNarrowByPreservesValueHandler() {
+         Object handler = new Object();
+         JavaType baseType = MapLikeType.construct(
+                 Hashap.class, type(String.class), type(String.class));
+         MapLikeType mapType = (MapLikeType) baseType.withValueHandler(handler);
+
+         JavaType narrowed = mapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertSame("value handler must survive forcedNarrowBy", handler,
+narrowed.getValueHandler());
+     }
+
+     @Test
+     public void testForcedNarrowByPreservesTypeHandler() {
+         Object handler = new Object();
+         JavaType baseType = MapLikeType.construct(
+                 Hashap.class, type(String.class), type(String.class));
+         MapLikeType mapType = (MapLikeType) baseType.withTypeHandler(handler);
+
+         JavaType narrowed = mapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertSame("type handler must survive forcedNarrowBy", handler, narrowed.getTypeHandler());
+     }
+
+     @Test
+     public void testNarrowMapPreservesKeyTypeHandler() {
+         Object handler = new Object();
+         JavaType baseType = MapLikeType.construct(
+                 Hashap.class, type(CompoundKey.class), type(String.class));
+         MapLikeType mapType = (MapLikeType) baseType.withKeyTypeHandler(handler);
+
+         JavaType narrowed = mapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertEquals("key class must still be CompoundKey",
+                 CompoundKey.class, narrowed.getKeyType().getRawClass());
+         assertSame("key type handler must survive narrowing",
+                 handler, narrowed.getKeyType().getTypeHandler());
+     }
+
+     // ---- Boundary and edge cases ----
+
+     @Test
+     public void testForcedNarrowBySameClassReturnsSame() {
+         MapLikeType mapType = MapLikeType.construct(
+                 Hashap.class, type(String.class), type(Integer.class));
+
+         JavaType result = mapType.forcedNarrowBy(HashMap.class);
+
+         assertSame("narrowing to same class should return identical instance", mapType, result);
+     }
+
+     @Test
+     public void testNarrowMapWithObjectKeyBoundary() {
+         MapLikeType mapType = MapLikeType.construct(
+                 Hashap.class, type(Object.class), type(String.class));
+
+         JavaType narrowed = mapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertNotNull("key type must not be null for Object key", narrowed.getKeyType());
+         assertTrue("key should still be MapLikeType", narrowed.isMapLikeType());
+         assertEquals("key type must be Object",
+                 Object.class, narrowed.getKeyType().getRawClass());
+         assertEquals("value type must be String",
+                 String.class, narrowed.getContentType().getRawClass());
+     }
+
+     @Test
+     public void testNarrowMapPreservesStaticTyping() {
+         MapLikeType mapType = MapLikeType.construct(
+                 Hashap.class, type(CompoundKey.class), type(String.class));
+         MapLikeType staticMapType = mapType.withStaticTyping();
+
+         JavaType narrowed = staticMapType.forcedNarrowBy(LinkedHashMap.class);
+
+         assertEquals("key type must survive static-typing narrowing",
+                 CompoundKey.class, narrowed.getKeyType().getRawClass());
+         assertEquals("value type must survive static-typing narrowing",
+                 String.class, narrowed.getContentType().getRawClass());
+     }
+
+     // ---- upgradeFrom path ----
+
+     @Test
+     public void testUpgradeFromMapPreservesTypes() {
+         JavaType base = SimpleType.constructUnsafe(Hashtable.class);
+         MapLikeType mapType = MapLikeType.upgradeFrom(
+                 base, type(CompoundKey.class), type(String.class));
+
+         assertEquals("key type raw class must be CompoundKey after upgradeFrom",
+                 CompoundKey.class, mapType.getKeyType().getRawClass());
+         assertEquals("value type raw class must be String after upgradeFrom",
+                 String.class, mapType.getContentType().getRawClass());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-59f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-59f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-59f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-59f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-59f-copilot/.test_suite/com/fasterxml/jackson/databind/type/MapCollectionLikeTypeNarrowingTest.java:37: error: cannot find symbol
+ [javac] Hashap.class, type(CompoundKey.class), type(String.class));
+ [javac] ^
+ [javac] symbol: class Hashap
+ [javac] location: class MapCollectionLikeTypeNarrowingTest
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 26 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

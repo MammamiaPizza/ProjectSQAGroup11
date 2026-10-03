@@ -1,0 +1,331 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 47  Version: Closure-47b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 575
+Trigger failures:
+- com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testParseSourceMetaMap
+ --> junit.framework.AssertionFailedError: expected:<5> but was:<4>
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput0a
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testMultilineMapping
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<9>
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testMultiFunctionMapping
+ --> junit.framework.AssertionFailedError: expected:<10> but was:<9>
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testLiteralMappingsGoldenOutput
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testMultilineMapping2
+ --> junit.framework.AssertionFailedError
+...[truncated deterministically]...
+nFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput3
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput4
+ --> junit.framework.ComparisonFailure: expected:<...t":1,
+ - com.google.debugging.sourcemap.SourceMapGeneratorV3Test::testGoldenOutput5
+ --> junit.framework.ComparisonFailure: expected:<...
+Modified: com.google.debugging.sourcemap.SourceMapConsumerV3, com.google.javascript.jscomp.SourceMap
+
+Available API/signatures:
+[com.google.debugging.sourcemap.SourceMapConsumerV3 | java]
+package com.google.debugging.sourcemap;
+public class SourceMapConsumerV3 implements SourceMapConsumer,
+public SourceMapConsumerV3() {
+static class DefaultSourceMapSupplier implements SourceMapSupplier {
+@Override
+public String getSourceMap(String url) {
+public void parse(String contents) throws SourceMapParseException {
+public void parse(String contents, SourceMapSupplier sectionSupplier)
+public void parse(JSONObject sourceMapRoot) throws SourceMapParseException {
+public void parse(JSONObject sourceMapRoot, SourceMapSupplier sectionSupplier)
+public OriginalMapping getMappingForLine(int lineNumber, int column) {
+public Collection<String> getOriginalSources() {
+private String[] getJavaStringArray(JSONArray array) throws JSONException {
+private class MappingBuilder {
+private void validateEntry(Entry entry) {
+private Entry de
+...[truncated deterministically]...
+public int getGeneratedColumn() {
+public int getSourceFileId() {
+public int getSourceLine() {
+public int getSourceColumn() {
+public int getNameId() {
+private static class UnnamedEntry extends UnmappedEntry {
+private static class NamedEntry extends UnnamedEntry {
+static interface EntryVisitor {
+public void visitMappings(EntryVisitor visitor) {
+final int lineCount = lines.size();
+final int entryCount = line.size();
+
+[com.google.javascript.jscomp.SourceMap | java]
+package com.google.javascript.jscomp;
+public class SourceMap {
+public static enum Format {
+@Override SourceMap getInstance() {
+abstract SourceMap getInstance();
+public static enum DetailLevel implements Predicate<Node> {
+@Override public boolean apply(Node node) {
+public static class LocationMapping {
+public LocationMapping(String prefix, String replacement) {
+private List<LocationMapping> prefixMappings = Collections.emptyList();
+private SourceMap(SourceMapGenerator generator) {
+private String fixupSourceLocation(String sourceFile) {
+public void appendTo(Appendable out, String name) throws IOException {
+public void reset() {
+public void setStartingPosition(int offsetLine, int offsetIndex) {
+public void setWrapperPrefix(String prefix) {
+public void validate(boolean validate) {
+public void setPrefixMappings(List<LocationMapping> sourceMapLocationMappings) {
+
+Generated JUnit Test:
+package com.google.debugging.sourcemap;
+
+ import static org.junit.Assert.*;
+
+ import com.google.debugging.sourcemap.proto.Mapping.OriginalMapping;
+ import org.json.JSONArray;
+ import org.json.JSONException;
+ import org.json.JSONObject;
+ import org.junit.Test;
+
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
+
+ /**
+  * Tests for SourceMapConsumerV3 and SourceMap to expose Closure bug 47
+  * (off-by-one mapping count, section merge issues).
+  */
+ public class SourceMapConsumerV3Test {
+
+   // --- Helpers ---
+
+   private String minimalValidSourceMapJson(String mappings, int lineCount) {
+     return "{" +
+         "\"version\":3," +
+         "\"file\":\"test.js\"," +
+         "\"lineCount\":" + lineCount + "," +
+         "\"mappings\":\"" + mappings + "\"," +
+         "\"sources\":[\"test.js\"]," +
+         "\"names\":[]" +
+         "}";
+   }
+
+   private SourceMapConsumerV3 parseJson(String json) throws SourceMapParseException {
+     SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+     consumer.parse(json, (SourceMapSupplier) null);
+     return consumer;
+   }
+
+   // --- SourceMapConsumerV3.getMappingForLine ---
+
+   @Test
+   public void testGetMappingForLineLastLineNotLost() throws Exception {
+     // Two lines, each one entry; the last line must be stored.
+     String json = minimalValidSourceMapJson("AAAAA;AAAAA", 2);
+     SourceMapConsumerV3 consumer = parseJson(json);
+
+     OriginalMapping m0 = consumer.getMappingForLine(0, 0);
+     OriginalMapping m1 = consumer.getMappingForLine(1, 0);
+     assertNotNull("First line mapping missing", m0);
+     assertNotNull("Last line mapping missing – off-by-one bug", m1);
+   }
+
+   @Test
+   public void testGetMappingForLineUnmappedReturnsNull) throws Exception {
+     // A line with no entries (null line) should return null.
+     String json = minimalValidSourceMapJson("AAAAA;", 2); // second line empty
+     SourceMapConsumerV3 consumer = parseJson(json);
+
+     OriginalMapping m0 = consumer.getMappingForLine(0, 0);
+     OriginalMapping m1 = consumer.getMappingForLine(1, 0);
+     assertNotNull(m0);
+     assertNull("Empty line should have no mapping", m1);
+   }
+
+   @Test
+   public void testGetMappingForLineOutOfBounds) throws Exception {
+     String json = minimalValidSourceMapJson("AAAAA", 1);
+     SourceMapConsumerV3 consumer = parseJson(json);
+     assertNull(consumer.getMappingForLine(1, 0));
+     assertNull(consumer.getMappingForLine(-1, 0));
+   }
+
+   @Test
+   public void testGetMappingForColumnOutOfRange) throws Exception {
+     String json = minimalValidSourceMapJson("AAAAA", 1);
+     SourceMapConsumerV3 consumer = parseJson(json);
+     // Entry at column 0, so column 1 should be unmapped.
+     assertNotNull(consumer.getMappingForLine(0, 0));
+     assertNull("Column beyond mapped range should return null", consumer.getMappingForLine(0, 1));
+   }
+
+   // --- SourceMapConsumerV3.sections / meta-map ---
+
+   @Test
+   public void testSectionMergingTotalLineCount) throws Exception {
+     String indexJson = "{\" +
+         "\"version\":3," +
+         "\"file\":\"merged.js\"," +
+         "\"lineCount\":2," +
+         "\"sections\":[" +
+         "{\"url\":\"s1\",\"map\":{" +
+         "\"version\":3,\"file\":\"a.js\",\"lineCount\":1," +
+         "\"mappings\":\"AAAAA\"," +
+         "\"sources\":[\"a.js\"],\"names\":[]}}," +
+         "{\"url\":\"s2\",\"map\":{" +
+         "\"version\":3,\"file\":\"b.js\",\"lineCount\":1," +
+         "\"mappings\":\"AAAAA\"," +
+         "\"sources\":[\"b.js\"],\"names\":[]}}," +
+         "]}";
+
+     SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+     consumer.parse(indexJson, new SourceMapSupplier() {
+       @Override
+       public String getSourceMap(String url) {
+         if ("s1".equals(url)) {
+           return "{\"version\":3,\"file\":\"a.js\",\"lineCount\":1,"+
+                  "\"mappings\":\"AAAAA\",\"sources\":[\"a.js\"],\"names\":[]}";
+         } else if ("s2".equals(url))) {
+           return "{\"version\":3,\"file\":\"b.js\",\"lineCount\":1,"+
+                  "\"mappings\":\"AAAAA\",\"sources\":[\"b.js\"],\"names\":[]}";
+         }
+         return null;
+       }
+     });
+
+     // Both sections should produce exactly 2 mapped lines.
+     assertNotNull(consumer.getMappingForLine(0, 0));
+     assertNotNull(consumer.getMappingForLine(1, 0));
+     assertNull(consumer.getMappingForLine(2, 0));
+   }
+
+   @Test
+   public void testMergedMappingsCount) throws Exception {
+     // First section provides 2 lines, second provides 1 line → total 3.
+     String indexJson = "{\"version\":3,\"file\":\"merged.js\"," +
+         "\"sections\":[" +
+         "{\"url\":\"s1\",\"map\":{" +
+         "\"version\":3,\"file\":\"a.js\",\"lineCount\":2," +
+         "\"mappings\":\"AAAAA;AAAAA\"," +
+         "\"sources\":[\"a.js\"],\"names\":[]}}," +
+         "{\"url\":\"s2\",\"map\":{" +
+         "\"version\":3,\"file\":\"b.js\",\"lineCount\":1," +
+         "\"mappings\":\"AAAAA\"," +
+         "\"sources\":[\"b.js\"],\"names\":[]}}," +
+         "]}";
+
+     SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+     final int[] callCount = {0};
+     consumer.parse(indexJson, new SourceMapSupplier() {
+       @Override
+       public String getSourceMap(String url) {
+         if ("s1".equals(url)) {
+           return "{\"version\":3,\"file\":\"a.js\",\"lineCount\":2," +
+                  "\"mappings\":\"AAAAA;AAAAA\",\"sources\":[\"a.js\"],\"names\":[]}";
+         } else if ("s2".equals(url)) {
+           return "{\"version\":3,\"file\":\"b.js\",\"lineCount\":1," +
+                  "\"mappings\":\"AAAAA\",\"sources\":[\"b.js\"],\"names\":[]}";
+         }
+         return null;
+       }
+     });
+
+     // The bug could drop the last line of the last section (count=2 instead of 3).
+     assertNotNull(consumer.getMappingForLine(0, 0));
+     assertNotNull(consumer.getMappingForLine(1, 0));
+     assertNotNull("Third line of merged map should exist", consumer.getMappingForLine(2, 0));
+     assertNull(consumer.getMappingForLine(3, 0));
+   }
+
+   // --- visitMappings ---
+
+   @Test
+   public void testVisitMappingsTotalCount) throws Exception {
+     String json = minimalValidSourceMapJson("AAAAA;AAAAA;AAAAA", 3);
+     SourceMapConsumerV3 consumer = parseJson(json);
+
+     final int[] count = {0};
+     consumer.visitMappings(new SourceMapConsumerV3.EntryVisitor() {
+       @Override
+        public void notice(SourceMapConsumerV3.Entry entry) {
+         count[0]++;
+       }
+     });
+
+     assertEquals("All 3 entries should be visited", 3, count[0]);
+   }
+
+   // --- reverse mapping ---
+
+   @Test
+   public void testReverseMappingBasic) throws Exception {
+     String json = "{\"version\":3,\"file\":\"test.js\",\"lineCount\":1," +
+                   "\"mappings\":\"AAAAA\"," +
+                   "\"sources\":[\"src.js\"],\"names\":[]}";
+     SourceMapConsumerV3 consumer = parseJson(json);
+
+     Collection<OriginalMapping> mappings =
+         consumer.getReverseMapping("src.js", 0, 0);
+     assertNotNull("Reverse mapping should not be null", mappings);
+     assertFalse("Should have at least one reverse mapping", mappings.isEmpty());
+   }
+
+   // --- parse errors ---
+
+   @Test(expected = SourceMapParseException.class)
+   public void testParseInvalidJsonThrows) throws Exception {
+     parseJson("not json");
+   }
+
+   @Test(expected = SourceMapParseException.class)
+   public void testParseWrongVersionThrows) throws Exception {
+     String json = "{\"version\":4,\"file\":\"test.js\",\"lineCount\":1," +
+                   "\"mappings\":\"AAAAA\",\"sources\":[\"test.js\"],\"names\":[]}";
+     parseJson(json);
+   }
+
+   @Test(expected = SourceMapParseException.class)
+   public void testParseMissingFileThrows) throws Exception {
+     String json = "{\"version\":3,\"file\":\"\",\"lineCount\":1," +
+                   "\"mappings\":\"AAAAA\",\"sources\":[\"test.js\"],\"names\":[]}";
+     parseJson(json);
+   }
+
+   // --- SourceMap appendTo / reset sanity ---
+
+   @Test
+   public void testSourceMapAppendToDoesNotThrow) throws Exception {
+     // Just verify that a default SourceMap can be serialised without errors.
+     SourceMap sm = SourceMap.Format.DEFAULT.getInstance();
+     StringBuilder sb = new StringBuilder();
+     sm.appendTo(sb, "test");
+     assertTrue("Serialised output should contain version", sb.toString().contains("\"version\":"));
+     sb.setLength(0);
+     sm.reset();
+     sm.appendTo(sb, "test2");
+     assertTrue("Should produce valid map after reset", sb.toString().contains("\"version\":"));
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-47f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-47f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-47f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-47f-copilot/.test_suite/com/google/debugging/sourcemap/SourceMapConsumerV3Test.java:55: error: '(' expected
+ [javac] public void testGetMappingForLineUnmappedReturnsNull) throws Exception {
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 24 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

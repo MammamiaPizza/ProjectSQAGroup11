@@ -1,0 +1,155 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 17  Version: Cli-17b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-163
+Trigger failures:
+- org.apache.commons.cli.PosixParserTest::testStopBursting
+ --> junit.framework.AssertionFailedError: Confirm 1 extra arg: 2
+Modified: org.apache.commons.cli.PosixParser
+
+Available API/signatures:
+[org.apache.commons.cli.PosixParser | java]
+package org.apache.commons.cli;
+public class PosixParser extends Parser {
+private List tokens = new ArrayList();
+private void init()
+protected String[] flatten(Options options, String[] arguments, boolean stopAtNonOption)
+private void gobble(Iterator iter)
+private void process(String value)
+private void processSingleHyphen(String hyphen)
+private void processOptionToken(String token, boolean stopAtNonOption)
+protected void burstToken(String token, boolean stopAtNonOption)
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+import junit.framework.TestCase;
+
+public class PosixParserCli17Test extends TestCase
+{
+    private static class ExposedPosixParser extends PosixParser
+    {
+        public String[] flattenArguments(Options options, String[] arguments,
+                                         boolean stopAtNonOption)
+        {
+            return flatten(options, arguments, stopAtNonOption);
+        }
+    }
+
+    private void assertTokens(String[] expected, String[] actual)
+    {
+        assertEquals("token count", expected.length, actual.length);
+
+        for (int i = 0; i < expected.length; i++)
+        {
+            assertEquals("token " + i, expected[i], actual[i]);
+        }
+    }
+
+    public void testBurstAttachedArgumentStopsAtFollowingNonOption()
+    {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+        options.addOption(new Option("b", true, "option b"));
+
+        String[] flattened = new ExposedPosixParser().flattenArguments(
+            options,
+            new String[] { "-abvalue", "first", "second" },
+            true);
+
+        assertTokens(
+            new String[] { "-a", "-b", "value", "--", "first", "second" },
+            flattened);
+    }
+
+    public void testBurstAttachedArgumentDoesNotStopWhenDisabled()
+    {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+        options.addOption(new Option("b", true, "option b"));
+
+        String[] flattened = new ExposedPosixParser().flattenArguments(
+            options,
+            new String[] { "-abvalue", "first", "second" },
+            false);
+
+        assertTokens(
+            new String[] { "-a", "-b", "value", "first", "second" },
+            flattened);
+    }
+
+    public void testBurstArgumentWithoutAttachedValueConsumesNextTokenOnly()
+    {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+        options.addOption(new Option("b", true, "option b"));
+
+        String[] flattened = new ExposedPosixParser().flattenArguments(
+            options,
+            new String[] { "-ab", "value", "tail" },
+            true);
+
+        assertTokens(
+            new String[] { "-a", "-b", "value", "--", "tail" },
+            flattened);
+    }
+
+    public void testUnknownCharacterInBurstStopsAndPreservesRemainder()
+    {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+
+        String[] flattened = new ExposedPosixParser().flattenArguments(
+            options,
+            new String[] { "-ax", "tail" },
+            true);
+
+        assertTokens(
+            new String[] { "-a", "--", "x", "tail" },
+            flattened);
+    }
+
+    public void testKnownShortOptionsAreBurstIndividually()
+    {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+        options.addOption(new Option("b", false, "flag b"));
+        options.addOption(new Option("c", false, "flag c"));
+
+        String[] flattened = new ExposedPosixParser().flattenArguments(
+            options,
+            new String[] { "-abc" },
+            true);
+
+        assertTokens(new String[] { "-a", "-b", "-c" }, flattened);
+    }
+
+    public void testSingleAndDoubleHyphenRemainArgumentBoundaries()
+        throws Exception
+    {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+
+        CommandLine commandLine = new PosixParser().parse(
+            options,
+            new String[] { "-a", "-", "--", "-a", "plain" },
+            true);
+
+        assertTrue("option before boundaries should be recognized",
+                   commandLine.hasOption("a"));
+        assertTokens(new String[] { "-", "-a", "plain" },
+                     commandLine.getArgs());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.cli.PosixParserCli17Test::testBurstAttachedArgumentStopsAtFollowingNonOption
+ - org.apache.commons.cli.PosixParserCli17Test::testSingleAndDoubleHyphenRemainArgumentBoundaries
+
+Failing generated tests: org.apache.commons.cli.PosixParserCli17Test::testBurstAttachedArgumentStopsAtFollowingNonOption, org.apache.commons.cli.PosixParserCli17Test::testSingleAndDoubleHyphenRemainArgumentBoundaries

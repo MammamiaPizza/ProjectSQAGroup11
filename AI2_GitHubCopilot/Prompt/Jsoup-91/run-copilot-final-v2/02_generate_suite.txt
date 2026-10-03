@@ -1,0 +1,292 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 91  Version: Jsoup-91b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.UncheckedIOException, org.jsoup.parser.CharacterReader
+Modified: org.jsoup.UncheckedIOException, org.jsoup.parser.CharacterReader
+Triggers: org.jsoup.integration.ConnectTest::testBinaryThrowsExceptionWhenTypeIgnored, org.jsoup.integration.ConnectTest::testBinaryResultThrows, org.jsoup.integration.ParseTest::testBinaryThrowsException
+
+Bug/specification summary:
+Bug report: 1192
+Trigger failures:
+- org.jsoup.integration.ConnectTest::testBinaryThrowsExceptionWhenTypeIgnored
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.integration.ConnectTest::testBinaryResultThrows
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.integration.ParseTest::testBinaryThrowsException
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.UncheckedIOException, org.jsoup.parser.CharacterReader
+
+Prompt-01 test plan:
+TARGETS: UncheckedIOException(IOException cause), UncheckedIOException.ioException(),
+CharacterReader.bufferUp(), CharacterReader.rangeEquals()
+ORACLES: UncheckedIOException wraps IOException; ioException() returns original cause; bufferUp()
+must throw UncheckedIOException when reader.read() throws IOException (e.g., due to binary data)
+CASES: binary Reader returning non-text bytes, empty String input, null Reader, valid text,
+boundary: readAheadLimit-sized buffer, EOF handling in rangeEquals
+RISKS: No access to integration tests; must simulate binary I/O via custom Reader; only
+UncheckedIOException and CharacterReader in scope
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.UncheckedIOException (java) =====
+package org.jsoup;
+
+import java.io.IOException;
+
+public class UncheckedIOException extends RuntimeException {
+ public UncheckedIOException(IOException cause) {
+ super(cause);
+ }
+
+ public IOException ioException() {
+ return (IOException) getCause();
+ }
+}
+
+===== org.jsoup.parser.CharacterReader (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public final class CharacterReader {
+static final char EOF = (char) -1;
+private static final int readAheadLimit = (int) (maxBufferLen * 0.75);
+public CharacterReader(Reader input, int sz) {
+public CharacterReader(Reader input) {
+public CharacterReader(String input) {
+private void bufferUp() {
+final int read = reader.read(charBuf);
+public int pos() {
+public boolean isEmpty() {
+private boolean isEmptyNoBufferUp() {
+public char current() {
+public void advance() {
+public String consumeTo(char c) {
+public String consumeToAny(final char... chars) {
+String consumeToAnySorted(final char... chars) {
+@Override
+public String toString() {
+private static String cacheString(final char[] charBuf, final String[] stringCache, final int start, final int count) {
+static boolean rangeEquals(final char[] charBuf, final int start, int count, final String cached) {
+boolean rangeEquals(final int start, final int count, final String cached) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.UncheckedIOException;
+import org.jsoup.helper.Validate;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.Arrays;
+import java.util.Locale;
+
+/* METHOD CharacterReader */
+public CharacterReader(Reader input, int sz) {
+ Validate.notNull(input);
+ Validate.isTrue(input.markSupported());
+ reader = input;
+ charBuf = new char[sz > maxBufferLen ? maxBufferLen : sz];
+ bufferUp();
+
+ }
+
+/* METHOD CharacterReader */
+public CharacterReader(Reader input) {
+ this(input, maxBufferLen);
+ }
+
+/* METHOD CharacterReader */
+public CharacterReader(String input) {
+ this(new StringReader(input), input.length());
+ }
+
+/* METHOD pos */
+public int pos() {
+ return readerPos + bufPos;
+ }
+
+/* METHOD isEmpty */
+public boolean isEmpty() {
+ bufferUp();
+ return bufPos >= bufLength;
+ }
+
+/* METHOD current */
+public char current() {
+ bufferUp();
+ return isEmptyNoBufferUp() ? EOF : charBuf[bufPos];
+ }
+
+/* METHOD advance */
+public void advance() {
+ bufPos++;
+ }
+
+/* METHOD consumeTo */
+public String consumeTo(char c) {
+ int offset = nextIndexOf(c);
+ if (offset != -1) {
+ String consumed = cacheString(charBuf, stringCache, bufPos, offset);
+ bufPos += offset;
+ return consumed;
+ } else {
+ return consumeToEnd();
+ }
+ }
+
+/* METHOD consumeToAny */
+public String consumeToAny(final char... chars) {
+ bufferUp();
+ int pos = bufPos;
+ final int start = pos;
+ final int remaining = bufLength;
+ final char[] val = charBuf;
+ final int charLen = chars.length;
+ int i;
+
+ OUTER: while (pos < remaining) {
+ for (i = 0; i < charLen; i++) {
+ if (val[pos] == chars[i])
+ break OUTER;
+ }
+ pos++;
+ }
+
+ bufPos = pos;
+ return pos > start ? cacheString(charBuf, stringCache, start, pos -start) : "";
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return new String(charBuf, bufPos, bufLength - bufPos);
+ }
+
+/* METHOD consumeTagName */
+String consumeTagName() {
+ // '\t', '\n', '\r', '\f', ' ', '/', '>', nullChar
+ // NOTE: out of spec, added '<' to fix common author bugs
+ bufferUp();
+ int pos = bufPos;
+ final int start = pos;
+ final int remaining = bufLength;
+ final char[] val = charBuf;
+
+ OUTER: while (pos < remaining) {
+ switch (val[pos]) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ case '/':
+ case '>':
+ case '<':
+ case TokeniserState.nullChar:
+ break OUTER;
+ }
+ pos++;
+ }
+
+ bufPos = pos;
+ return pos > start ? cacheString(charBuf, stringCache, start, pos -start) : "";
+ }
+
+/* METHOD bufferUp */
+private void bufferUp() {
+ final int pos = bufPos;
+ if (pos < bufSplitPoint)
+ return;
+
+ try {
+ reader.skip(pos);
+ reader.mark(maxBufferLen);
+ final int read = reader.read(charBuf);
+ reader.reset();
+ if (read != -1) {
+ bufLength = read;
+ readerPos += pos;
+ bufPos = 0;
+ bufMark = -1;
+ bufSplitPoint = bufLength > readAheadLimit ? readAheadLimit : bufLength;
+ }
+ } catch (IOException e) {
+ throw new UncheckedIOException(e);
+ }
+ }
+
+/* METHOD unconsume */
+void unconsume() {
+ if (bufPos < 1)
+ throw new UncheckedIOException(new IOException("No buffer left to unconsume"));
+
+ bufPos--;
+ }
+
+/* METHOD rewindToMark */
+void rewindToMark() {
+ if (bufMark == -1)
+ throw new UncheckedIOException(new IOException("Mark invalid"));
+
+ bufPos = bufMark;
+ }
+
+/* METHOD nextIndexOf */
+int nextIndexOf(char c) {
+ // doesn't handle scanning for surrogates
+ bufferUp();
+ for (int i = bufPos; i < bufLength; i++) {
+ if (c == charBuf[i])
+ return i - bufPos;
+ }
+ return -1;
+ }
+
+ /**
+ * Returns the number of characters between the current position and the next instance of the input sequence
+ *
+ * @param seq scan target
+ * @return offset between current position and next instance of target. -1 if not found.
+ */
+ int nextIndexOf(CharSequence seq) {
+ bufferUp();
+ // doesn't handle scanning for surrogates
+ char startChar = seq.charAt(0);
+ for (int offset = bufPos; offset < bufLength; offset++) {
+ // scan to first instance of startchar:
+ if (startChar != charBuf[offset])
+ while(++offset < bufLength && startChar != charBuf[offset]) { /* empty */ }
+ int i = offset + 1;
+ int last = i + seq.length()-1;
+ if (offset < bufLength && last <= bufLength) {
+ for (int j = 1; i < last && seq.charAt(j) == charBuf[i]; i++, j++) { /* empty */ }
+ if (i == last) // found full sequence
+ return offset - bufPos;
+ }
+ }
+ return -1;
+ }
+
+/* METHOD consumeLetterThenDigitSequence */
+String consumeLetterThenDigitSequence() {
+ bufferUp();
+ int start = bufPos;
+ while (bufPos < bufLength) {
+ char c = charBuf[bufPos];
+ if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || Character.isLetter(c))
+ bufPos++;
+ else
+ break;
+ }
+ while (!isEmptyNoBufferUp()) {
+ char c = charBuf[bufPos];
+ if (c >= '0' && c <= '9')
+ bufPos++;
+ else
+ break;
+ }
+
+ return cacheString(charBuf, stringCache, start, bufPos - start);
+ }

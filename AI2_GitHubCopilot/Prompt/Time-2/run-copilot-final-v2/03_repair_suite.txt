@@ -1,0 +1,202 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 2  Version: Time-2b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 93
+Trigger failures:
+- org.joda.time.TestPartial_Basics::testWith_baseAndArgHaveNoRange
+ --> java.lang.IllegalArgumentException: Types array must not contain duplicate: era and year
+Modified: org.joda.time.field.UnsupportedDurationField, org.joda.time.Partial
+
+Available API/signatures:
+[org.joda.time.field.UnsupportedDurationField | java]
+package org.joda.time.field;
+public final class UnsupportedDurationField extends DurationField implements Serializable {
+public static synchronized UnsupportedDurationField getInstance(DurationFieldType type) {
+private UnsupportedDurationField(DurationFieldType type) {
+public final DurationFieldType getType() {
+public String getName() {
+public boolean isSupported() {
+public boolean isPrecise() {
+public int getValue(long duration) {
+public long getValueAsLong(long duration) {
+public int getValue(long duration, long instant) {
+public long getValueAsLong(long duration, long instant) {
+public long getMillis(int value) {
+public long getMillis(long value) {
+public long getMillis(int value, long instant) {
+public long getMillis(long value, long instant) {
+public long add(long instant, int value) {
+public long add(long instant, long value) {
+public int getDifference(long minuendInstant, long subtrahendInstant) {
+public long getDifferenceAsLong(long minuendInstant, long subtrahendInstant) {
+public long getUnitMillis() {
+public int compareTo(DurationField durationField) {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+private Object readResolve() {
+private UnsupportedOperationException unsupported() {
+
+[org.joda.time.Partial | java]
+package org.joda.time;
+public final class Partial
+public Partial() {
+public Partial(Chronology chrono) {
+public Partial(DateTimeFieldType type, int value) {
+public Partial(DateTimeFieldType type, int value, Chronology chronology) {
+public Partial(DateTimeFieldType[] types, int[] values) {
+public Partial(DateTimeFieldType[] type
+...[truncated deterministically]...
+tChronology() {
+protected DateTimeField getField(int index, Chronology chrono) {
+public DateTimeFieldType getFieldType(int index) {
+public DateTimeFieldType[] getFieldTypes() {
+public int getValue(int index) {
+public int[] getValues() {
+public Partial withChronologyRetainFields(Chronology newChronology) {
+public Partial with(DateTimeFieldType fieldType, int value) {
+public Part
+...[truncated deterministically]...
+ateTimeField getField() {
+protected ReadablePartial getReadablePartial() {
+public Partial getPartial() {
+public int get() {
+public Partial addToCopy(int valueToAdd) {
+public Partial addWrapFieldToCopy(int valueToAdd) {
+public Partial setCopy(int value) {
+public Partial setCopy(String text, Locale locale) {
+public Partial setCopy(String text) {
+public Partial withMaximumValue() {
+public Partial withMinimumValue() {
+
+Generated JUnit Test:
+package org.joda.time;
+
+import junit.framework.TestCase;
+
+public class TestPartialBug93 extends TestCase {
+
+ // Era and year are not duplicates; the buggy version may throw a false duplicate.
+ public void testConstructorEraYearNoDuplicate() {
+     Partial p = new Partial(
+         new DateTimeFieldType[]{DateTimeFieldType.era(), DateTimeFieldType.year()},
+         new int[]{1, 2023}
+     );
+     assertEquals(2, p.size());
+     assertEquals(DateTimeFieldType.era(), p.getFieldType(0));
+     assertEquals(DateTimeFieldType.year(), p.getFieldType(1));
+ }
+
+ // Adding year to an era partial should succeed.
+ public void testWithAddYearToEraNoDuplicate() {
+     Partial p = new Partial(DateTimeFieldType.era(), 1);
+     Partial p2 = p.with(DateTimeFieldType.year(), 2023);
+     assertEquals(2, p2.size());
+     assertEquals(DateTimeFieldType.era(), p2.getFieldType(0));
+     assertEquals(DateTimeFieldType.year(), p2.getFieldType(1));
+ }
+
+ // Adding era to a year partial should succeed as well.
+ public void testWithAddEraToYearNoDuplicate() {
+     Partial p = new Partial(DateTimeFieldType.year(), 2023);
+     Partial p2 = p.with(DateTimeFieldType.era(), 1);
+     assertEquals(2, p2.size());
+     assertEquals(DateTimeFieldType.era(), p2.getFieldType(0));
+     assertEquals(DateTimeFieldType.year(), p2.getFieldType(1));
+ }
+
+ // Updating a field without changing the type must work.
+ public void testWithUpdateSameType() {
+     Partial p = new Partial(DateTimeFieldType.year(), 2023);
+     Partial p2 = p.with(DateTimeFieldType.year(), 2025);
+     assertEquals(1, p2.size());
+     assertEquals(2025, p2.getValue(0));
+ }
+
+ // Adding a smaller field (month) to a larger (year) keeps correct order.
+ public void testWithAddMonthToYearSuccess() {
+     Partial p = new Partial(DateTimeFieldType.year(), 2023);
+     Partial p2 = p.with(DateTimeFieldType.monthOfYear(), 6);
+     assertEquals(2, p2.size());
+     assertEquals(DateTimeFieldType.year(), p2.getFieldType(0));
+     assertEquals(DateTimeFieldType.monthOfYear(), p2.getFieldType(1));
+ }
+
+ // Adding a larger field after a smaller one violates the order constraint.
+ public void testWithAddYearToMonthOrderError() {
+     Partial p = new Partial(DateTimeFieldType.monthOfYear(), 6);
+     try {
+         p.with(DateTimeFieldType.year(), 2023);
+         fail("Should have thrown order error");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("order largest-smallest"));
+     }
+ }
+
+ // Genuine duplicate of the same DateTimeFieldType must be rejected.
+ public void testConstructorDuplicateSameTypeThrows() {
+     try {
+         new Partial(
+             new DateTimeFieldType[]{DateTimeFieldType.era(), DateTimeFieldType.era()},
+             new int[]{1, 2}
+         );
+         fail("Should have thrown duplicate error");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("duplicate"));
+     }
+ }
+
+ // Singe-field construction is valid.
+ public void testConstructorSingleFieldValid() {
+     Partial p = new Partial(DateTimeFieldType.era(), 1);
+     assertEquals(1, p.size());
+ }
+
+ // with() should accept the same field type and value.
+ public void testWithExistingTypeNoOp() {
+     Partial p = new Partial(DateTimeFieldType.era(), 1);
+     Partial p2 = p.with(DateTimeFieldType.era(), 1);
+     assertEquals(1, p2.size());
+     assertEquals(1, p2.getValue(0));
+ }
+
+ // Null types array must throw.
+ public void testConstructorNullTypesThrows() {
+     try {
+         new Partial((DateTimeFieldType[]) null, new int[]{1});
+         fail("Should have thrown");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("Types array must not be null"));
+     }
+ }
+
+ // Mismatched lengths must throw.
+ public void testConstructorValuesLengthMismatchThrows() {
+     try {
+         new Partial(new DateTimeFieldType[]{DateTimeFieldType.era()}, new int[]{1, 2});
+         fail("Should have thrown");
+     } catch (IllegalArgumentException e) {
+         assertTrue(e.getMessage().contains("same length"));
+     }
+ }
+
+ // Empty arrays are allowed.
+ public void testConstructorEmptyTypes() {
+     Partial p = new Partial(new DateTimeFieldType[]{}, new int[]{});
+     assertEquals(0, p.size());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.joda.time.TestPartialBug93::testWithAddYearToMonthOrderError
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.joda.time.TestPartialBug93::testWithAddYearToMonthOrderError

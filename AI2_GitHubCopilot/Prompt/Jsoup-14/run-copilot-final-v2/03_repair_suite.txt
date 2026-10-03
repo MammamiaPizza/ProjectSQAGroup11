@@ -1,0 +1,144 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 14  Version: Jsoup-14b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 82
+Trigger failures:
+- org.jsoup.parser.ParserTest::parsesUnterminatedTextarea
+ --> junit.framework.AssertionFailedError: expected:<one[]> but was:<one[<p>two]>
+ - org.jsoup.parser.ParserTest::handlesUnclosedTitle
+ --> junit.framework.AssertionFailedError: expected:<One[]> but was:<One[<b>Two <p>Test</p]>
+Modified: org.jsoup.parser.Tokeniser, org.jsoup.parser.TokeniserState
+
+Available API/signatures:
+[org.jsoup.parser.Tokeniser | java]
+package org.jsoup.parser;
+class Tokeniser {
+private List<ParseError> errors = new ArrayList<ParseError>(); // errors found while tokenising
+private StringBuilder charBuffer = new StringBuilder(); // buffers characters to output as one token
+private void characterReferenceError() {
+private void error(String errorMsg) {
+
+[org.jsoup.parser.TokeniserState | java]
+package org.jsoup.parser;
+enum TokeniserState {
+private void anythingElse(Tokeniser t, CharacterReader r) {
+abstract void read(Tokeniser t, CharacterReader r);
+private static final String replacementStr = String.valueOf(Tokeniser.replacementChar);
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.Element;
+ import org.junit.Test;
+
+ public class TokeniserStateTest {
+
+     private Document parse(String html) {
+         return Jsoup.parse(html);
+     }
+
+     @Test
+     public void normalTextarea() {
+         Document doc = parse("<textarea>text</textarea>");
+         Element textarea = doc.select("textarea").first();
+         assertNotNull(textarea);
+         assertEquals("text", textarea.text());
+     }
+
+     @Test
+     public void unterminatedTextarea() {
+         Document doc = parse("<textarea>one<p>two");
+         Element textarea = doc.select("textarea").first();
+         assertNotNull(textarea);
+         assertEquals("one", textarea.text());
+     }
+
+     @Test
+     public void normalTitle() {
+         Document doc = parse("<html><head><title>Hello</title></head><body></body></html>");
+         Element title = doc.select("title").first();
+         assertNotNull(title);
+         assertEquals("Hello", title.text());
+     }
+
+     @Test
+     public void unclosedTitle() {
+         Document doc = parse("<title>One<b>Two <p>Test</p>");
+         Element title = doc.select("title").first();
+         assertNotNull(title);
+         assertEquals("One", title.text());
+     }
+
+     @Test
+     public void emptyTextarea() {
+         Document doc = parse("<textarea></textarea>");
+         Element textarea = doc.select("textarea").first();
+         assertNotNull(textarea);
+         assertEquals("", textarea.text());
+     }
+
+     @Test
+     public void emptyTitle() {
+         Document doc = parse("<title></title>");
+         Element title = doc.select("title").first();
+         assertNotNull(title);
+         assertEquals("", title.text());
+     }
+
+     @Test
+     public void textareaOnlyWhitespace() {
+         Document doc = parse("<textarea>   </textarea>");
+         Element textarea = doc.select("textarea").first();
+         assertNotNull(textarea);
+         assertEquals("   ", textarea.text());
+     }
+
+     @Test
+     public void unclosedTitleAtEof() {
+         Document doc = parse("<title>NoEnd");
+         Element title = doc.select("title").first();
+         assertNotNull(title);
+         assertEquals("NoEnd", title.text());
+     }
+
+     @Test
+     public void deeplyNestedInUnclosedTitle() {
+         Document doc = parse("<title>a<b>c<i>d");
+         Element title = doc.select("title").first();
+         assertNotNull(title);
+         assertEquals("a", title.text());
+     }
+
+     @Test
+     public void unclosedTitleStopsAtHeadClose() {
+         Document doc = parse("<html><head><title>One</head><body></body></html>");
+         Element title = doc.select("title").first();
+         assertNotNull(title);
+         assertEquals("One", title.text());
+     }
+
+     @Test
+     public void textareaWithNestedTags() {
+         Document doc = parse("<textarea><b>bold</textarea>");
+         Element textarea = doc.select("textarea").first();
+         assertNotNull(textarea);
+         assertEquals("<b>bold", textarea.text());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.jsoup.parser.TokeniserStateTest::unclosedTitleStopsAtHeadClose
+ - org.jsoup.parser.TokeniserStateTest::textareaOnlyWhitespace
+
+Failing generated tests: org.jsoup.parser.TokeniserStateTest::textareaOnlyWhitespace, org.jsoup.parser.TokeniserStateTest::unclosedTitleStopsAtHeadClose

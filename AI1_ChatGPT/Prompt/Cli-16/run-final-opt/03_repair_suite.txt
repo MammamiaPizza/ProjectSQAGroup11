@@ -1,0 +1,183 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 16  Version: Cli-16b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-123
+Trigger failures:
+- org.apache.commons.cli2.bug.BugCLI123Test::testMultipleChildOptions
+ --> org.apache.commons.cli2.OptionException: Missing option parentOptions
+ - org.apache.commons.cli2.bug.BugCLI123Test::testParentOptionAndChildOption
+ --> junit.framework.AssertionFailedError: Maximum restriction for parent not verified!
+ - org.apache.commons.cli2.bug.BugCLI123Test::testSingleChildOption
+ --> org.apache.commons.cli2.OptionException: Missing option parentOptions
+ - org.apache.commons.cli2.commandline.DefaultingCommandLineTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>] [<target1> [<target2> ...]]> was not:<[--help (-?,-h)]>
+ - org.apache.commons.cli2.commandline.PreferencesCommandLineTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>
+...[truncated deterministically]...
+.PropertiesCommandLineTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>] [<target1> [<target2> ...]]> was not:<[--help (-?,-h)]>
+ - org.apache.commons.cli2.commandline.WriteableCommandLineImplTest::testGetOptions_Order
+ --> junit.framework.AssertionFailedError: expected same:<[--help (-?,-h)|login <username>] [<target1> [<target2> ...]]> was not:<[--help (-?,-h)]>
+Modified: org.apache.commons.cli2.Option, org.apache.commons.cli2.commandline.WriteableCommandLineImpl, org.apache.commons.cli2.option.GroupImpl, org.apache.commons.cli2.option.OptionImpl
+
+Available API/signatures:
+[org.apache.commons.cli2.Option | java]
+package org.apache.commons.cli2;
+public interface Option {
+void defaults(final WriteableCommandLine commandLine);
+boolean canProcess(final WriteableCommandLine commandLine, final String argument);
+boolean canProcess(final WriteableCommandLine commandLine, final ListIterator arguments);
+void validate(final WriteableCommandLine commandLine)
+Option findOption(final String trigger);
+
+[org.apache.commons.cli2.commandline.WriteableCommandLineImpl | java]
+package org.apache.commons.cli2.commandline;
+public class WriteableCommandLineImpl
+private final Map optionToProperties = new HashMap();
+private final List options = new ArrayList();
+private final Map nameToOption = new HashMap();
+private final Map values = new HashMap();
+private final Map switches = new HashMap();
+private final Map defaultValues = new HashMap();
+private final Map defaultSwitches = new HashMap();
+public void addOption(Option option) {
+public boolean hasOption(final Option option) {
+final boolean present = options.contains(option);
+public Option getOption(final String trigger) {
+public List getUndefaultedValues(Option option) {
+public String getProperty(final String property) {
+public void addProperty(final String property, final String value) {
+public Set getProperties(fin
+...[truncated deterministically]...
+keOption(final String trigger) {
+for (final Iterator i = prefixes.iterator(); i.hasNext();) {
+final String prefix = (String) i.next();
+public String toString() {
+final StringBuffer buffer = new StringBuffer();
+for (final Iterator i = normalised.iterator(); i.hasNext();) {
+final String arg = (String) i.next();
+public List getOptions()
+...[truncated deterministically]...
+= (String) o1;
+final String s2 = (String) o2;
+
+[org.apache.commons.cli2.option.OptionImpl | java]
+package org.apache.commons.cli2.option;
+public abstract class OptionImpl implements Option {
+final String argument = (String) arguments.next();
+public String toString() {
+final StringBuffer buffer = new StringBuffer();
+public int getId() {
+public boolean equals(final Object thatObj) {
+final OptionImpl that = (OptionImpl) thatObj;
+public int hashCode() {
+public Option findOption(String trigger) {
+public boolean isRequired() {
+public void defaults(final WriteableCommandLine commandLine) {
+protected void checkPrefixes(final Set prefixes) {
+for (final Iterator i = getTriggers().iterator(); i.hasNext();) {
+for (final Iterator i = prefixes.iterator(); i.hasNext();) {
+final ResourceHelper helper = ResourceHelper.getResourceHelper();
+
+Generated JUnit Test:
+import java.util.ArrayList;
+import java.util.List;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.commandline.WriteableCommandLineImpl;
+import org.apache.commons.cli2.builder.DefaultOptionBuilder;
+import org.apache.commons.cli2.builder.GroupBuilder;
+
+public class Cli16FaultTest extends TestCase {
+
+    private Option createOption(final String shortName, final String longName) {
+        return new DefaultOptionBuilder()
+                .withShortName(shortName)
+                .withLongName(longName)
+                .create();
+    }
+
+    public void testGetOptionsRetainsAllAddedOptionsInInsertionOrder() {
+        final Option help = createOption("h", "help");
+        final Option login = createOption("l", "login");
+        final Option target = createOption("t", "target");
+
+        final Option root = new GroupBuilder()
+                .withOption(help)
+                .withOption(login)
+                .withOption(target)
+                .create();
+
+        final WriteableCommandLineImpl commandLine =
+                new WriteableCommandLineImpl(root, new ArrayList());
+
+        commandLine.addOption(help);
+        commandLine.addOption(login);
+        commandLine.addOption(target);
+
+        final List options = commandLine.getOptions();
+
+        assertEquals(3, options.size());
+        assertSame(help, options.get(0));
+        assertSame(login, options.get(1));
+        assertSame(target, options.get(2));
+    }
+
+    public void testAddedOptionsAreAvailableByBothShortAndLongTriggers() {
+        final Option help = createOption("h", "help");
+        final Option login = createOption("l", "login");
+
+        final Option root = new GroupBuilder()
+                .withOption(help)
+                .withOption(login)
+                .create();
+
+        final WriteableCommandLineImpl commandLine =
+                new WriteableCommandLineImpl(root, new ArrayList());
+
+        commandLine.addOption(help);
+        commandLine.addOption(login);
+
+        assertSame(help, commandLine.getOption("-h"));
+        assertSame(help, commandLine.getOption("--help"));
+        assertSame(login, commandLine.getOption("-l"));
+        assertSame(login, commandLine.getOption("--login"));
+        assertNull(commandLine.getOption("--missing"));
+    }
+
+    public void testGroupFindOptionResolvesChildOptionsAndRejectsUnknownTrigger() {
+        final Option help = createOption("h", "help");
+        final Option login = createOption("l", "login");
+
+        final Option group = new GroupBuilder()
+                .withOption(help)
+                .withOption(login)
+                .create();
+
+        assertSame(help, group.findOption("--help"));
+        assertSame(login, group.findOption("-l"));
+        assertNull(group.findOption("--unknown"));
+    }
+
+    public void testOptionFindOptionResolvesOnlyItsOwnTrigger() {
+        final Option help = createOption("h", "help");
+
+        assertSame(help, help.findOption("-h"));
+        assertSame(help, help.findOption("--help"));
+        assertNull(help.findOption("--login"));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - Cli16FaultTest::testGetOptionsRetainsAllAddedOptionsInInsertionOrder
+
+Extract test suite......................................................... OK
+Failing generated tests: Cli16FaultTest::testGetOptionsRetainsAllAddedOptionsInInsertionOrder

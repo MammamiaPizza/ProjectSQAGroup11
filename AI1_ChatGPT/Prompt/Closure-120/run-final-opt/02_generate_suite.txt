@@ -1,0 +1,465 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 120  Version: Closure-120b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.ReferenceCollectingCallback
+Modified: com.google.javascript.jscomp.ReferenceCollectingCallback
+Triggers: com.google.javascript.jscomp.InlineVariablesTest::testExternalIssue1053
+
+Bug/specification summary:
+Bug report: 1053
+Trigger failures:
+- com.google.javascript.jscomp.InlineVariablesTest::testExternalIssue1053
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.ReferenceCollectingCallback
+
+Prompt-01 test plan:
+TARGETS: ReferenceCollectingCallback.visit, enterScope, exitScope, addReference, and block-boundary handling. 
+TARGETS: ReferenceCollection assignment/initialization queries used by InlineVariables. 
+ORACLES: Existing InlineVariablesTest.testExternalIssue1053 assertion/failure outcome. 
+CASES: References across scopes and BasicBlock boundaries, including declarations and assignments. 
+CASES: Normal symbol lookup plus references involving initializing declarations/assignments. 
+RISKS: No source diff or trigger test body/expected assertion is provided; exact regression input is unavailable.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.ReferenceCollectingCallback (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class ReferenceCollectingCallback implements ScopedCallback,
+private final Deque<BasicBlock> blockStack = new ArrayDeque<BasicBlock>();
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node scriptRoot, Node originalRoot) {
+public Iterable<Var> getAllSymbols() {
+public Scope getScope(Var var) {
+public ReferenceCollection getReferences(Var v) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+private static boolean isBlockBoundary(Node n, Node parent) {
+private void addReference(Var v, Reference reference) {
+interface ReferenceMap {
+private static class ReferenceMapWrapper implements ReferenceMap {
+public ReferenceMapWrapper(Map<Var, ReferenceCollection> referenceMap) {
+public ReferenceCollection getReferences(Var var) {
+interface Behavior {
+static final Behavior DO_NOTHING_BEHAVIOR = new Behavior() {
+public void afterExitScope(NodeTraversal t, ReferenceMap referenceMap) {}
+static class ReferenceCollection implements Iterable<Reference> {
+public Iterator<Reference> iterator() {
+protected boolean isWellDefined() {
+private boolean isInitializingDeclarationAt(int index) {
+private boolean isInitializingAssignmentAt(int index) {
+private Reference getOneAndOnlyAssignment() {
+static final class Reference implements StaticReference<JSType> {
+@VisibleForTesting
+static Reference createRefForTest(CompilerInput input) {
+public Var getSymbol() {
+public Node getNode() {
+public InputId getInputId() {
+public StaticSourceFile getSourceFile() {
+private static boolean isLhsOfForInExpression(Node n) {
+static final class BasicBlock {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.InputId;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.StaticReference;
+import com.google.javascript.rhino.jstype.StaticSourceFile;
+import com.google.javascript.rhino.jstype.StaticSymbolTable;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class ReferenceCollectingCallback implements ScopedCallback,
+
+/* METHOD ReferenceCollectingCallback */
+ReferenceCollectingCallback(AbstractCompiler compiler, Behavior behavior) {
+ this(compiler, behavior, Predicates.<Var>alwaysTrue());
+ }
+
+/* METHOD ReferenceCollectingCallback */
+ReferenceCollectingCallback(AbstractCompiler compiler, Behavior behavior,
+ Predicate<Var> varFilter) {
+ this.compiler = compiler;
+ this.behavior = behavior;
+ this.varFilter = varFilter;
+ }
+
+/* METHOD exitScope */
+@Override
+ public void exitScope(NodeTraversal t) {
+ blockStack.pop();
+ if (t.getScope().isGlobal()) {
+ // Update global scope reference lists when we are done with it.
+ compiler.updateGlobalVarReferences(referenceMap, t.getScopeRoot());
+ behavior.afterExitScope(t, compiler.getGlobalVarReferences());
+ } else {
+ behavior.afterExitScope(t, new ReferenceMapWrapper(referenceMap));
+ }
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ NodeTraversal.traverseRoots(
+ compiler, Lists.newArrayList(externs, root), this);
+ }
+
+/* METHOD hotSwapScript */
+@Override
+ public void hotSwapScript(Node scriptRoot, Node originalRoot) {
+ NodeTraversal.traverse(compiler, scriptRoot, this);
+ }
+
+/* METHOD enterScope */
+@Override
+ public void enterScope(NodeTraversal t) {
+ Node n = t.getScope().getRootNode();
+ BasicBlock parent = blockStack.isEmpty() ? null : blockStack.peek();
+ blockStack.push(new BasicBlock(parent, n));
+ }
+
+/* METHOD getSourceFile */
+@Override
+ public StaticSourceFile getSourceFile() {
+ return sourceFile;
+ }
+
+/* METHOD getAllSymbols */
+@Override
+ public Iterable<Var> getAllSymbols() {
+ return referenceMap.keySet();
+ }
+
+/* METHOD getScope */
+@Override
+ public Scope getScope(Var var) {
+ return var.scope;
+ }
+
+/* METHOD getReferences */
+@Override
+ public ReferenceCollection getReferences(Var v) {
+ return referenceMap.get(v);
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (n.isName()) {
+ Var v;
+ if (n.getString().equals("arguments")) {
+ v = t.getScope().getArgumentsVar();
+ } else {
+ v = t.getScope().getVar(n.getString());
+ }
+ if (v != null && varFilter.apply(v)) {
+ addReference(v, new Reference(n, t, blockStack.peek()));
+ }
+ }
+
+ if (isBlockBoundary(n, parent)) {
+ blockStack.pop();
+ }
+ }
+
+/* METHOD shouldTraverse */
+@Override
+ public boolean shouldTraverse(NodeTraversal nodeTraversal, Node n,
+ Node parent) {
+ // If node is a new basic block, put on basic block stack
+ if (isBlockBoundary(n, parent)) {
+ blockStack.push(new BasicBlock(blockStack.peek(), n));
+ }
+ return true;
+ }
+
+/* METHOD ReferenceMapWrapper */
+public ReferenceMapWrapper(Map<Var, ReferenceCollection> referenceMap) {
+ this.referenceMap = referenceMap;
+ }
+
+/* METHOD getReferences */
+@Override
+ public ReferenceCollection getReferences(Var var) {
+ return referenceMap.get(var);
+ }
+
+/* METHOD afterExitScope */
+@Override
+ public void afterExitScope(NodeTraversal t, ReferenceMap referenceMap) {}
+
+/* METHOD iterator */
+@Override
+ public Iterator<Reference> iterator() {
+ return references.iterator();
+ }
+
+/* METHOD getSymbol */
+@Override
+ public Var getSymbol() {
+ return scope.getVar(nameNode.getString());
+ }
+
+/* METHOD getNode */
+@Override
+ public Node getNode() {
+ return nameNode;
+ }
+
+/* METHOD getInputId */
+public InputId getInputId() {
+ return inputId;
+ }
+
+/* METHOD createRefForTest */
+@VisibleForTesting
+ static Reference createRefForTest(CompilerInput input) {
+ return new Reference(new Node(Token.NAME), null, null,
+ input.getInputId());
+ }
+
+/* METHOD Reference */
+private Reference(Node nameNode,
+ BasicBlock basicBlock, Scope scope, InputId inputId) {
+ this.nameNode = nameNode;
+ this.basicBlock = basicBlock;
+ this.scope = scope;
+ this.inputId = inputId;
+ this.sourceFile = nameNode.getStaticSourceFile();
+ }
+
+/* METHOD isDeclaration */
+boolean isDeclaration() {
+ Node parent = getParent();
+ Node grandparent = parent.getParent();
+ return DECLARATION_PARENTS.contains(parent.getType()) ||
+ parent.isParamList() &&
+ grandparent.isFunction();
+ }
+
+/* METHOD BasicBlock */
+BasicBlock(BasicBlock parent, Node root) {
+ this.parent = parent;
+
+ // only named functions may be hoisted.
+ this.isHoisted = NodeUtil.isHoistedFunctionDeclaration(root);
+
+ this.isFunction = root.isFunction();
+
+ if (root.getParent() != null) {
+ int pType = root.getParent().getType();
+ this.isLoop = pType == Token.DO ||
+ pType == Token.WHILE ||
+ pType == Token.FOR;
+ } else {
+ this.isLoop = false;
+ }
+ }
+
+/* METHOD isBlockBoundary */
+private static boolean isBlockBoundary(Node n, Node parent) {
+ if (parent != null) {
+ switch (parent.getType()) {
+ case Token.DO:
+ case Token.FOR:
+ case Token.TRY:
+ case Token.WHILE:
+ case Token.WITH:
+ // NOTE: TRY has up to 3 child blocks:
+ // TRY
+ // BLOCK
+ // BLOCK
+ // CATCH
+ // BLOCK
+ // Note that there is an explicit CATCH token but no explicit
+ // FINALLY token. For simplicity, we consider each BLOCK
+ // a separate basic BLOCK.
+ return true;
+ case Token.AND:
+ case Token.HOOK:
+ case Token.IF:
+ case Token.OR:
+ // The first child of a conditional is not a boundary,
+ // but all the rest of the children are.
+ return n != parent.getFirstChild();
+
+ }
+ }
+
+ return n.isCase();
+ }
+
+/* METHOD addReference */
+private void addReference(Var v, Reference reference) {
+ // Create collection if none already
+ ReferenceCollection referenceInfo = referenceMap.get(v);
+ if (referenceInfo == null) {
+ referenceInfo = new ReferenceCollection();
+ referenceMap.put(v, referenceInfo);
+ }
+
+ // Add this particular reference
+ referenceInfo.add(reference);
+ }
+
+/* METHOD add */
+void add(Reference reference) {
+ references.add(reference);
+ }
+
+/* METHOD isEscaped */
+boolean isEscaped() {
+ Scope scope = null;
+ for (Reference ref : references) {
+ if (scope == null) {
+ scope = ref.scope;
+ } else if (scope != ref.scope) {
+ return true;
+ }
+ }
+ return false;
+ }
+
+/* METHOD isInitializingDeclarationAt */
+private boolean isInitializingDeclarationAt(int index) {
+ Reference maybeInit = references.get(index);
+ if (maybeInit.isInitializingDeclaration()) {
+ // This is a declaration that represents the initial value.
+ // Specifically, var declarations without assignments such as "var a;"
+ // are not.
+ return true;
+ }
+ return false;
+ }
+
+/* METHOD isInitializingAssignmentAt */
+private boolean isInitializingAssignmentAt(int index) {
+ if (index < references.size() && index > 0) {
+ Reference maybeDecl = references.get(index - 1);
+ if (maybeDecl.isVarDeclaration()) {
+ Preconditions.checkState(!maybeDecl.isInitializingDeclaration());
+ Reference maybeInit = references.get(index);
+ if (maybeInit.isSimpleAssignmentToName()) {
+ return true;
+ }
+ }
+ }
+ return false;
+ }
+
+/* METHOD getInitializingReference */
+Reference getInitializingReference() {
+ if (isInitializingDeclarationAt(0)) {
+ return references.get(0);
+ } else if (isInitializingAssignmentAt(1)) {
+ return references.get(1);
+ }
+ return null;
+ }
+
+/* METHOD getInitializingReferenceForConstants */
+Reference getInitializingReferenceForConstants() {
+ int size = references.size();
+ for (int i = 0; i < size; i++) {
+ if (isInitializingDeclarationAt(i) || isInitializingAssignmentAt(i)) {
+ return references.get(i);
+ }
+ }
+ return null;
+ }
+
+/* METHOD isAssignedOnceInLifetime */
+boolean isAssignedOnceInLifetime() {
+ Reference ref = getOneAndOnlyAssignment();
+ if (ref == null) {
+ return false;
+ }
+
+ // Make sure this assignment is not in a loop.
+ for (BasicBlock block = ref.getBasicBlock();
+ block != null; block = block.getParent()) {
+ if (block.isFunction) {
+ break;
+ } else if (block.isLoop) {
+ return false;
+ }
+ }
+
+ return true;
+ }
+
+/* METHOD getOneAndOnlyAssignment */
+private Reference getOneAndOnlyAssignment() {
+ Reference assignment = null;
+ int size = references.size();
+ for (int i = 0; i < size; i++) {
+ Reference ref = references.get(i);
+ if (ref.isLvalue() || ref.isInitializingDeclaration()) {
+ if (assignment == null) {
+ assignment = ref;
+ } else {
+ return null;
+ }
+ }
+ }
+ return assignment;
+ }
+
+/* METHOD isNeverAssigned */
+boolean isNeverAssigned() {
+ int size = references.size();
+ for (int i = 0; i < size; i++) {
+ Reference ref = references.get(i);
+ if (ref.isLvalue() || ref.isInitializingDeclaration()) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+/* METHOD firstReferenceIsAssigningDeclaration */
+boolean firstReferenceIsAssigningDeclaration() {
+ int size = references.size();
+ if (size > 0 && references.get(0).isInitializingDeclaration()) {
+ return true;
+ }
+ return false;
+ }
+
+/* METHOD Reference */
+Reference(Node nameNode, NodeTraversal t,
+ BasicBlock basicBlock) {
+ this(nameNode, basicBlock, t.getScope(), t.getInput().getInputId());
+ }
+
+/* METHOD newBleedingFunction */
+static Reference newBleedingFunction(NodeTraversal t,
+ BasicBlock basicBlock, Node func) {
+ return new Reference(func.getFirstChild(),
+ basicBlock, t.getScope(), t.getInput().getInputId());
+ }
+
+/* METHOD cloneWithNewScope */
+Reference cloneWithNewScope(Scope newScope) {
+ return new Reference(nameNode, basicBlock, newScope, inputId);
+ }

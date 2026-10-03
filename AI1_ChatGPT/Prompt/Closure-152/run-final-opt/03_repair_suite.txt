@@ -1,0 +1,169 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 152  Version: Closure-152b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 268
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testBackwardsTypedefUse1
+ --> java.lang.ClassCastException: com.google.javascript.rhino.jstype.StringType cannot be cast to com.google.javascript.rhino.jstype.ObjectType
+ - com.google.javascript.jscomp.TypeCheckTest::testBackwardsTypedefUse2
+ --> java.lang.ClassCastException: com.google.javascript.rhino.jstype.UnionType cannot be cast to com.google.javascript.rhino.jstype.ObjectType
+ - com.google.javascript.jscomp.TypeCheckTest::testBackwardsTypedefUse3
+ --> java.lang.ClassCastException: com.google.javascript.rhino.jstype.UnionType cannot be cast to com.google.javascript.rhino.jstype.ObjectType
+Modified: com.google.javascript.rhino.jstype.FunctionType
+
+Available API/signatures:
+[com.google.javascript.rhino.jstype.FunctionType | java]
+package com.google.javascript.rhino.jstype;
+public class FunctionType extends PrototypeObjectType {
+private enum Kind {
+private List<ObjectType> implementedInterfaces = ImmutableList.of();
+/** Creates an instance for a function that is an interface. */
+private FunctionType(JSTypeRegistry registry, String name, Node source) {
+@Override
+public boolean isInstanceType() {
+public boolean isConstructor() {
+public boolean isInterface() {
+public boolean isOrdinaryFunction() {
+public boolean isFunctionType() {
+public boolean canBeCalled() {
+public Iterable<Node> getParameters() {
+public Node getParametersNode() {
+public int getMinArguments() {
+public int getMaxArguments() {
+public JSType getReturnType() {
+public boolean isReturnTypeInferred() {
+public FunctionPrototypeType getPrototype() {
+public void setPrototypeBasedOn(ObjectType baseType) {
+public boolean setPrototype(FunctionPrototypeType prototype) {
+public Iterable<ObjectType> getAllImplementedInterfaces() {
+private void addRelatedInterfaces(ObjectType instance, Set<ObjectType> set) {
+/** Returns interfaces implemented directly by a class or its superclass. */
+public Iterable<ObjectType> getImplementedInterfaces() {
+public void setImplementedInterfaces(List<ObjectType> implementedInterfaces) {
+public boolean hasProperty(String name) {
+public boolean hasOwnProperty(String name) {
+public JSType getPropertyType(String name) {
+public boolean isPropertyTypeInferred(String property) {
+public JSType getLeastSupertype(JSType that) {
+public JSType getGreatestSubtype(JSType that) {
+private JSType supAndInfHelper(JSType that, boolean leastSuper)
+...[truncated deterministically]...
+lean hasUnknownSupertype() {
+public JSType getTopMostDefiningType(String propertyName) {
+public boolean isEquivalentTo(JSType otherType) {
+public int hashCode() {
+public boolean hasEqualCallType(FunctionType otherType) {
+public String toString() {
+private void appendVarArgsString(StringBuilder builder, JSType paramType) {
+public boolean isSubtype(JSType that) {
+public <T> T visit(Visitor<T> visitor) {
+public ObjectType getInstanceType() {
+public boolean hasInstanceType() {
+public ObjectType getTypeOfThis() {
+public Node getSource() {
+public void setSource(Node source) {
+private void addSubType(FunctionType subType) {
+public List<FunctionType> getSubTypes() {
+public boolean hasCachedValues() {
+public String getTemplateTypeName() {
+public String toDebugHashCodeString() {
+private String getDebugHashCodeStringOf(JSType type) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+public class FunctionTypeBackwardsTypedefTest {
+
+  private Result compile(String source) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    return compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("input.js", source),
+        options);
+  }
+
+  @Test
+  public void testOrdinaryThisTypeCompilesNormally() {
+    Result result =
+        compile(
+            "/** @this {Object} */\n"
+                + "function f() {}\n");
+
+    assertNotNull(result);
+    assertEquals(0, result.errors.length);
+  }
+
+  @Test
+  public void testBackwardsTypedefToStringInThisTypeDoesNotCrash() {
+    Result result =
+        compile(
+            "/** @this {LaterType} */\n"
+                + "function f() {}\n"
+                + "/** @typedef {string} */\n"
+                + "var LaterType;\n");
+
+    assertNotNull("Resolving a backwards typedef to string must complete", result);
+    assertNotNull(result.errors);
+  }
+
+  @Test
+  public void testBackwardsTypedefToUnionInThisTypeDoesNotCrash() {
+    Result result =
+        compile(
+            "/** @this {LaterType} */\n"
+                + "function f() {}\n"
+                + "/** @typedef {(string|number)} */\n"
+                + "var LaterType;\n");
+
+    assertNotNull("Resolving a backwards typedef to a union must complete", result);
+    assertNotNull(result.errors);
+  }
+
+  @Test
+  public void testBackwardsTypedefToUnionWithObjectMemberInThisTypeDoesNotCrash() {
+    Result result =
+        compile(
+            "/** @this {LaterType} */\n"
+                + "function f() {}\n"
+                + "/** @typedef {(string|Object)} */\n"
+                + "var LaterType;\n");
+
+    assertNotNull(
+        "Resolving a backwards typedef whose union includes an object must complete", result);
+    assertNotNull(result.errors);
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-152f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-152f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-152f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-152f-ai/.test_suite/com/google/javascript/jscomp/FunctionTypeBackwardsTypedefTest.java:16: error: no suitable method found for compile(SourceFile,SourceFile,CompilerOptions)
+ [javac] return compiler.compile(
+ [javac] ^
+ [javac] method Compiler.compile(JSSourceFile,JSSourceFile,CompilerOptions) is not applicable
+ [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

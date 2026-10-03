@@ -1,0 +1,425 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 70  Version: JacksonDatabind-70b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap
+Modified: com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap
+Triggers: com.fasterxml.jackson.databind.struct.TestUnwrapped::testCaseInsensitiveUnwrap
+
+Bug/specification summary:
+Bug report: 1493
+Trigger failures:
+- com.fasterxml.jackson.databind.struct.TestUnwrapped::testCaseInsensitiveUnwrap
+ --> java.util.NoSuchElementException: No entry 'businessAddress' found, can't remove
+Modified: com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap
+
+Prompt-01 test plan:
+TARGETS: BeanPropertyMap.remove(SettableBeanProperty); case-insensitive name lookup/removal behavior. 
+TARGETS: find(String), withCaseInsensitivity(boolean), and insertion-order property tracking after removal. 
+ORACLES: Trigger expects removal of "businessAddress" not to throw NoSuchElementException under case-insensitivity. 
+ORACLES: Public size(), find(String), iterator(), and getPropertiesInInsertionOrder() provide observable results. 
+CASES: Construct case-insensitive map; remove a property whose logical name differs only by letter case. 
+CASES: Verify removed property is no longer found by case variants and size/order reflect one removal. 
+CASES: Case-sensitive map retains distinct behavior for differently cased lookup/removal names. 
+CASES: Remove existing exact-name property and verify remaining properties remain retrievable. 
+RISKS: SettableBeanProperty construction/setup details are not provided; use available project test utilities only. 
+RISKS: No alternate-version behavior is available; derive expectations solely from trigger and exposed API.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser.impl;
+public class BeanPropertyMap
+protected final boolean _caseInsensitive;
+public BeanPropertyMap(boolean caseInsensitive, Collection<SettableBeanProperty> props)
+protected BeanPropertyMap(BeanPropertyMap base, boolean caseInsensitive)
+public BeanPropertyMap withCaseInsensitivity(boolean state) {
+protected void init(Collection<SettableBeanProperty> props)
+final int hashSize = findSize(_size);
+private final static int findSize(int size)
+public static BeanPropertyMap construct(Collection<SettableBeanProperty> props, boolean caseInsensitive) {
+public BeanPropertyMap withProperty(SettableBeanProperty newProp)
+final int slot = _hashCode(key);
+public BeanPropertyMap assignIndexes()
+public BeanPropertyMap renameAll(NameTransformer transformer)
+public BeanPropertyMap withoutProperties(Collection<String> toExclude)
+public void replace(SettableBeanProperty newProp)
+private List<SettableBeanProperty> properties() {
+@Override
+public Iterator<SettableBeanProperty> iterator() {
+public SettableBeanProperty[] getPropertiesInInsertionOrder() {
+protected final String getPropertyName(SettableBeanProperty prop) {
+public SettableBeanProperty find(int index)
+public SettableBeanProperty find(String key)
+private final SettableBeanProperty _find2(String key, int slot, Object match)
+public int size() { return _size; }
+public void remove(SettableBeanProperty propToRm)
+final SettableBeanProperty prop = find(key);
+public String toString()
+protected SettableBeanProperty _rename(SettableBeanProperty prop, NameTransformer xf)
+@SuppressWarnings("unchecked")
+protected void wrapAndThrow(Throwable t, Object bean, String fieldName, DeserializationContext ctxt)
+private final int _findIndexInHash(String key)
+private final int _findFromOrdered(SettableBeanProperty prop) {
+private final int _hashCode(String key) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser.impl;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.deser.SettableBeanProperty;
+import com.fasterxml.jackson.databind.util.NameTransformer;
+public class BeanPropertyMap
+
+/* METHOD remove */
+public void remove(SettableBeanProperty propToRm)
+ {
+ ArrayList<SettableBeanProperty> props = new ArrayList<SettableBeanProperty>(_size);
+ String key = getPropertyName(propToRm);
+ boolean found = false;
+
+ for (int i = 1, end = _hashArea.length; i < end; i += 2) {
+ SettableBeanProperty prop = (SettableBeanProperty) _hashArea[i];
+ if (prop == null) {
+ continue;
+ }
+ if (!found) {
+ // 09-Jan-2017, tatu: Important: must check name slot and NOT property name,
+ // as only former is lower-case in case-insensitive case
+ found = key.equals(prop.getName());
+ if (found) {
+ // need to leave a hole here
+ _propsInOrder[_findFromOrdered(prop)] = null;
+ continue;
+ }
+ }
+ props.add(prop);
+ }
+ if (!found) {
+ throw new NoSuchElementException("No entry '"+propToRm.getName()+"' found, can't remove");
+ }
+ init(props);
+ }
+
+/* METHOD BeanPropertyMap */
+protected BeanPropertyMap(BeanPropertyMap base, boolean caseInsensitive)
+ {
+ _caseInsensitive = caseInsensitive;
+
+ // 16-May-2016, tatu: Alas, not enough to just change flag, need to re-init
+ // as well.
+ _propsInOrder = Arrays.copyOf(base._propsInOrder, base._propsInOrder.length);
+ init(Arrays.asList(_propsInOrder));
+ }
+
+/* METHOD BeanPropertyMap */
+public BeanPropertyMap(boolean caseInsensitive, Collection<SettableBeanProperty> props)
+ {
+ _caseInsensitive = caseInsensitive;
+ _propsInOrder = props.toArray(new SettableBeanProperty[props.size()]);
+ init(props);
+ }
+
+/* METHOD replace */
+public void replace(SettableBeanProperty newProp)
+ {
+ String key = getPropertyName(newProp);
+ int ix = _findIndexInHash(key);
+ 
+ if (ix >= 0) {
+ SettableBeanProperty prop = (SettableBeanProperty) _hashArea[ix];
+ _hashArea[ix] = newProp;
+ // also, replace in in-order
+ _propsInOrder[_findFromOrdered(prop)] = newProp;
+ return;
+ }
+ 
+ throw new NoSuchElementException("No entry '"+key+"' found, can't replace");
+ }
+
+/* METHOD construct */
+public static BeanPropertyMap construct(Collection<SettableBeanProperty> props, boolean caseInsensitive) {
+ return new BeanPropertyMap(caseInsensitive, props);
+ }
+
+/* METHOD withProperty */
+public BeanPropertyMap withProperty(SettableBeanProperty newProp)
+ {
+ // First: may be able to just replace?
+ String key = getPropertyName(newProp);
+
+ for (int i = 1, end = _hashArea.length; i < end; i += 2) {
+ SettableBeanProperty prop = (SettableBeanProperty) _hashArea[i];
+ if ((prop != null) && prop.getName().equals(key)) {
+ _hashArea[i] = newProp;
+ _propsInOrder[_findFromOrdered(prop)] = newProp;
+ return this;
+ }
+ }
+ // If not, append
+ final int slot = _hashCode(key);
+ final int hashSize = _hashMask+1;
+ int ix = (slot<<1);
+ 
+ // primary slot not free?
+ if (_hashArea[ix] != null) {
+ // secondary?
+ ix = (hashSize + (slot >> 1)) << 1;
+ if (_hashArea[ix] != null) {
+ // ok, spill over.
+ ix = ((hashSize + (hashSize >> 1) ) << 1) + _spillCount;
+ _spillCount += 2;
+ if (ix >= _hashArea.length) {
+ _hashArea = Arrays.copyOf(_hashArea, _hashArea.length + 4);
+ // Uncomment for debugging only
+ /*
+for (int i = 0; i < _hashArea.length; i += 2) {
+ if (_hashArea[i] != null) {
+ System.err.println("Property #"+(i/2)+" '"+_hashArea[i]+"'...");
+ }
+}
+System.err.println("And new propr #"+slot+" '"+key+"'");
+*/
+ 
+ }
+ }
+ }
+ _hashArea[ix] = key;
+ _hashArea[ix+1] = newProp;
+
+ int last = _propsInOrder.length;
+ _propsInOrder = Arrays.copyOf(_propsInOrder, last+1);
+ _propsInOrder[last] = newProp;
+
+ // should we just create a new one? Or is resetting ok?
+ 
+ return this;
+ }
+
+/* METHOD withoutProperties */
+public BeanPropertyMap withoutProperties(Collection<String> toExclude)
+ {
+ if (toExclude.isEmpty()) {
+ return this;
+ }
+ final int len = _propsInOrder.length;
+ ArrayList<SettableBeanProperty> newProps = new ArrayList<SettableBeanProperty>(len);
+
+ for (int i = 0; i < len; ++i) {
+ SettableBeanProperty prop = _propsInOrder[i];
+ // 01-May-2015, tatu: Not 100% sure if existing `null`s should be retained;
+ // or, if entries to ignore should be retained as nulls. For now just
+ // prune them out
+ if (prop != null) { // may contain holes, too, check.
+ if (!toExclude.contains(prop.getName())) {
+ newProps.add(prop);
+ }
+ }
+ }
+ // should we try to re-index? Apparently no need
+ return new BeanPropertyMap(_caseInsensitive, newProps);
+ }
+
+/* METHOD _rename */
+protected SettableBeanProperty _rename(SettableBeanProperty prop, NameTransformer xf)
+ {
+ if (prop == null) {
+ return prop;
+ }
+ String newName = xf.transform(prop.getName());
+ prop = prop.withSimpleName(newName);
+ JsonDeserializer<?> deser = prop.getValueDeserializer();
+ if (deser != null) {
+ @SuppressWarnings("unchecked")
+ JsonDeserializer<Object> newDeser = (JsonDeserializer<Object>)
+ deser.unwrappingDeserializer(xf);
+ if (newDeser != deser) {
+ prop = prop.withValueDeserializer(newDeser);
+ }
+ }
+ return prop;
+ }
+
+/* METHOD wrapAndThrow */
+protected void wrapAndThrow(Throwable t, Object bean, String fieldName, DeserializationContext ctxt)
+ throws IOException
+ {
+ // inlined 'throwOrReturnThrowable'
+ while (t instanceof InvocationTargetException && t.getCause() != null) {
+ t = t.getCause();
+ }
+ // Errors to be passed as is
+ if (t instanceof Error) {
+ throw (Error) t;
+ }
+ // StackOverflowErrors are tricky ones; need to be careful...
+ boolean wrap = (ctxt == null) || ctxt.isEnabled(DeserializationFeature.WRAP_EXCEPTIONS);
+ // Ditto for IOExceptions; except we may want to wrap JSON exceptions
+ if (t instanceof IOException) {
+ if (!wrap || !(t instanceof JsonProcessingException)) {
+ throw (IOException) t;
+ }
+ } else if (!wrap) { // allow disabling wrapping for unchecked exceptions
+ if (t instanceof RuntimeException) {
+ throw (RuntimeException) t;
+ }
+ }
+ throw JsonMappingException.wrapWithPath(t, bean, fieldName);
+ }
+
+/* METHOD withCaseInsensitivity */
+public BeanPropertyMap withCaseInsensitivity(boolean state) {
+ if (_caseInsensitive == state) {
+ return this;
+ }
+ return new BeanPropertyMap(this, state);
+ }
+
+/* METHOD assignIndexes */
+public BeanPropertyMap assignIndexes()
+ {
+ // order is arbitrary, but stable:
+ int index = 0;
+ for (int i = 1, end = _hashArea.length; i < end; i += 2) {
+ SettableBeanProperty prop = (SettableBeanProperty) _hashArea[i];
+ if (prop != null) {
+ prop.assignIndex(index++);
+ }
+ }
+ return this;
+ }
+
+/* METHOD find */
+public SettableBeanProperty find(int index)
+ {
+ // note: will scan the whole area, including primary, secondary and
+ // possible spill-area
+ for (int i = 1, end = _hashArea.length; i < end; i += 2) {
+ SettableBeanProperty prop = (SettableBeanProperty) _hashArea[i];
+ if ((prop != null) && (index == prop.getPropertyIndex())) {
+ return prop;
+ }
+ }
+ return null;
+ }
+
+/* METHOD find */
+public SettableBeanProperty find(String key)
+ {
+ if (key == null) {
+ throw new IllegalArgumentException("Can not pass null property name");
+ }
+ if (_caseInsensitive) {
+ key = key.toLowerCase();
+ }
+ 
+ // inlined `_hashCode(key)`
+ int slot = key.hashCode() & _hashMask;
+// int h = key.hashCode();
+// int slot = (h + (h >> 13)) & _hashMask;
+
+ int ix = (slot<<1);
+ Object match = _hashArea[ix];
+ if ((match == key) || key.equals(match)) {
+ return (SettableBeanProperty) _hashArea[ix+1];
+ }
+ return _find2(key, slot, match);
+ }
+
+/* METHOD findDeserializeAndSet */
+public boolean findDeserializeAndSet(JsonParser p, DeserializationContext ctxt,
+ Object bean, String key) throws IOException
+ {
+ final SettableBeanProperty prop = find(key);
+ if (prop == null) {
+ return false;
+ }
+ try {
+ prop.deserializeAndSet(p, ctxt, bean);
+ } catch (Exception e) {
+ wrapAndThrow(e, bean, key, ctxt);
+ }
+ return true;
+ }
+
+/* METHOD toString */
+@Override
+ public String toString()
+ {
+ StringBuilder sb = new StringBuilder();
+ sb.append("Properties=[");
+ int count = 0;
+
+ Iterator<SettableBeanProperty> it = iterator();
+ while (it.hasNext()) {
+ SettableBeanProperty prop = it.next();
+ if (count++ > 0) {
+ sb.append(", ");
+ }
+ sb.append(prop.getName());
+ sb.append('(');
+ sb.append(prop.getType());
+ sb.append(')');
+ }
+ sb.append(']');
+ return sb.toString();
+ }
+
+/* METHOD iterator */
+@Override
+ public Iterator<SettableBeanProperty> iterator() {
+ return properties().iterator();
+ }
+
+/* METHOD getPropertiesInInsertionOrder */
+public SettableBeanProperty[] getPropertiesInInsertionOrder() {
+ return _propsInOrder;
+ }
+
+/* METHOD getPropertyName */
+protected final String getPropertyName(SettableBeanProperty prop) {
+ return _caseInsensitive ? prop.getName().toLowerCase() : prop.getName();
+ }
+
+/* METHOD size */
+public int size() { return _size; }
+
+/* METHOD properties */
+private List<SettableBeanProperty> properties() {
+ ArrayList<SettableBeanProperty> p = new ArrayList<SettableBeanProperty>(_size);
+ for (int i = 1, end = _hashArea.length; i < end; i += 2) {
+ SettableBeanProperty prop = (SettableBeanProperty) _hashArea[i];
+ if (prop != null) {
+ p.add(prop);
+ }
+ }
+ return p;
+ }
+
+/* METHOD findSize */
+private final static int findSize(int size)
+ {
+ if (size <= 5) {
+ return 8;
+ }
+ if (size <= 12) {
+ return 16;
+ }
+ int needed = size + (size >> 2); // at most 80% full
+ int result = 32;
+ while (result < needed) {
+ result += result;
+ }
+ return result;
+ }

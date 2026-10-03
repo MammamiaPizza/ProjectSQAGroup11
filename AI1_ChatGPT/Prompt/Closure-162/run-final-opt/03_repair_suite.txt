@@ -1,0 +1,183 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 162  Version: Closure-162b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 548
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testForwardJsDoc
+ --> junit.framework.AssertionFailedError: expected:<[STRING foo.Foo.Bar 4 [source_file: testcode]
+Modified: com.google.javascript.jscomp.Scope, com.google.javascript.jscomp.ScopedAliases
+
+Available API/signatures:
+[com.google.javascript.jscomp.Scope | java]
+package com.google.javascript.jscomp;
+public class Scope
+private final Map<String, Var> vars = new LinkedHashMap<String, Var>();
+@Override public boolean apply(Var var) {
+public static class Var
+@Override
+public String getName() {
+public Node getNode() {
+public StaticSourceFile getSourceFile() {
+public Var getSymbol() {
+public Var getDeclaration() {
+public Node getParentNode() {
+public boolean isBleedingFunction() {
+public boolean isGlobal() {
+public boolean isLocal() {
+public boolean isConst() {
+public boolean isDefine() {
+public Node getInitialValue() {
+public JSType getType() {
+public Node getNameNode() {
+public JSDocInfo getJSDocInfo() {
+public boolean isTypeInferred() {
+public String getInputName() {
+public boolean isNoShadow() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+public
+...[truncated deterministically]...
+Slot<JSType> getOwnSlot(String name) {
+public Var getVar(String name) {
+public Var getArgumentsVar() {
+public boolean isDeclared(String name, boolean recurse) {
+public Iterator<Var> getVars() {
+public Iterable<Var> getReferences(Var var) {
+public StaticScope<JSType> getScope(Var var) {
+public Iterable<Var> getAllSymbols() {
+public int getVarCount() {
+public Iterator<Var> getDeclarativelyUnboundVarsWithoutTypes() {
+
+[com.google.javascript.jscomp.ScopedAliases | java]
+package com.google.javascript.jscomp;
+class ScopedAliases implements HotSwapCompilerPass {
+@Nullable PreprocessorSymbolTable preprocessorSymbolTable,
+@Override
+public void process(Node externs, Node root) {
+public void hotSwapScript(Node root, Node originalRoot) {
+private interfac
+...[truncated deterministically]...
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> aliasUsages = Lists.newArrayList();
+private final Map<String, Var> aliases = Maps.newHashMap();
+private List<AliasUsage> getAliasUsages() {
+private bo
+...[truncated deterministically]...
+eMethod(Node n) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+public final boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+private SourcePosition<AliasTransformation> getSourceRegion(Node n) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformation;
+import com.google.javascript.jscomp.CompilerOptions.AliasTransformationHandler;
+import com.google.javascript.rhino.SourcePosition;
+import org.junit.Test;
+
+public class ScopedAliasesForwardJsDocTest extends CompilerTestCase {
+
+  private static final AliasTransformationHandler NULL_ALIAS_TRANSFORMATION_HANDLER =
+      new AliasTransformationHandler() {
+        @Override
+        public AliasTransformation logAliasTransformation(
+            String sourceFile, SourcePosition<AliasTransformation> position) {
+          return new AliasTransformation() {
+            @Override
+            public void addAlias(String alias, String definition) {
+            }
+          };
+        }
+      };
+
+  @Override
+  protected CompilerPass getProcessor(Compiler compiler) {
+    return new ScopedAliases(
+        compiler, null, NULL_ALIAS_TRANSFORMATION_HANDLER);
+  }
+
+  @Override
+  protected int getNumRepetitions() {
+    return 1;
+  }
+
+  @Test
+  public void testRewritesJsDocTypeWhenAliasDeclaredBeforeUse() {
+    test(
+        "goog.scope(function() {\n"
+            + "  var Foo = foo.Foo;\n"
+            + "  function f() {\n"
+            + "    /** @type {Foo.Bar} */\n"
+            + "    var value;\n"
+            + "  }\n"
+            + "});",
+        "function f() {\n"
+            + "  /** @type {foo.Foo.Bar} */\n"
+            + "  var value;\n"
+            + "}");
+  }
+
+  @Test
+  public void testRewritesForwardJsDocTypeReference() {
+    test(
+        "goog.scope(function() {\n"
+            + "  function f() {\n"
+            + "    /** @type {Foo.Bar} */\n"
+            + "    var value;\n"
+            + "  }\n"
+            + "  var Foo = foo.Foo;\n"
+            + "});",
+        "function f() {\n"
+            + "  /** @type {foo.Foo.Bar} */\n"
+            + "  var value;\n"
+            + "}");
+  }
+
+  @Test
+  public void testRewritesForwardJsDocThroughTransitiveAliases() {
+    test(
+        "goog.scope(function() {\n"
+            + "  function f() {\n"
+            + "    /** @param {Bar.Baz} value */\n"
+            + "    function use(value) {}\n"
+            + "  }\n"
+            + "  var Foo = foo.Foo;\n"
+            + "  var Bar = Foo.Bar;\n"
+            + "});",
+        "function f() {\n"
+            + "  /** @param {foo.Foo.Bar.Baz} value */\n"
+            + "  function use(value) {}\n"
+            + "}");
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-162f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-162f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-162f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-162f-ai/.test_suite/com/google/javascript/jscomp/ScopedAliasesForwardJsDocTest.java:8: error: cannot find symbol
+ [javac] public class ScopedAliasesForwardJsDocTest extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

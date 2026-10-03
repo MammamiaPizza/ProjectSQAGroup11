@@ -1,0 +1,214 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 70  Version: JacksonDatabind-70b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1493
+Trigger failures:
+- com.fasterxml.jackson.databind.struct.TestUnwrapped::testCaseInsensitiveUnwrap
+ --> java.util.NoSuchElementException: No entry 'businessAddress' found, can't remove
+Modified: com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap | java]
+package com.fasterxml.jackson.databind.deser.impl;
+public class BeanPropertyMap
+protected final boolean _caseInsensitive;
+public BeanPropertyMap(boolean caseInsensitive, Collection<SettableBeanProperty> props)
+protected BeanPropertyMap(BeanPropertyMap base, boolean caseInsensitive)
+public BeanPropertyMap withCaseInsensitivity(boolean state) {
+protected void init(Collection<SettableBeanProperty> props)
+final int hashSize = findSize(_size);
+private final static int findSize(int size)
+public static BeanPropertyMap construct(Collection<SettableBeanProperty> props, boolean caseInsensitive) {
+public BeanPropertyMap withProperty(SettableBeanProperty newProp)
+final int slot = _hashCode(key);
+public BeanPropertyMap assignIndexes()
+public BeanPropertyMap renameAll(NameTransformer transformer)
+public BeanPropertyMap withoutProperties(Collection<String> toExclude)
+public void replace(SettableBeanProperty newProp)
+private List<SettableBeanProperty> properties() {
+@Override
+public Iterator<SettableBeanProperty> iterator() {
+public SettableBeanProperty[] getPropertiesInInsertionOrder() {
+protected final String getPropertyName(SettableBeanProperty prop) {
+public SettableBeanProperty find(int index)
+public SettableBeanProperty find(String key)
+private final SettableBeanProperty _find2(String key, int slot, Object match)
+public int size() { return _size; }
+public void remove(SettableBeanProperty propToRm)
+final SettableBeanProperty prop = find(key);
+public String toString()
+protected SettableBeanProperty _rename(SettableBeanProperty prop, NameTransformer xf)
+@SuppressWarnings("unchecked")
+protected void wrapAndThrow(Throwable t, Object bean, String fieldName, DeserializationContext ctxt)
+private final int _findIndexInHash(String key)
+private final int _findFromOrdered(SettableBeanProperty prop) {
+private final int _hashCode(String key) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser.impl;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.DefaultDeserializationContext;
+import com.fasterxml.jackson.databind.deser.SettableBeanProperty;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+public class BeanPropertyMapCaseInsensitiveRemovalTest
+{
+    public static class AddressBean {
+        public String businessAddress;
+        public String zipCode;
+    }
+
+    private List<SettableBeanProperty> properties() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonParser parser = mapper.getFactory().createParser("{}");
+        try {
+            DefaultDeserializationContext ctxt = ((DefaultDeserializationContext) mapper.getDeserializationContext())
+                    .createInstance(mapper.getDeserializationConfig(), parser, null);
+            JsonDeserializer<?> deser = ctxt.findRootValueDeserializer(
+                    mapper.constructType(AddressBean.class));
+
+            assertTrue(deser instanceof BeanDeserializerBase);
+
+            List<SettableBeanProperty> result = new ArrayList<SettableBeanProperty>();
+            Iterator<SettableBeanProperty> it = ((BeanDeserializerBase) deser).properties();
+            while (it.hasNext()) {
+                result.add(it.next());
+            }
+            assertEquals(2, result.size());
+            return result;
+        } finally {
+            parser.close();
+        }
+    }
+
+    private BeanPropertyMap map(boolean caseInsensitive) throws Exception {
+        return BeanPropertyMap.construct(properties(), caseInsensitive);
+    }
+
+    @Test
+    public void removeUsesCanonicalNameForCaseInsensitiveMap() throws Exception {
+        BeanPropertyMap map = map(true);
+        SettableBeanProperty business = map.find("BUSINESSADDRESS");
+        SettableBeanProperty zip = map.find("zipcode");
+
+        assertSame(business, map.find("businessAddress"));
+        assertSame(zip, map.find("ZIPCODE"));
+
+        SettableBeanProperty[] before = map.getPropertiesInInsertionOrder();
+        int businessPosition = -1;
+        for (int i = 0; i < before.length; ++i) {
+            if (before[i] == business) {
+                businessPosition = i;
+                break;
+            }
+        }
+        assertTrue(businessPosition >= 0);
+
+        map.remove(business);
+
+        assertEquals(1, map.size());
+        assertNull(map.find("businessAddress"));
+        assertNull(map.find("BUSINESSADDRESS"));
+        assertNull(map.find("BusinessAddress"));
+        assertSame(zip, map.find("zipCode"));
+        assertNull(map.getPropertiesInInsertionOrder()[businessPosition]);
+    }
+
+    @Test
+    public void removalFromCaseInsensitiveMapRetainsRemainingIteratorProperty() throws Exception {
+        BeanPropertyMap map = map(true);
+        SettableBeanProperty business = map.find("businessAddress");
+        SettableBeanProperty zip = map.find("zipCode");
+
+        map.remove(business);
+
+        Iterator<SettableBeanProperty> it = map.iterator();
+        assertTrue(it.hasNext());
+        assertSame(zip, it.next());
+        assertFalse(it.hasNext());
+    }
+
+    @Test
+    public void withCaseInsensitivitySupportsCaseVariantLookupAndRemoval() throws Exception {
+        BeanPropertyMap sensitive = map(false);
+        BeanPropertyMap insensitive = sensitive.withCaseInsensitivity(true);
+
+        SettableBeanProperty business = insensitive.find("BUSINESSADDRESS");
+        assertSame(sensitive.find("businessAddress"), business);
+
+        insensitive.remove(business);
+
+        assertEquals(1, insensitive.size());
+        assertNull(insensitive.find("businessAddress"));
+        assertNull(insensitive.find("BUSINESSADDRESS"));
+        assertTrue(insensitive.find("zipCode") != null);
+    }
+
+    @Test
+    public void caseSensitiveMapRequiresExactLookupNameAndRemovesExactProperty() throws Exception {
+        BeanPropertyMap map = map(false);
+        SettableBeanProperty business = map.find("businessAddress");
+        SettableBeanProperty zip = map.find("zipCode");
+
+        assertNull(map.find("BUSINESSADDRESS"));
+        assertSame(business, map.find("businessAddress"));
+
+        map.remove(business);
+
+        assertEquals(1, map.size());
+        assertNull(map.find("businessAddress"));
+        assertNull(map.find("BUSINESSADDRESS"));
+        assertSame(zip, map.find("zipCode"));
+    }
+
+    @Test
+    public void findRejectsNullPropertyName() throws Exception {
+        BeanPropertyMap map = map(true);
+
+        try {
+            map.find((String) null);
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("null property name"));
+            return;
+        }
+        throw new AssertionError("Expected IllegalArgumentException for null property name");
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-70f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-70f-ai -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-70f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-70f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-70f-ai/.test_suite/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMapCaseInsensitiveRemovalTest.java:37: error: cannot find symbol
+ [javac] assertTrue(deser instanceof BeanDeserializerBase);
+ [javac] ^
+ [javac] symbol: class BeanDeserializerBase
+ [javac] location: class BeanPropertyMapCaseInsensitiveRemovalTest
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

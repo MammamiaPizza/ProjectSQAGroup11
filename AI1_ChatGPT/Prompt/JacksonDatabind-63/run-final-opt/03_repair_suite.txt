@@ -1,0 +1,201 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 63  Version: JacksonDatabind-63b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1403
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.exc.ExceptionPathTest::testReferenceChainForInnerClass
+ --> junit.framework.ComparisonFailure: expected:<....databind.deser.exc.[ExceptionPathTest$]Outer["inner"]> but was:<....databind.deser.exc.[]Outer["inner"]>
+ - com.fasterxml.jackson.databind.deser.exc.TestExceptionHandlingWithDefaultDeserialization::testShouldThrowJsonMappingExceptionWithPathReference
+ --> junit.framework.ComparisonFailure: expected:<....databind.deser.exc.[TestExceptionHandlingWithDefaultDeserialization$Foo["bar"]->com.fasterxml.jackson.databind.deser.exc.TestExceptionHandlingWithDefaultDeserialization$]Bar["baz"]> but was:<....databind.deser.exc.[Foo["bar"]->com.fasterxml.jackson.databind.deser.exc.]Bar["baz"]>
+ - com.fasterxml.jackson.databind.deser.exc.TestExceptionHandlingWithJsonCreatorDeserialization::testShouldThrowJsonMappingExceptionWithPathReference
+ --> junit.framework.ComparisonFailure: expected:<....databind.deser.exc.[TestExceptionHandlingWithJsonCreatorDeserialization$Foo["bar"]->com.fasterxml.jackson.databind.deser.exc.TestExceptionHandlingWithJsonCreatorDeserialization$]Bar["baz"]> but was:<....databind.deser.exc.[Foo["bar"]->com.fasterxml.jackson.databind.deser.exc.]Bar["baz"]>
+Modified: com.fasterxml.jackson.databind.JsonMappingException
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.JsonMappingException | java]
+package com.fasterxml.jackson.databind;
+public class JsonMappingException
+public static class Reference implements Serializable
+protected transient Object _from;
+protected String _fieldName;
+protected int _index = -1;
+protected String _desc;
+protected Reference() { }
+public Reference(Object from) { _from = from; }
+public Reference(Object from, String fieldName) {
+public Reference(Object from, int index) {
+@JsonIgnore
+public Object getFrom() { return _from; }
+public String getFieldName() { return _fieldName; }
+public int getIndex() { return _index; }
+public String getDescription() {
+@Override
+public String toString() {
+protected LinkedList<Reference> _path;
+protected transient Closeable _processor;
+@Deprecated // since 2.7
+public JsonMappingException(String msg) { super(msg); }
+public JsonMappingException(String msg, Throwable rootCause) { super(msg, rootCause); }
+public JsonMappingException(String msg, JsonLocation loc) { super(msg, loc); }
+public JsonMappingException(String msg, JsonLocation loc, Throwable rootCause) { super(msg, loc, rootCause); }
+public JsonMappingException(Closeable processor, String msg) {
+public JsonMappingException(Closeable processor, String msg, Throwable problem) {
+public JsonMappingException(Closeable processor, String msg, JsonLocation loc) {
+public static JsonMappingException from(JsonParser p, String msg) {
+public static JsonMappingException from(JsonParser p, String msg, Throwable problem) {
+public static JsonMappingException from(JsonGenerator g, String msg) {
+public static JsonMappingException from(JsonGenerator g, String msg, Throwable problem)
+...[truncated deterministically]...
+) {
+public static JsonMappingException fromUnexpectedIOE(IOException src) {
+public static JsonMappingException wrapWithPath(Throwable src, Object refFrom, int index) {
+@SuppressWarnings("resource")
+public static JsonMappingException wrapWithPath(Throwable src, Reference ref)
+public List<Reference> getPath()
+public String getPathReference()
+public StringBuilder getPathReference(StringBuilder sb)
+public void prependPath(Object referrer, String fieldName)
+public void prependPath(Object referrer, int index)
+public void prependPath(Reference r)
+@Override // since 2.7.5
+@JsonIgnore // as per [databind#1368]
+public Object getProcessor() { return _processor; }
+public String getLocalizedMessage() {
+public String getMessage() {
+protected String _buildMessage()
+public String toString()
+protected void _appendPathDesc(StringBuilder sb)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import org.junit.Test;
+
+public class JsonMappingExceptionBug63Test
+{
+    static class Outer {
+        public Inner inner;
+    }
+
+    static class Inner {
+    }
+
+    public static class DefaultFoo {
+        public DefaultBar bar;
+
+        public DefaultFoo() { }
+    }
+
+    public static class DefaultBar {
+        public DefaultBar() { }
+
+        public void setBaz(int value) {
+            throw new IllegalArgumentException("default deserialization failure");
+        }
+    }
+
+    public static class CreatorFoo {
+        @JsonCreator
+        public CreatorFoo(@JsonProperty("bar") CreatorBar bar) { }
+    }
+
+    public static class CreatorBar {
+        @JsonCreator
+        public CreatorBar(@JsonProperty("baz") int baz) {
+            throw new IllegalArgumentException("creator deserialization failure");
+        }
+    }
+
+    @Test
+    public void referenceDescriptionUsesFullBinaryNameForInnerInstance() {
+        JsonMappingException.Reference reference =
+                new JsonMappingException.Reference(new Outer(), "inner");
+
+        assertEquals(Outer.class.getName() + "[\"inner\"]", reference.getDescription());
+        assertEquals(reference.getDescription(), reference.toString());
+    }
+
+    @Test
+    public void referenceDescriptionUsesFullBinaryNameForClassAndIndex() {
+        JsonMappingException.Reference reference =
+                new JsonMappingException.Reference(Outer.class, 0);
+
+        assertEquals(Outer.class.getName() + "[0]", reference.getDescription());
+        assertEquals(0, reference.getIndex());
+        assertEquals(Outer.class, reference.getFrom());
+    }
+
+    @Test
+    public void prependPathKeepsOuterToInnerOrderAndMessagePath() {
+        JsonMappingException exception = new JsonMappingException("problem");
+        exception.prependPath(new Inner(), "value");
+        exception.prependPath(new Outer(), "inner");
+
+        String expectedPath = Outer.class.getName() + "[\"inner\"]->"
+                + Inner.class.getName() + "[\"value\"]";
+
+        assertEquals(expectedPath, exception.getPathReference());
+        assertEquals(2, exception.getPath().size());
+        assertEquals("problem (through reference chain: " + expectedPath + ")",
+                exception.getMessage());
+    }
+
+    @Test
+    public void referenceRejectsNullFieldName() {
+        try {
+            new JsonMappingException.Reference(new Outer(), (String) null);
+            fail("Expected null field name to be rejected");
+        } catch (NullPointerException e) {
+            assertTrue(e.getMessage().contains("null fieldName"));
+        }
+    }
+
+    @Test
+    public void defaultDeserializationFailureIncludesFullBinaryNamesInPath() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            mapper.readValue("{\"bar\":{\"baz\":1}}", DefaultFoo.class);
+            fail("Expected setter failure to be wrapped as JsonMappingException");
+        } catch (JsonMappingException e) {
+            String expectedPath = DefaultFoo.class.getName() + "[\"bar\"]->"
+                    + DefaultBar.class.getName() + "[\"baz\"]";
+            assertEquals(expectedPath, e.getPathReference());
+            assertTrue(e.getMessage().contains(expectedPath));
+        }
+    }
+
+    @Test
+    public void creatorDeserializationFailureIncludesFullBinaryNamesInPath() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            mapper.readValue("{\"bar\":{\"baz\":1}}", CreatorFoo.class);
+            fail("Expected creator failure to be wrapped as JsonMappingException");
+        } catch (JsonMappingException e) {
+            String expectedPath = CreatorFoo.class.getName() + "[\"bar\"]->"
+                    + CreatorBar.class.getName() + "[\"baz\"]";
+            assertEquals(expectedPath, e.getPathReference());
+            assertTrue(e.getMessage().contains(expectedPath));
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.JsonMappingExceptionBug63Test::creatorDeserializationFailureIncludesFullBinaryNamesInPath
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: com.fasterxml.jackson.databind.JsonMappingExceptionBug63Test::creatorDeserializationFailureIncludesFullBinaryNamesInPath

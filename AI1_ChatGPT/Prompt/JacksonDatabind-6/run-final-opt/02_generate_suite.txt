@@ -1,0 +1,319 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 6  Version: JacksonDatabind-6b
+JUnit: junit-4.8.2.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.util.StdDateFormat
+Modified: com.fasterxml.jackson.databind.util.StdDateFormat
+Triggers: com.fasterxml.jackson.databind.deser.TestDateDeserialization::testISO8601MissingSeconds, com.fasterxml.jackson.databind.deser.TestDateDeserialization::testISO8601PartialMilliseconds
+
+Bug/specification summary:
+Bug report: 570
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestDateDeserialization::testISO8601MissingSeconds
+ --> com.fasterxml.jackson.databind.exc.InvalidFormatException: Can not construct instance of java.util.Date from String value '1997-07-16T19:20+01:00': not a valid representation (error: Failed to parse Date value '1997-07-16T19:20+01:00': Can not parse date "1997-07-16T19:20+01:00": not compatible with any of standard forms ("yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "EEE, dd MMM yyyy HH:mm:ss zzz", "yyyy-MM-dd"))
+ - com.fasterxml.jackson.databind.deser.TestDateDeserialization::testISO8601PartialMilliseconds
+ --> com.fasterxml.jackson.databind.exc.InvalidFormatException: Can not construct instance of java.util.Date from String value '2014-10-03T18:00:00.6-05:00': not a valid representation (error: Failed to parse Date value '2014-10-03T18:00:00.6-05:00': Can not parse date "2014-10-03T18:00:00.6-05:00": not compatible with any of standard forms ("yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "EEE, dd MMM yyyy HH:mm:ss zzz", "yyyy-MM-dd"))
+Modified: com.fasterxml.jackson.databind.util.StdDateFormat
+
+Prompt-01 test plan:
+TARGETS: StdDateFormat.parse(String) and parse(String,ParsePosition), especially parseAsISO8601 timezone/fraction handling.
+ORACLES: Trigger inputs must parse to Date; compare instants using expected UTC offset semantics.
+CASES: "1997-07-16T19:20+01:00" accepts ISO-8601 time lacking seconds with colon offset.
+CASES: "2014-10-03T18:00:00.6-05:00" accepts one-digit fractional milliseconds with colon offset.
+CASES: Boundary fractional precision and timezone forms only where supported by existing standard formats.
+RISKS: ParsePosition error/index behavior is unspecified here; avoid asserting it beyond successful parsing.
+RISKS: Context lacks fixed expected epoch values and exact malformed-input rejection rules.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.util.StdDateFormat (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.util;
+@SuppressWarnings("serial")
+public class StdDateFormat
+/* TODO !!! 24-Nov-2009, tatu: Need to rewrite this class:
+protected final static String DATE_FORMAT_STR_ISO8601 = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+protected final static String DATE_FORMAT_STR_ISO8601_Z = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'";
+protected final static String DATE_FORMAT_STR_PLAIN = "yyyy-MM-dd";
+protected final static String DATE_FORMAT_STR_RFC1123 = "EEE, dd MMM yyyy HH:mm:ss zzz";
+protected final static DateFormat DATE_FORMAT_RFC1123;
+protected final static DateFormat DATE_FORMAT_ISO8601;
+protected final static DateFormat DATE_FORMAT_ISO8601_Z;
+protected final static DateFormat DATE_FORMAT_PLAIN;
+public final static StdDateFormat instance = new StdDateFormat();
+protected transient TimeZone _timezone;
+protected final Locale _locale;
+protected transient DateFormat _formatRFC1123;
+protected transient DateFormat _formatISO8601;
+protected transient DateFormat _formatISO8601_z;
+protected transient DateFormat _formatPlain;
+public StdDateFormat() {
+@Deprecated // since 2.4
+public StdDateFormat(TimeZone tz) {
+public StdDateFormat(TimeZone tz, Locale loc) {
+public static TimeZone getDefaultTimeZone() {
+public StdDateFormat withTimeZone(TimeZone tz) {
+public StdDateFormat withLocale(Locale loc) {
+@Override
+public StdDateFormat clone() {
+@Deprecated
+public static DateFormat getBlueprintISO8601Format() {
+public static DateFormat getISO8601Format(TimeZone tz) {
+public static DateFormat getISO8601Format(TimeZone tz, Locale loc) {
+public static DateFormat getBlueprintRFC1123Format() {
+public static DateFormat getRFC1123Format(TimeZone tz, Locale loc) {
+public static DateFormat getRFC1123Format(TimeZone tz) {
+public void setTimeZone(TimeZone tz)
+public Date parse(String dateStr) throws ParseException
+public Date parse(String dateStr, ParsePosition pos)
+public String toString() {
+protected boolean looksLikeISO8601(String dateStr)
+protected Date parseAsISO8601(String dateStr, ParsePosition pos)
+protected Date parseAsRFC1123(String dateStr, ParsePosition pos)
+private final static boolean hasTimeZone(String str)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.util;
+import java.text.DateFormat;
+import java.text.FieldPosition;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import com.fasterxml.jackson.core.io.NumberInput;
+public class StdDateFormat
+
+/* METHOD parse */
+@Override
+ public Date parse(String dateStr) throws ParseException
+ {
+ dateStr = dateStr.trim();
+ ParsePosition pos = new ParsePosition(0);
+ Date result = parse(dateStr, pos);
+ if (result != null) {
+ return result;
+ }
+
+ StringBuilder sb = new StringBuilder();
+ for (String f : ALL_FORMATS) {
+ if (sb.length() > 0) {
+ sb.append("\", \"");
+ } else {
+ sb.append('"');
+ }
+ sb.append(f);
+ }
+ sb.append('"');
+ throw new ParseException
+ (String.format("Can not parse date \"%s\": not compatible with any of standard forms (%s)",
+ dateStr, sb.toString()), pos.getErrorIndex());
+ }
+
+/* METHOD parse */
+@Override
+ public Date parse(String dateStr, ParsePosition pos)
+ {
+ if (looksLikeISO8601(dateStr)) { // also includes "plain"
+ return parseAsISO8601(dateStr, pos);
+ }
+ /* 14-Feb-2010, tatu: As per [JACKSON-236], better also
+ * consider "stringified" simple time stamp
+ */
+ int i = dateStr.length();
+ while (--i >= 0) {
+ char ch = dateStr.charAt(i);
+ if (ch < '0' || ch > '9') {
+ // 07-Aug-2013, tatu: And #267 points out that negative numbers should also work
+ if (i > 0 || ch != '-') {
+ break;
+ }
+ }
+ }
+ if (i < 0) { // all digits
+ // let's just assume negative numbers are fine (can't be RFC-1123 anyway); check length for positive
+ if (dateStr.charAt(0) == '-' || NumberInput.inLongRange(dateStr, false)) {
+ return new Date(Long.parseLong(dateStr));
+ }
+ }
+ // Otherwise, fall back to using RFC 1123
+ return parseAsRFC1123(dateStr, pos);
+ }
+
+/* METHOD StdDateFormat */
+public StdDateFormat() {
+ _locale = DEFAULT_LOCALE;
+ }
+
+/* METHOD StdDateFormat */
+public StdDateFormat(TimeZone tz) {
+ this(tz, DEFAULT_LOCALE);
+ }
+
+/* METHOD StdDateFormat */
+public StdDateFormat(TimeZone tz, Locale loc) {
+ _timezone = tz;
+ _locale = loc;
+ }
+
+/* METHOD looksLikeISO8601 */
+protected boolean looksLikeISO8601(String dateStr)
+ {
+ if (dateStr.length() >= 5
+ && Character.isDigit(dateStr.charAt(0))
+ && Character.isDigit(dateStr.charAt(3))
+ && dateStr.charAt(4) == '-'
+ ) {
+ return true;
+ }
+ return false;
+ }
+
+/* METHOD parseAsRFC1123 */
+protected Date parseAsRFC1123(String dateStr, ParsePosition pos)
+ {
+ if (_formatRFC1123 == null) {
+ _formatRFC1123 = _cloneFormat(DATE_FORMAT_RFC1123, DATE_FORMAT_STR_RFC1123, _timezone, _locale);
+ }
+ return _formatRFC1123.parse(dateStr, pos);
+ }
+
+/* METHOD withTimeZone */
+public StdDateFormat withTimeZone(TimeZone tz) {
+ if (tz == null) {
+ tz = DEFAULT_TIMEZONE;
+ }
+ if (tz.equals(_timezone)) {
+ return this;
+ }
+ return new StdDateFormat(tz, _locale);
+ }
+
+/* METHOD withLocale */
+public StdDateFormat withLocale(Locale loc) {
+ if (loc.equals(_locale)) {
+ return this;
+ }
+ return new StdDateFormat(_timezone, loc);
+ }
+
+/* METHOD clone */
+@Override
+ public StdDateFormat clone() {
+ /* Although there is that much state to share, we do need to
+ * orchestrate a bit, mostly since timezones may be changed
+ */
+ return new StdDateFormat(_timezone, _locale);
+ }
+
+/* METHOD setTimeZone */
+@Override
+ public void setTimeZone(TimeZone tz)
+ {
+ /* DateFormats are timezone-specific (via Calendar contained),
+ * so need to reset instances if timezone changes:
+ */
+ if (!tz.equals(_timezone)) {
+ _formatRFC1123 = null;
+ _formatISO8601 = null;
+ _formatISO8601_z = null;
+ _formatPlain = null;
+ _timezone = tz;
+ }
+ }
+
+/* METHOD format */
+@Override
+ public StringBuffer format(Date date, StringBuffer toAppendTo,
+ FieldPosition fieldPosition)
+ {
+ if (_formatISO8601 == null) {
+ _formatISO8601 = _cloneFormat(DATE_FORMAT_ISO8601, DATE_FORMAT_STR_ISO8601, _timezone, _locale);
+ }
+ return _formatISO8601.format(date, toAppendTo, fieldPosition);
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ String str = "DateFormat "+getClass().getName();
+ TimeZone tz = _timezone;
+ if (tz != null) {
+ str += " (timezone: "+tz+")";
+ }
+ str += "(locale: "+_locale+")";
+ return str;
+ }
+
+/* METHOD getBlueprintISO8601Format */
+@Deprecated
+ public static DateFormat getBlueprintISO8601Format() {
+ return DATE_FORMAT_ISO8601;
+ }
+
+/* METHOD getISO8601Format */
+@Deprecated
+ public static DateFormat getISO8601Format(TimeZone tz) {
+ return getISO8601Format(tz, DEFAULT_LOCALE);
+ }
+
+/* METHOD getISO8601Format */
+public static DateFormat getISO8601Format(TimeZone tz, Locale loc) {
+ return _cloneFormat(DATE_FORMAT_ISO8601, DATE_FORMAT_STR_ISO8601, tz, loc);
+ }
+
+/* METHOD getBlueprintRFC1123Format */
+@Deprecated
+ public static DateFormat getBlueprintRFC1123Format() {
+ return DATE_FORMAT_RFC1123;
+ }
+
+/* METHOD getRFC1123Format */
+public static DateFormat getRFC1123Format(TimeZone tz, Locale loc) {
+ return _cloneFormat(DATE_FORMAT_RFC1123, DATE_FORMAT_STR_RFC1123, tz, loc);
+ }
+
+/* METHOD getRFC1123Format */
+@Deprecated
+ public static DateFormat getRFC1123Format(TimeZone tz) {
+ return getRFC1123Format(tz, DEFAULT_LOCALE);
+ }
+
+/* METHOD getDefaultTimeZone */
+public static TimeZone getDefaultTimeZone() {
+ return DEFAULT_TIMEZONE;
+ }
+
+/* METHOD _cloneFormat */
+private final static DateFormat _cloneFormat(DateFormat df, String format,
+ TimeZone tz, Locale loc)
+ {
+ if (!loc.equals(DEFAULT_LOCALE)) {
+ df = new SimpleDateFormat(format, loc);
+ df.setTimeZone((tz == null) ? DEFAULT_TIMEZONE : tz);
+ } else {
+ df = (DateFormat) df.clone();
+ if (tz != null) {
+ df.setTimeZone(tz);
+ }
+ }
+ return df;
+ }
+
+/* METHOD hasTimeZone */
+private final static boolean hasTimeZone(String str)
+ {
+ // Only accept "+hh", "+hhmm" and "+hh:mm" (and with minus), so
+ int len = str.length();
+ if (len >= 6) {
+ char c = str.charAt(len-6);
+ if (c == '+' || c == '-') return true;
+ c = str.charAt(len-5);
+ if (c == '+' || c == '-') return true;
+ c = str.charAt(len-3);
+ if (c == '+' || c == '-') return true;
+ }
+ return false;
+ }

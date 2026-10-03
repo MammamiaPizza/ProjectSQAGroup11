@@ -1,0 +1,314 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Compress  Bug: 33  Version: Compress-33b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.compress.compressors.CompressorStreamFactory, org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream
+Modified: org.apache.commons.compress.compressors.CompressorStreamFactory, org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream
+Triggers: org.apache.commons.compress.compressors.DetectCompressorTestCase::testDetection
+
+Bug/specification summary:
+Bug report: COMPRESS-316
+Trigger failures:
+- org.apache.commons.compress.compressors.DetectCompressorTestCase::testDetection
+ --> org.apache.commons.compress.compressors.CompressorException: No Compressor found for the stream signature.
+Modified: org.apache.commons.compress.compressors.CompressorStreamFactory, org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream
+
+Prompt-01 test plan:
+TARGETS: CompressorStreamFactory.createCompressorInputStream(InputStream) signature detection, including DEFLATE. 
+TARGETS: DeflateCompressorInputStream read/read(byte[],off,len), skip, available, close behavior. 
+ORACLES: Existing DetectCompressorTestCase::testDetection and CompressorException indicate detection result/failure. 
+CASES: Detect a valid DEFLATE-compressed byte stream via factory; expect a Deflate compressor stream, not CompressorException. 
+CASES: Read detected DEFLATE stream to EOF and verify decompressed bytes match original input. 
+CASES: Boundary reads: single-byte, buffer reads, EOF; exercise skip/available if supported by fixture. 
+CASES: Invalid or unrecognized signature should retain CompressorException behavior. 
+RISKS: No explicit DEFLATE signature format or expected bytes are provided; derive fixtures from public compressor APIs only.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.compress.compressors.CompressorStreamFactory (java) =====
+/* API SIGNATURES */
+package org.apache.commons.compress.compressors;
+public class CompressorStreamFactory {
+public static final String BZIP2 = "bzip2";
+public static final String GZIP = "gz";
+public static final String PACK200 = "pack200";
+public static final String XZ = "xz";
+public static final String LZMA = "lzma";
+public static final String SNAPPY_FRAMED = "snappy-framed";
+public static final String SNAPPY_RAW = "snappy-raw";
+public static final String Z = "z";
+public static final String DEFLATE = "deflate";
+public CompressorStreamFactory() {
+public CompressorStreamFactory(boolean decompressUntilEOF) {
+@Deprecated
+public void setDecompressConcatenated(boolean decompressConcatenated) {
+public CompressorInputStream createCompressorInputStream(final InputStream in)
+
+/* HEADER */
+package org.apache.commons.compress.compressors;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream;
+import org.apache.commons.compress.compressors.deflate.DeflateCompressorOutputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream;
+import org.apache.commons.compress.compressors.lzma.LZMAUtils;
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream;
+import org.apache.commons.compress.compressors.xz.XZUtils;
+import org.apache.commons.compress.compressors.pack200.Pack200CompressorInputStream;
+import org.apache.commons.compress.compressors.pack200.Pack200CompressorOutputStream;
+import org.apache.commons.compress.compressors.snappy.FramedSnappyCompressorInputStream;
+import org.apache.commons.compress.compressors.snappy.SnappyCompressorInputStream;
+import org.apache.commons.compress.compressors.z.ZCompressorInputStream;
+import org.apache.commons.compress.utils.IOUtils;
+public class CompressorStreamFactory {
+
+/* METHOD CompressorStreamFactory */
+public CompressorStreamFactory() {
+ this.decompressUntilEOF = null; 
+ }
+
+/* METHOD CompressorStreamFactory */
+public CompressorStreamFactory(boolean decompressUntilEOF) {
+ this.decompressUntilEOF = Boolean.valueOf(decompressUntilEOF);
+ // Also copy to existing variable so can continue to use that as the current value
+ this.decompressConcatenated = decompressUntilEOF;
+ }
+
+/* METHOD createCompressorOutputStream */
+public CompressorOutputStream createCompressorOutputStream(
+ final String name, final OutputStream out)
+ throws CompressorException {
+ if (name == null || out == null) {
+ throw new IllegalArgumentException(
+ "Compressor name and stream must not be null.");
+ }
+
+ try {
+
+ if (GZIP.equalsIgnoreCase(name)) {
+ return new GzipCompressorOutputStream(out);
+ }
+
+ if (BZIP2.equalsIgnoreCase(name)) {
+ return new BZip2CompressorOutputStream(out);
+ }
+
+ if (XZ.equalsIgnoreCase(name)) {
+ return new XZCompressorOutputStream(out);
+ }
+
+ if (PACK200.equalsIgnoreCase(name)) {
+ return new Pack200CompressorOutputStream(out);
+ }
+
+ if (DEFLATE.equalsIgnoreCase(name)) {
+ return new DeflateCompressorOutputStream(out);
+ }
+
+ } catch (IOException e) {
+ throw new CompressorException(
+ "Could not create CompressorOutputStream", e);
+ }
+ throw new CompressorException("Compressor: " + name + " not found.");
+ }
+
+/* METHOD createCompressorInputStream */
+public CompressorInputStream createCompressorInputStream(final InputStream in)
+ throws CompressorException {
+ if (in == null) {
+ throw new IllegalArgumentException("Stream must not be null.");
+ }
+
+ if (!in.markSupported()) {
+ throw new IllegalArgumentException("Mark is not supported.");
+ }
+
+ final byte[] signature = new byte[12];
+ in.mark
+...[truncated deterministically]...
+set();
+
+ if (BZip2CompressorInputStream.matches(signature, signatureLength)) {
+ return new BZip2CompressorInputStream(in, decompressConcatenated);
+ }
+
+ if (GzipCompressorInputStream.matches(signature, signatureLength)) {
+ return new GzipCompressorInputStream(in, decompressConcatenated);
+ }
+
+ if (Pack200CompressorInputStream.matches(signature, signatureLength)) {
+ return new Pack200CompressorInputStream(in);
+ }
+
+ if (FramedSnappyCompressorInputStream.matches(signature, signatureLength)) {
+ return new FramedSnappyCompressorInputStream(in);
+ }
+
+ if (ZCompressorInputStream.matches(signature, signatureLength)) {
+ return new ZCompressorInputStream(in);
+ }
+
+ if (XZUtils.matches(signature, signatureLength) &&
+ XZUtils.isXZCompressionAvailable()) {
+ return new XZCompressorInputStream(in, decompressConcatenated);
+ }
+
+ if (LZMAUtils.matches(signature, signatureLength) &&
+ LZMAUtils.isLZMACompressionAvailable()) {
+ return new LZMACompressorInputStream(in);
+ }
+
+ } catch (IOException e) {
+ throw new CompressorException("Failed to detect Compressor from InputStream.", e);
+ }
+
+ throw new CompressorException("No Compressor found for the stream signature.");
+ }
+
+/* METHOD createCompressorInputStream */
+public CompressorInputStream createCompressorInputStream(final String name,
+ final InputStream in) throws CompressorException {
+ if (name == null || in == null) {
+ throw new IllegalArgumentException(
+ "Compressor name and stream must not be null.");
+ }
+
+ try {
+
+ if (GZIP.equalsIgnoreCase(name)) {
+ return new GzipCompressorInputStream(in, decompressConcatenated);
+ }
+
+ if (BZIP2.equalsIgnoreCase(name)) {
+ return new BZip2CompressorInputStream(in, decompressConcatenated);
+ }
+
+ if (XZ.equalsIgnoreCase(nam
+...[truncated deterministically]...
+IgnoreCase(name)) {
+ return new DeflateCompressorInputStream(in);
+ }
+
+ } catch (IOException e) {
+ throw new CompressorException(
+ "Could not create CompressorInputStream.", e);
+ }
+ throw new CompressorException("Compressor: " + name + " not found.");
+ }
+
+===== org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements. See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership. The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.commons.compress.compressors.deflate;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
+
+import org.apache.commons.compress.compressors.CompressorInputStream;
+
+/**
+ * Deflate decompressor.
+ * @since 1.9
+ */
+public class DeflateCompressorInputStream extends CompressorInputStream {
+ 
+ private final InputStream in;
+
+ /**
+ * Creates a new input stream that decompresses Deflate-compressed data
+ * from the specified input stream.
+ *
+ * @param inputStream where to read the compressed data
+ *
+ */
+ public DeflateCompressorInputStream(InputStream inputStream) {
+ this(inputStream, new DeflateParameters());
+ }
+
+ /**
+ * Creates a new input stream that decompresses Deflate-compressed data
+ * from the specified input stream.
+ *
+ * @param inputStream where to read the compressed data
+ * @param parameters parameters
+ */
+ public DeflateCompressorInputStream(InputStream inputStream,
+ DeflateParameters parameters) {
+ in = new InflaterInputStream(inputStream, new Inflater(!parameters.withZlibHeader()));
+ }
+ 
+ /** {@inheritDoc} */
+ @Override
+ public int read() throws IOException {
+ int ret = in.read();
+ count(ret == -1 ? 0 : 1);
+ return ret;
+ }
+
+ /** {@inheritDoc} */
+ @Override
+ public int read(byte[] buf, int off, int len) throws IOException {
+ int ret = in.read(buf, off, len);
+ count(ret);
+ return ret;
+ }
+
+ /** {@inheritDoc} */
+ @Override
+ public long skip(long n) throws IOException {
+ return in.skip(n);
+ }
+
+ /** {@inheritDoc} */
+ @Override
+ public int available() throws IOException {
+ return in.available();
+ }
+
+ /** {@inheritDoc} */
+ @Override
+ public void close() throws IOException {
+ in.close();
+ }
+ 
+ /**
+ * Checks if the signature matches what is expected for a zlib / deflated file
+ * with the zlib header.
+ * 
+ * @param signature
+ * the bytes to check
+ * @param length
+ * the number of bytes to check
+ * @return true, if this stream is zlib / deflate compressed with a header
+ * stream, false otherwise
+ * 
+ * @since 1.9
+ */
+}

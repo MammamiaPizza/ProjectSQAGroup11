@@ -1,0 +1,313 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 90  Version: JacksonDatabind-90b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1804
+Trigger failures:
+- com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test::testDelegatingArray1804
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.creators.DelegatingArrayCreator1804Test$MyType: abstract types either need to be mapped to concrete types, have custom deserializer, or contain additional type information
+Modified: com.fasterxml.jackson.databind.deser.ValueInstantiator, com.fasterxml.jackson.databind.deser.std.StdValueInstantiator
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.ValueInstantiator | java]
+package com.fasterxml.jackson.databind.deser;
+public abstract class ValueInstantiator
+public Class<?> getValueClass() {
+return Object.class;
+public String getValueTypeDesc() {
+public boolean canInstantiate() {
+public boolean canCreateFromString() { return false; }
+public boolean canCreateFromInt() { return false; }
+public boolean canCreateFromLong() { return false; }
+public boolean canCreateFromDouble() { return false; }
+public boolean canCreateFromBoolean() { return false; }
+public boolean canCreateUsingDefault() { return getDefaultCreator() != null; }
+public boolean canCreateUsingDelegate() { return false; }
+public boolean canCreateUsingArrayDelegate() { return false; }
+public boolean canCreateFromObjectWith() { return false; }
+public SettableBeanProperty[] getFromObjectArguments(DeserializationConfig config) {
+public J
+...[truncated deterministically]...
+etArrayDelegateCreator() { return null; }
+public AnnotatedWithParams getWithArgsCreator() { return null; }
+public AnnotatedParameter getIncompleteParameter() { return null; }
+protected Object _createFromStringFallbacks(DeserializationContext ctxt, String value)
+public static class Base extends ValueInstantiator
+protected final Class<?> _valueType;
+public Base(Class<?> type) {
+public Base(JavaType type) {
+@Override
+
+[com.fasterxml.jackson.databind.deser.std.StdValueInstantiator | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class StdValueInstantiator
+protected final String _valueTypeDesc;
+protected final Class<?> _valueClass;
+protected AnnotatedWithParams _defaultCreator;
+protected Annotate
+...[truncated deterministically]...
+rguments;
+protected JavaType _arrayDelegateType;
+protected AnnotatedWithParams _arrayDelegateCreator;
+protected SettableBeanProperty[] _arrayDelegateArguments;
+protected AnnotatedWithParams _fromStringCreator;
+protected AnnotatedWithParams _fromIntCreator;
+protected AnnotatedWithParams _fromLongCreator;
+protected AnnotatedWithParams _fromDoubleCreator;
+protected AnnotatedWithPa
+...[truncated deterministically]...
+) {
+public AnnotatedWithParams getDefaultCreator() {
+public AnnotatedWithParams getWithArgsCreator() {
+public AnnotatedParameter getIncompleteParameter() {
+@Deprecated // since 2.7
+protected JsonMappingException wrapException(Throwable t)
+protected JsonMappingException unwrapAndWrapException(DeserializationContext ctxt, Throwable t)
+if ((t instanceof ExceptionInInitializerError) // from static initialization block
+
+Generated JUnit Test:
+import java.io.IOException;
+ import java.util.*;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.core.JsonProcessingException;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.deser.ValueInstantiator;
+ import com.fasterxml.jackson.databind.introspect.AnnotatedWithParams;
+ import com.fasterxml.jackson.databind.introspect.BasicBeanDescription;
+
+ import static org.junit.Assert.*;
+
+ /**
+  * Regression tests for JacksonDatabind bug #1804: abstract types with an
+  * array-delegate creator must be instantiable.
+  */
+ public class ValueInstantiatorArrayDelegateTest {
+
+     // ---- abstract with array delegate ----
+     static abstract class AbstractArrayDelegate {
+         @JsonCreator
+         public static AbstractArrayDelegate create(String[] values) {
+             return new ImplArrayDelegate(values);
+         }
+     }
+     static class ImplArrayDelegate extends AbstractArrayDelegate {
+         final String[] values;
+         ImplArrayDelegate(String[] v) { this.values = v; }
+     }
+
+     // ---- abstract without any creator ----
+     static abstract class AbstractWithoutCreator { }
+
+     // ---- concrete with array delegate ----
+     static class ConcreteArrayDelegate {
+         final int[] nums;
+         private ConcreteArrayDelegate(int[] nums) { this.nums = nums; }
+         @JsonCreator
+         public static ConcreteArrayDelegate create(int[] values) {
+             return new ConcreteArrayDelegate(values);
+         }
+     }
+
+     // ---- abstract with a simple delegate (non-array) ----
+     static abstract class AbstractDelegateOnly {
+         final String data;
+         protected AbstractDelegateOnly(String data) { this.data = data; }
+         @JsonCreator
+         public static AbstractDelegateOnly from(String s) {
+             return new ImplDelegateOnly(s);
+         }
+     }
+     static class ImplDelegateOnly extends AbstractDelegateOnly {
+         ImplDelegateOnly(String s) { super(s); }
+     }
+
+     // ---- abstract with both array-delegate and simple delegate ----
+     static abstract class AbstractBothDelegates {
+         final Object payload;
+         protected AbstractBothDelegates(Object payload) { this.payload = payload; }
+
+         @JsonCreator
+         public static AbstractBothDelegates fromArray(String[] vals) {
+             return new ImplBothArray(vals);
+         }
+         @JsonCreator
+         public static AbstractBothDelegates fromString(String s) {
+             return new ImplBothString(s);
+         }
+     }
+     static class ImplBothArray extends AbstractBothDelegates {
+         ImplBothArray(String[] vals) { super(vals); }
+     }
+     static class ImplBothString extends AbstractBothDelegates {
+         ImplBothString(String s) { super(s); }
+     }
+
+     // ---- abstract with a no-arg default creator (impossible to instantiate) ----
+     static abstract class AbstractWithDefault {
+         public AbstractWithDefault() { }
+     }
+
+     // ---- concrete POJO with no creators (default instantiation works) ----
+     static class ConcreteDefault {
+         public int x;
+     }
+
+     private final ObjectMapper mapper = new ObjectMapper();
+
+     @Test
+     public void abstractWithArrayDelegateShouldSucceed() throws Exception {
+         String json = "[\"a\",\"b\"]";
+         AbstractArrayDelegate result = mapper.readValue(json, AbstractArrayDelegate.class);
+         assertNotNull(result);
+         assertTrue(result instanceof ImplArrayDelegate);
+         assertArrayEquals(new String[]{"a","b"}, ((ImplArrayDelegate) result).values);
+     }
+
+     @Test
+     public void abstractWithoutCreatorShouldFail() throws Exception {
+         try {
+             mapper.readValue("{\"a\":1}", AbstractWithoutCreator.class);
+             fail("Should have thrown");
+         } catch (Exception e) {
+             // should be a JsonMappingException or InvalidDefinitionException
+             assertTrue(e.getMessage(), e.getMessage().contains("abstract types either need"));
+         }
+     }
+
+     @Test
+     public void concreteArrayDelegateShouldSucceed() throws Exception {
+         String json = "[1,2,3]";
+         ConcreteArrayDelegate result = mapper.readValue(json, ConcreteArrayDelegate.class);
+         assertNotNull(result);
+         assertArrayEquals(new int[]{1,2,3}, result.nums);
+     }
+
+     @Test
+     public void abstractWithDelegateOnlyShouldSucceed() throws Exception {
+         String json = "\"hello\"";
+         AbstractDelegateOnly result = mapper.readValue(json, AbstractDelegateOnly.class);
+         assertNotNull(result);
+         assertTrue(result instanceof ImplDelegateOnly);
+         assertEquals("hello", ((ImplDelegateOnly) result).data);
+     }
+
+     @Test
+     public void abstractBothDelegatesArrayInputShouldUseArray() throws Exception {
+         String json = "[\"x\",\"y\"]";
+         AbstractBothDelegates result = mapper.readValue(json, AbstractBothDelegates.class);
+         assertNotNull(result);
+         assertTrue(result instanceof ImplBothArray);
+         String[] arr = (String[]) ((ImplBothArray) result).payload;
+         assertArrayEquals(new String[]{"x","y"}, arr);
+     }
+
+     @Test
+     public void abstractBothDelegatesStringInputShouldUseDelegate() throws Exception {
+         String json = "\"single\"";
+         AbstractBothDelegates result = mapper.readValue(json, AbstractBothDelegates.class);
+         assertNotNull(result);
+         assertTrue(result instanceof ImplBothString);
+         assertEquals("single", ((ImplBothString) result).payload);
+     }
+
+     @Test
+     public void abstractWithDefaultCreatorShouldFail() throws Exception {
+         try {
+             mapper.readValue("{}", AbstractWithDefault.class);
+             fail("Should have thrown");
+         } catch (Exception e) {
+             assertTrue(e.getMessage(), e.getMessage().toLowerCase().contains("abstract"));
+         }
+     }
+
+     @Test
+     public void concreteDefaultShouldSucceed() throws Exception {
+         String json = "{\"x\":42}";
+         ConcreteDefault result = mapper.readValue(json, ConcreteDefault.class);
+         assertEquals(42, result.x);
+     }
+
+     // -----------------------------------------------------------
+     //  Direct ValueInstantiator API tests (ensure canInstantiate returns correct boolean)
+     // -----------------------------------------------------------
+
+     @Test
+     public void arrayDelegateGivesCanInstantiateTrue() throws Exception {
+         DeserializationConfig config = mapper.getDeserializationConfig();
+         JavaType type = config.constructType(AbstractArrayDelegate.class);
+         BasicBeanDescription desc = (BasicBeanDescription) config.introspect(type);
+         ValueInstantiator vi = desc.findValueInstantiator(config);
+         assertNotNull(vi);
+         assertTrue("canInstantiate should be true for abstract + array delegate",
+vi.canInstantiate());
+         assertTrue("canCreateUsingArrayDelegate should be true", vi.canCreateUsingArrayDelegate());
+         assertNotNull("getArrayDelegateCreator should not be null", vi.getArrayDelegateCreator());
+     }
+
+     @Test
+     public void delegateOnlyGivesCanInstantiateTrue() throws Exception {
+         DeserializationConfig config = mapper.getDeserializationConfig();
+         JavaType type = config.constructType(AbstractDelegateOnly.class);
+         BasicBeanDescription desc = (BasicBeanDescription) config.introspect(type);
+         ValueInstantiator vi = desc.findValueInstantiator(config);
+         assertNotNull(vi);
+         assertTrue("canInstantiate should be true for abstract + delegate", vi.canInstantiate());
+         assertTrue("canCreateUsingDelegate should be true", vi.canCreateUsingDelegate());
+         assertNotNull("getDelegateCreator should not be null", vi.getDelegateCreator());
+         assertNull("no array delegate", vi.getArrayDelegateCreator());
+     }
+
+     @Test
+     public void noCreatorGivesCanInstantiateFalse() throws Exception {
+         DeserializationConfig config = mapper.getDeserializationConfig();
+         JavaType type = config.constructType(AbstractWithoutCreator.class);
+         BasicBeanDescription desc = (BasicBeanDescription) config.introspect(type);
+         ValueInstantiator vi = desc.findValueInstantiator(config);
+         assertNotNull(vi);
+         assertFalse("canInstantiate should be false for abstract without creators",
+vi.canInstantiate());
+         assertFalse(vi.canCreateUsingArrayDelegate());
+         assertFalse(vi.canCreateUsingDelegate());
+     }
+
+     @Test
+     public void bothDelegatesGiveCorrectFlags() throws Exception {
+         DeserializationConfig config = mapper.getDeserializationConfig();
+         JavaType type = config.constructType(AbstractBothDelegates.class);
+         BasicBeanDescription desc = (BasicBeanDescription) config.introspect(type);
+         ValueInstantiator vi = desc.findValueInstantiator(config);
+         assertNotNull(vi);
+         assertTrue(vi.canInstantiate());
+         assertTrue(vi.canCreateUsingArrayDelegate());
+         assertTrue(vi.canCreateUsingDelegate());
+         assertNotNull(vi.getArrayDelegateCreator());
+         assertNotNull(vi.getDelegateCreator());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonDatabind-90f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonDatabind-90f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonDatabind-90f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonDatabind-90f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonDatabind-90f-copilot/.test_suite/ValueInstantiatorArrayDelegateTest.java:174: error: cannot find symbol
+ [javac] ValueInstantiator vi = desc.findValueInstantiator(config);
+ [javac] ^
+ [javac] symbol: method findValueInstantiator(DeserializationConfig)
+ [javac] location: variable desc of type BasicBeanDescription
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

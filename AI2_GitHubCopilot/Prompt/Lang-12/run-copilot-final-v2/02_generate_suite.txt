@@ -1,0 +1,181 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Lang  Bug: 12  Version: Lang-12b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.lang3.RandomStringUtils
+Modified: org.apache.commons.lang3.RandomStringUtils
+Triggers: org.apache.commons.lang3.RandomStringUtilsTest::testExceptions, org.apache.commons.lang3.RandomStringUtilsTest::testLANG805
+
+Bug/specification summary:
+Bug report: LANG-805
+Trigger failures:
+- org.apache.commons.lang3.RandomStringUtilsTest::testExceptions
+ --> java.lang.ArrayIndexOutOfBoundsException: 1171399597
+ - org.apache.commons.lang3.RandomStringUtilsTest::testLANG805
+ --> java.lang.ArrayIndexOutOfBoundsException: 1859709389
+Modified: org.apache.commons.lang3.RandomStringUtils
+
+Prompt-01 test plan:
+TARGETS: random(int,char...), random(int,String), random(int,int,int,boolean,boolean),
+random(int,int,int,boolean,boolean,char...)
+ORACLES: No ArrayIndexOutOfBoundsException; returned string length == count
+ORACLES: Characters belong to supplied char array/string or start-end numeric range
+CASES: empty char[] (length 0) – triggers AIOOBE; null chars/String – likely
+IllegalArgumentException
+CASES: start > end; start=end; negative start/end; start > Character.MAX_CODE_POINT; count=0 with
+valid chars
+CASES: large count with tiny char set; chars array of length 1; supplementary characters in range
+RISKS: Without source, cannot confirm integer overflow in range-length calculation or exact bounds
+checks
+RISKS: Tests should verify correctness of length and allowed chars only; randomness distribution is
+not the target
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.lang3.RandomStringUtils (java) =====
+/* API SIGNATURES */
+package org.apache.commons.lang3;
+public class RandomStringUtils {
+private static final Random RANDOM = new Random();
+public RandomStringUtils() {
+public static String random(int count) {
+public static String randomAscii(int count) {
+public static String randomAlphabetic(int count) {
+public static String randomAlphanumeric(int count) {
+public static String randomNumeric(int count) {
+public static String random(int count, boolean letters, boolean numbers) {
+public static String random(int count, int start, int end, boolean letters, boolean numbers) {
+public static String random(int count, int start, int end, boolean letters, boolean numbers, char... chars) {
+public static String random(int count, String chars) {
+public static String random(int count, char... chars) {
+
+/* HEADER */
+package org.apache.commons.lang3;
+import java.util.Random;
+public class RandomStringUtils {
+
+/* METHOD RandomStringUtils */
+public RandomStringUtils() {
+ super();
+ }
+
+/* METHOD random */
+public static String random(int count, int start, int end, boolean letters, boolean numbers,
+ char[] chars, Random random) {
+ if (count == 0) {
+ return "";
+ } else if (count < 0) {
+ throw new IllegalArgumentException("Requested random string length " + count + " is less than 0.");
+ }
+
+ if (start == 0 && end == 0) {
+ if (!letters && !numbers) {
+ end = Integer.MAX_VALUE;
+ } else {
+ end = 'z' + 1;
+ start = ' '; 
+ }
+ }
+
+ char[] buffer = new char[count];
+ int gap = end - start;
+
+ while (count-- != 0) {
+ char ch;
+ if (chars == null) {
+ ch = (char) (random.nextInt(gap) + start);
+ } else {
+ ch = chars[random.nextInt(gap) + start];
+ }
+ if (letters && Character.isLetter(ch)
+ || numbers && Character.isDigit(ch)
+ || !letters && !numbers) {
+ if(ch >= 56320 && ch <= 57343) {
+ if(count == 0) {
+ count++;
+ } else {
+ // low surrogate, insert high surrogate after putting it in
+ buffer[count] = ch;
+ count--;
+ buffer[count] = (char) (55296 + random.nextInt(128));
+ }
+ } else if(ch >= 55296 && ch <= 56191) {
+ if(count == 0) {
+ count++;
+ } else {
+ // high surrogate, insert low surrogate before putting it in
+ buffer[count] = (char) (56320 + random.nextInt(128));
+ count--;
+ buffer[count] = ch;
+ }
+ } else if(ch >= 56192 && ch <= 56319) {
+ // private high surrogate, no effing clue, so skip it
+ count++;
+ } else {
+ buffer[count] = ch;
+ }
+ } else {
+ count++;
+ }
+ }
+ return new String(buffer);
+ }
+
+/* METHOD random */
+public static String random(int count, boolean letters, boolean numbers) {
+ return random(count, 0, 0, letters, numbers);
+ }
+
+/* METHOD random */
+public static String random(int count, int start, int end, boolean letters, boolean numbers) {
+ return random(count, start, end, letters, numbers, null, RANDOM);
+ }
+
+/* METHOD random */
+public static String random(int count, int start, int end, boolean letters, boolean numbers, char... chars) {
+ return random(count, start, end, letters, numbers, chars, RANDOM);
+ }
+
+/* METHOD random */
+public static String random(int count) {
+ return random(count, false, false);
+ }
+
+/* METHOD randomAscii */
+public static String randomAscii(int count) {
+ return random(count, 32, 127, false, false);
+ }
+
+/* METHOD randomAlphabetic */
+public static String randomAlphabetic(int count) {
+ return random(count, true, false);
+ }
+
+/* METHOD randomAlphanumeric */
+public static String randomAlphanumeric(int count) {
+ return random(count, true, true);
+ }
+
+/* METHOD randomNumeric */
+public static String randomNumeric(int count) {
+ return random(count, false, true);
+ }
+
+/* METHOD random */
+public static String random(int count, String chars) {
+ if (chars == null) {
+ return random(count, 0, 0, false, false, null, RANDOM);
+ }
+ return random(count, chars.toCharArray());
+ }
+
+/* METHOD random */
+public static String random(int count, char... chars) {
+ if (chars == null) {
+ return random(count, 0, 0, false, false, null, RANDOM);
+ }
+ return random(count, 0, chars.length, false, false, chars, RANDOM);
+ }

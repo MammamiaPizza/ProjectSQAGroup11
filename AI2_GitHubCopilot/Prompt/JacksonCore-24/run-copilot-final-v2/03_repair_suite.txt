@@ -1,0 +1,285 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 24  Version: JacksonCore-24b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 508
+Trigger failures:
+- com.fasterxml.jackson.core.json.async.AsyncNumberCoercionTest::testToLongFailing
+ --> com.fasterxml.jackson.core.JsonParseException: Numeric value (9223372036854775817) out of range of long (-9223372036854775808 - 9223372036854775807)
+ - com.fasterxml.jackson.core.json.async.AsyncNumberCoercionTest::testToIntFailing
+ --> com.fasterxml.jackson.core.JsonParseException: Numeric value (2147483648) out of range of int
+ - com.fasterxml.jackson.core.read.NumberCoercionTest::testToLongFailing
+ --> com.fasterxml.jackson.core.JsonParseException: Numeric value (9223372036854775817) out of range of long (-9223372036854775808 - 9223372036854775807)
+ - com.fasterxml.jackson.core.read.NumberCoercionTest::testToIntFailing
+ --> com.fasterxml.jackson.core.JsonParseException: Numeric value (2147483648) out of range of int
+ - com.fasterxml.jackson.core.read.NumberOverflow
+...[truncated deterministically]...
+Exception: Numeric value (-9223372036854775809) out of range of long
+ - com.fasterxml.jackson.core.read.NumberOverflowTest::testMaliciousIntOverflow
+ --> com.fasterxml.jackson.core.JsonParseException: Numeric value ([Integer with 199999 digits]) out of range of int
+ - com.fasterxml.jackson.core.read.NumberParsingTest::testSimpleLong
+ --> com.fasterxml.jackson.core.JsonParseException: Numeric value (12345678907) out of range of int
+Modified: com.fasterxml.jackson.core.base.ParserBase, com.fasterxml.jackson.core.base.ParserMinimalBase
+
+Available API/signatures:
+[com.fasterxml.jackson.core.base.ParserBase | java]
+package com.fasterxml.jackson.core.base;
+public abstract class ParserBase extends ParserMinimalBase
+final protected IOContext _ioContext;
+protected boolean _closed;
+protected int _inputPtr;
+protected int _inputEnd;
+protected long _currInputProcessed;
+protected int _currInputRow = 1;
+protected int _currInputRowStart;
+protected long _tokenInputTotal;
+protected int _tokenInputRow = 1;
+protected int _tokenInputCol;
+protected JsonReadContext _parsingContext;
+protected JsonToken _nextToken;
+protected final TextBuffer _textBuffer;
+protected char[] _nameCopyBuffer;
+protected boolean _nameCopied;
+protected ByteArrayBuilder _byteArrayBuilder;
+protected byte[] _binaryValue;
+protected int _numTypesValid = NR_UNKNOWN;
+protected int _numberInt;
+protected long _numberLong;
+protected double _numberDouble;
+protected BigInteger _numberBigI
+...[truncated deterministically]...
+ows IllegalArgumentException {
+protected void _handleBase64MissingPadding(Base64Variant b64variant) throws IOException
+protected Object _getSourceReference() {
+protected static int[] growArrayBy(int[] arr, int more)
+@Deprecated // since 2.8
+protected void loadMoreGuaranteed() throws IOException {
+protected boolean loadMore() throws IOException { return false; }
+protected void _finishString() throws IOException { }
+
+[com.fasterxml.jackson.core.base.ParserMinimalBase | java]
+package com.fasterxml.jackson.core.base;
+public abstract class ParserMinimalBase extends JsonParser
+protected final static int INT_TAB = '\t';
+protected final static int INT_LF = '\n';
+protected final static int INT_CR = '\r';
+protected final static int INT_SPACE =
+...[truncated deterministically]...
+= '}';
+protected final static int INT_QUOTE = '"';
+protected final static int INT_APOS = '\'';
+protected final static int INT_BACKSLASH = '\\';
+protected final static int INT_SLASH = '/';
+protected final static int INT_ASTERISK = '*';
+protected final static int INT_COLON = ':';
+protected final static int INT_COMMA = ',';
+protected final static int INT_HASH = '#';
+protected final
+...[truncated deterministically]...
+JsonParseException {
+protected final void _reportError(String msg, Object arg1, Object arg2) throws JsonParseException {
+protected final void _wrapError(String msg, Throwable t) throws JsonParseException {
+protected final void _throwInternal() {
+protected final JsonParseException _constructError(String msg, Throwable t) {
+protected static byte[] _asciiBytes(String str) {
+protected static String _ascii(byte[] b) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.failing;
+
+import static org.junit.Assert.*;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+
+/**
+
+ - Tests that target overflow and coercion behavior in ParserBase / ParserMinimalBase,
+ - exercising the bug described in Defects4J JacksonCore-24.
+ - <p>
+ - The key contract is that {@code getLongValue()} must succeed for numbers that fit in
+ - a {@code long} even when they exceed the {@code int} range, while
+ - {@code getIntValue()} must throw for numbers outside the {@code int} range.
+  */
+ public class TestParserBaseOverflow {
+  // ----------------------------------------------------------------------
+  // Helper
+  // ----------------------------------------------------------------------
+  private static JsonParser intParser(String content) throws IOException {
+  JsonParser p = new JsonFactory().createParser(content.getBytes("UTF-8"));
+  assertToken(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+  return p;
+  }
+  private static JsonParser floatParser(String content) throws IOException {
+  JsonParser p = new JsonFactory().createParser(content.getBytes("UTF-8"));
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+  return p;
+  }
+  private static void assertToken(JsonToken expected, JsonToken actual) {
+  assertEquals(expected, actual);
+  }
+  // ----------------------------------------------------------------------
+  // Int coercions
+  // ----------------------------------------------------------------------
+  @Test
+  public void testIntCoercionBasic() throws IOException {
+  try (JsonParser p = intParser("42")) {
+      assertEquals(42, p.getIntValue());
+      assertEquals(42L, p.getLongValue());
+  }
+  }
+  @Test
+  public void testIntBoundaryMinMax() throws IOException {
+  try (JsonParser p = intParser(String.valueOf(Integer.MIN_VALUE))) {
+      assertEquals(Integer.MIN_VALUE, p.getIntValue());
+      assertEquals((long) Integer.MIN_VALUE, p.getLongValue());
+  }
+  try (JsonParser p = intParser(String.valueOf(Integer.MAX_VALUE))) {
+      assertEquals(Integer.MAX_VALUE, p.getIntValue());
+      assertEquals((long) Integer.MAX_VALUE, p.getLongValue());
+  }
+  }
+  @Test
+  public void testIntOverflowThrows() throws IOException {
+  try (JsonParser p = intParser("2147483648")) { // Integer.MAX_VALUE + 1
+      try {
+          p.getIntValue();
+          fail("Expected JsonParseException for out-of-int value");
+      } catch (JsonParseException e) {
+          assertTrue(e.getMessage().contains("out of range"));
+      }
+  }
+  }
+  // ----------------------------------------------------------------------
+  // Long coercions
+  // ----------------------------------------------------------------------
+  @Test
+  public void testLongCoercionOutsideIntRange() throws IOException {
+  // value within long range but outside int range
+  try (JsonParser p = intParser("12345678907")) {
+      // getLongValue must succeed (bug: it threw int-out-of-range)
+      assertEquals(12345678907L, p.getLongValue());
+      // getIntValue must fail
+      try {
+          p.getIntValue();
+          fail("Expected JsonParseException for out-of-int value");
+      } catch (JsonParseException e) {
+          assertTrue(e.getMessage().contains("out of range"));
+      }
+  }
+  }
+  @Test
+  public void testLongBoundaryMinMax() throws IOException {
+  try (JsonParser p = intParser(String.valueOf(Long.MIN_VALUE))) {
+      assertEquals(Long.MIN_VALUE, p.getLongValue());
+  }
+  try (JsonParser p = intParser(String.valueOf(Long.MAX_VALUE))) {
+      assertEquals(Long.MAX_VALUE, p.getLongValue());
+  }
+  }
+  @Test
+  public void testLongOverflowThrows() throws IOException {
+  // Long.MAX_VALUE + 1
+  try (JsonParser p = intParser("9223372036854775808")) {
+      try {
+          p.getLongValue();
+          fail("Expected JsonParseException for out-of-long value");
+      } catch (JsonParseException e) {
+          assertTrue(e.getMessage().contains("out of range"));
+      }
+  }
+  }
+  @Test
+  public void testLargeDigitNumberOverflowMessage() throws IOException {
+  // 2000-digit number – beyond even BigInteger-as-long representation
+  char[] digits = new char[2000];
+  Arrays.fill(digits, '0');
+  digits[0] = '1';
+  String huge = new String(digits);
+  try (JsonParser p = intParser(huge)) {
+      try {
+          p.getLongValue();
+          fail("Expected JsonParseException");
+      } catch (JsonParseException e) {
+          String msg = e.getMessage();
+          // truncated description: "[Integer with 2000 digits]"
+          assertTrue(msg.contains("[Integer with") && msg.contains("digits]"));
+      }
+  }
+  }
+  // ----------------------------------------------------------------------
+  // Negative zero
+  // ----------------------------------------------------------------------
+  @Test
+  public void testNegativeZeroCoercion() throws IOException {
+  try (JsonParser p = intParser("-0")) {
+      assertEquals(0, p.getIntValue());
+      assertEquals(0L, p.getLongValue());
+  }
+  }
+  // ----------------------------------------------------------------------
+  // Float → int / long coercions
+  // ----------------------------------------------------------------------
+  @Test
+  public void testFloatCoercionToIntOutOfRange() throws IOException {
+  try (JsonParser p = floatParser("1e100")) {
+      try {
+          p.getIntValue();
+          fail("Expected JsonParseException");
+      } catch (JsonParseException e) {
+          assertTrue(e.getMessage().contains("out of range"));
+      }
+  }
+  }
+  @Test
+  public void testFloatCoercionToLongWithinRange() throws IOException {
+  try (JsonParser p = floatParser("1.23e2")) { // 123.0
+      assertEquals(123L, p.getLongValue());
+  }
+  }
+  @Test
+  public void testFloatCoercionToIntWithinRange() throws IOException {
+  try (JsonParser p = floatParser("1.23e2")) {
+      assertEquals(123, p.getIntValue());
+  }
+  }
+  // ----------------------------------------------------------------------
+  // Number type detection
+  // ----------------------------------------------------------------------
+  @Test
+  public void testGetNumberTypeAfterCoercion() throws IOException {
+  try (JsonParser p = intParser("42")) {
+      assertEquals(com.fasterxml.jackson.core.JsonParser.NumberType.INT, p.getNumberType());
+  }
+  try (JsonParser p = intParser("12345678907")) {
+      assertEquals(com.fasterxml.jackson.core.JsonParser.NumberType.LONG, p.getNumberType());
+  }
+  try (JsonParser p = intParser("9223372036854775808")) { // exceeds long
+      assertEquals(com.fasterxml.jackson.core.JsonParser.NumberType.BIG_INTEGER, p.getNumberType());
+  }
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testLargeDigitNumberOverflowMessage
+ - com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testLongOverflowThrows
+ - com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testLongCoercionOutsideIntRange
+ - com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testIntOverflowThrows
+ - com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testFloatCoercionToIntOutOfRange
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testFloatCoercionToIntOutOfRange, com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testIntOverflowThrows, com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testLargeDigitNumberOverflowMessage, com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testLongCoercionOutsideIntRange, com.fasterxml.jackson.core.failing.TestParserBaseOverflow::testLongOverflowThrows

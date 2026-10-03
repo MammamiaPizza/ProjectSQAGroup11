@@ -1,0 +1,163 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 95  Version: JacksonDatabind-95b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1941
+Trigger failures:
+- com.fasterxml.jackson.databind.type.TestTypeFactory::testCanonicalNames
+ --> java.lang.NullPointerException
+Modified: com.fasterxml.jackson.databind.type.TypeFactory, com.fasterxml.jackson.databind.type.TypeParser
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.TypeFactory | java]
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes" })
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static TypeBindings EMPTY_BINDINGS = TypeBindings.emptyBindings();
+private final static Class<?> CLS_STRING = String.class;
+private final static Class<?> CLS_OBJECT = Object.class;
+private final static Class<?> CLS_COMPARABLE = Comparable.class;
+private final static Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(CLS_INT);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(CLS_LONG);
+protected final static SimpleType CORE_TYPE_STRING = new Sim
+...[truncated deterministically]...
+== Map.class) {
+if (rawType == Collection.class) {
+if (rawType == AtomicReference.class) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+[com.fasterxml.jackson.databind.type.TypeParser | java]
+package com.fasterxml.jackson.databind.type;
+public class TypeParser
+protected final TypeFactory _factory;
+public TypeParser(TypeFactory f) {
+public TypeParser withFactory(TypeFactory f) {
+public JavaType parse(String canonical) throws IllegalArgumentException
+protected JavaType parseType(MyTokenizer tokens)
+protected List<JavaType> parseTypes(MyTokenizer tokens)
+protected Class<?> findClass(String className, MyTokenizer tokens)
+throw _problem(tokens, "Can not locate class '"+className+"', problem: "+e.getMessage());
+protected IllegalArgumentException _problem(MyTokenizer tokens, String msg)
+final static class MyTokenizer extends StringTokenizer
+protected final String _input;
+protected int _index;
+protected String _pushbackToken;
+public MyTokenizer(String str) {
+@Override
+public boolean hasMoreTokens() {
+public String nextToken() {
+public void pushBack(String token) {
+public String getAllInput() { return _input; }
+public String getRemainingInput() { return _input.substring(_index); }
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+import com.fasterxml.jackson.databind.JavaType;
+import java.util.List;
+import java.util.Map;
+import org.junit.Test;
+
+public class TypeFactoryCanonicalParsingTest
+{
+    private final TypeFactory factory = TypeFactory.defaultInstance();
+
+    @Test
+    public void parsesSimpleCanonicalClassName()
+    {
+        JavaType type = factory.constructFromCanonical("java.lang.String");
+
+        assertEquals(String.class, type.getRawClass());
+        assertEquals("java.lang.String", type.toCanonical());
+    }
+
+    @Test
+    public void parsesSingleGenericCanonicalName()
+    {
+        JavaType type = factory.constructFromCanonical(
+                "java.util.List<java.lang.String>");
+
+        assertEquals(List.class, type.getRawClass());
+        assertEquals(1, type.containedTypeCount());
+        assertEquals(String.class, type.containedType(0).getRawClass());
+        assertEquals("java.util.List<java.lang.String>", type.toCanonical());
+    }
+
+    @Test
+    public void parsesNestedCanonicalNameAndRetainsAllArguments()
+    {
+        JavaType type = factory.constructFromCanonical(
+                "java.util.Map<java.lang.String,java.util.List<java.lang.Integer>>");
+
+        assertEquals(Map.class, type.getRawClass());
+        assertEquals(2, type.containedTypeCount());
+        assertEquals(String.class, type.containedType(0).getRawClass());
+
+        JavaType valueType = type.containedType(1);
+        assertNotNull(valueType);
+        assertEquals(List.class, valueType.getRawClass());
+        assertEquals(Integer.class, valueType.containedType(0).getRawClass());
+        assertEquals(
+                "java.util.Map<java.lang.String,java.util.List<java.lang.Integer>>",
+                type.toCanonical());
+    }
+
+    @Test
+    public void parserAcceptsWhitespaceAroundCanonicalTokens()
+    {
+        TypeParser parser = new TypeParser(factory);
+
+        JavaType type = parser.parse(
+                "  java.util.Map < java.lang.String , java.util.List < java.lang.Long > >  ");
+
+        assertEquals(Map.class, type.getRawClass());
+        assertEquals(String.class, type.containedType(0).getRawClass());
+        assertEquals(List.class, type.containedType(1).getRawClass());
+        assertEquals(Long.class, type.containedType(1).containedType(0).getRawClass());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsUnresolvableCanonicalClass()
+    {
+        factory.constructFromCanonical("no.such.package.NoSuchType");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsCanonicalNameWithMissingClosingBracket()
+    {
+        factory.constructFromCanonical("java.util.List<java.lang.String");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsCanonicalNameWithEmptyGenericArgumentList()
+    {
+        factory.constructFromCanonical("java.util.List<>");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsTrailingTokensAfterCompleteType()
+    {
+        factory.constructFromCanonical("java.lang.String java.lang.Integer");
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.type.TypeFactoryCanonicalParsingTest::parserAcceptsWhitespaceAroundCanonicalTokens
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.type.TypeFactoryCanonicalParsingTest::parserAcceptsWhitespaceAroundCanonicalTokens

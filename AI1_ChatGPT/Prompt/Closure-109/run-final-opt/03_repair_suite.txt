@@ -1,0 +1,233 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 109  Version: Closure-109b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1105
+Trigger failures:
+- com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testStructuralConstructor2
+ --> junit.framework.AssertionFailedError: extra warning: Bad type annotation. type not recognized due to syntax error
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testStructuralConstructor3
+ --> junit.framework.AssertionFailedError: extra warning: Bad type annotation. type not recognized due to syntax error
+Modified: com.google.javascript.jscomp.parsing.JsDocInfoParser
+
+Available API/signatures:
+[com.google.javascript.jscomp.parsing.JsDocInfoParser | java]
+package com.google.javascript.jscomp.parsing;
+public final class JsDocInfoParser {
+private final ErrorReporterParser parser = new ErrorReporterParser();
+private class ErrorReporterParser {
+private enum State {
+private String getSourceName() {
+public JSDocInfo parseInlineTypeDoc() {
+public static Node parseTypeString(String typeString) {
+parser.addTypeWarning("msg.jsdoc.interface.constructor",
+private JsDocToken recordDescription(JsDocToken token) {
+private void checkExtendedTypes(List<ExtendedTypeInfo> extendedTypes) {
+private JsDocToken parseSuppressTag(JsDocToken token) {
+private JsDocToken parseModifiesTag(JsDocToken token) {
+private JsDocToken parseIdGeneratorTag(JsDocToken token) {
+private Node parseAndRecordParamTypeNode(JsDocToken token) {
+private String toString(JsDocToken token) {
+private static class ExtractionInfo {
+public ExtractionInfo(String string, JsDocToken token) {
+private static class ExtendedTypeInfo {
+public ExtendedTypeInfo(JSTypeExpression type, int lineno, int charno) {
+private ExtractionInfo extractSingleLineBlock() {
+private ExtractionInfo extractMultilineTextualBlock(JsDocToken token) {
+private enum WhitespaceOption {
+@SuppressWarnings("fallthrough")
+private ExtractionInfo extractBlockComment(JsDocToken token) {
+private static String trimEnd(String s) {
+private Node parseTypeExpressionAnnotation(JsDocToken token) {
+private Node parseParamTypeExpressionAnnotation(JsDocToken token) {
+private Node parseTypeNameAnnotation(JsDocToken token) {
+private Node parseTopLevelTypeExpression(JsDocToken token) {
+private Node parseTypeExpressionList(JsDocToken token)
+...[truncated deterministically]...
+s, int lineno, int charno) {
+private Node createTemplateNode() {
+private Node reportTypeSyntaxWarning(String warning) {
+private Node reportGenericTypeSyntaxWarning() {
+private JsDocToken eatUntilEOLIfNotAnnotation() {
+private JsDocToken eatUntilEOLIfNotAnnotation(JsDocToken token) {
+private JsDocToken eatTokensUntilEOL() {
+private JsDocToken eatTokensUntilEOL(JsDocToken token) {
+private void restoreLookAhead(JsDocToken token) {
+private boolean match(JsDocToken token) {
+private boolean match(JsDocToken token1, JsDocToken token2) {
+private JsDocToken next() {
+private JsDocToken current() {
+private void skipEOLs() {
+private String getRemainingJSDocLine() {
+private boolean hasParsedFileOverviewDocInfo() {
+private boolean lookAheadForType() {
+private boolean lookAheadForAnnotation() {
+private boolean lookAheadFor(char expect) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp.parsing;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.jscomp.parsing.Config.LanguageMode;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.head.ErrorReporter;
+import com.google.javascript.rhino.head.EvaluatorException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import org.junit.Test;
+
+public class JsDocInfoParserStructuralConstructorTest {
+
+  @Test
+  public void parsesStructuralConstructorParameterWithoutTypeWarning() {
+    RecordingErrorReporter reporter = new RecordingErrorReporter();
+
+    JSDocInfo info =
+        parse(
+            "/**\n"
+                + " * @constructor\n"
+                + " * @param {function(new: {name: string})} factory\n"
+                + " */",
+            reporter);
+
+    assertNotNull(info);
+    assertTrue(info.isConstructor());
+    assertNotNull(info.getParameterType("factory"));
+    assertEquals(0, reporter.warnings.size());
+  }
+
+  @Test
+  public void parsesStructuralConstructorWithMultipleRecordFieldsWithoutTypeWarning() {
+    RecordingErrorReporter reporter = new RecordingErrorReporter();
+
+    JSDocInfo info =
+        parse(
+            "/**\n"
+                + " * @constructor\n"
+                + " * @param {function(new: {name: string, count: number})} factory\n"
+                + " */",
+            reporter);
+
+    assertNotNull(info);
+    assertTrue(info.isConstructor());
+    assertNotNull(info.getParameterType("factory"));
+    assertEquals(0, reporter.warnings.size());
+  }
+
+  @Test
+  public void parsesStructuralConstructorThatAlsoHasFunctionArgumentsAndReturnType() {
+    RecordingErrorReporter reporter = new RecordingErrorReporter();
+
+    JSDocInfo info =
+        parse(
+            "/**\n"
+                + " * @constructor\n"
+                + " * @param {function(new: {name: string}, number): boolean} factory\n"
+                + " */",
+            reporter);
+
+    assertNotNull(info);
+    assertTrue(info.isConstructor());
+    assertNotNull(info.getParameterType("factory"));
+    assertEquals(0, reporter.warnings.size());
+  }
+
+  @Test
+  public void parsesNamedConstructorFunctionTypeWithoutWarnings() {
+    RecordingErrorReporter reporter = new RecordingErrorReporter();
+
+    JSDocInfo info =
+        parse(
+            "/**\n"
+                + " * @constructor\n"
+                + " * @param {function(new: Widget, string): number} factory\n"
+                + " */",
+            reporter);
+
+    assertNotNull(info);
+    assertTrue(info.isConstructor());
+    assertNotNull(info.getParameterType("factory"));
+    assertEquals(0, reporter.warnings.size());
+  }
+
+  @Test
+  public void reportsWarningForMalformedStructuralConstructorType() {
+    RecordingErrorReporter reporter = new RecordingErrorReporter();
+
+    JSDocInfo info =
+        parse(
+            "/**\n"
+                + " * @constructor\n"
+                + " * @param {function(new: {name: })} factory\n"
+                + " */",
+            reporter);
+
+    assertNotNull(info);
+    assertTrue(info.isConstructor());
+    assertTrue(reporter.warnings.size() > 0);
+  }
+
+  private static JSDocInfo parse(String comment, RecordingErrorReporter reporter) {
+    Config config =
+        new Config(
+            new HashSet<String>(),
+            new HashSet<String>(),
+            false,
+            LanguageMode.ECMASCRIPT3,
+            false);
+
+    JsDocInfoParser parser =
+        new JsDocInfoParser(
+            new JsDocTokenStream(comment), null, null, config, reporter);
+
+    return parser.parse();
+  }
+
+  private static final class RecordingErrorReporter implements ErrorReporter {
+    final List<String> warnings = new ArrayList<String>();
+
+    @Override
+    public void warning(
+        String message, String sourceName, int line, String lineSource, int lineOffset) {
+      warnings.add(message);
+    }
+
+    @Override
+    public void error(
+        String message, String sourceName, int line, String lineSource, int lineOffset) {
+      warnings.add(message);
+    }
+
+    @Override
+    public EvaluatorException runtimeError(
+        String message, String sourceName, int line, String lineSource, int lineOffset) {
+      return new EvaluatorException(message);
+    }
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-109f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-109f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-109f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-109f-ai/.test_suite/com/google/javascript/jscomp/parsing/JsDocInfoParserStructuralConstructorTest.java:120: error: incompatible types: boolean cannot be converted to JSDocInfo
+ [javac] return parser.parse();
+ [javac] ^
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 31 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

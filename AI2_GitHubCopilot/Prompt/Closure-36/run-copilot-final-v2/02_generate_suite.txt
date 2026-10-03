@@ -1,0 +1,440 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 36  Version: Closure-36b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.InlineVariables
+Modified: com.google.javascript.jscomp.InlineVariables
+Triggers: com.google.javascript.jscomp.IntegrationTest::testSingletonGetter1
+
+Bug/specification summary:
+Bug report: 668
+Trigger failures:
+- com.google.javascript.jscomp.IntegrationTest::testSingletonGetter1
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.InlineVariables
+
+Prompt-01 test plan:
+TARGETS: InlineVariables.doInlinesForScope, InliningBehavior.afterExitScope,
+IdentifyConstants.apply, isValidReference, isValidInitialization, isVarInlineForbidden
+TARGETS: Reference-based inlining decisions: blacklistVarReferencesInTree, canMoveAggressively,
+isStringWorthInlining
+ORACLES: Regression test testSingletonGetter1 must pass; no JS output mismatch or assertion error
+after fix.
+ORACLES: Variables holding singleton getter calls (with possible side effects) must not be inlined
+if unsafe.
+CASES: Normal: variable declared and used once, twice, in expressions; inlining saves size.
+CASES: Boundary: inlining inside conditional branches, loops, with aliases, multiple references,
+nested scopes.
+CASES: Error: variable initialized with non-pure call (getter, method, constructor) must be blocked
+from inlining.
+RISKS: No fixed version available; expected correct behavior inferred only from test name and
+typical inlining rules.
+RISKS: Limited to buggy source; cannot compare with correct behavior or review the actual failing JS
+snippet.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.InlineVariables (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class InlineVariables implements CompilerPass {
+enum Mode {
+private final IdentifyConstants identifyConstants = new IdentifyConstants();
+@Override
+public void process(Node externs, Node root) {
+private Predicate<Var> getFilterForMode() {
+private class IdentifyConstants implements Predicate<Var> {
+public boolean apply(Var var) {
+private class IdentifyLocals implements Predicate<Var> {
+private static class AliasCandidate {
+private class InliningBehavior implements Behavior {
+private final Set<Var> staleVars = Sets.newHashSet();
+final Map<Node, AliasCandidate> aliasCandidates = Maps.newHashMap();
+public void afterExitScope(NodeTraversal t, ReferenceMap referenceMap) {
+private void doInlinesForScope(NodeTraversal t, ReferenceMap referenceMap) {
+private boolean isLValue(Node n) {
+private void blacklistVarReferencesInTree(Node root, Scope scope) {
+private boolean isVarInlineForbidden(Var var) {
+private void removeDeclaration(Reference declaration) {
+private void inlineValue(Var v, Reference ref, Node value) {
+private boolean isStringWorthInlining(Var var, List<Reference> refs) {
+private boolean canMoveAggressively(Node value) {
+private boolean isValidDeclaration(Reference declaration) {
+private boolean isValidInitialization(Reference initialization) {
+private boolean isValidReference(Reference reference) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.CodingConvention.SubclassRelationship;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.Behavior;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.Reference;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.ReferenceCollection;
+import com.google.javascript.jscomp.ReferenceCollectingCallback.ReferenceMap;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.Node;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+class InlineVariables implements CompilerPass {
+ enum Mode {
+
+/* METHOD InlineVariables */
+InlineVariables(
+ AbstractCompiler compiler,
+ Mode mode,
+ boolean inlineAllStrings) {
+ this.compiler = compiler;
+ this.mode = mode;
+ this.inlineAllStrings = inlineAllStrings;
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ ReferenceCollectingCallback callback = new ReferenceCollectingCallback(
+ compiler, new InliningBehavior(), getFilterForMode());
+ callback.process(externs, root);
+ }
+
+/* METHOD inline */
+private void inline(Var v, Reference declaration,
+ Reference init, Reference reference) {
+ Node value = init.getAssignedValue();
+ Preconditions.checkState(value != null);
+ // Check for function declarations before the value is moved in the AST.
+ boolean isFunctionDeclaration = NodeUtil.isFunctionDeclaration(value);
+
+ inlineValue(v, reference, value.detachFromParent());
+ if (declaration != init) {
+ Node expressRoot = init.getGrandparent();
+ Preconditions.checkState(expressRoot.isExprResult());
+ NodeUtil.removeChild(expressRoot.getParent(), expressRoot);
+ }
+
+ // Function declarations have already been removed.
+ if (!isFunctionDeclaration) {
+ removeDeclaration(declaration);
+ } else {
+ compiler.reportCodeChange();
+ }
+ }
+
+/* METHOD inlineValue */
+private void inlineValue(Var v, Reference ref, Node value) {
+ if (ref.isSimpleAssignmentToName()) {
+ // This is the initial assignment.
+ ref.getGrandparent().replaceChild(ref.getParent(), value);
+ } else {
+ ref.getParent().replaceChild(ref.getNode(), value);
+ }
+
+ blacklistVarReferencesInTree(value, v.scope);
+ compiler.reportCodeChange();
+ }
+
+/* METHOD afterExitScope */
+@Override
+ public void afterExitScope(NodeTraversal t, ReferenceMap referenceMap) {
+ collectAliasCandidates(t, referenceMap);
+ doInlinesForScope(t, referenceMap);
+ }
+
+/* METHOD removeDeclaration */
+private void removeDeclaration(Reference declaration) {
+ Node varNode = declaration.getParent();
+ Node grandparent = declaration.getGrandparent();
+
+ varNode.removeChild(declaration.getNode());
+
+ // Remove var node if empty
+ if (!varNode.hasChildren()) {
+ Preconditions.checkState(varNode.isVar());
+ NodeUtil.removeChild(grandparent, varNode);
+ }
+
+ compiler.reportCodeChange();
+ }
+
+/* METHOD apply */
+@Override
+ public boolean apply(Var var) {
+ return var.isConst();
+ }
+
+/* METHOD apply */
+@Override
+ public boolean apply(Var var) {
+ return var.scope.isLocal();
+ }
+
+/* METHOD isVarInlineForbidden */
+private boolean isVarInlineForbidden(Var var) {
+ // A variable may not be inlined if:
+ // 1) The variable is exported,
+ // 2) A reference to the variable has been inlined. We're downstream
+ // of the mechanism that creates variable references, so we don't
+ // have a good way to update the reference. Just punt on it.
+ // 3) Don't inline the special RENAME_PROPERTY_FUNCTION_NAME
+ return var.isExtern()
+ || compiler.getCodingConvention().isExported(var.name)
+ || RenameProperties.RENAME_PROPERTY_FUNCTION_NAME.equals(var.name)
+ || staleVars.contains(var);
+ }
+
+ /**
+ * Do the actual work of inlining a single declaration into a single
+ * reference.
+ */
+ private void inline(Var v, Reference declaration,
+ Reference init, Reference reference) {
+ Node value = init.getAssignedValue();
+ Preconditions.checkState(value != null);
+ // Check for function declarations before the value is moved in the AST.
+ boolean isFunctionDeclaration = NodeUtil.isFunctionDeclaration(value);
+
+ inlineValue(v, reference, value.detachFromParent());
+ if (declaration != init) {
+ Node expressRoot = init.getGrandparent();
+ Preconditions.checkState(expressRoot.isExprResult());
+ NodeUtil.removeChild(expressRoot.getParent(), expressRoot);
+ }
+
+ // Function declarations have already been removed.
+ if (!isFunctionDeclaration) {
+ removeDeclaration(declaration);
+ } else {
+ compiler.reportCodeChange();
+ }
+ }
+
+ /**
+ * Inline an immutable variable into all of its references.
+ */
+ private void inlineWellDefinedVariable(Var v, Node value,
+ List<Reference> refSet) {
+ Reference decl = refSet.get(0);
+ for (int i = 1; i < refSet.size(); i++) {
+ inlineValue(v, refSet.get(i), value.cloneTree());
+ }
+ removeDeclaration(decl);
+ }
+
+ /**
+ * Inline a declared constant.
+ */
+ private void inlineDeclaredConstant(Var v, Node value,
+ List<Reference> refSet) {
+ // Replace the references with the constant value
+ Reference decl = null;
+
+ for (Reference r : refSet) {
+ if (r.getNode() == v.getNameNode()) {
+ decl = r;
+ } else {
+ inlineValue(v, r, value.cloneTree());
+ }
+ }
+
+ removeDeclaration(decl);
+ }
+
+ /**
+ * Remove the given VAR declaration.
+ */
+ private void removeDeclaration(Reference declaration) {
+ Node varNode = declaration.getParent();
+ Node grandparent = declaration.getGrandparent();
+
+ varNode.removeChild(declaration.getNode());
+
+ // Remove var node if empty
+ if (!varNode.hasChildren()) {
+ Preconditions.checkState(varNode.isVar());
+ NodeUtil.removeChild(grandparent, varNode);
+ }
+
+ compiler.reportCodeChange();
+ }
+
+ /**
+ * Replace the given reference with the given value node.
+ *
+ * @param v The variable that's referenced.
+ * @param ref The reference to replace.
+ * @param value The node tree to replace it with. This tree should be safe
+ * to re-parent.
+ */
+ private void inlineValue(Var v, Reference ref, Node value) {
+ if (ref.isSimpleAssignmentToName()) {
+ // This is the initial assignment.
+ ref.getGrandparent().replaceChild(ref.getParent(), value);
+ } else {
+ ref.getParent().replaceChild(ref.getNode(), value);
+ }
+
+ blacklistVarReferencesInTree(value, v.scope);
+ compiler.reportCodeChange();
+ }
+
+ /**
+ * Determines whether the given variable is declared as a constant
+ * and may be inlined.
+ */
+ private boolean isInlineableDeclaredConstant(Var var,
+ ReferenceCollection refInfo) {
+ if (!
+...[truncated deterministically]...
+* @return true if the reference is a candidate for inlining
+ */
+ private boolean isValidReference(Reference reference) {
+ return !reference.isDeclaration() && !reference.isLvalue();
+ }
+
+ /**
+ * Determines whether the reference collection describes a variable that
+ * is initialized to an immutable value, never modified, and defined before
+ * every reference.
+ */
+ private boolean isImmutableAndWellDefinedVariable(Var v,
+ ReferenceCollection refInfo) {
+ List<Reference> refSet = refInfo.references;
+ int startingReadRef = 1;
+ Reference refDecl = refSet.get(0);
+ if (!isValidDeclaration(refDecl)) {
+ return false;
+ }
+
+ boolean isNeverAssigned = refInfo.isNeverAssigned();
+ // For values that are never assigned, only the references need to be
+ // checked.
+ if (!isNeverAssigned) {
+ Reference refInit = refInfo.getInitializingReference();
+ if (!isValidInitialization(refInit)) {
+ return false;
+ }
+
+ if (refDecl != refInit) {
+ Preconditions.checkState(refInit == refSet.get(1));
+ startingReadRef = 2;
+ }
+
+ if (!refInfo.isWellDefined()) {
+ return false;
+ }
+
+ Node value = refInit.getAssignedValue();
+ Preconditions.checkNotNull(value);
+
+ boolean isImmutableValueWorthInlining =
+ NodeUtil.isImmutableValue(value) &&
+ (!value.isString() ||
+ isStringWorthInlining(v, refInfo.references));
+ boolean isInlinableThisAlias =
+ value.isThis() &&
+ !refInfo.isEscaped();
+ if (!isImmutableValueWorthInlining && !isInlinableThisAlias) {
+ return false;
+ }
+ }
+
+ for (int i = startingReadRef; i < refSet.size(); i++) {
+ Reference ref = refSet.get(i);
+ if (!isValidReference(ref)) {
+ return false;
+ }
+ }
+
+ return true;
+ }
+ }
+
+/* METHOD isInlineableDeclaredConstant */
+private boolean isInlineableDeclaredConstant(Var var,
+ ReferenceCollection refInfo) {
+ if (!identifyConstants.apply(var)) {
+ return false;
+ }
+
+ if (!refInfo.isAssignedOnceInLifetime()) {
+ return false;
+ }
+
+ Reference init = refInfo.getInitializingReferenceForConstants();
+ if (init == null) {
+ return false;
+ }
+
+ Node value = init.getAssignedValue();
+ if (value == null) {
+ // This constant is either externally defined or initialized indirectly
+ // (e.g. in an function expression used to hide
+ // temporary variables), so the constant is ineligible for inlining.
+ return false;
+ }
+
+ // Is the constant's value immutable?
+ if (!NodeUtil.isImmutableValue(value)) {
+ return false;
+ }
+
+ // Determine if we should really inline a String or not.
+ return !value.isString() ||
+ isStringWorthInlining(var, refInfo.references);
+ }
+
+ /**
+ * Compute whether the given string is worth inlining.
+ */
+ private boolean isStringWorthInlining(Var var, List<Reference> refs) {
+ if (!inlineAllStrings && !var.isDefine()) {
+ int len = var.getInitialValue().getString().length() + "''".length();
+
+ // if not inlined: var xx="value"; .. xx .. xx ..
+ // The 4 bytes per reference is just a heuristic:
+ // 2 bytes per var name plus maybe 2 bytes if we don't inline, e.g.
+ // in the case of "foo " + CONST + " bar"
+ int noInlineBytes = "var xx=;".length() + len +
+ 4 * (refs.size() - 1);
+
+ // if inlined:
+ // I'm going to assume that half of the quotes will be eliminated
+ // thanks to constant folding, therefore I subtract 1 (2/2=1) from
+ // the string length.
+ int
+...[truncated deterministically]...
+!= null);
+ if (value.isGetProp()
+ && reference.getParent().isCall()
+ && reference.getParent().getFirstChild() == reference.getNode()) {
+ return false;
+ }
+
+ if (value.isFunction()) {
+ Node callNode = reference.getParent();
+ if (reference.getParent().isCall()) {
+ CodingConvention convention = compiler.getCodingConvention();
+ // Bug 2388531: Don't inline subclass definitions into class defining
+ // calls as this confused class removing logic.
+ SubclassRelationship relationship =
+ convention.getClassesDefinedByCall(callNode);
+ if (relationship != null) {
+ return false;
+ }
+
+ // issue 668: Don't inline singleton getter methods
+ // calls as this confused class removing logic.
+ }
+ }
+
+ return canMoveAggressively(value) ||
+ canMoveModerately(initialization, reference);
+ }

@@ -1,0 +1,129 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 111  Version: Closure-111b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1114
+Trigger failures:
+- com.google.javascript.jscomp.ClosureReverseAbstractInterpreterTest::testGoogIsArray2
+ --> junit.framework.AssertionFailedError: Expected: Array
+Modified: com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreter
+
+Available API/signatures:
+[com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreter | java]
+package com.google.javascript.jscomp.type;
+public class ClosureReverseAbstractInterpreter
+@Override
+protected JSType caseTopType(JSType topType) {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseFunctionType(FunctionType type) {
+public JSType caseAllType() {
+public JSType apply(TypeRestriction p) {
+private static class TypeRestriction {
+private TypeRestriction(JSType type, boolean outcome) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp.type;
+
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+
+import com.google.common.base.Function;
+import com.google.javascript.jscomp.ClosureCodingConvention;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.util.Map;
+import org.junit.Test;
+
+public class ClosureReverseAbstractInterpreterArrayRestrictionTest {
+
+  @Test
+  public void testGoogIsArrayTrueRestrictsUnknownTypeToArray() throws Exception {
+    RestrictionHarness harness = new RestrictionHarness();
+    JSType result =
+        harness.apply("isArray", harness.registry.getNativeType(JSTypeNative.UNKNOWN_TYPE), true);
+
+    assertSame(harness.registry.getNativeType(JSTypeNative.ARRAY_TYPE), result);
+  }
+
+  @Test
+  public void testGoogIsArrayTrueRestrictsObjectTypeToArray() throws Exception {
+    RestrictionHarness harness = new RestrictionHarness();
+    JSType result =
+        harness.apply("isArray", harness.registry.getNativeType(JSTypeNative.OBJECT_TYPE), true);
+
+    assertSame(harness.registry.getNativeType(JSTypeNative.ARRAY_TYPE), result);
+  }
+
+  @Test
+  public void testGoogIsArrayTrueWithNoKnownTypeProducesArray() throws Exception {
+    RestrictionHarness harness = new RestrictionHarness();
+    JSType result = harness.apply("isArray", null, true);
+
+    assertSame(harness.registry.getNativeType(JSTypeNative.ARRAY_TYPE), result);
+  }
+
+  @Test
+  public void testGoogIsArrayFalseRejectsKnownArray() throws Exception {
+    RestrictionHarness harness = new RestrictionHarness();
+    JSType result =
+        harness.apply("isArray", harness.registry.getNativeType(JSTypeNative.ARRAY_TYPE), false);
+
+    assertNull(result);
+  }
+
+  @Test
+  public void testGoogIsArrayFalsePreservesGeneralObjectType() throws Exception {
+    RestrictionHarness harness = new RestrictionHarness();
+    JSType objectType = harness.registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+    JSType result = harness.apply("isArray", objectType, false);
+
+    assertSame(objectType, result);
+  }
+
+  private static final class RestrictionHarness {
+    final JSTypeRegistry registry;
+    private final Map<String, Function<?, ?>> restricters;
+    private final Constructor<?> restrictionConstructor;
+
+    @SuppressWarnings("unchecked")
+    RestrictionHarness() throws Exception {
+      registry = new JSTypeRegistry(null);
+      ClosureReverseAbstractInterpreter interpreter =
+          new ClosureReverseAbstractInterpreter(new ClosureCodingConvention(), registry);
+
+      Field field =
+          ClosureReverseAbstractInterpreter.class.getDeclaredField("restricters");
+      field.setAccessible(true);
+      restricters = (Map<String, Function<?, ?>>) field.get(interpreter);
+
+      Class<?> restrictionClass =
+          Class.forName(
+              "com.google.javascript.jscomp.type."
+                  + "ClosureReverseAbstractInterpreter$TypeRestriction");
+      restrictionConstructor =
+          restrictionClass.getDeclaredConstructor(JSType.class, Boolean.TYPE);
+      restrictionConstructor.setAccessible(true);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    JSType apply(String functionName, JSType type, boolean outcome) throws Exception {
+      Object restriction = restrictionConstructor.newInstance(type, Boolean.valueOf(outcome));
+      Function function = restricters.get(functionName);
+      return (JSType) function.apply(restriction);
+    }
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreterArrayRestrictionTest::testGoogIsArrayTrueRestrictsUnknownTypeToArray
+
+Extract test suite......................................................... OK
+Failing generated tests: com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreterArrayRestrictionTest::testGoogIsArrayTrueRestrictsUnknownTypeToArray

@@ -1,0 +1,365 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 59  Version: JacksonDatabind-59b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.type.CollectionLikeType, com.fasterxml.jackson.databind.type.MapLikeType, com.fasterxml.jackson.databind.type.TypeFactory
+Modified: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.type.CollectionLikeType, com.fasterxml.jackson.databind.type.MapLikeType, com.fasterxml.jackson.databind.type.TypeFactory
+Triggers: com.fasterxml.jackson.databind.jsontype.TypeRefinementForMapTest::testMapKeyRefinement1384
+
+Bug/specification summary:
+Bug report: 1384
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TypeRefinementForMapTest::testMapKeyRefinement1384
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not find a (Map) Key deserializer for type [simple type, class com.fasterxml.jackson.databind.jsontype.TypeRefinementForMapTest$CompoundKey]
+Modified: com.fasterxml.jackson.databind.JavaType, com.fasterxml.jackson.databind.type.CollectionLikeType, com.fasterxml.jackson.databind.type.MapLikeType, com.fasterxml.jackson.databind.type.TypeFactory
+
+Prompt-01 test plan:
+TARGETS: forcedNarrowBy/_narrow on MapLikeType,CollectionLikeType;
+TypeFactory.constructMapType,constructSpecializedType
+TARGETS: MapLikeType.getKeyType(),getContentType() after narrowing; isMapLikeType() flag still true
+ORACLES: Narrowing a Map-type with key=CompoundKey must preserve the key type so KeyDeserializer is
+found (no JsonMappingException)
+ORACLES: Type handlers and value handlers set on the original type should be retained after
+forcedNarrowBy
+CASES: Normal: narrow Map(CompoundKey,String) to Map subclass; narrow Collection-like with element
+type; boundary: narrow key as Object.class(null)
+CASES: Error: narrow Map to List.class (expect IllegalArgumentException or fallback); narrow with
+missing generic info
+RISKS: Internal _narrow() @Deprecated; private _class/_handlers may affect identity;
+key‑deserializer lookup is outside the visible scope of these classes
+RISKS: Test can only verify structural type metadata (getKeyType) not actual deserialization;
+TypeRefinementForMapTest source not provided here
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.JavaType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind;
+public abstract class JavaType
+protected final Class<?> _class;
+protected final int _hash;
+protected final Object _valueHandler;
+protected final Object _typeHandler;
+protected final boolean _asStatic;
+protected JavaType(JavaType base)
+public abstract JavaType withTypeHandler(Object h);
+public abstract JavaType withContentTypeHandler(Object h);
+public abstract JavaType withValueHandler(Object h);
+public abstract JavaType withContentValueHandler(Object h);
+public abstract JavaType withContentType(JavaType contentType);
+public abstract JavaType withStaticTyping();
+@Deprecated
+public JavaType forcedNarrowBy(Class<?> subcla
+...[truncated deterministically]...
+public String getGenericSignature() {
+public abstract StringBuilder getGenericSignature(StringBuilder sb);
+public String getErasedSignature() {
+public abstract StringBuilder getErasedSignature(StringBuilder sb);
+public abstract String toString();
+public abstract boolean equals(Object o);
+public final int hashCode() { return _hash; }
+
+/* HEADER */
+package com.fasterxml.jackson.databind;
+import java.lang.reflect.Modifier;
+import java.util.List;
+import com.fasterxml.jackson.core.type.ResolvedType;
+import com.fasterxml.jackson.databind.type.TypeBindings;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+
+/* METHOD JavaType */
+protected JavaType(JavaType base) 
+ {
+ _class = base._class;
+ _hash = base._hash;
+ _valueHandler = base._valueHandler;
+ _typeHandler = base._typeHandler;
+ _asStatic = base._asStatic;
+ }
+
+/* METHOD JavaType */
+protected JavaType(Class<?> raw, int additionalHash,
+ Object valueHandler, Object typeHandler, boolean asStatic)
+ {
+ _class = raw;
+ _hash = raw.getName().hashCode() + additionalHash;
+ _valueHandler = valueHandler;
+ _typeHandler = typeHandler;
+ _asStatic = asStatic;
+ }
+
+/* METHOD forcedNarrowBy */
+@Deprecated
+ public JavaType forcedNarrowBy(Class<?> subclass)
+ {
+ if (subclass == _class) { // can still optimize for simple case
+ return this;
+ }
+ JavaType result = _narrow(subclass);
+ // TODO: these checks should NOT actually be needed; above should suffice:
+ if (_valueHandler != result.<Object>getValueHandler()) {
+ result = result.withValueHandler(_valueHandler);
+ }
+ if (_typeHandler != result.<Object>getTypeHandler()) {
+ result = result.withTypeHandler(_typeHandler);
+ }
+ return result;
+ }
+
+/* METHOD isMapLikeType */
+@Override
+ public boolean isMapLikeType() { return false; }
+
+/* METHOD getKeyType */
+@Override
+ public JavaType getKeyType() { return null; }
+
+===== com.fasterxml.jackson.databind.type.CollectionLikeType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+public class CollectionLikeType extends TypeBase
+protected final JavaType _elementType;
+protected CollectionLikeType(TypeBase base, JavaType elemT)
+@Deprecated // since 2.7
+public static CollectionLikeType construct(Class<?> rawType, JavaType elemT) {
+public static CollectionLikeType upgradeFrom(JavaType baseType, JavaType elementType) {
+@Override
+protected JavaType _narrow(Class<?> subclass) {
+public JavaType withContentType(JavaType contentType) {
+public CollectionLikeType withTypeHandler(Object h) {
+public CollectionLikeType withContentTypeHandler(Object h)
+public CollectionLikeType withValueHandler(Object h) {
+...[truncated deterministically]...
+ublic StringBuilder getGenericSignature(StringBuilder sb) {
+protected String buildCanonicalName() {
+public boolean isTrueCollectionType() {
+return Collection.class.isAssignableFrom(_class);
+public boolean equals(Object o)
+public String toString()
+return "[collection-like type; class "+_class.getName()+", contains "+_elementType+"]";
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.lang.reflect.TypeVariable;
+import java.util.Collection;
+import com.fasterxml.jackson.databind.JavaType;
+public class CollectionLikeType extends TypeBase
+
+/* METHOD CollectionLikeType */
+protected CollectionLikeType(TypeBase base, JavaType elemT)
+ {
+ super(base);
+ _elementType = elemT;
+ }
+
+/* METHOD CollectionLikeType */
+protected CollectionLikeType(Class<?> collT, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts, JavaType elemT,
+ Object valueHandler, Object typeHandler, boolean asStatic)
+ {
+ super(collT, bindings, superClass, superInts,
+ elemT.hashCode(), valueHandler, typeHandler, asStatic);
+ _elementType = elemT;
+ }
+
+/* METHOD upgradeFrom */
+public static CollectionLikeType upgradeFrom(JavaType baseType, JavaType elementType) {
+ // 19-Oct-2015, tatu: Not sure if and how other types could be used as base;
+ // will cross that bridge if and when need be
+ if (baseType instanceof TypeBase) {
+ return new CollectionLikeType((TypeBase) baseType, elementType);
+ }
+ throw new IllegalArgumentException("Can not upgrade from an instance of "+baseType.getClass());
+ }
+
+/* METHOD construct */
+public static CollectionLikeType construct(Class<?> rawType, JavaType elemT) {
+ // First: may need to fabricate TypeBindings (needed for refining into
+ // concrete collection types, as per [databind#1102])
+ TypeVariable<?>[] vars = rawType.getTypeParameters();
+ TypeBindings bindings;
+ if ((vars == null) || (vars.length != 1)) {
+ bindings = TypeBindings.emptyBindings();
+ } else {
+ bindings = TypeBindings.create(rawType, elemT);
+ }
+ return new CollectionLikeType(rawType, bindings,
+ _bogusSuperClass(rawType), null,
+ elemT, null, null, false);
+ }
+
+===== com.fasterxml.jackson.databind.type.MapLikeType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+public class MapLikeType extends TypeBase {
+protected final JavaType _keyType;
+protected final JavaType _valueType;
+protected MapLikeType(TypeBase base, JavaType keyT, JavaType valueT) {
+@Deprecated
+@Override
+protected JavaType _narrow(Class<?> subclass) {
+public MapLikeType withKeyType(JavaType keyType) {
+public JavaType withContentType(JavaType contentType) {
+public MapLikeType withTypeHandler(Object h) {
+public MapLikeType withContentTypeHandler(Object h) {
+public MapLikeType withValueHandler(Object h) {
+public MapLikeType withContentValueHandler(Object h) {
+public MapLikeType withStaticTyping() {
+protected Str
+...[truncated deterministically]...
+GenericSignature(StringBuilder sb) {
+public MapLikeType withKeyTypeHandler(Object h) {
+public MapLikeType withKeyValueHandler(Object h) {
+public boolean isTrueMapType() {
+return Map.class.isAssignableFrom(_class);
+public String toString() {
+return String.format("[map-like type; class %s, %s -> %s]",
+public boolean equals(Object o) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.lang.reflect.TypeVariable;
+import java.util.*;
+import com.fasterxml.jackson.databind.JavaType;
+public class MapLikeType extends TypeBase {
+
+/* METHOD MapLikeType */
+protected MapLikeType(TypeBase base, JavaType keyT, JavaType valueT) {
+ super(base);
+ _keyType = keyT;
+ _valueType = valueT;
+ }
+
+/* METHOD MapLikeType */
+protected MapLikeType(Class<?> mapType, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts, JavaType keyT,
+ JavaType valueT, Object valueHandler, Object typeHandler,
+ boolean asStatic) {
+ super(mapType, bindings, superClass, superInts, keyT.hashCode()
+ ^ valueT.hashCode(), valueHandler, typeHandler, asStatic);
+ _keyType = keyT;
+ _valueType = valueT;
+ }
+
+/* METHOD upgradeFrom */
+public static MapLikeType upgradeFrom(JavaType baseType, JavaType keyT,
+ JavaType valueT) {
+ // 19-Oct-2015, tatu: Not sure if and how other types could be used as
+ // base;
+ // will cross that bridge if and when need be
+ if (baseType instanceof TypeBase) {
+ return new MapLikeType((TypeBase) baseType, keyT, valueT);
+ }
+ throw new IllegalArgumentException(
+ "Can not upgrade from an instance of " + baseType.getClass());
+ }
+
+/* METHOD construct */
+public static MapLikeType construct(Class<?> rawType, JavaType keyT,
+ JavaType valueT) {
+ // First: may need to fabricate TypeBindings (needed for refining into
+ // concrete collection types, as per [databind#1102])
+ TypeVariable<?>[] vars = rawType.getTypeParameters();
+ TypeBindings bindings;
+ if ((vars == null) || (vars.length != 2)) {
+ bindings = TypeBindings.emptyBindings();
+ } else {
+ bindings = TypeBindings.create(rawType, keyT, valueT);
+ }
+ return new MapLikeType(rawType, bindings, _bogusSuperClass(rawType),
+ null, keyT, valueT, null, null, false);
+ }
+
+===== com.fasterxml.jackson.databind.type.TypeFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes" })
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static TypeBindings EMPTY_BINDINGS = TypeBindings.emptyBindings();
+private final static Class<?> CLS_STRING = String.class;
+private final static Class<?> CLS_OBJECT = Object.class;
+private final static Class<?> CLS_COMPARABLE = Comparable.class;
+private final static Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_I
+...[truncated deterministically]...
+lass) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.LRUMap;
+
+/* METHOD TypeFactory */
+protected TypeFactory(LRUMap<Object,JavaType> typeCache, TypeParser p,
+ TypeModifier[] mods, ClassLoader classLoader)
+ {
+ if (typeCache == null) {
+ typeCache = new LRUMap<Object,JavaType>(16, 200);
+ }
+ _typeCache = typeCache;
+ // As per [databind#894] must ensure we have back-linkage from TypeFactory:
+ _parser = p.withFactory(this);
+ _modifiers = mods;
+ _classLoader = classLoader;
+ }
+
+/* METHOD TypeFactory */
+protected TypeFactory(LRUMap<Object,JavaType> typeCache) {
+ if (typeCache == n
+...[truncated deterministically]...
+= typeCache;
+ _parser = new TypeParser(this);
+ _modifiers = null;
+ _classLoader = null;
+ }
+
+/* METHOD TypeFactory */
+private TypeFactory() {
+ this(null);
+ }
+
+/* METHOD withModifier */
+public TypeFactory withModifier(TypeModifier mod) 
+ {
+ LRUMap<Object,JavaType> typeCache = _typeCache;
+ TypeModifier[] mods;
+ if (mod == null) { // mostly for unit tests
+ mods = null;
+ // 30-Jun-2016, tatu: for some reason expected semantics are to clear cache
+ // in this case; can't recall why, but keeping the same
+ typeCache = null;
+ } else if (_modifiers == null) {
+ mods = new TypeModifier[] { mod };
+ } else {
+ mods = ArrayBuilders.insertInListNoDup(_modifiers, mod);
+ }
+ return new TypeFactory(typeCache, _parse
+...[truncated deterministically]...
+= rawComp) {
+ return baseType;
+ }
+ JavaType componentType = _fromAny(null, rawComp, null);
+ return ((ArrayType) baseType).withComponentType(componentType);
+ }
+ }
+
+ // otherwise regular narrowing should work just fine
+ return baseType.narrowBy(subclass);
+ */
+ }

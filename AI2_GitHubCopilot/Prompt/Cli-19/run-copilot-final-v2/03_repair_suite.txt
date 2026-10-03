@@ -1,0 +1,199 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 19  Version: Cli-19b
+JUnit: junit-3.8.1.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-164
+Trigger failures:
+- org.apache.commons.cli.PosixParserTest::testUnrecognizedOption2
+ --> junit.framework.AssertionFailedError: UnrecognizedOptionException wasn't thrown
+Modified: org.apache.commons.cli.PosixParser
+
+Available API/signatures:
+[org.apache.commons.cli.PosixParser | java]
+package org.apache.commons.cli;
+public class PosixParser extends Parser {
+private List tokens = new ArrayList();
+private void init()
+protected String[] flatten(Options options, String[] arguments, boolean stopAtNonOption)
+private void gobble(Iterator iter)
+private void process(String value)
+private void processOptionToken(String token, boolean stopAtNonOption)
+protected void burstToken(String token, boolean stopAtNonOption)
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+ import java.util.List;
+ import java.util.ArrayList;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Test class for PosixParser, focusing on unrecognized option detection.
+  * Exposes CLI-164: PosixParser does not throw UnrecognizedOptionException.
+  */
+ public class PosixParserTest extends TestCase {
+
+     private Options options;
+
+     public void setUp() {
+         options = new Options();
+         options.addOption(new Option("a", "alpha", false, "opt a"));
+         options.addOption(new Option("b", false, "opt b"));
+         Option optC = new Option("c", "charlie", true, "opt c with arg");
+         options.addOption(optC);
+     }
+
+     public void testUnrecognizedShortOption() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"-z"});
+             fail("UnrecognizedOptionException should have been thrown");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedLongOption() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"--unknown"});
+             fail("UnrecognizedOptionException should have been thrown");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedShortAfterNonOption() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"foo", "-z"});
+             fail("UnrecognizedOptionException should have been thrown");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedLongAfterNonOption() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"foo", "--bad"});
+             fail("UnrecognizedOptionException should have been thrown");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedWithStopAtNonOptionTrue() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"-9"}, true);
+             fail("UnrecognizedOptionException should have been thrown even with stopAtNonOption");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedLongWithStopAtNonOptionTrue() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"--ghost"}, true);
+             fail("UnrecognizedOptionException should have been thrown even with stopAtNonOption");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedBurstToken() {
+         PosixParser parser = new PosixParser();
+         try {
+             // "-xz": -x unknown, -z unknown, should cause exception
+             parser.parse(options, new String[]{"-xz"});
+             fail("UnrecognizedOptionException should have been thrown for burst token");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testUnrecognizedLongWithEquals() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"--bad=value"});
+             fail("UnrecognizedOptionException should have been thrown for --bad=value");
+         } catch (UnrecognizedOptionException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+
+     public void testValidShortOption() {
+         PosixParser parser = new PosixParser();
+         try {
+             CommandLine cl = parser.parse(options, new String[]{"-a"});
+             assertTrue(cl.hasOption("a"));
+             assertEquals(0, cl.getArgs().length);
+         } catch (ParseException e) {
+             fail("Unexpected ParseException: " + e.getMessage());
+         }
+     }
+
+     public void testValidLongOption() {
+         PosixParser parser = new PosixParser();
+         try {
+             CommandLine cl = parser.parse(options, new String[]{"--alpha"});
+             assertTrue(cl.hasOption("alpha"));
+             assertEquals(0, cl.getArgs().length);
+         } catch (ParseException e) {
+             fail("Unexpected ParseException: " + e.getMessage());
+         }
+     }
+
+     public void testOptionWithArgument() {
+         PosixParser parser = new PosixParser();
+         try {
+             CommandLine cl = parser.parse(options, new String[]{"-c", "value"});
+             assertTrue(cl.hasOption("c"));
+             assertEquals("value", cl.getOptionValue("c"));
+         } catch (ParseException e) {
+             fail("Unexpected ParseException: " + e.getMessage());
+         }
+     }
+
+     public void testMissingArgumentException() {
+         PosixParser parser = new PosixParser();
+         try {
+             parser.parse(options, new String[]{"-c"});
+             fail("MissingArgumentException should have been thrown");
+         } catch (MissingArgumentException e) {
+             // expected
+         } catch (Exception e) {
+             fail("Wrong exception type: " + e.getClass().getName());
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.cli.PosixParserTest::testUnrecognizedWithStopAtNonOptionTrue
+ - org.apache.commons.cli.PosixParserTest::testUnrecognizedLongWithStopAtNonOptionTrue
+
+Failing generated tests: org.apache.commons.cli.PosixParserTest::testUnrecognizedLongWithStopAtNonOptionTrue, org.apache.commons.cli.PosixParserTest::testUnrecognizedWithStopAtNonOptionTrue

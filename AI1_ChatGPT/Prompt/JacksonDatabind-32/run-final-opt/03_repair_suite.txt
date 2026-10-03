@@ -1,0 +1,204 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 32  Version: JacksonDatabind-32b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 989
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.TestUntypedDeserialization::testNestedUntyped989
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not deserialize instance of java.lang.Object out of END_OBJECT token
+Modified: com.fasterxml.jackson.databind.deser.std.UntypedObjectDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.std.UntypedObjectDeserializer | java]
+package com.fasterxml.jackson.databind.deser.std;
+@JacksonStdImpl
+public class UntypedObjectDeserializer
+protected final static Object[] NO_OBJECTS = new Object[0];
+@Deprecated
+public final static UntypedObjectDeserializer instance = new UntypedObjectDeserializer(null, null);
+protected JsonDeserializer<Object> _mapDeserializer;
+protected JsonDeserializer<Object> _listDeserializer;
+protected JsonDeserializer<Object> _stringDeserializer;
+protected JsonDeserializer<Object> _numberDeserializer;
+protected JavaType _listType;
+protected JavaType _mapType;
+public UntypedObjectDeserializer() {
+public UntypedObjectDeserializer(JavaType listType, JavaType mapType) {
+super(Object.class);
+@SuppressWarnings("unchecked")
+@Override
+public void resolve(DeserializationContext ctxt) throws JsonMappingException
+JavaType obType = ctxt.constructType(Object.class);
+JavaType stringType = ctxt.constructType(String.class);
+_listDeserializer = _clearIfStdImpl(_findCustomDeser(ctxt, tf.constructCollectionType(List.class, obType)));
+_mapDeserializer = _clearIfStdImpl(_findCustomDeser(ctxt, tf.constructMapType(Map.class, stringType, obType)));
+_numberDeserializer = _clearIfStdImpl(_findCustomDeser(ctxt, tf.constructType(Number.class)));
+protected JsonDeserializer<Object> _findCustomDeser(DeserializationContext ctxt, JavaType type)
+protected JsonDeserializer<Object> _clearIfStdImpl(JsonDeserializer<Object> deser) {
+&& getClass() == UntypedObjectDeserializer.class) {
+public boolean isCachable() {
+public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+throw ctxt.mappingException(Object.class);
+public Object deserializeWithType(JsonParser p, DeserializationContext ctxt, TypeDeserializer typeDeserializer) throws IOException
+protected Object mapArray(JsonParser jp, DeserializationContext ctxt) throws IOException
+protected Object mapObject(JsonParser p, DeserializationContext ctxt) throws IOException
+protected Object[] mapArrayToArray(JsonParser jp, DeserializationContext ctxt) throws IOException
+public static class Vanilla
+public final static Vanilla std = new Vanilla();
+public Vanilla() { super(Object.class); }
+public Object deserializeWithType(JsonParser jp, DeserializationContext ctxt, TypeDeserializer typeDeserializer) throws IOException
+protected Object[] mapArrayToArray(JsonParser jp, DeserializationContext ctxt) throws IOException {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.deser;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class UntypedObjectDeserializerBug989Test
+{
+    @Test
+    public void testEndObjectTokenRepresentsEmptyUntypedObject() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonParser parser = mapper.getFactory().createParser("{}");
+        try {
+            assertEquals(com.fasterxml.jackson.core.JsonToken.START_OBJECT, parser.nextToken());
+            assertEquals(com.fasterxml.jackson.core.JsonToken.END_OBJECT, parser.nextToken());
+
+            Object value = mapper.readValue(parser, Object.class);
+
+            assertTrue(value instanceof Map);
+            assertTrue(((Map<?, ?>) value).isEmpty());
+        } finally {
+            parser.close();
+        }
+    }
+
+    @Test
+    public void testNestedUntypedObjectsIncludingEmptyObject() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Object value = mapper.readValue("{\"outer\":{\"inner\":{}}}", Object.class);
+
+        assertTrue(value instanceof Map);
+        Map<?, ?> outer = (Map<?, ?>) value;
+        assertTrue(outer.get("outer") instanceof Map);
+
+        Map<?, ?> nested = (Map<?, ?>) outer.get("outer");
+        assertTrue(nested.containsKey("inner"));
+        assertTrue(nested.get("inner") instanceof Map);
+        assertTrue(((Map<?, ?>) nested.get("inner")).isEmpty());
+    }
+
+    @Test
+    public void testNestedUntypedValuesInMapContainExpectedGraph() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Map<?, ?> root = mapper.readValue(
+                "{\"object\":{\"empty\":{},\"name\":\"value\"},\"nullValue\":null}",
+                Map.class);
+
+        assertTrue(root.get("object") instanceof Map);
+        Map<?, ?> object = (Map<?, ?>) root.get("object");
+        assertTrue(object.get("empty") instanceof Map);
+        assertTrue(((Map<?, ?>) object.get("empty")).isEmpty());
+        assertEquals("value", object.get("name"));
+        assertTrue(root.containsKey("nullValue"));
+        assertNull(root.get("nullValue"));
+    }
+
+    @Test
+    public void testNestedArraysAndObjectsDeserializeAsUntypedValues() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Object value = mapper.readValue(
+                "{\"items\":[{}, {\"text\":\"x\",\"number\":3}, [], true, null]}",
+                Object.class);
+
+        Map<?, ?> root = (Map<?, ?>) value;
+        assertTrue(root.get("items") instanceof List);
+        List<?> items = (List<?>) root.get("items");
+
+        assertEquals(5, items.size());
+        assertTrue(items.get(0) instanceof Map);
+        assertTrue(((Map<?, ?>) items.get(0)).isEmpty());
+        assertTrue(items.get(1) instanceof Map);
+        assertEquals("x", ((Map<?, ?>) items.get(1)).get("text"));
+        assertEquals(Integer.valueOf(3), ((Map<?, ?>) items.get(1)).get("number"));
+        assertTrue(items.get(2) instanceof List);
+        assertTrue(((List<?>) items.get(2)).isEmpty());
+        assertEquals(Boolean.TRUE, items.get(3));
+        assertNull(items.get(4));
+    }
+
+    @Test
+    public void testJavaArrayFeatureHandlesNestedUntypedObjects() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY);
+
+        Object value = mapper.readValue("[{}, {\"nested\":[]}, \"text\"]", Object.class);
+
+        assertTrue(value instanceof Object[]);
+        Object[] values = (Object[]) value;
+        assertEquals(3, values.length);
+        assertTrue(values[0] instanceof Map);
+        assertTrue(((Map<?, ?>) values[0]).isEmpty());
+        assertTrue(values[1] instanceof Map);
+
+        Object nested = ((Map<?, ?>) values[1]).get("nested");
+        assertTrue(nested instanceof Object[]);
+        assertEquals(0, ((Object[]) nested).length);
+        assertEquals("text", values[2]);
+    }
+
+    @Test
+    public void testEndArrayTokenIsNotAcceptedAsUntypedValue() throws Exception
+    {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonParser parser = mapper.getFactory().createParser("[]");
+        try {
+            assertEquals(com.fasterxml.jackson.core.JsonToken.START_ARRAY, parser.nextToken());
+            assertEquals(com.fasterxml.jackson.core.JsonToken.END_ARRAY, parser.nextToken());
+
+            try {
+                mapper.readValue(parser, Object.class);
+                fail("END_ARRAY is not a valid standalone untyped value token");
+            } catch (JsonMappingException expected) {
+                assertNotNull(expected.getMessage());
+                assertFalse(expected.getMessage().isEmpty());
+            }
+        } finally {
+            parser.close();
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.deser.UntypedObjectDeserializerBug989Test::testEndObjectTokenRepresentsEmptyUntypedObject
+ - com.fasterxml.jackson.databind.deser.UntypedObjectDeserializerBug989Test::testEndArrayTokenIsNotAcceptedAsUntypedValue
+
+Failing generated tests: com.fasterxml.jackson.databind.deser.UntypedObjectDeserializerBug989Test::testEndArrayTokenIsNotAcceptedAsUntypedValue, com.fasterxml.jackson.databind.deser.UntypedObjectDeserializerBug989Test::testEndObjectTokenRepresentsEmptyUntypedObject

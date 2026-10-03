@@ -1,0 +1,244 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 16  Version: Gson-16b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1128
+Trigger failures:
+- com.google.gson.internal.bind.RecursiveTypesResolveTest::testRecursiveTypeVariablesResolve12
+ --> java.lang.StackOverflowError
+ - com.google.gson.internal.bind.RecursiveTypesResolveTest::testRecursiveTypeVariablesResolve1
+ --> java.lang.StackOverflowError
+Modified: com.google.gson.internal.$Gson$Types
+
+Available API/signatures:
+[com.google.gson.internal.$Gson$Types | java]
+package com.google.gson.internal;
+public final class $Gson$Types {
+private $Gson$Types() {
+public static GenericArrayType arrayOf(Type componentType) {
+public static WildcardType subtypeOf(Type bound) {
+public static WildcardType supertypeOf(Type bound) {
+return new WildcardTypeImpl(new Type[] { Object.class }, lowerBounds);
+public static Type canonicalize(Type type) {
+public static Class<?> getRawType(Type type) {
+return Object.class;
+static boolean equal(Object a, Object b) {
+public static boolean equals(Type a, Type b) {
+static int hashCodeOrZero(Object o) {
+public static String typeToString(Type type) {
+static Type getGenericSupertype(Type context, Class<?> rawType, Class<?> toResolve) {
+while (rawType != Object.class) {
+static Type getSupertype(Type context, Class<?> contextRawType, Class<?> supertype) {
+public static Type getArrayComponentType(Type array) {
+public static Type getCollectionElementType(Type context, Class<?> contextRawType) {
+Type collectionType = getSupertype(context, contextRawType, Collection.class);
+public static Type[] getMapKeyAndValueTypes(Type context, Class<?> contextRawType) {
+if (context == Properties.class) {
+return new Type[] { String.class, String.class }; // TODO: test subclasses of Properties!
+Type mapType = getSupertype(context, contextRawType, Map.class);
+return new Type[] { Object.class, Object.class };
+public static Type resolve(Type context, Class<?> contextRawType, Type toResolve) {
+static Type resolveTypeVariable(Type context, Class<?> contextRawType, TypeVariable<?> unknown) {
+private static int indexOf(Object[] array, Object toFind) {
+private stati
+...[truncated deterministically]...
+l(Type ownerType, Type rawType, Type... typeArguments) {
+public Type[] getActualTypeArguments() {
+public Type getRawType() {
+public Type getOwnerType() {
+@Override public boolean equals(Object other) {
+@Override public int hashCode() {
+@Override public String toString() {
+private static final class GenericArrayTypeImpl implements GenericArrayType, Serializable {
+public GenericArrayTypeImpl(Type componentType) {
+public Type getGenericComponentType() {
+@Override public boolean equals(Object o) {
+private static final class WildcardTypeImpl implements WildcardType, Serializable {
+public WildcardTypeImpl(Type[] upperBounds, Type[] lowerBounds) {
+checkArgument(upperBounds[0] == Object.class);
+this.upperBound = Object.class;
+public Type[] getUpperBounds() {
+public Type[] getLowerBounds() {
+} else if (upperBound == Object.class) {
+
+Generated JUnit Test:
+package com.google.gson.internal;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+ import java.lang.reflect.*;
+ import java.util.*;
+
+ /**
+  * Tests for recursive type-variable resolution in {@link $Gson$Types}.
+  * Targets the bug that causes {@link StackOverflowError} when resolving
+  * TypeVariables with self-referential or mutually recursive bounds.
+  */
+ public class $Gson$TypesRecursiveTest {
+
+     // ---------- helper types for testing ----------
+
+     /** Simple self‑referential bound: T extends SelfRef<T>. */
+     static interface SelfRef<T extends SelfRef<T>> {}
+     static class SelfRefImpl implements SelfRef<SelfRefImpl> {}
+
+     /** Common recursive bound: T extends Comparable<T>. */
+     static interface RecCmp<T extends Comparable<T>> {}
+     static class RecCmpImpl implements RecCmp<RecCmpImpl>, Comparable<RecCmpImpl> {
+         @Override public int compareTo(RecCmpImpl o) { return 0; }
+     }
+
+     /** Mutual recursion: A<X extends B<?>>, B<Y extends A<?>>. */
+     static interface A<X extends B<?>> {}
+     static interface B<Y extends A<?>> {}
+     static class ABImpl implements A<BImpl>, B<AImpl> {}
+     static class AImpl implements A<BImpl> {}
+     static class BImpl implements B<AImpl> {}
+
+     /** Deep cyclic chain (depth 5). */
+     static interface C1<X extends C2<X>> {}
+     static interface C2<Y extends C3<Y>> {}
+     static interface C3<Z extends C4<Z>> {}
+     static interface C4<W extends C5<W>> {}
+     static interface C5<V extends C1<V>> {}
+     static class CImpl implements C1<CImpl>, C2<CImpl>, C3<CImpl>, C4<CImpl>, C5<CImpl> {}
+
+     /** Type variable with multiple bounds. */
+     static interface MultiBound<T extends Number & Comparable<T>> {}
+     static class MultiBoundImpl extends Number implements MultiBound<MultiBoundImpl>,
+Comparable<MultiBoundImpl> {
+         @Override public int intValue() { return 0; }
+         @Override public long longValue() { return 0; }
+         @Override public float floatValue() { return 0; }
+         @Override public double doubleValue() { return 0; }
+         @Override public int compareTo(MultiBoundImpl o) { return 0; }
+     }
+
+     /** Non‑recursive generic type for regression test. */
+     static interface Simple<I> {}
+     static class SimpleImpl implements Simple<String> {}
+
+     // ---------- test methods ----------
+
+     /** Self‑recursive bound T extends SelfRef<T> – resolution must not overflow. */
+     @Test public void testSelfRefBound() {
+         TypeVariable<?> tv = SelfRef.class.getTypeParameters()[0];
+         Type context = SelfRefImpl.class.getGenericInterfaces()[0];
+         Type resolved = resolveSafely(context, SelfRefImpl.class, tv);
+         assertEquals(SelfRefImpl.class, resolved);
+     }
+
+     /** Self‑recursive bound T extends Comparable<T> – common real‑world pattern. */
+     @Test public void testComparableBound() {
+         TypeVariable<?> tv = RecCmp.class.getTypeParameters()[0];
+         Type context = RecCmpImpl.class.getGenericInterfaces()[0];
+         Type resolved = resolveSafely(context, RecCmpImpl.class, tv);
+         assertEquals(RecCmpImpl.class, resolved);
+     }
+
+     /** Mutual recursion across two interfaces A and B. */
+     @Test public void testMutualRecursion() {
+         TypeVariable<?> tv = A.class.getTypeParameters()[0];
+         Type context = AImpl.class.getGenericInterfaces()[0];  // A<BImpl>
+         Type resolved = resolveSafely(context, AImpl.class, tv);
+         assertEquals(BImpl.class, resolved);
+     }
+
+     /** Deep cyclic chain of length 5 – exercises boundary of finite recursion. */
+     @Test public void testDeepCyclicChain() {
+         TypeVariable<?> tv = C1.class.getTypeParameters()[0];
+         Type context = CImpl.class.getGenericInterfaces()[0];  // C1<CImpl>
+         Type resolved = resolveSafely(context, CImpl.class, tv);
+         assertEquals(CImpl.class, resolved);
+     }
+
+     /** Type variable with multiple upper bounds. */
+     @Test public void testMultipleUpperBounds() {
+         TypeVariable<?> tv = MultiBound.class.getTypeParameters()[0];
+         Type context = MultiBoundImpl.class.getGenericInterfaces()[0];  //
+MultiBound<MultiBoundImpl>
+         Type resolved = resolveSafely(context, MultiBoundImpl.class, tv);
+         assertEquals(MultiBoundImpl.class, resolved);
+     }
+
+     /** Non‑recursive generic type – must not break normal resolution. */
+     @Test public void testSimpleResolution() {
+         TypeVariable<?> tv = Simple.class.getTypeParameters()[0];
+         Type context = SimpleImpl.class.getGenericInterfaces()[0];  // Simple<String>
+         Type resolved = resolveSafely(context, SimpleImpl.class, tv);
+         assertEquals(String.class, resolved);
+     }
+
+     /** Resolving a TypeVariable that does not belong to the context should throw. */
+     @Test(expected = IllegalArgumentException.class)
+     public void testForeignTypeVariable() {
+         // SelfRef’s T is not declared on Simple
+         TypeVariable<?> tv = SelfRef.class.getTypeParameters()[0];
+         Type context = SimpleImpl.class.getGenericInterfaces()[0];
+         $Gson$Types.resolve(context, SimpleImpl.class, tv);
+     }
+
+     /** A resolved type must be canonical (no StackOverflow during canonicalization either). */
+     @Test public void testCanonicalizeDoesNotOverflow() {
+         ParameterizedType ctx = (ParameterizedType) SimpleImpl.class.getGenericInterfaces()[0];
+         Type can = canonicalizeSafely(ctx);
+         assertNotNull(can);
+     }
+
+     /** Raw type of a self‑recursive parameterized type must not overflow. */
+     @Test public void testGetRawTypeOnRecursive() {
+         ParameterizedType ctx = (ParameterizedType) SelfRefImpl.class.getGenericInterfaces()[0];
+         Class<?> raw = getRawTypeSafely(ctx);
+         assertEquals(SelfRef.class, raw);
+     }
+
+     // ---------- safety wrappers ----------
+
+     private Type resolveSafely(Type context, Class<?> rawType, TypeVariable<?> tv) {
+         try {
+             return $Gson$Types.resolve(context, rawType, tv);
+         } catch (StackOverflowError soe) {
+             fail("Recursive type resolution caused StackOverflowError");
+             return null; // unreachable
+         }
+     }
+
+     private Type canonicalizeSafely(Type type) {
+         try {
+             return $Gson$Types.canonicalize(type);
+         } catch (StackOverflowError soe) {
+             fail("canonicalize caused StackOverflowError");
+             return null;
+         }
+     }
+
+     private Class<?> getRawTypeSafely(Type type) {
+         try {
+             return $Gson$Types.getRawType(type);
+         } catch (StackOverflowError soe) {
+             fail("getRawType caused StackOverflowError");
+             return null;
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Gson-16f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Gson-16f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Gson-16f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Gson-16f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Gson-16f-copilot/.test_suite/com/google/gson/internal/SelfRefImpl.java:96: error: ';' expected
+ [javac] Type resolved = resolveSafely(context, MultiBoundImpl.class, tv);
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 1 minute 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

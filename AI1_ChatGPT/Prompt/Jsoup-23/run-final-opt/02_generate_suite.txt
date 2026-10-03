@@ -1,0 +1,438 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 23  Version: Jsoup-23b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.parser.CharacterReader, org.jsoup.parser.Tokeniser
+Modified: org.jsoup.parser.CharacterReader, org.jsoup.parser.Tokeniser
+Triggers: org.jsoup.nodes.EntitiesTest::letterDigitEntities
+
+Bug/specification summary:
+Bug report: 145
+Trigger failures:
+- org.jsoup.nodes.EntitiesTest::letterDigitEntities
+ --> junit.framework.AssertionFailedError: expected:<[&sup1;&sup2;&sup3;&frac14;&frac12;&]frac34;> but was:<[⊃1;⊃2;⊃3;&amp;frac14;&amp;frac12;&amp;]frac34;>
+Modified: org.jsoup.parser.CharacterReader, org.jsoup.parser.Tokeniser
+
+Prompt-01 test plan:
+TARGETS: CharacterReader and Tokeniser handling of character references with letters followed by digits. 
+ORACLES: EntitiesTest::letterDigitEntities assertion is the only stated expected-result source. 
+CASES: References &sup1;, &sup2;, &sup3; must not be parsed as the shorter &sup; entity. 
+CASES: References &frac14;, &frac12;, &frac34; exercise digit-suffixed entity-name boundaries. 
+RISKS: Current behavior consumes a valid name prefix, producing ⊃1; / escaped ampersands instead of expected text. 
+RISKS: Context omits accessible methods and the precise input/assertion source for the trigger.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.CharacterReader (java) =====
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+
+/**
+ CharacterReader cosumes tokens off a string. To replace the old TokenQueue.
+ */
+class CharacterReader {
+ static final char EOF = (char) -1;
+
+ private final String input;
+ private final int length;
+ private int pos = 0;
+ private int mark = 0;
+
+ CharacterReader(String input) {
+ Validate.notNull(input);
+ input = input.replaceAll("\r\n?", "\n"); // normalise carriage returns to newlines
+
+ this.input = input;
+ this.length = input.length();
+ }
+
+ int pos() {
+ return pos;
+ }
+
+ boolean isEmpty() {
+ return pos >= length;
+ }
+
+ char current() {
+ return isEmpty() ? EOF : input.charAt(pos);
+ }
+
+ char consume() {
+ char val = isEmpty() ? EOF : input.charAt(pos);
+ pos++;
+ return val;
+ }
+
+ void unconsume() {
+ pos--;
+ }
+
+ void advance() {
+ pos++;
+ }
+
+ void mark() {
+ mark = pos;
+ }
+
+ void rewindToMark() {
+ pos = mark;
+ }
+
+ String consumeAsString() {
+ return input.substring(pos, pos++);
+ }
+
+ String consumeTo(char c) {
+ int offset = input.indexOf(c, pos);
+ if (offset != -1) {
+ String consumed = input.substring(pos, offset);
+ pos += consumed.length();
+ return consumed;
+ } else {
+ return consumeToEnd();
+ }
+ }
+
+ String consumeTo(String seq) {
+ int offset = input.indexOf(seq, pos);
+ if (offset != -1) {
+ String consumed = input.substring(pos, offset);
+ pos += consumed.length();
+ return consumed;
+ } else {
+ return consumeToEnd();
+ }
+ }
+
+ String consumeToAny(char... seq) {
+ int start = pos;
+
+ OUTER: while (!isEmpty()) {
+ char c = input.charAt(pos);
+ for (char seek : seq) {
+ if (seek == c)
+ break OUTER;
+ }
+ pos++;
+ }
+
+ return pos > start ? input.substring(start, pos) : "";
+ }
+
+ String consumeToEnd() {
+ String data = input.substring(pos, input.length());
+ pos = input.length();
+ return data;
+ }
+
+ String consumeLetterSequence() {
+ int start = pos;
+ while (!isEmpty()) {
+ char c = input.charAt(pos);
+ if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
+ pos++;
+ else
+ break;
+ }
+
+ return input.substring(start, pos);
+ }
+
+ String consumeHexSequence() {
+ int start = pos;
+ while (!isEmpty()) {
+ char c = input.charAt(pos);
+ if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))
+ pos++;
+ else
+ break;
+ }
+ return input.substring(start, pos);
+ }
+
+ String consumeDigitSequence() {
+ int start = pos;
+ while (!isEmpty()) {
+ char c = input.charAt(pos);
+ if (c >= '0' && c <= '9')
+ pos++;
+ else
+ break;
+ }
+ return input.substring(start, pos);
+ }
+
+ boolean matches(char c) {
+ return !isEmpty() && input.charAt(pos) == c;
+
+ }
+
+ boolean matches(String seq) {
+ return input.startsWith(seq, pos);
+ }
+
+ boolean matchesIgnoreCase(String seq) {
+ return input.regionMatches(true, pos, seq, 0, seq.length());
+ }
+
+ boolean matchesAny(char... seq) {
+ if (isEmpty())
+ return false;
+
+ char c = input.charAt(pos);
+ for (char seek : seq) {
+ if (seek == c)
+ return true;
+ }
+ return false;
+ }
+
+ boolean matchesLetter() {
+ if (isEmpty())
+ return false;
+ char c = input.charAt(pos);
+ return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+ }
+
+ boolean matchesDigit() {
+ if (isEmpty())
+ return false;
+ char c = input.charAt(pos);
+ return (c >= '0' && c <= '9');
+ }
+
+ boolean matchConsume(String seq) {
+ if (matches(seq)) {
+ pos += seq.length();
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+ boolean matchConsumeIgnoreCase(String seq) {
+ if (matchesIgnoreCase(seq)) {
+ pos += seq.length();
+ return true;
+ } else {
+ return false;
+ }
+ }
+
+ boolean containsIgnoreCase(String seq) {
+ // used to check presence of </title>, </style>. only finds consistent case.
+ String loScan = seq.toLowerCase();
+ String hiScan = seq.toUpperCase();
+ return (input.indexOf(loScan, pos) > -1) || (input.indexOf(hiScan, pos) > -1);
+ }
+
+ @Override
+ public String toString() {
+ return input.substring(pos);
+ }
+}
+
+===== org.jsoup.parser.Tokeniser (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+class Tokeniser {
+private StringBuilder charBuffer = new StringBuilder(); // buffers characters to output as one token
+private void characterReferenceError(String message) {
+private void error(String errorMsg) {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Entities;
+import java.util.ArrayList;
+import java.util.List;
+class Tokeniser {
+
+/* METHOD Tokeniser */
+Tokeniser(CharacterReader reader, ParseErrorList errors) {
+ this.reader = reader;
+ this.errors = errors;
+ }
+
+/* METHOD consumeCharacterReference */
+Character consumeCharacterReference(Character additionalAllowedCharacter, boolean inAttribute) {
+ if (reader.isEmpty())
+ return null;
+ if (additionalAllowedCharacter != null && additionalAllowedCharacter == reader.current())
+ return null;
+ if (reader.matchesAny('\t', '\n', '\f', ' ', '<', '&'))
+ return null;
+
+ reader.mark();
+ if (reader.matchConsume("#")) { // numbered
+ boolean isHexMode = reader.matchConsumeIgnoreCase("X");
+ String numRef = isHexMode ? reader.consumeHexSequence() : reader.consumeDigitSequence();
+ if (numRef.length() == 0) { // didn't match anything
+ characterReferenceError("numeric reference with no numerals");
+ reader.rewindToMark();
+ return null;
+ }
+ if (!reader.matchConsume(";"))
+ characterReferenceError("missing semicolon"); // missing semi
+ int charval = -1;
+ try {
+ int base = isHexMode ? 16 : 10;
+ charval = Integer.valueOf(numRef, base);
+ } catch (NumberFormatException e) {
+ } // skip
+ if (charval == -1 || (charval >= 0xD800 && charval <= 0xDFFF) || charval > 0x10FFFF) {
+ characterReferenceError("character outside of valid range");
+ return replacementChar;
+ } else {
+ // todo: implement number replacement table
+ // todo: check for extra illegal unicode points as parse errors
+ return (char) charval;
+ }
+ } else { // named
+ // get as many letters as possible, and look for matching entities. unconsume backwards till a match is found
+ String nameRef = reader.consumeLetterSequence();
+ String origNameRef = new String(nameRef); // for error reporting. nameRef gets chomped looking for matches
+ boolean looksLegit = reader.matches(';');
+ boolean found = false;
+ while (nameRef.length() > 0 && !found) {
+ if (Entities.isNamedEntity(nameRef))
+ found = true;
+ else {
+ nameRef = nameRef.substring(0, nameRef.length()-1);
+ reader.unconsume();
+ }
+ }
+ if (!found) {
+ if (looksLegit) // named with semicolon
+ characterReferenceError(String.format("invalid named referenece '%s'", origNameRef));
+ reader.rewindToMark();
+ return null;
+ }
+ if (inAttribute && (reader.matchesLetter() || reader.matchesDigit() || reader.matchesAny('=', '-', '_'))) {
+ // don't want that to match
+ reader.rewindToMark();
+ return null;
+ }
+ if (!reader.matchConsume(";"))
+ characterReferenceError("missing semicolon"); // missing semi
+ return Entities.getCharacterByName(nameRef);
+ }
+ }
+
+/* METHOD emit */
+void emit(Token token) {
+ Validate.isFalse(isEmitPending, "There is an unread token pending!");
+
+ emitPending = token;
+ isEmitPending = true;
+
+ if (token.type == Token.TokenType.StartTag) {
+ Token.StartTag startTag = (Token.StartTag) token;
+ lastStartTag = startTag;
+ if (startTag.selfClosing)
+ selfClosingFlagAcknowledged = false;
+ } else if (token.type == Token.TokenType.EndTag) {
+ Token.EndTag endTag = (Token.EndTag) token;
+ if (endTag.attributes.size() > 0)
+ error("Attributes incorrectly present on end tag");
+ }
+ }
+
+/* METHOD eofError */
+void eofError(TokeniserState state) {
+ if (errors.canAddError())
+ errors.add(new ParseError(reader.pos(), "Unexpectedly reached end of file (EOF) in input state [%s]", state));
+ }
+
+/* METHOD read */
+Token read() {
+ if (!selfClosingFlagAcknowledged) {
+ error("Self closing flag not acknowledged");
+ selfClosingFlagAcknowledged = true;
+ }
+
+ while (!isEmitPending)
+ state.read(this, reader);
+
+ // if emit is pending, a non-character token was found: return any chars in buffer, and leave token for next read:
+ if (charBuffer.length() > 0) {
+ String str = charBuffer.toString();
+ charBuffer.delete(0, charBuffer.length());
+ return new Token.Character(str);
+ } else {
+ isEmitPending = false;
+ return emitPending;
+ }
+ }
+
+/* METHOD getState */
+TokeniserState getState() {
+ return state;
+ }
+
+/* METHOD transition */
+void transition(TokeniserState state) {
+ this.state = state;
+ }
+
+/* METHOD advanceTransition */
+void advanceTransition(TokeniserState state) {
+ reader.advance();
+ this.state = state;
+ }
+
+/* METHOD createCommentPending */
+void createCommentPending() {
+ commentPending = new Token.Comment();
+ }
+
+/* METHOD emitCommentPending */
+void emitCommentPending() {
+ emit(commentPending);
+ }
+
+/* METHOD createTempBuffer */
+void createTempBuffer() {
+ dataBuffer = new StringBuilder();
+ }
+
+/* METHOD error */
+void error(TokeniserState state) {
+ if (errors.canAddError())
+ errors.add(new ParseError(reader.pos(), "Unexpected character '%s' in input state [%s]", reader.current(), state));
+ }
+
+/* METHOD emit */
+void emit(String str) {
+ // buffer strings up until last string token found, to emit only one token for a run of character refs etc.
+ // does not set isEmitPending; read checks that
+ charBuffer.append(str);
+ }
+
+/* METHOD emit */
+void emit(char c) {
+ charBuffer.append(c);
+ }
+
+/* METHOD acknowledgeSelfClosingFlag */
+void acknowledgeSelfClosingFlag() {
+ selfClosingFlagAcknowledged = true;
+ }
+
+/* METHOD createTagPending */
+Token.Tag createTagPending(boolean start) {
+ tagPending = start ? new Token.StartTag() : new Token.EndTag();
+ return tagPending;
+ }
+
+/* METHOD emitTagPending */
+void emitTagPending() {
+ tagPending.finaliseTag();
+ emit(tagPending);
+ }

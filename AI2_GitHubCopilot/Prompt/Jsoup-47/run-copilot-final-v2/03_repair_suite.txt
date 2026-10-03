@@ -1,0 +1,173 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 47  Version: Jsoup-47b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 528
+Trigger failures:
+- org.jsoup.nodes.EntitiesTest::escapesGtInXmlAttributesButNotInHtml
+ --> junit.framework.AssertionFailedError: expected:<<a title="[&lt;p>One&lt;]/p>">One</a>> but was:<<a title="[<p>One<]/p>">One</a>>
+Modified: org.jsoup.nodes.Entities
+
+Available API/signatures:
+[org.jsoup.nodes.Entities | java]
+package org.jsoup.nodes;
+public class Entities {
+public enum EscapeMode {
+public Map<Character, String> getMap() {
+private Entities() {}
+public static boolean isNamedEntity(String name) {
+public static boolean isBaseNamedEntity(String name) {
+public static Character getCharacterByName(String name) {
+static String escape(String string, Document.OutputSettings out) {
+final EscapeMode escapeMode = out.escapeMode();
+final CharsetEncoder encoder = out.encoder();
+final CoreCharset coreCharset = CoreCharset.byName(encoder.charset().name());
+final Map<Character, String> map = escapeMode.getMap();
+final int length = string.length();
+final char c = (char) codePoint;
+final String c = new String(Character.toChars(codePoint));
+static String unescape(String string) {
+static String unescape(String string, boolean strict) {
+private static boolean canEncode(final CoreCharset charset, final char c, final CharsetEncoder fallback) {
+private enum CoreCharset {
+private static CoreCharset byName(String name) {
+private static Map<String, Character> loadEntities(String filename) {
+InputStream in = Entities.class.getResourceAsStream(filename);
+private static Map<Character, String> toCharacterKey(Map<String, Character> inMap) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class EntitiesTest {
+
+ private Document.OutputSettings newOutputSettings(Entities.EscapeMode mode) {
+     Document.OutputSettings out = new Document.OutputSettings();
+     out.escapeMode(mode);
+     return out;
+ }
+
+ private String escape(String string, Entities.EscapeMode mode, boolean inAttribute, boolean
+normaliseWhite, boolean stripLeadingWhite) {
+     StringBuilder sb = new StringBuilder();
+     Entities.escape(sb, string, newOutputSettings(mode), inAttribute, normaliseWhite,
+stripLeadingWhite);
+     return sb.toString();
+ }
+
+ // --- XML attribute: '>' MUST be escaped (this fails in the buggy version) ---
+
+ @Test
+ public void escapesGtInXmlAttribute() {
+     String result = escape(">", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("&gt;", result);
+ }
+
+ @Test
+ public void escapesGtInXmlAttributeString() {
+     String result = escape("a>b", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("a&gt;b", result);
+ }
+
+ @Test
+ public void escapesMultipleGtInXmlAttribute() {
+     String result = escape(">>", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("&gt;&gt;", result);
+ }
+
+ @Test
+ public void escapesGtInXmlAttributeLong() {
+     String input = "a>b>c>d";
+     String result = escape(input, Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("a&gt;b&gt;c&gt;d", result);
+ }
+
+ // --- HTML attribute: '>' must NOT be escaped ---
+
+ @Test
+ public void doesNotEscapeGtInHtmlAttribute() {
+     String result = escape(">", Entities.EscapeMode.base, true, false, false);
+     assertEquals(">", result);
+ }
+
+ @Test
+ public void doesNotEscapeGtInHtmlAttributeString() {
+     String result = escape("a>b", Entities.EscapeMode.base, true, false, false);
+     assertEquals("a>b", result);
+ }
+
+ // --- XHTML mode (text content): '<' and '>' both escaped ---
+
+ @Test
+ public void escapesLtAndGtInXhtmlText() {
+     String result = escape("<p>One</p>", Entities.EscapeMode.xhtml, false, false, false);
+     assertEquals("&lt;p&gt;One&lt;/p&gt;", result);
+ }
+
+ // --- Interleaved special chars in XML attribute ---
+
+ @Test
+ public void fullTagInXmlAttribute() {
+     String result = escape("<p>One</p>", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("&lt;p&gt;One&lt;/p&gt;", result);
+ }
+
+ @Test
+ public void ampersandAndGtInXmlAttribute() {
+     String result = escape("a&b>c", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("a&amp;b&gt;c", result);
+ }
+
+ // --- Other bounding cases ---
+
+ @Test
+ public void emptyString() {
+     String result = escape("", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("", result);
+ }
+
+ @Test
+ public void onlyGtString() {
+     String result = escape(">", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("&gt;", result);
+ }
+
+ @Test
+ public void cdataLikeSequence() {
+     String result = escape("]]>", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("]]&gt;", result);
+ }
+
+ // --- Map integrity: xhtmlByVal must contain mapping for '>' ---
+
+ @Test
+ public void xhtmlMapContainsGt() {
+     assertTrue("xhtml map must contain entry for '>'",
+             Entities.EscapeMode.xhtml.getMap().containsKey('>'));
+     assertEquals("gt", Entities.EscapeMode.xhtml.getMap().get('>'));
+ }
+
+ // --- ensure '&' is always escaped ---
+
+ @Test
+ public void ampersandAlwaysEscaped() {
+     String result = escape("&", Entities.EscapeMode.base, false, false, false);
+     assertEquals("&amp;", result);
+     result = escape("&", Entities.EscapeMode.xhtml, true, false, false);
+     assertEquals("&amp;", result);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 8
+ - org.jsoup.nodes.EntitiesTest::escapesMultipleGtInXmlAttribute
+ - org.jsoup.nodes.EntitiesTest::onlyGtString
+ - org.jsoup.nodes.EntitiesTest::escapesGtInXmlAttribute
+Failing generated tests: org.jsoup.nodes.EntitiesTest::ampersandAndGtInXmlAttribute, org.jsoup.nodes.EntitiesTest::cdataLikeSequence, org.jsoup.nodes.EntitiesTest::escapesGtInXmlAttribute, org.jsoup.nodes.EntitiesTest::escapesGtInXmlAttributeLong, org.jsoup.nodes.EntitiesTest::escapesGtInXmlAttributeString, org.jsoup.nodes.EntitiesTest::escapesMultipleGtInXmlAttribute, org.jsoup.nodes.EntitiesTest::fullTagInXmlAttribute, org.jsoup.nodes.EntitiesTest::onlyGtString

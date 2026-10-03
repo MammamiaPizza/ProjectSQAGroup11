@@ -1,0 +1,412 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 142  Version: Closure-142b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.CoalesceVariableNames, com.google.javascript.jscomp.parsing.JsDocInfoParser
+Modified: com.google.javascript.jscomp.CoalesceVariableNames, com.google.javascript.jscomp.parsing.JsDocInfoParser
+Triggers: com.google.javascript.jscomp.CoalesceVariableNamesTest::testParameter4, com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicenseWithAnnotation
+
+Bug/specification summary:
+Bug report: 58
+Trigger failures:
+- com.google.javascript.jscomp.CoalesceVariableNamesTest::testParameter4
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.parsing.JsDocInfoParserTest::testParseLicenseWithAnnotation
+ --> junit.framework.ComparisonFailure: expected:< Foo
+Modified: com.google.javascript.jscomp.CoalesceVariableNames, com.google.javascript.jscomp.parsing.JsDocInfoParser
+
+Prompt-01 test plan:
+TARGETS: CoalesceVariableNames.process/visit/LiveRangeChecker variable coalescing around parameters (testParameter4).
+TARGETS: JsDocInfoParser block-comment extraction/parsing for @license text with annotations.
+ORACLES: Existing trigger assertions: testParameter4 must not fail; testParseLicenseWithAnnotation expects " Foo".
+CASES: Parameter declarations/usages whose live ranges must remain distinct during coalescing.
+CASES: @license comment containing an annotation; preserve extracted license text/leading space as expected.
+RISKS: Internal/private parser helpers limit direct unit access; test through existing parser-facing test utilities.
+RISKS: No source/body context supplied; avoid assumptions beyond trigger names and stated expected text.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.CoalesceVariableNames (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class CoalesceVariableNames extends AbstractPostOrderCallback implements
+public int compare(Var v1, Var v2) {
+@Override
+public void process(Node externs, Node root) {
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private static class CombinedCfgNodeLiveRangeChecker
+private static class CombinedLiveRangeChecker
+public static boolean shouldVisit(Node n) {
+private void removeVarDeclaration(Node name) {
+private static class LiveRangeChecker
+public LiveRangeChecker(Var def, Var use) {
+private static boolean isAssignTo(Var var, Node n, Node parent) {
+private static boolean isReadFrom(Var var, Node name) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.ControlFlowGraph.AbstractCfgNodeTraversalCallback;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.DataFlowAnalysis.FlowState;
+import com.google.javascript.jscomp.LiveVariablesAnalysis.LiveVariableLattice;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphNode;
+import com.google.javascript.jscomp.graph.GraphColoring;
+import com.google.javascript.jscomp.graph.GraphColoring.GreedyGraphColoring;
+import com.google.javascript.jscomp.graph.GraphNode;
+import com.google.javascript.jscomp.graph.LinkedUndirectedGraph;
+import com.google.javascript.jscomp.graph.UndiGraph;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.Set;
+class CoalesceVariableNames extends AbstractPostOrderCallback implements
+
+/* METHOD CoalesceVariableNames */
+CoalesceVariableNames(AbstractCompiler compiler, boolean usePseudoNames) {
+ this.compiler = compiler;
+ colorings = Lists.newLinkedList();
+ this.usePseudoNames = usePseudoNames;
+ }
+
+/* METHOD enterScope */
+@Override
+ public void enterScope(NodeTraversal t) {
+ // TODO(user): We CAN do this in the global scope, just need to be
+ // careful when something is exported. Liveness uses bit-vector for live
+ // sets so I don't see compilation time will be a problem for running this
+ // pass in the global scope.
+ Scope scope = t.getScope();
+ if (scope.isGlobal()) {
+ return;
+ }
+ ControlFlowGraph<Node> cfg = t.getControlFlowGraph();
+
+ LiveVariablesAnalysis liveness =
+ new LiveVariablesAnalysis(cfg, scope, compiler);
+ // If the function has exactly 2 params, mark them as escaped. This is
+ // a work-around for an IE bug where it throws an exception if you
+ // write to the parameters of the callback in a sort(). See:
+ // http://code.google.com/p/closure-compiler/issues/detail?id=58
+ liveness.analyze();
+
+ UndiGraph<Var, Void> interferenceGraph =
+ computeVariableNamesInterferenceGraph(
+ t, cfg, liveness.getEscapedLocals());
+
+ GraphColoring<Var, Void> coloring =
+ new GreedyGraphColoring<Var, Void>(interferenceGraph,
+ coloringTieBreaker);
+
+ coloring.color();
+ colorings.push(coloring);
+ }
+
+ @Override
+ public void exitScope(NodeTraversal t) {
+ if (t.inGlobalScope()) {
+ return;
+ }
+ colorings.pop();
+ }
+
+ @Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (colorings.isEmpty() || !NodeUtil.isName(n) ||
+ NodeUtil.isFunction(parent)) {
+ // Don't rename named functions.
+ return;
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ if (colorings.isEmpty() || !NodeUtil.isName(n) ||
+ NodeUtil.isFunction(parent)) {
+ // Don't rename named functions.
+ return;
+ }
+ Var var = t.getScope().getVar(n.getString());
+ GraphNode<Var, ?> vNode = colori
+...[truncated deterministically]...
+is is not a local.
+ return;
+ }
+ Var coalescedVar = colorings.peek().getPartitionSuperNode(var);
+
+ if (!usePseudoNames) {
+ if (vNode.getValue().equals(coalescedVar)) {
+ // The coalesced name is itself, nothing to do.
+ return;
+ }
+
+ // Rename.
+ n.setString(coalescedVar.name);
+ compiler.reportCodeChange();
+
+ if (NodeUtil.isVar(parent)) {
+ removeVarDeclaration(n);
+ }
+ } else {
+ // This code block is slow but since usePseudoName is for debugging,
+ // we should not sacrifice performance for non-debugging compilation to
+ // make this fast.
+ String pseudoName = null;
+ Set<String> allMergedNames = Sets.newTreeSet();
+ for (Iterator<Var> i = t.getScope().getVars(); i.hasNext();) {
+ Var iVar = i.next();
+
+ // Look for all the variables that can be merged (in the graph by now)
+ // and it is merged with the current coalscedVar.
+ if (colorings.peek().getGraph().getNode(iVar) != null &&
+ coalescedVar.equals(colorings.peek().getPartitionSuperNode(iVar))) {
+ allMergedNames.add(iVar.name);
+ }
+ }
+
+ // Keep its original name.
+ if (allMergedNames.size() == 1) {
+ return;
+ }
+
+ pseudoName = Joiner.on("_").join(allMergedNames);
+
+ while (t.getScope().isDeclared(pseudoName, true)) {
+ pseudoName += "$";
+ }
+...[truncated deterministically]...
+.getParent();
+ Node parent = var.getParent();
+
+ // Special case when we are in FOR-IN loop.
+ if (NodeUtil.isForIn(parent)) {
+ var.removeChild(name);
+ parent.replaceChild(var, name);
+ } else if (var.getChildCount() == 1) {
+ // The removal is easy when there is only one variable in the VAR node.
+ if (name.hasChildren()) {
+ Node value = name.removeFirstChild();
+ var.removeChild(name);
+ Node assign = new Node(Token.ASSIGN, name, value);
+
+ // We don't need to wrapped it with EXPR node if it is within a FOR.
+ if (parent.getType() != Token.FOR) {
+ assign = NodeUtil.newExpr(assign);
+ }
+ parent.replaceChild(var, assign);
+
+ } else {
+ // In a FOR( ; ; ) node, we must replace it with an EMPTY or else it
+ // becomes a FOR-IN node.
+ NodeUtil.removeChild(parent, var);
+ }
+ }
+
+===== com.google.javascript.jscomp.parsing.JsDocInfoParser (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.parsing;
+public final class JsDocInfoParser {
+private final ErrorReporterParser parser = new ErrorReporterParser();
+private class ErrorReporterParser {
+private enum State {
+public static Node parseTypeString(String typeString) {
+parser.addWarning("msg.jsdoc.interface.constructor",
+private JsDocToken parseSuppressTag(JsDocToken token) {
+private Node parseAndRecordTypeNode(JsDocToken token) {
+private Node parseAndRecordTypeNode(JsDocToken token, boolean matchingLC) {
+private Node parseAndRecordParamTypeNode(JsDocToken token) {
+private boolean isValidDefineType(Node typeNode) {
+private String toString(JsDocToken token) {
+private JSTypeExpression createJSTypeExpression(Node n) {
+private static class ExtractionInfo {
+public ExtractionInfo(String string, JsDocToken token) {
+public String getString() {
+public JsDocToken getToken() {
+private ExtractionInfo extractSingleLineBlock() {
+private ExtractionInfo extractMultilineTextualBlock(JsDocToken token) {
+private enum WhitespaceOption {
+@SuppressWarnings("fallthrough")
+private ExtractionInfo extractBlockComment(JsDocToken token) {
+private static String trimEnd(String s) {
+private Node parseTypeExpressionAnnotation(JsDocToken token) {
+private Node parseParamTypeExpressionAnnotation(JsDocToken token) {
+private Node parseTypeNameAnnotatio
+...[truncated deterministically]...
+sDocToken token) {
+private Node parseFieldType(JsDocToken token) {
+private Node parseFieldName(JsDocToken token) {
+private Node wrapNode(int type, Node n) {
+private Node newNode(int type) {
+private Node newStringNode(String s) {
+private Node reportTypeSyntaxWarning(String warning) {
+private Node reportGenericTypeSyntaxWarning() {
+private JsDocToken eatTokensUntilEOL() {
+private JsDocToken eatTokensUntilEOL(JsDocToken token)
+...[truncated deterministically]...
+ileOverviewDocInfo() {
+
+/* HEADER */
+package com.google.javascript.jscomp.parsing;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.mozilla.rhino.ErrorReporter;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.JSDocInfoBuilder;
+import com.google.javascript.rhino.JSTypeExpression;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.ScriptRuntime;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.JSDocInfo.Visibility;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+/* METHOD JsDocInfoParser */
+JsDocInfoParser(JsDocTokenStream stream,
+ String sourceName,
+ Config config,
+ ErrorReporter errorReporter) {
+ this.stream = stream;
+ this.sourceName = sourceName;
+ this.typeRegistry = config.registry;
+ this.jsdocBuilder = new JSDocInfoBuilder(config.parseJsDocDocumentation);
+ this.annotationNames = config.annotationNames;
+
+ this.errorReporter = errorReporter;
+ }
+
+/* METHOD parseTypeString */
+public static Node parseTypeString(String typeString) {
+ Config config = new Config(
+ new JSTypeRegistry(NullErrorReporter.forOldRhino()),
+ Sets.<String>newHashSet(),
+ false);
+ JsDocInfoParser parser = new JsDocInfoParser(
+ new JsDocTokenStream(typeString),
+ "typeparsing",
+ config,
+ NullErrorReporter.forNewRhino());
+
+ return parser.parseTopLevelTypeExpression(parser.next());
+ }
+
+/* METHOD ExtractionInfo */
+public ExtractionInfo(String string, JsDocToken token) {
+ this.string = string;
+ this.token = token;
+ }
+
+/* METHOD getString */
+public String getString() {
+ return string;
+ }
+
+/* METHOD getToken */
+public JsDocToken getToken() {
+ return token;
+ }
+
+/* METHOD addWarning */
+void addWarning(String messageId, String messageA
+...[truncated deterministically]...
+messageArg),
+ sourceName, lineno, null, charno);
+ }
+
+/* METHOD addWarning */
+void addWarning(String messageId, int lineno, int charno) {
+ errorReporter.warning(ScriptRuntime.getMessage0(messageId),
+ sourceName, lineno, null, charno);
+ }
+
+/* METHOD extractSingleLineBlock */
+private ExtractionInfo extractSingleLineBlock() {
+
+ // Get the current starting point.
+ stream.update();
+ int lineno = stream.getLineno();
+ int charno = stream.getCharno() + 1;
+
+ String line = stream.getRemainingJSDocLine().trim();
+
+ // Record the textual description.
+ if (line.length() > 0) {
+ jsdocBuilder.markText(line, lineno, charno, lineno,
+ charno + line.length());
+ }
+
+ return new ExtractionInfo(line, next());
+ }
+
+/* METHOD parseTypeName */
+private Node parseTypeName(JsDocToken token) {
+ if (token != JsDocToken.STRING) {
+ return reportGenericTypeSyntaxWarning();
+ }
+
+ Node typeName = newStringNode(stream.getString());
+ if (match(JsDocToken.LT)) {
+ next();
+ skipEOLs();
+ Node memberType = parseTypeExpressionList(next());
+ if (memberType != null) {
+ typeName.addChildToFront(memberType);
+
+ skipEOLs();
+ if (!match(JsDocToken.GT)) {
+ return reportTypeSyntaxWarning("msg.jsdoc.missing.gt");
+ }
+
+ next();
+ }
+ }
+ return typeName;
+ }
+
+/* METHOD parseFunctionType */
+private Node parseFunctionType(JsDocToken token) {
+ // NOTE(nicksantos): We're not implementing generics at the moment, so
+ // just throw out TypeParameters.
+ if (token != JsDocToken.LP) {
+ return reportTypeSyntaxWarning("msg.jsdoc.missing.lp");
+ }
+
+ Node functionType = newNode(Token.FUNCTION);
+ Node parameters = null;
+ skipEOLs();
+ if (!match(JsDocToken.RP)) {
+ token = next();
+
+ boolean hasParams = true;
+ if (token == JsDocToken.STRING && "this".equals(stream.getString()
+...[truncated deterministically]...
+.isPopulated();
+ }
+
+ JSDocInfo retrieveAndResetParsedJSDocInfo() {
+ return jsdocBuilder.build(sourceName);
+ }
+
+ /**
+ * Gets the fileoverview JSDocInfo, if any.
+ */
+ JSDocInfo getFileOverviewJSDocInfo() {
+ return fileOverviewJSDocInfo;
+ }
+}

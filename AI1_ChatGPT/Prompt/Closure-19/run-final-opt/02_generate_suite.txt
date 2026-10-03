@@ -1,0 +1,458 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 19  Version: Closure-19b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreter
+Modified: com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreter
+Triggers: com.google.javascript.jscomp.TypeInferenceTest::testNoThisInference
+
+Bug/specification summary:
+Bug report: 769
+Trigger failures:
+- com.google.javascript.jscomp.TypeInferenceTest::testNoThisInference
+ --> java.lang.IllegalArgumentException: Node cannot be refined.
+Modified: com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreter
+
+Prompt-01 test plan:
+TARGETS: ChainableReverseAbstractInterpreter.getTypeIfRefinable(Node, FlowScope) node-refinement handling. 
+ORACLES: TypeInferenceTest.testNoThisInference must not throw IllegalArgumentException: Node cannot be refined. 
+CASES: Exercise inference paths for nodes that are not refinable in the trigger’s no-this scenario. 
+CASES: Verify refinable nodes still yield their scope/type information during inference. 
+RISKS: AST shape, FlowScope setup, and intended refinability rules are not provided in this context.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreter (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp.type;
+public abstract class ChainableReverseAbstractInterpreter
+protected final CodingConvention convention;
+public ChainableReverseAbstractInterpreter getFirst() {
+protected JSType getTypeIfRefinable(Node node, FlowScope scope) {
+protected void declareNameInScope(FlowScope scope, Node node, JSType type) {
+@Override
+public JSType caseEnumElementType(EnumElementType enumElementType) {
+public JSType caseAllType() {
+public JSType caseNoObjectType() {
+public JSType caseNoType() {
+public JSType caseBooleanType() {
+public JSType caseFunctionType(FunctionType type) {
+public JSType caseNullType() {
+public JSType caseNumberType() {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseStringType() {
+public JSType caseUnionType(UnionType type) {
+public JSType caseUnknownType() {
+public JSType caseVoidType() {
+public JSType caseParameterizedType(ParameterizedType type) {
+public JSType caseTemplateType(TemplateType templateType) {
+abstract class RestrictByTypeOfResultVisitor
+protected abstract JSType caseTopType(JSType topType);
+abstract class RestrictByTrueTypeOfResultVisitor
+abstract class RestrictByFalseTypeOfResultVisitor
+protected JSType caseTopType(JSType topType) {
+private class RestrictByOneTypeOfResultVisitor
+private boolean matchesExpectation(String result) {
+protected final JSType getRestrictedWithoutUndefined(JSType type) {
+protected final JSType getRestrictedWithoutNull(JSType type) {
+private JSType getNativeTypeForTypeOf(String value) {
+
+/* HEADER */
+package com.google.javascript.jscomp.type;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ALL_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.BOOLEAN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NULL_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NUMBER_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.STRING_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.VOID_TYPE;
+import com.google.common.base.Preconditions;
+import com.google.javascript.jscomp.CodingConvention;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.EnumElementType;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import com.google.javascript.rhino.jstype.ParameterizedType;
+import com.google.javascript.rhino.jstype.StaticSlot;
+import com.google.javascript.rhino.jstype.TemplateType;
+import com.google.javascript.rhino.jstype.UnionType;
+import com.google.javascript.rhino.jstype.Visitor;
+
+/* METHOD ChainableReverseAbstractInterpreter */
+public ChainableReverseAbstractInterpreter(CodingConvention convention,
+ JSTypeRegistry typeRegistry) {
+ Preconditions.checkNotNull(convention);
+ this.convention = convention;
+ this.typeRegistry = typeRegistry;
+ firstLink = this;
+ nextLink = null;
+ }
+
+/* METHOD caseEnumElementType */
+@Override
+ public JSType caseEnumElementType(EnumElementType enumElementType) {
+ // NOTE(nicksantos): This is a white lie. Suppose we have:
+ // /** @enum {string|number} */ var MyEnum = ...;
+ // if (goog.isNumber(myEnumInstance)) {
+ // /* what is myEnumInstance here? */
+ // }
+ // There is no type that represents {MyEnum - string}. What we really
+ // need is a notion of "enum subtyping", so that we could dynamically
+ // create a subtype of MyEnum restricted by string. In any case,
+ // this should catch the common case.
+ JSType type = enumElementType.getPrimitiveType().visit(this);
+ if (type != null && enumElementType.getPrimitiveType().equals(type)) {
+ return enumElementType;
+ } else {
+ return type;
+ }
+ }
+
+/* METHOD firstPreciserScopeKnowingConditionOutcome */
+protected FlowScope firstPreciserScopeKnowingConditionOutcome(Node condition,
+ FlowScope blindScope, boolean outcome) {
+ return firstLink.getPreciserScopeKnowingConditionOutcome(
+ condition, blindScope, outcome);
+ }
+
+/* METHOD nextPreciserScopeKnowingConditionOutcome */
+protected FlowScope nextPreciserScopeKnowingConditionOutcome(Node condition,
+ FlowScope blindScope, boolean outcome) {
+ return nextLink != null ? nextLink.getPreciserScopeKnowingConditionOutcome(
+ condition, blindScope, outcome) : blindScope;
+ }
+
+/* METHOD getTypeIfRefinable */
+protected JSType getTypeIfRefinable(Node node, FlowScope scope) {
+ switch (node.getType()) {
+ case Token.NAME:
+ StaticSlot<JSType> nameVar = scope.getSlot(node.getString());
+ if (nameVar != null) {
+ JSType nameVarType = nameVar.getType();
+ if (nameVarType == null) {
+ nameVarType = node.getJSType();
+ }
+ return nameVarType;
+ }
+ return null;
+
+ case Token.GETPROP:
+ String qualifiedName = node.getQualifiedName();
+ if (qualifiedName == null) {
+ return null;
+ }
+ StaticSlot<JSType> propVar = scope.getSlot(qualifiedName);
+ JSType propVarType = null;
+ if (propVar != null) {
+ propVarType = propVar.getType();
+ }
+ if (propVarType == null) {
+ propVarType = node.getJSType();
+ }
+ if (propVarType == null) {
+ propVarType = getNativeType(UNKNOWN_TYPE);
+ }
+ return propVarType;
+ }
+ return null;
+ }
+
+/* METHOD caseAllType */
+@Override
+ public JSType caseAllType() {
+ return typeRegistry.createUnionType(OBJECT_TYPE, NUMBER_TYPE,
+ STRING_TYPE, BOOLEAN_TYPE, NULL_TYPE);
+ }
+
+/* METHOD caseNumberType */
+@Override
+ public JSType caseNumberType() {
+ return getNativeType(NUMBER_TYPE);
+ }
+
+/* METHOD caseAllType */
+@Override
+ public JSType caseAllType() {
+ return typeRegistry.createUnionType(OBJECT_TYPE, NUMBER_TYPE,
+ STRING_TYPE, BOOLEAN_TYPE, VOID_TYPE);
+ }
+
+/* METHOD caseNumberType */
+@Override
+ public JSType caseNumberType() {
+ return getNativeType(NUMBER_TYPE);
+ }
+
+/* METHOD caseNumberType */
+@Override
+ public JSType caseNumberType() {
+ return null;
+ }
+
+/* METHOD caseNumberType */
+@Override
+ public JSType caseNumberType() {
+ return getNativeType(NUMBER_TYPE);
+ }
+
+/* METHOD caseNumberType */
+@Override
+ public JSType caseNumberType() {
+ return matchesExpectation("number") ? getNativeType(NUMBER_TYPE) : null;
+ }
+
+/* METHOD append */
+public ChainableReverseAbstractInterpreter append(
+ ChainableReverseAbstractInterpreter lastLink) {
+ Preconditions.checkArgument(lastLink.nextLink == null);
+ this.nextLink = lastLink;
+ lastLink.firstLink = this.firstLink;
+ return lastLink;
+ }
+
+/* METHOD getFirst */
+public ChainableReverseAbstractInterpreter getFirst() {
+ return firstLink;
+ }
+
+/* METHOD caseEnumElementType */
+@Override
+ public JSType caseEnumElementType(EnumElementType enumElementType) {
+ JSType type = enumElementType.getPrimitiveType().visit(this);
+ if (type != null && enumElementType.getPrimitiveType().equals(type)) {
+ return enumElementType;
+ } else {
+ return type;
+ }
+ }
+
+/* METHOD caseNoObjectType */
+@Override
+ public JSType caseNoObjectType() {
+ return getNativeType(NO_OBJECT_TYPE);
+ }
+
+/* METHOD caseNoType */
+@Override
+ public JSType caseNoType() {
+ return getNativeType(NO_TYPE);
+ }
+
+/* METHOD caseBooleanType */
+@Override
+ public JSType caseBooleanType() {
+ return getNativeType(BOOLEAN_TYPE);
+ }
+
+/* METHOD caseFunctionType */
+@Override
+ public JSType caseFunctionType(FunctionType type) {
+ return type;
+ }
+
+/* METHOD caseNullType */
+@Override
+ public JSType caseNullType() {
+ return getNativeType(NULL_TYPE);
+ }
+
+/* METHOD caseObjectType */
+@Override
+ public JSType caseObjectType(ObjectType type) {
+ return type;
+ }
+
+/* METHOD caseStringType */
+@Override
+ public JSType caseStringType() {
+ return getNativeType(STRING_TYPE);
+ }
+
+/* METHOD caseUnionType */
+@Override
+ public JSType caseUnionType(UnionType type) {
+ return type.getRestrictedUnion(getNativeType(VOID_TYPE));
+ }
+
+/* METHOD caseUnknownType */
+@Override
+ public JSType caseUnknownType() {
+ return getNativeType(UNKNOWN_TYPE);
+ }
+
+/* METHOD caseVoidType */
+@Override
+ public JSType caseVoidType() {
+ return null;
+ }
+
+/* METHOD caseParameterizedType */
+@Override
+ public JSType caseParameterizedType(ParameterizedType type) {
+ return caseObjectType(type);
+ }
+
+/* METHOD caseTemplateType */
+@Override
+ public JSType caseTemplateType(TemplateType templateType) {
+ return caseObjectType(templateType);
+ }
+
+/* METHOD caseEnumElementType */
+@Override
+ public JSType caseEnumElementType(EnumElementType enumElementType) {
+ JSType type = enumElementType.getPrimitiveType().visit(this);
+ if (type != null && enumElementType.getPrimitiveType().equals(type)) {
+ return enumElementType;
+ } else {
+ return type;
+ }
+ }
+
+/* METHOD caseNoObjectType */
+@Override
+ public JSType caseNoObjectType() {
+ return getNativeType(NO_OBJECT_TYPE);
+ }
+
+/* METHOD caseNoType */
+@Override
+ public JSType caseNoType() {
+ return getNativeType(NO_TYPE);
+ }
+
+/* METHOD caseBooleanType */
+@Override
+ public JSType caseBooleanType() {
+ return getNativeType(BOOLEAN_TYPE);
+ }
+
+/* METHOD caseFunctionType */
+@Override
+ public JSType caseFunctionType(FunctionType type) {
+ return type;
+ }
+
+/* METHOD caseNullType */
+@Override
+ public JSType caseNullType() {
+ return null;
+ }
+
+/* METHOD caseObjectType */
+@Override
+ public JSType caseObjectType(ObjectType type) {
+ return type;
+ }
+
+/* METHOD caseStringType */
+@Override
+ public JSType caseStringType() {
+ return getNativeType(STRING_TYPE);
+ }
+
+/* METHOD caseUnionType */
+@Override
+ public JSType caseUnionType(UnionType type) {
+ return type.getRestrictedUnion(getNativeType(NULL_TYPE));
+ }
+
+/* METHOD caseUnknownType */
+@Override
+ public JSType caseUnknownType() {
+ return getNativeType(UNKNOWN_TYPE);
+ }
+
+/* METHOD caseVoidType */
+@Override
+ public JSType caseVoidType() {
+ return getNativeType(VOID_TYPE);
+ }
+
+/* METHOD caseParameterizedType */
+@Override
+ public JSType caseParameterizedType(ParameterizedType type) {
+ return caseObjectType(type);
+ }
+
+/* METHOD caseTemplateType */
+@Override
+ public JSType caseTemplateType(TemplateType templateType) {
+ return caseObjectType(templateType);
+ }
+
+/* METHOD caseAllType */
+@Override
+ public JSType caseAllType() {
+ return caseTopType(getNativeType(ALL_TYPE));
+ }
+
+/* METHOD caseUnknownType */
+@Override
+ public JSType caseUnknownType() {
+ return caseTopType(getNativeType(UNKNOWN_TYPE));
+ }
+
+/* METHOD caseUnionType */
+@Override
+ public JSType caseUnionType(UnionType type) {
+ JSType restricted = null;
+ for (JSType alternate : type.getAlternates()) {
+ JSType restrictedAlternate = alternate.visit(this);
+ if (restrictedAlternate != null) {
+ if (restricted == null) {
+ restricted = restrictedAlternate;
+ } else {
+ restricted = restrictedAlternate.getLeastSupertype(restricted);
+ }
+ }
+ }
+ return restricted;
+ }
+
+/* METHOD caseNoType */
+@Override
+ public JSType caseNoType() {
+ return getNativeType(NO_TYPE);
+ }
+
+/* METHOD caseParameterizedType */
+@Override
+ public JSType caseParameterizedType(ParameterizedType type) {
+ return caseObjectType(type);
+ }
+
+/* METHOD caseTemplateType */
+@Override
+ public JSType caseTemplateType(TemplateType templateType) {
+ return caseObjectType(templateType);
+ }
+
+/* METHOD caseNoObjectType */
+@Override
+ public JSType caseNoObjectType() {
+ return null;
+ }
+
+/* METHOD caseBooleanType */
+@Override
+ public JSType caseBooleanType() {
+ return null;
+ }
+
+/* METHOD caseFunctionType */
+@Override
+ public JSType caseFunctionType(FunctionType type) {
+ return null;
+ }

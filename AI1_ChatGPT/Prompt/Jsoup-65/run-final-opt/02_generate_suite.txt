@@ -1,0 +1,423 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 65  Version: Jsoup-65b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState
+Modified: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState
+Triggers: org.jsoup.parser.HtmlParserTest::testTemplateInsideTable
+
+Bug/specification summary:
+Bug report: 807
+Trigger failures:
+- org.jsoup.parser.HtmlParserTest::testTemplateInsideTable
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.parser.HtmlTreeBuilder, org.jsoup.parser.HtmlTreeBuilderState
+
+Prompt-01 test plan:
+TARGETS: HtmlTreeBuilder.process and initialiseParse during HTML parsing with template/table tokens 
+TARGETS: HtmlTreeBuilderState.process and table-related state transitions for template placement 
+ORACLES: HtmlParserTest::testTemplateInsideTable assertions are the available expected-result source 
+CASES: Parse a template inside a table; verify the trigger test’s resulting parse tree behavior 
+CASES: Exercise template start/end tokens while table context remains active 
+CASES: Include surrounding table structure to cover table-state entry and exit boundaries 
+RISKS: State-stack or active-formatting-element handling may misplace nodes or select a wrong mode 
+RISKS: No test body, input HTML, or asserted DOM details are provided; derive no additional expectations
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.HtmlTreeBuilder (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+public class HtmlTreeBuilder extends TreeBuilder {
+private ArrayList<Element> formattingElements; // active (open) formatting elements
+@Override
+protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+protected boolean process(Token token) {
+private void insertNode(Node node) {
+private boolean isElementInQueue(ArrayList<Element> queue, Element element) {
+private void clearStackToContext(String... nodeNames) {
+private void replaceInQueue(ArrayList<Element> queue, Element out, Element in) {
+private boolean inSpecificScope(String targetName, String[] baseTypes, String[] extraTypes) {
+private boolean inSpecificScope(String[] targetNames, String[] baseTypes, String[] extraTypes) {
+@param excludeTag If a step requires the UA to generate implied end tags but lists an element to exclude from the
+private boolean isSameFormattingElement(Element a, Element b) {
+public String toString() {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DataNode;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+public class HtmlTreeBuilder extends TreeBuilder {
+
+/* METHOD HtmlTreeBuilder */
+HtmlTreeBuilder() {}
+
+/* METHOD initialiseParse */
+@Override
+ protected void initialiseParse(Reader input, String baseUri, ParseErrorList errors, ParseSettings settings) {
+ super.initialiseParse(input, baseUri, errors, settings);
+
+ // this is a bit mucky. todo - probably just create new parser objects to ensure all reset.
+ state = HtmlTreeBuilderState.Initial;
+ originalState = null;
+ baseUriSetFromDoc = false;
+ headElement = null;
+ formElement = null;
+ contextElement = null;
+ formattingElements = new ArrayList<>();
+ pendingTableCharacters = new ArrayList<>();
+ emptyEnd = new Token.EndTag();
+ framesetOk = true;
+ fosterInserts = false;
+ fragmentParsing = false;
+ }
+
+/* METHOD parseFragment */
+List<Node> parseFragment(String inputFragment, Element context, String baseUri, ParseErrorList errors, ParseSettings settings) {
+ // context may be null
+ state = HtmlTreeBuilderState.Initial;
+ initialiseParse(new StringReader(inputFragment), baseUri, errors, settings);
+ contextElement = context;
+ fragmentParsing = true;
+ Element root = null;
+
+ if (context != null) {
+ if (context.ownerDocument() != null) // quirks setup:
+ doc.quirksMode(context.ownerDocument().quirksMode());
+
+ // initialise the tokeniser state:
+ String contextTag = context.tagName();
+ if (StringUtil.in(contextTag, "title", "textarea"))
+ tokeniser.transition(TokeniserState.Rcdata);
+ else if (StringUtil.in(contextTag, "iframe", "noembed", "noframes", "style", "xmp"))
+ tokeniser.transition(TokeniserState.Rawtext);
+ else if (contextTag.equals("script"))
+ tokeniser.transition(TokeniserState.ScriptData);
+ else if (contextTag.equals(("noscript")))
+ tokeniser.transition(TokeniserState.Data); // if scripting enabled, rawtext
+ else if (contextTag.equals("plaintext"))
+ tokeniser.transition(TokeniserState.Data);
+ else
+ tokeniser.transition(TokeniserState.Data); // default
+
+ root = new Element(Tag.valueOf("html", settings), baseUri);
+ doc.appendChild(root);
+ stack.add(root);
+ resetInsertionMode();
+
+ // setup form element to nearest form on context (up ancestor chain). ensures form controls are associated
+ // with form correctly
+ Elements contextChain = context.parents();
+ contextChain.add(0, context);
+ for (Element parent: contextChain) {
+ if (parent instanceof FormElement) {
+ formElement = (FormElement) parent;
+ break;
+ }
+ }
+ }
+
+ runParser();
+ if (context != null)
+ return root.childNodes();
+ else
+ return doc.childNodes();
+ }
+
+/* METHOD toString */
+@Override
+ public Strin
+...[truncated deterministically]...
+=" + state +
+ ", currentElement=" + currentElement() +
+ '}';
+ }
+
+/* METHOD process */
+@Override
+ protected boolean process(Token token) {
+ currentToken = token;
+ return this.state.process(token, this);
+ }
+
+/* METHOD maybeSetBaseUri */
+void maybeSetBaseUri(Element base) {
+ if (baseUriSetFromDoc) // only listen to the first <base href> in parse
+ return;
+
+ String href = base.absUrl("href");
+ if (href.length() != 0) { // ignore <base target> etc
+ baseUri = href;
+ baseUriSetFromDoc = true;
+ doc.setBaseUri(href); // set on the doc so doc.createElement(Tag) will get updated base, and to update all descendants
+ }
+ }
+
+/* METHOD process */
+boolean process(Token token, HtmlTreeBuilderState state) {
+ currentToken = token;
+ return state.process(token, this);
+ }
+
+/* METHOD transition */
+void transition(HtmlTreeBuilderState state) {
+ this.state = state;
+ }
+
+/* METHOD state */
+HtmlTreeBuilderState state() {
+ return state;
+ }
+
+/* METHOD originalState */
+HtmlTreeBuilderState originalState() {
+ return originalState;
+ }
+
+/* METHOD error */
+void error(HtmlTreeBuilderState state) {
+ if (errors.canAddError())
+ errors.add(new ParseError(reader.pos(), "Unexpected token [%s] when in state [%s]", currentToken.tokenType(), state));
+ }
+
+/* METHOD insert */
+Element insert(Token.StartTag startTag) {
+ // handle empty unknown tags
+ // when the spec expects an empty tag, will directly hit insertEmpty, so won't generate this fake end tag.
+ if (startTag.isSelfClosing()) {
+ Element el = insertEmpty(startTag);
+ stack.add(el);
+ tokeniser.transition(TokeniserState.Data); // handles <script />, otherwise needs breakout steps from script data
+ tokeniser.emit(emptyEnd.reset().name(el.tagName())); // ensure we get out of whatever state we
+...[truncated deterministically]...
+;
+ else
+ currentElement().appendChild(node);
+
+ // connect form controls to their form element
+ if (node instanceof Element && ((Element) node).tag().isFormListed()) {
+ if (formElement != null)
+ formElement.addElement((Element) node);
+ }
+ }
+
+===== org.jsoup.parser.HtmlTreeBuilderState (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+enum HtmlTreeBuilderState {
+private boolean anythingElse(Token t, HtmlTreeBuilder tb) {
+private boolean anythingElse(Token t, TreeBuilder tb) {
+final int stackSize = stack.size();
+private boolean exitTableBody(Token t, HtmlTreeBuilder tb) {
+private boolean handleMissingTr(Token t, TreeBuilder tb) {
+private void closeCell(HtmlTreeBuilder tb) {
+private static String nullString = String.valueOf('\u0000');
+abstract boolean process(Token t, HtmlTreeBuilder tb);
+private static boolean isWhitespace(Token t) {
+private static boolean isWhitespace(String data) {
+private static void handleRcData(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static void handleRawtext(Token.StartTag startTag, HtmlTreeBuilder tb) {
+private static final class Constants {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.nodes.*;
+import java.util.ArrayList;
+enum HtmlTreeBuilderState {
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ tb.insert(t.asCharacter());
+ return true;
+ }
+ switch (t.type) {
+ case Comment:
+ tb.insert(t.asComment());
+ break;
+ case Doctype:
+ tb.error(this);
+ return false;
+ case StartTag:
+ Token.StartTag start = t.asStartTag();
+ String name = start.normalName();
+ if (name.equals("html")) {
+ return InBody.process(t, tb);
+ } else if (StringUtil.in(name, "base", "basefont", "bgsound", "command", "link")) {
+ Element el = tb.insertEmpty(start);
+ // jsoup special: update base the frist time it is seen
+ if (name.equals("base") && el.hasAttr("href"))
+ tb.maybeSetBaseUri(el);
+ } else if (name.equals("meta")) {
+ Element meta = tb.insertEmpty(start);
+ // todo: charset switches
+ } else if (name.equals("title")) {
+ handleRcData(start, tb);
+ } else if (StringUtil.in(name, "noframes", "style")) {
+ handleRawte
+...[truncated deterministically]...
+nsition(InHeadNoscript);
+ } else if (name.equals("script")) {
+ // skips some script rules as won't execute them
+
+ tb.tokeniser.transition(TokeniserState.ScriptData);
+ tb.markInsertionMode();
+ tb.transition(Text);
+ tb.insert(start);
+ } else if (name.equals("head")) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ break;
+ case EndTag:
+ Token.EndTag end = t.asEndTag();
+ name = end.normalName();
+ if (name.equals("head")) {
+ tb.pop();
+ tb.transition(AfterHead);
+ } else if (StringUtil.in(name, "body", "html", "br")) {
+ return anythingElse(t, tb);
+ } else {
+ tb.error(this);
+ return false;
+ }
+ break;
+ default:
+ return anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (t.isDoctype()) {
+ tb.error(this);
+ } else if (t.isStartTag() && t.asStartTag().normalName().equals("html")) {
+ return tb.process(t, InBody);
+ } else if (t.isEndTag() && t.asEndTag().normalName().equals("noscript")) {
+ tb.pop();
+ tb.transition(InHead);
+ } else if (isWhitespace(t) || t.isComment() || (t.isStartTag() && StringUtil.in(t.asStartTag().normalName(),
+ "basefont", "bgsound", "link", "meta", "noframes", "style"))) {
+ return tb.process(t, InHead);
+ } else if (t.isEndTag() && t.asEndTag().normalName().equals("br")) {
+ return anythingElse(t, tb);
+ } else if ((t.isStartTag() && StringUtil.in(t.asStartTag().normalName(), "head", "noscript")) || t.isEndTag()) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ tb.insert(t.asCharacter());
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (t.isDoctype()) {
+ tb.error(this);
+ } else if (t.isStartTag()) {
+ Token.StartTag startTag = t.asStartTag();
+ String name = startTag.normalName();
+ if (name.equals("html")) {
+ return tb.process(t, InBody);
+ } else if (name.equals("body")) {
+ tb.insert(
+...[truncated deterministically]...
+name.equals("frameset")) {
+ tb.insert(startTag);
+ tb.transition(InFrameset);
+ } else if (StringUtil.in(name, "base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "title")) {
+ tb.error(this);
+ Element head = tb.getHeadElement();
+ tb.push(head);
+ tb.process(t, InHead);
+ tb.removeFromStack(head);
+ } else if (name.equals("head")) {
+ tb.error(this);
+ return false;
+ } else {
+ anythingElse(t, tb);
+ }
+ } else if (t.isEndTag()) {
+ if (StringUtil.in(t.asEndTag().normalName(), "body", "html")) {
+ anythingElse(t, tb);
+ } else {
+ tb.error(this);
+ return false;
+ }
+ } else {
+ anythingElse(t, tb);
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (isWhitespace(t)) {
+ return true; // ignore whitespace
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (t.isDoctype()) {
+ // todo: parse error check on expected doctypes
+ // todo: quirk state check on doctype ids
+ Token.Doctype d = t.asDoctype();
+ DocumentType doctype = new DocumentType(
+ tb.settings.normalizeTag(d.getName()), d.getPublicIdentifier(), d.getSystemIdentifier());
+ doctype.setPubSysKey(d.getPubSysKey());
+ tb.getDocument().appendChild(doctype);
+ if (d.isForceQuirks())
+ tb.getDocument().quirksMode(Document.QuirksMode.quirks);
+ tb.transition(BeforeHtml);
+ } else {
+ // todo: check not iframe srcdoc
+ tb.transition(BeforeHtml);
+ return tb.process(t); // re-process token
+ }
+ return true;
+ }
+
+/* METHOD process */
+boolean process(Token t, HtmlTreeBuilder tb) {
+ if (t.isDoctype()) {
+ tb.error(this);
+ return false;
+ } else if (t.isComment()) {
+ tb.insert(t.asComment());
+ } else if (isWhitespace(t)) {
+ return true; // ignore whitespace
+ } else if (t.isStartTag() && t.asStartTag().normalName().equals("html")) {
+ tb.insert(t.asStartTag());
+ tb.transiti
+...[truncated deterministically]...
+dy", "html", "br"))) {
+ return anythingElse(t, tb);
+ } else if (t.isEndTag()) {
+ tb.error(this);
+ return false;
+ } else {
+ return anythingElse(t, tb);
+ }
+ return true;
+ }

@@ -1,0 +1,383 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Time  Bug: 6  Version: Time-6b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.joda.time.chrono.GJChronology
+Modified: org.joda.time.chrono.GJChronology
+Triggers: org.joda.time.chrono.TestGJDate::test_cutoverPreZero, org.joda.time.chrono.TestGJDate::test_plusWeekyears_positiveToNegative_crossCutover, org.joda.time.chrono.TestGJDate::test_plusYears_positiveToZero_crossCutover, org.joda.time.chrono.TestGJDate::test_plusYears_positiveToNegative_crossCutover, org.joda.time.chrono.TestGJDate::test_plusWeekyears_positiveToZero_crossCutover
+
+Bug/specification summary:
+Bug report: 28
+Trigger failures:
+- org.joda.time.chrono.TestGJDate::test_cutoverPreZero
+ --> junit.framework.AssertionFailedError
+ - org.joda.time.chrono.TestGJDate::test_plusWeekyears_positiveToNegative_crossCutover
+ --> junit.framework.AssertionFailedError: expected:<-0002-06-30> but was:<-0001-06-28>
+ - org.joda.time.chrono.TestGJDate::test_plusYears_positiveToZero_crossCutover
+ --> org.joda.time.IllegalFieldValueException: Value 0 for year is not supported
+ - org.joda.time.chrono.TestGJDate::test_plusYears_positiveToNegative_crossCutover
+ --> junit.framework.AssertionFailedError: expected:<-0002-06-30> but was:<-0001-06-30>
+ - org.joda.time.chrono.TestGJDate::test_plusWeekyears_positiveToZero_crossCutover
+ --> org.joda.time.IllegalFieldValueException: Value 0 for year is not supported
+Modified: org.joda.time.chrono.GJChronology
+
+Prompt-01 test plan:
+TARGETS: CutoverField.add() for year/weekyear fields when result crosses cutover into year 0 or
+negative.
+TARGETS: static convertByYear() and convertByWeekyear() mappings around year 0 boundary.
+ORACLES: Expected no year 0 (IllegalFieldValueException); crossing positive→negative should yield -2
+not -1.
+ORACLES: Test expected values: <-0002-06-30> for plusYears/plusWeekyears positive→negative; no
+exception for valid dates.
+CASES: plusYears/plusWeekyears from positive to zero, positive to negative, crossing cutover
+instant.
+CASES: Boundary: add zero; add large deltas; dates exactly on cutover day; leap days (Feb 29) near
+cutover.
+CASES: cutoverPreZero: plusYears on dates before year 1 crossing the cutover (negative→positive?).
+RISKS: convertByYear may not skip year 0, producing an invalid intermediate year in target
+chronology.
+RISKS: CutoverField.add() may call set(year=0) after conversion, triggering
+IllegalFieldValueException.
+RISKS: Weekyear conversion logic may differ from year conversion, causing off-by-one in negative
+era.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.joda.time.chrono.GJChronology (java) =====
+/* API SIGNATURES */
+package org.joda.time.chrono;
+public final class GJChronology extends AssembledChronology {
+private static long convertByYear(long instant, Chronology from, Chronology to) {
+private static long convertByWeekyear(final long instant, Chronology from, Chronology to) {
+static final Instant DEFAULT_CUTOVER = new Instant(-12219292800000L);
+private static final Map<DateTimeZone, ArrayList<GJChronology>> cCache = new HashMap<DateTimeZone, ArrayList<GJChronology>>();
+public static GJChronology getInstanceUTC() {
+public static GJChronology getInstance() {
+public static GJChronology getInstance(DateTimeZone zone) {
+synchronized (cCache) {
+private Object readResolve() {
+public DateTimeZone getZone() {
+public Chronology withUTC() {
+public Chronology withZone(DateTimeZone zone) {
+public Instant getGregorianCutover() {
+public int getMinimumDaysInFirstWeek() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+protected void assemble(Fields fields) {
+private class CutoverField extends BaseDateTimeField {
+protected DurationField iDurationField;
+protected DurationField iRangeDurationField;
+public boolean isLenient() {
+public int get(long instant) {
+public String getAsText(long instant, Locale locale) {
+public String getAsText(int fieldValue, Locale locale) {
+public String getAsShortText(long instant, Locale locale) {
+public String getAsShortText(int fieldValue, Locale locale) {
+public long add(long instant, int value) {
+public long add(long instant, long value) {
+public int[] add(ReadablePartial partial, int fieldIndex, int[] values, int valueToAdd) {
+public int getDifference(long minuendInstant, long subtrahendInstant) {
+public long getDifferenceAsLong(long minuendInstant, long subtrahendInstant) {
+public long set(long instant, int value) {
+public long set(long instant, String text, Locale locale) {
+public DurationField getDurationField() {
+public DurationField getRangeDurationField() {
+public boolean isLeap(long instant) {
+public int getLeapAmount(long instant) {
+public DurationField getLeapDurationField() {
+public int getMinimumValue() {
+public int getMinimumValue(ReadablePartial partial) {
+public int getMinimumValue(ReadablePartial partial, int[] values) {
+public int getMinimumValue(long instant) {
+public int getMaximumValue() {
+public int getMaximumValue(long instant) {
+public int getMaximumValue(ReadablePartial partial) {
+public int getMaximumValue(ReadablePartial partial, int[] values) {
+public long roundFloor(long instant) {
+public long roundCeiling(long instant) {
+public int getMaximumTextLength(Locale locale) {
+public int getMaximumShortTextLength(Locale locale) {
+protected long julianToGregorian(long instant) {
+protected long gregorianToJulian(long instant) {
+private final class ImpreciseCutoverField extends CutoverField {
+private static class LinkedDurationField extends DecoratedDurationField {
+
+/* HEADER */
+package org.joda.time.chrono;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeField;
+import org.joda.time.DateTimeUtils;
+import org.joda.time.DateTimeZone;
+import org.joda.time.DurationField;
+import org.joda.time.IllegalFieldValueException;
+import org.joda.time.Instant;
+import org.joda.time.LocalDate;
+import org.joda.time.ReadableInstant;
+import org.joda.time.ReadablePartial;
+import org.joda.time.field.BaseDateTimeField;
+import org.joda.time.field.DecoratedDurationField;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.ISODateTimeFormat;
+
+/* METHOD GJChronology */
+private GJChronology(Chronology base,
+ JulianChronology julian,
+ GregorianChronology gregorian,
+ Instant cutoverInstant) {
+ super(base, new Object[] {julian, gregorian, cutoverInstant});
+ }
+
+/* METHOD GJChronology */
+private GJChronology(JulianChronology julian,
+ GregorianChronology gregorian,
+ Instant cutoverInstant) {
+ super(null, new Object[] {julian, gregorian, cutoverInstant});
+ }
+
+/* METHOD getDateTimeMillis */
+public long getDateTimeMillis(int year, int monthOfYear, int dayOfMonth,
+ int hourOfDay, int minuteOfHour,
+ int secondOfMinute, int millisOfSecond)
+ throws IllegalArgumentException
+ {
+ Chronology base;
+ if ((base = getBase()) != null) {
+ return base.getDateTimeMillis
+ (year, monthOfYear, dayOfMonth,
+ hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond);
+ }
+
+ // Assume date is Gregorian.
+ long instant;
+ try {
+ instant = iGregorianChronology.getDateTimeMillis
+ (year, monthOfYear, dayOfMonth,
+ hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond);
+ } catch (IllegalFieldValueException ex) {
+ if (monthOfYear != 2 || dayOfMonth != 29) {
+ throw ex;
+ }
+ instant = iGregorianChronology.getDateTimeMillis
+ (year, monthOfYear, 28,
+ hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond);
+ if (instant >= iCutoverMillis) {
+ throw ex;
+ }
+ }
+ if (instant < iCutoverMillis) {
+ // Maybe it's Julian.
+ instant = iJulianChronology.getDateTimeMillis
+ (year, monthOfYear, dayOfMonth,
+ hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond);
+ if (instant >= iCutoverMillis) {
+ // Okay, it's in the illegal cutover gap.
+ throw new IllegalArgumentException("Specified date does not exist");
+ }
+ }
+
+/* METHOD getDateTimeMillis */
+public long getDateTimeMillis(int year, int monthOfYear, int dayOfMonth,
+ int millisOfDay)
+ throws IllegalArgumentException
+ {
+ Chronology base;
+ if ((base = getBase()) != null) {
+ return base.getDateTimeMillis(year, monthOfYear, dayOfMonth, millisOfDay);
+ }
+
+ // Assume date is Gregorian.
+ long instant = iGregorianChronology.getDateTimeMillis
+ (year, monthOfYear, dayOfMonth, millisOfDay);
+ if (instant < iCutoverMillis) {
+ // Maybe it's Julian.
+ instant = iJulianChronology.getDateTimeMillis
+ (year, monthOfYear, dayOfMonth, millisOfDay);
+ if (instant >= iCutoverMillis) {
+ // Okay, it's in the illegal cutover gap.
+ throw new IllegalArgumentException("Specified date does not exist");
+ }
+ }
+
+/* METHOD getInstance */
+public static synchronized GJChronology getInstance(
+ DateTimeZone zone,
+ ReadableInstant gregorianCutover,
+ int minDaysInFirstWeek) {
+ 
+ zone = DateTimeUtils.getZone(zone);
+ Instant cutoverInstant;
+ if (gregorianCutover == null) {
+ cutoverInstant = DEFAULT_CUTOVER;
+ } else {
+ cutoverInstant = gregorianCutover.toInstant();
+ }
+
+ GJChronology chrono;
+ synchronized (cCache) {
+ ArrayList<GJChronology> chronos = cCache.get(zone);
+ if (chronos == null) {
+ chronos = new ArrayList<GJChronology>(2);
+ cCache.put(zone, chronos);
+ } else {
+ for (int i = chronos.size(); --i >= 0;) {
+ chrono = chronos.get(i);
+ if (minDaysInFirstWeek == chrono.getMinimumDaysInFirstWeek() &&
+ cutoverInstant.equals(chrono.getGregorianCutover())) {
+ 
+ return chrono;
+ }
+ }
+ }
+ if (zone == DateTimeZone.UTC) {
+ chrono = new GJChronology
+ (JulianChronology.getInstance(zone, minDaysInFirstWeek),
+ GregorianChronology.getInstance(zone, minDaysInFirstWeek),
+ cutoverInstant);
+ } else {
+ chrono = getInstance(DateTimeZone.UTC, cutoverInstant, minDaysInFirstWeek);
+ chrono = new GJChronology
+ (ZonedChronology.getInstance(chrono, zone),
+ chrono.iJulianChronology,
+ chrono.iGregorianChronology,
+ chrono.iCutoverInstant);
+ }
+ chronos.add(chrono);
+ }
+ return chrono;
+ }
+
+/* METHOD toString */
+public String toString() {
+ StringBuffer sb = new StringBuffer(60);
+ sb.append("GJChronology");
+ sb.append('[');
+ sb.append(getZone().getID());
+ 
+ if (iCutoverMillis != DEFAULT_CUTOVER.getMillis()) {
+ sb.append(",cutover=");
+ DateTimeFormatter printer;
+ if (withUTC().dayOfYear().remainder(iCutoverMillis) == 0) {
+ printer = ISODateTimeFormat.date();
+ } else {
+ printer = ISODateTimeFormat.dateTime();
+ }
+ printer.withChronology(withUTC()).printTo(sb, iCutoverMillis);
+ }
+ 
+ if (getMinimumDaysInFirstWeek() != 4) {
+ sb.append(",mdfw=");
+ sb.append(getMinimumDaysInFirstWeek());
+ }
+ sb.append(']');
+ 
+ return sb.toString();
+ }
+
+/* METHOD assemble */
+protected void assemble(Fields fields) {
+ Object[
+...[truncated deterministically]...
+gorianChronology)params[1];
+ Instant cutoverInstant = (Instant)params[2];
+ iCutoverMillis = cutoverInstant.getMillis();
+
+ iJulianChronology = julian;
+ iGregorianChronology = gregorian;
+ iCutoverInstant = cutoverInstant;
+
+ if (getBase() != null) {
+ return;
+ }
+
+ if (julian.getMinimumDaysInFirstWeek() != gregorian.getMinimumDaysInFirstWeek()) {
+ throw new IllegalArgumentException();
+ }
+
+ // Compute difference between the chronologies at the cutover instant
+ iGapDuration = iCutoverMillis - julianToGregorianByYear(iCutoverMillis);
+
+ // Begin field definitions.
+
+ // First just copy all the Gregorian fields and then override those
+ // that need special attention.
+ fields.copyFieldsFrom(gregorian);
+ 
+ // Assuming cutover is at midnight, all time of day fields can be
+ // gregorian since they are unaffected by cutover.
+
+ // Verify assumption.
+ if (gregorian.millisOfDay().get(iCutoverMillis) == 0) {
+ // Cutover is sometime in the day, so cutover fields are required
+ // for time of day.
+
+ fields.millisOfSecond = new CutoverField(julian.millisOfSecond(), fields.millisOfSecond, iCutoverMillis);
+ fields.millisOfDay = new CutoverField(julian.millisOfDay(), fields.millisOfDay, iCutoverMillis);
+ fields.secondOfMinute = new CutoverField(julian.secondOfMinute(), fields.secondOfMinute, iCutoverMillis);
+ fields.secondOfDay = new CutoverField(julian.secondOfDay(), fields.secondOfDay, iCutoverMillis);
+ fields.minuteOfHour = new CutoverField(julian.minuteOfHour(), fields.minuteOfHour, iCutoverMillis);
+ fields.minuteOfDay = new CutoverField(julian.minuteOfDay(), fields.minuteOfDay, iCutoverMillis);
+ fields.hourOfDay = new CutoverField(julian.hourOfDay(), fields.hourOfDay, iCutoverMillis);
+ fields.hourOfHalfday = new CutoverField(julian.hourOfHalfday(), fields.hourOfHalfday, iCutoverMillis);
+ fields.clockhourOfDay = new CutoverField(julian.clockhourOfDay(), fields.clockhourOfDay, iCutoverMillis);
+ fields.clockhourOfHalfday = new CutoverField(julian.clockhourOfHalfday(),
+ fields.clockhourOfHalfday, iCutoverMillis);
+ fields.halfdayOfDay = new CutoverField(julian.halfdayOfDay(), fields.halfdayOfDay, iCutoverMillis);
+ }
+
+ // These fields just require basic cutover support.
+ {
+ fields.era = new CutoverField(julian.era(), fields.era, iCutoverMillis);
+ }
+
+ // DayOfYear and weekOfWeekyear require special handling since cutover
+ // year has fewer days and weeks. Extend the cutover to the start of
+ // the next year or weekyear. This keeps the sequence unbroken during
+ // the cutover year.
+
+ {
+ long cutover = gregorian.year().roundCeiling(iCutoverMillis);
+ fields.dayOfYear =
+...[truncated deterministically]...
+d special attention. Override affected
+ // duration fields as well.
+ {
+ fields.year = new ImpreciseCutoverField(
+ julian.year(), fields.year, iCutoverMillis);
+ fields.years = fields.year.getDurationField();
+ fields.yearOfEra = new ImpreciseCutoverField(
+ julian.yearOfEra(), fields.yearOfEra, fields.years, iCutoverMillis);
+ fields.yearOfCentury = new ImpreciseCutoverField(
+ julian.yearOfCentury(), fields.yearOfCentury, fields.years, iCutoverMillis);
+ 
+ fields.centuryOfEra = new ImpreciseCutoverField(
+ julian.centuryOfEra(), fields.centuryOfEra, iCutoverMillis);
+ fields.centuries = fields.centuryOfEra.getDurationField();
+ 
+ fields.monthOfYear = new ImpreciseCutoverField(
+ julian.monthOfYear(), fields.monthOfYear, iCutoverMillis);
+ fields.months = fields.monthOfYear.getDurationField();
+ 
+ fields.weekyear = new ImpreciseCutoverField(
+ julian.weekyear(), fields.weekyear, null, iCutoverMillis, true);
+ fields.weekyearOfCentury = new ImpreciseCutoverField(
+ julian.weekyearOfCentury(), fields.weekyearOfCentury, fields.weekyears, iCutoverMillis);
+ fields.weekyears = fields.weekyear.getDurationField();
+ }
+
+ // These fields require basic cutover support, except they must link to
+ // imprecise durations.
+ {
+ CutoverField cf = new CutoverField
+ (julian.dayOfMonth(), fields.dayOfMonth, iCutoverMillis);
+ cf.iRangeDurationField = fields.months;
+ fields.dayOfMonth = cf;
+ }
+ }

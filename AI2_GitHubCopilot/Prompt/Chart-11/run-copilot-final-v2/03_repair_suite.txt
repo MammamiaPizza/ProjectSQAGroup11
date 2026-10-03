@@ -1,0 +1,235 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Chart  Bug: 11  Version: Chart-11b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Bug/specification summary:
+Bug report: 868
+Trigger failures:
+- org.jfree.chart.util.junit.ShapeUtilitiesTests::testEqualGeneralPaths
+ --> junit.framework.AssertionFailedError
+Modified: org.jfree.chart.util.ShapeUtilities
+
+Available API/signatures:
+[org.jfree.chart.util.ShapeUtilities | java]
+package org.jfree.chart.util;
+public class ShapeUtilities {
+private ShapeUtilities() {
+public static Shape clone(Shape shape) {
+public static boolean equal(Shape s1, Shape s2) {
+public static boolean equal(Line2D l1, Line2D l2) {
+public static boolean equal(Ellipse2D e1, Ellipse2D e2) {
+public static boolean equal(Arc2D a1, Arc2D a2) {
+public static boolean equal(Polygon p1, Polygon p2) {
+public static boolean equal(GeneralPath p1, GeneralPath p2) {
+private static final float SQRT2 = (float) Math.pow(2.0, 0.5);
+public static Shape createDiagonalCross(float l, float t) {
+public static Shape createRegularCross(float l, float t) {
+public static Shape createDiamond(float s) {
+public static Shape createUpTriangle(float s) {
+public static Shape createDownTriangle(float s) {
+public static Shape createLineRegion(Line2D line, float width) {
+public static boolean contains(Rectangle2D rect1, Rectangle2D rect2) {
+public static boolean intersects(Rectangle2D rect1, Rectangle2D rect2) {
+
+Generated JUnit Test:
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.awt.geom.GeneralPath;
+import java.awt.geom.PathIterator;
+import java.awt.geom.AffineTransform;
+
+public class ShapeUtilitiesTests {
+
+ // Test identical paths (same winding rule, same segments, same coordinates)
+ @Test
+ public void testEqualGeneralPaths_Identical() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     p1.lineTo(1.0f, 1.0f);
+     p1.lineTo(2.0f, 0.0f);
+     p1.closePath();
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.lineTo(1.0f, 1.0f);
+     p2.lineTo(2.0f, 0.0f);
+     p2.closePath();
+
+     assertTrue(ShapeUtilities.equal(p1, p2));
+     assertTrue(ShapeUtilities.equal(p2, p1));
+ }
+
+ // Test same coordinates but different winding rule (WIND_EVEN_ODD vs WIND_NON_ZERO)
+ @Test
+ public void testEqualGeneralPaths_DifferentWindingRule() {
+     GeneralPath p1 = new GeneralPath(GeneralPath.WIND_EVEN_ODD);
+     p1.moveTo(0.0f, 0.0f);
+     p1.lineTo(1.0f, 1.0f);
+     p1.lineTo(2.0f, 0.0f);
+     p1.closePath();
+
+     GeneralPath p2 = new GeneralPath(GeneralPath.WIND_NON_ZERO);
+     p2.moveTo(0.0f, 0.0f);
+     p2.lineTo(1.0f, 1.0f);
+     p2.lineTo(2.0f, 0.0f);
+     p2.closePath();
+
+     assertFalse(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Test different subpath counts
+ @Test
+ public void testEqualGeneralPaths_DifferentSubpathCounts() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     p1.lineTo(1.0f, 1.0f);
+     p1.closePath();
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.lineTo(1.0f, 1.0f);
+     p2.closePath();
+     p2.moveTo(2.0f, 2.0f);
+     p2.lineTo(3.0f, 3.0f);
+     p2.closePath();
+
+     assertFalse(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Test empty vs non-empty
+ @Test
+ public void testEqualGeneralPaths_EmptyVsNonEmpty() {
+     GeneralPath p1 = new GeneralPath();
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.lineTo(1.0f, 1.0f);
+
+     assertFalse(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Both empty paths should be equal
+ @Test
+ public void testEqualGeneralPaths_BothEmpty() {
+     GeneralPath p1 = new GeneralPath();
+     GeneralPath p2 = new GeneralPath();
+     assertTrue(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Test same shape but created with a transform applied (resulting in different segment
+coordinates)
+ @Test
+ public void testEqualGeneralPaths_DifferentTransformedCoordinates() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     p1.lineTo(1.0f, 0.0f);
+     p1.closePath();
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.lineTo(2.0f, 0.0f);
+     p2.closePath();
+
+     assertFalse(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Test mixed curve and line segments
+ @Test
+ public void testEqualGeneralPaths_MixedCurveAndLine() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     p1.quadTo(0.5f, 0.5f, 1.0f, 0.0f);
+     p1.lineTo(1.0f, 1.0f);
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.quadTo(0.5f, 0.5f, 1.0f, 0.0f);
+     p2.lineTo(1.0f, 1.0f);
+
+     assertTrue(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Verify iteration over p2's iterator (not p1 duplicated) - regression test for the bug where
+iterator2 uses p1
+ @Test
+ public void testEqualGeneralPaths_UsesIterator2FromP2() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     p1.lineTo(1.0f, 0.0f);
+     p1.closePath();
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.lineTo(0.0f, 1.0f);
+     p2.closePath();
+
+     // The bug in the source: iterator2 = p1.getPathIterator(null) instead of
+p2.getPathIterator(null)
+     // This means this test would pass even though p1 != p2 because both iterators iterate p1
+     // We assert the CORRECT behavior: they should NOT be equal
+     assertFalse(ShapeUtilities.equal(p1, p2));
+ }
+
+ // Test null arguments: both null
+ @Test
+ public void testEqualGeneralPaths_BothNull() {
+     assertTrue(ShapeUtilities.equal((GeneralPath) null, (GeneralPath) null));
+ }
+
+ // Test null arguments: first null, second non-null
+ @Test
+ public void testEqualGeneralPaths_FirstNull() {
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     assertFalse(ShapeUtilities.equal((GeneralPath) null, p2));
+ }
+
+ // Test null arguments: first non-null, second null
+ @Test
+ public void testEqualGeneralPaths_SecondNull() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     assertFalse(ShapeUtilities.equal(p1, (GeneralPath) null));
+ }
+
+ // Test paths with only MOVE_TO (no segments drawn)
+ @Test
+ public void testEqualGeneralPaths_OnlyMoveTo() {
+     GeneralPath p1 = new GeneralPath();
+     p1.moveTo(0.0f, 0.0f);
+     p1.moveTo(1.0f, 1.0f);
+
+     GeneralPath p2 = new GeneralPath();
+     p2.moveTo(0.0f, 0.0f);
+     p2.moveTo(1.0f, 1.0f);
+
+     assertTrue(ShapeUtilities.equal(p1, p2));
+
+     GeneralPath p3 = new GeneralPath();
+     p3.moveTo(0.0f, 0.0f);
+     p3.moveTo(2.0f, 2.0f);
+
+     assertFalse(ShapeUtilities.equal(p1, p3));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Chart-11f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Chart-11f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Chart-11f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Chart-11f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Chart-11f-copilot/.test_suite/ShapeUtilitiesTests.java:86: error: <identifier> expected
+ [javac] coordinates)
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 37 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

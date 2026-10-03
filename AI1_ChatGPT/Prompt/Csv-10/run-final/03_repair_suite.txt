@@ -1,0 +1,933 @@
+The previously generated JUnit Test Suite failed to compile or run.
+Analyze the production source code, generated test, Project Context, behavioral specification, and error
+output. Return a corrected complete Java Test Class.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Preserve all valid and meaningful Test Cases.
+4. Fix package, import, syntax, type, constructor, method-call, dependency, mock, and assertion errors.
+5. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+6. Do not invent missing APIs, dependencies, or expected behavior.
+7. Do not change an assertion only to make the test pass unless the supplied specification, API
+documentation, public contract, or bug report supports the change.
+8. Do not remove a Test Case merely to hide an error unless the scenario is impossible according to the
+supplied context.
+9. Do not modify the intended behavior being tested.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Keep the Test Cases independent and free from execution-order dependencies.
+12. Briefly explain the cause of each error and the correction made.
+13. Return the complete corrected Java Test Class.
+Project ID:
+Csv
+Bug ID:
+10
+Source Version:
+Csv-10b
+JUnit Version:
+junit-4.11.jar
+Build Tool:
+Maven
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: Csv
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: Csv
+       Program: commons-csv
+    Build file: /root/defects4j/framework/projects/Csv/Csv.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-csv.git
+     Commit db: /root/defects4j/framework/projects/Csv/active-bugs.csv
+Number of bugs: 16
+--------------------------------------------------------------------------------
+
+Summary for Bug: Csv-10
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+1282503fb97d621b4225bd031757adbfada66181
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2014-06-09 22:21:22 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+CSV-120
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/CSV-120
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.csv.CSVPrinterTest::testHeader
+   --> junit.framework.AssertionFailedError: expected:<[C1,C2,C3
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.csv.CSVPrinter
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.csv.CSVPrinter =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.csv;
+
+import static org.apache.commons.csv.Constants.COMMENT;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.SP;
+
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+/**
+ * Prints values in a CSV format.
+ *
+ * @version $Id$
+ */
+public final class CSVPrinter implements Flushable, Closeable {
+
+    /** The place that the values get written. */
+    private final Appendable out;
+    private final CSVFormat format;
+
+    /** True if we just began a new record. */
+    private boolean newRecord = true;
+
+    /**
+     * Creates a printer that will print values to the given stream following the CSVFormat.
+     * <p>
+     * Currently, only a pure encapsulation format or a pure escaping format is supported. Hybrid formats (encapsulation
+     * and escaping with a different character) are not supported.
+     * </p>
+     * 
+     * @param out
+     *        stream to which to print. Must not be null.
+     * @param format
+     *        the CSV format. Must not be null.
+     * @throws IOException
+     *         thrown if the optional header cannot be printed.
+     * @throws IllegalArgumentException
+     *         thrown if the parameters of the format are inconsistent or if either out or format are null.
+     */
+    public CSVPrinter(final Appendable out, final CSVFormat format) throws IOException {
+        Assertions.notNull(out, "out");
+        Assertions.notNull(format, "format");
+
+        this.out = out;
+        this.format = format;
+        this.format.validate();
+        // TODO: Is it a good idea to do this here instead of on the first call to a print method?
+        // It seems a pain to have to track whether the header has already been printed or not.
+    }
+
+    // ======================================================
+    // printing implementation
+    // ======================================================
+
+    public void close() throws IOException {
+        if (out instanceof Closeable) {
+            ((Closeable) out).close();
+        }
+    }
+
+    /**
+     * Flushes the underlying stream.
+     *
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void flush() throws IOException {
+        if (out instanceof Flushable) {
+            ((Flushable) out).flush();
+        }
+    }
+
+    /**
+     * Prints the string as the next value on the line. The value will be escaped or encapsulated as needed.
+     *
+     * @param value
+     *            value to be output.
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void print(final Object value) throws IOException {
+        // null values are considered empty
+        String strValue;
+        if (value == null) {
+            final String nullString = format.getNullString();
+            strValue = nullString == null ? Constants.EMPTY : nullString;
+        } else {
+            strValue = value.toString();
+        }
+        this.print(value, strValue, 0, strValue.length());
+    }
+
+    private void print(final Object object, final CharSequence value,
+            final int offset, final int len) throws IOException {
+        if (!newRecord) {
+            out.append(format.getDelimiter());
+        }
+        if (format.isQuoting()) {
+            // the original object is needed so can check for Number
+            printAndQuote(object, value, offset, len);
+        } else if (format.isEscaping()) {
+            printAndEscape(value, offset, len);
+        } else {
+            out.append(value, offset, offset + len);
+        }
+        newRecord = false;
+    }
+
+    /*
+     * Note: must only be called if escaping is enabled, otherwise will generate NPE
+     */
+    private void printAndEscape(final CharSequence value, final int offset, final int len) throws IOException {
+        int start = offset;
+        int pos = offset;
+        final int end = offset + len;
+
+        final char delim = format.getDelimiter();
+        final char escape = format.getEscape().charValue();
+
+        while (pos < end) {
+            char c = value.charAt(pos);
+            if (c == CR || c == LF || c == delim || c == escape) {
+                // write out segment up until this char
+                if (pos > start) {
+                    out.append(value, start, pos);
+                }
+                if (c == LF) {
+                    c = 'n';
+                } else if (c == CR) {
+                    c = 'r';
+                }
+
+                out.append(escape);
+                out.append(c);
+
+                start = pos + 1; // start on the current char after this one
+            }
+
+            pos++;
+        }
+
+        // write last segment
+        if (pos > start) {
+            out.append(value, start, pos);
+        }
+    }
+
+    /*
+     * Note: must only be called if quoting is enabled, otherwise will generate NPE
+     */
+    // the original object is needed so can check for Number
+    private void printAndQuote(final Object object, final CharSequence value,
+            final int offset, final int len) throws IOException {
+        boolean quote = false;
+        int start = offset;
+        int pos = offset;
+        final int end = offset + len;
+
+        final char delimChar = format.getDelimiter();
+        final char quoteChar = format.getQuoteChar().charValue();
+
+        Quote quotePolicy = format.getQuotePolicy();
+        if (quotePolicy == null) {
+            quotePolicy = Quote.MINIMAL;
+        }
+        switch (quotePolicy) {
+        case ALL:
+            quote = true;
+            break;
+        case NON_NUMERIC:
+            quote = !(object instanceof Number);
+            break;
+        case NONE:
+            // Use the existing escaping code
+            printAndEscape(value, offset, len);
+            return;
+        case MINIMAL:
+            if (len <= 0) {
+                // always quote an empty token that is the first
+                // on the line, as it may be the only thing on the
+                // line. If it were not quoted in that case,
+                // an empty line has no tokens.
+                if (newRecord) {
+                    quote = true;
+                }
+            } else {
+                char c = value.charAt(pos);
+
+                // Hmmm, where did this rule come from?
+                if (newRecord && (c < '0' || (c > '9' && c < 'A') || (c > 'Z' && c < 'a') || (c > 'z'))) {
+                    quote = true;
+                    // } else if (c == ' ' || c == '\f' || c == '\t') {
+                } else if (c <= COMMENT) {
+                    // Some other chars at the start of a value caused the parser to fail, so for now
+                    // encapsulate if we start in anything less than '#'. We are being conservative
+                    // by including the default comment char too.
+                    quote = true;
+                } else {
+                    while (pos < end) {
+                        c = value.charAt(pos);
+                        if (c == LF || c == CR || c == quoteChar || c == delimChar) {
+                            quote = true;
+                            break;
+                        }
+                        pos++;
+                    }
+
+                    if (!quote) {
+                        pos = end - 1;
+                        c = value.charAt(pos);
+                        // if (c == ' ' || c == '\f' || c == '\t') {
+                        // Some other chars at the end caused the parser to fail, so for now
+                        // encapsulate if we end in anything less than ' '
+                        if (c <= SP) {
+                            quote = true;
+                        }
+                    }
+                }
+            }
+
+            if (!quote) {
+                // no encapsulation needed - write out the original value
+                out.append(value, start, end);
+                return;
+            }
+            break;
+        default:
+            throw new IllegalStateException("Unexpected Quote value: " + quotePolicy);
+        }
+
+        if (!quote) {
+            // no encapsulation needed - write out the original value
+            out.append(value, start, end);
+            return;
+        }
+
+        // we hit something that needed encapsulation
+        out.append(quoteChar);
+
+        // Pick up where we left off: pos should be positioned on the first character that caused
+        // the need for encapsulation.
+        while (pos < end) {
+            final char c = value.charAt(pos);
+            if (c == quoteChar) {
+                // write out the chunk up until this point
+
+                // add 1 to the length to write out the encapsulator also
+                out.append(value, start, pos + 1);
+                // put the next starting position on the encapsulator so we will
+                // write it out again with the next string (effectively doubling it)
+                start = pos;
+            }
+            pos++;
+        }
+
+        // write the last segment
+        out.append(value, start, pos);
+        out.append(quoteChar);
+    }
+
+    /**
+     * Prints a comment on a new line among the delimiter separated values.
+     *
+     * <p>
+     * Comments will always begin on a new line and occupy a least one full line. The character specified to start
+     * comments and a space will be inserted at the beginning of each new line in the comment.
+     * </p>
+     *
+     * If comments are disabled in the current CSV format this method does nothing.
+     *
+     * @param comment
+     *            the comment to output
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void printComment(final String comment) throws IOException {
+        if (!format.isCommentingEnabled()) {
+            return;
+        }
+        if (!newRecord) {
+            println();
+        }
+        out.append(format.getCommentStart().charValue());
+        out.append(SP);
+        for (int i = 0; i < comment.length(); i++) {
+            final char c = comment.charAt(i);
+            switch (c) {
+            case CR:
+                if (i + 1 < comment.length() && comment.charAt(i + 1) == LF) {
+                    i++;
+                }
+                //$FALL-THROUGH$ break intentionally excluded.
+            case LF:
+                println();
+                out.append(format.getCommentStart().charValue());
+                out.append(SP);
+                break;
+            default:
+                out.append(c);
+                break;
+            }
+        }
+        println();
+    }
+
+    /**
+     * Outputs the record separator.
+     *
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void println() throws IOException {
+        final String recordSeparator = format.getRecordSeparator();
+        if (recordSeparator != null) {
+            out.append(recordSeparator);
+        }
+        newRecord = true;
+    }
+
+    /**
+     * Prints a single line of delimiter separated values. The values will be quoted if needed. Quotes and newLine
+     * characters will be escaped.
+     *
+     * @param values
+     *            values to output.
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void printRecord(final Iterable<?> values) throws IOException {
+        for (final Object value : values) {
+            print(value);
+        }
+        println();
+    }
+
+    /**
+     * Prints a single line of delimiter separated values. The values will be quoted if needed. Quotes and newLine
+     * characters will be escaped.
+     *
+     * @param values
+     *            values to output.
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void printRecord(final Object... values) throws IOException {
+        for (final Object value : values) {
+            print(value);
+        }
+        println();
+    }
+
+    /**
+     * Prints all the objects in the given collection.
+     *
+     * @param values
+     *            the values to print.
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void printRecords(final Iterable<?> values) throws IOException {
+        for (final Object value : values) {
+            if (value instanceof Object[]) {
+                this.printRecord((Object[]) value);
+            } else if (value instanceof Iterable) {
+                this.printRecord((Iterable<?>) value);
+            } else {
+                this.printRecord(value);
+            }
+        }
+    }
+
+    /**
+     * Prints all the objects in the given array.
+     *
+     * @param values
+     *            the values to print.
+     * @throws IOException
+     *             If an I/O error occurs
+     */
+    public void printRecords(final Object[] values) throws IOException {
+        for (final Object value : values) {
+            if (value instanceof Object[]) {
+                this.printRecord((Object[]) value);
+            } else if (value instanceof Iterable) {
+                this.printRecord((Iterable<?>) value);
+            } else {
+                this.printRecord(value);
+            }
+        }
+    }
+
+    /**
+     * Prints all the objects in the given JDBC result set.
+     *
+     * @param resultSet result set
+     *            the values to print.
+     * @throws IOException
+     *             If an I/O error occurs
+     * @throws SQLException if a database access error occurs
+     */
+    public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+        final int columnCount = resultSet.getMetaData().getColumnCount();
+        while (resultSet.next()) {
+            for (int i = 1; i <= columnCount; i++) {
+                print(resultSet.getString(i));
+            }
+            println();
+        }
+    }
+
+    /**
+     * Gets the target Appendable.
+     *
+     * @return the target Appendable.
+     */
+    public Appendable getOut() {
+        return this.out;
+    }
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.csv.CSVPrinter
+
+Triggering tests:
+- org.apache.commons.csv.CSVPrinterTest::testHeader
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.Appendable;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.util.Arrays;
+
+import org.junit.Test;
+
+public class CSVPrinterGeneratedTest {
+
+    @Test
+    public void constructorPrintsConfiguredHeaderImmediately() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withHeader("C1", "C2", "C3");
+        final StringBuilder output = new StringBuilder();
+
+        new CSVPrinter(output, format);
+
+        assertEquals("C1,C2,C3" + format.getRecordSeparator(), output.toString());
+    }
+
+    @Test
+    public void constructorDoesNotPrintHeaderWhenHeaderRecordIsSkipped() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withHeader("C1", "C2").withSkipHeaderRecord(true);
+        final StringBuilder output = new StringBuilder();
+
+        new CSVPrinter(output, format);
+
+        assertEquals("", output.toString());
+    }
+
+    @Test
+    public void constructorRejectsNullOutput() throws IOException {
+        try {
+            new CSVPrinter((Appendable) null, CSVFormat.DEFAULT);
+            fail("Expected IllegalArgumentException for null output");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("out"));
+        }
+    }
+
+    @Test
+    public void constructorRejectsNullFormat() throws IOException {
+        try {
+            new CSVPrinter(new StringBuilder(), null);
+            fail("Expected IllegalArgumentException for null format");
+        } catch (final IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("format"));
+        }
+    }
+
+    @Test
+    public void printUsesMinimalQuotingAndEscapesEmbeddedQuotes() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT;
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecord("plain", "a,b", "say \"hello\"", "line1\nline2", null);
+
+        assertEquals(
+                "plain,\"a,b\",\"say \"\"hello\"\"\",\"line1\nline2\","
+                        + format.getRecordSeparator(),
+                output.toString());
+    }
+
+    @Test
+    public void printQuotesEmptyFirstValueButNotEmptySubsequentValue() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT;
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.print("");
+        printer.print("");
+        printer.println();
+
+        assertEquals("\"\","
+                + format.getRecordSeparator(), output.toString());
+    }
+
+    @Test
+    public void printUsesConfiguredNullString() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withNullString("NULL");
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecord("value", null);
+
+        assertEquals("value,NULL" + format.getRecordSeparator(), output.toString());
+    }
+
+    @Test
+    public void quoteAllQuotesNumbersAndStrings() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withQuotePolicy(Quote.ALL);
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecord(Integer.valueOf(12), "text");
+
+        assertEquals("\"12\",\"text\"" + format.getRecordSeparator(), output.toString());
+    }
+
+    @Test
+    public void quoteNonNumericLeavesNumbersUnquoted() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withQuotePolicy(Quote.NON_NUMERIC);
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecord(Integer.valueOf(12), "text");
+
+        assertEquals("12,\"text\"" + format.getRecordSeparator(), output.toString());
+    }
+
+    @Test
+    public void quoteNoneUsesEscapeCharacterForSpecialCharacters() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT
+                .withQuotePolicy(Quote.NONE)
+                .withEscape('\\');
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecord("a,b", "a\\b", "a\nb", "a\rb");
+
+        assertEquals("a\\,b,a\\\\b,a\\nb,a\\rb"
+                + format.getRecordSeparator(), output.toString());
+    }
+
+    @Test
+    public void printCommentStartsOnNewLineAndHandlesAllLineEndings() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withCommentStart('#');
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.print("value");
+        printer.printComment("first\r\nsecond\nthird\rfourth");
+
+        final String separator = format.getRecordSeparator();
+        assertEquals("value" + separator
+                + "# first" + separator
+                + "# second" + separator
+                + "# third" + separator
+                + "# fourth" + separator,
+                output.toString());
+    }
+
+    @Test
+    public void printCommentDoesNothingWhenCommentsAreDisabled() throws IOException {
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, CSVFormat.DEFAULT);
+
+        printer.printComment("ignored");
+
+        assertEquals("", output.toString());
+    }
+
+    @Test
+    public void printlnWithNullRecordSeparatorStillStartsANewRecord() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT.withRecordSeparator(null);
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.print("first");
+        printer.println();
+        printer.print("second");
+
+        assertEquals("firstsecond", output.toString());
+    }
+
+    @Test
+    public void printRecordsHandlesArraysIterablesAndScalarValues() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT;
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecords(new Object[] {
+                new Object[] { "a", "b" },
+                Arrays.asList("c", "d"),
+                "e"
+        });
+
+        assertEquals("a,b" + format.getRecordSeparator()
+                + "c,d" + format.getRecordSeparator()
+                + "e" + format.getRecordSeparator(),
+                output.toString());
+    }
+
+    @Test
+    public void printRecordsIterableHandlesArraysIterablesAndScalarValues() throws IOException {
+        final CSVFormat format = CSVFormat.DEFAULT;
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+
+        printer.printRecords(Arrays.<Object>asList(
+                new Object[] { "a", "b" },
+                Arrays.asList("c", "d"),
+                "e"));
+
+        assertEquals("a,b" + format.getRecordSeparator()
+                + "c,d" + format.getRecordSeparator()
+                + "e" + format.getRecordSeparator(),
+                output.toString());
+    }
+
+    @Test
+    public void printRecordsResultSetPrintsEveryColumnOfEveryRow() throws Exception {
+        final CSVFormat format = CSVFormat.DEFAULT;
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, format);
+        final ResultSet resultSet = resultSet(new String[][] {
+                { "a", "b" },
+                { "c", "d" }
+        });
+
+        printer.printRecords(resultSet);
+
+        assertEquals("a,b" + format.getRecordSeparator()
+                + "c,d" + format.getRecordSeparator(),
+                output.toString());
+    }
+
+    @Test
+    public void flushAndCloseDelegateWhenAppendableSupportsThem() throws IOException {
+        final TrackingAppendable output = new TrackingAppendable();
+        final CSVPrinter printer = new CSVPrinter(output, CSVFormat.DEFAULT);
+
+        assertSame(output, printer.getOut());
+
+        printer.flush();
+        printer.close();
+
+        assertTrue(output.flushed);
+        assertTrue(output.closed);
+    }
+
+    @Test
+    public void flushAndCloseDoNothingForPlainAppendable() throws IOException {
+        final StringBuilder output = new StringBuilder();
+        final CSVPrinter printer = new CSVPrinter(output, CSVFormat.DEFAULT);
+
+        printer.flush();
+        printer.close();
+
+        assertEquals("", output.toString());
+    }
+
+    @Test
+    public void printPropagatesAppendableIOException() throws IOException {
+        final CSVPrinter printer = new CSVPrinter(new FailingAppendable(), CSVFormat.DEFAULT);
+
+        try {
+            printer.print("value");
+            fail("Expected IOException from Appendable");
+        } catch (final IOException expected) {
+            assertEquals("append failure", expected.getMessage());
+        }
+    }
+
+    private static ResultSet resultSet(final String[][] rows) {
+        final ResultSetMetaData metadata = (ResultSetMetaData) Proxy.newProxyInstance(
+                CSVPrinterGeneratedTest.class.getClassLoader(),
+                new Class<?>[] { ResultSetMetaData.class },
+                new InvocationHandler() {
+                    @Override
+                    public Object invoke(final Object proxy, final Method method, final Object[] args) {
+                        if ("getColumnCount".equals(method.getName())) {
+                            return Integer.valueOf(rows[0].length);
+                        }
+                        throw new UnsupportedOperationException(method.getName());
+                    }
+                });
+
+        return (ResultSet) Proxy.newProxyInstance(
+                CSVPrinterGeneratedTest.class.getClassLoader(),
+                new Class<?>[] { ResultSet.class },
+                new InvocationHandler() {
+                    private int row = -1;
+
+                    @Override
+                    public Object invoke(final Object proxy, final Method method, final Object[] args) {
+                        if ("getMetaData".equals(method.getName())) {
+                            return metadata;
+                        }
+                        if ("next".equals(method.getName())) {
+                            row++;
+                            return Boolean.valueOf(row < rows.length);
+                        }
+                        if ("getString".equals(method.getName())) {
+                            final int columnIndex = ((Integer) args[0]).intValue();
+                            return rows[row][columnIndex - 1];
+                        }
+                        if ("isClosed".equals(method.getName())) {
+                            return Boolean.FALSE;
+                        }
+                        throw new UnsupportedOperationException(method.getName());
+                    }
+                });
+    }
+
+    private static final class TrackingAppendable implements Appendable, Flushable, Closeable {
+        private final StringBuilder delegate = new StringBuilder();
+        private boolean flushed;
+        private boolean closed;
+
+        @Override
+        public Appendable append(final CharSequence csq) {
+            delegate.append(csq);
+            return this;
+        }
+
+        @Override
+        public Appendable append(final CharSequence csq, final int start, final int end) {
+            delegate.append(csq, start, end);
+            return this;
+        }
+
+        @Override
+        public Appendable append(final char c) {
+            delegate.append(c);
+            return this;
+        }
+
+        @Override
+        public void flush() {
+            flushed = true;
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+
+        @Override
+        public String toString() {
+            return delegate.toString();
+        }
+    }
+
+    private static final class FailingAppendable implements Appendable {
+        @Override
+        public Appendable append(final CharSequence csq) throws IOException {
+            throw new IOException("append failure");
+        }
+
+        @Override
+        public Appendable append(final CharSequence csq, final int start, final int end) throws IOException {
+            throw new IOException("append failure");
+        }
+
+        @Override
+        public Appendable append(final char c) throws IOException {
+            throw new IOException("append failure");
+        }
+    }
+}
+
+Compiler or Test Runner error:
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /root/sqa-workspaces/Csv-10f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Csv-10f-ai -Dd4j.test.dir=/root/sqa-workspaces/Csv-10f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+commons-csv-from-maven.compile:
+    [mkdir] Created dir: /root/sqa-workspaces/Csv-10f-ai/target/classes
+    [javac] /root/sqa-workspaces/Csv-10f-ai/maven-build.xml:79: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 11 source files to /root/sqa-workspaces/Csv-10f-ai/target/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] 4 warnings
+    [javac] Creating empty /root/sqa-workspaces/Csv-10f-ai/target/classes/org/apache/commons/csv/package-info.class
+    [mkdir] Created dir: /root/sqa-workspaces/Csv-10f-ai/target/classes/META-INF
+     [copy] Copying 2 files to /root/sqa-workspaces/Csv-10f-ai/target/classes/META-INF
+
+compile:
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target/classes/..
+    [mkdir] Created dir: /root/sqa-workspaces/Csv-10f-ai/.classes_testgen
+    [javac] /root/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /root/sqa-workspaces/Csv-10f-ai/.classes_testgen
+    [javac] /root/sqa-workspaces/Csv-10f-ai/.test_suite/org/apache/commons/csv/CSVPrinterGeneratedTest.java:9: error: cannot find symbol
+    [javac] import java.io.Appendable;
+    [javac]               ^
+    [javac]   symbol:   class Appendable
+    [javac]   location: package java.io
+    [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.
+
+
+Generated tests failing on fixed:
+(none listed; inspect log)

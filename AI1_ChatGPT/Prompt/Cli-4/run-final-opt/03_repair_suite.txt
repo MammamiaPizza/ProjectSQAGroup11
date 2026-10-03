@@ -1,0 +1,138 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 4  Version: Cli-4b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: cli-1
+Trigger failures:
+- org.apache.commons.cli.OptionsTest::testMissingOptionsException
+ --> junit.framework.ComparisonFailure: expected:<[Missing required options: ]fx> but was:<[]fx>
+ - org.apache.commons.cli.OptionsTest::testMissingOptionException
+ --> junit.framework.ComparisonFailure: expected:<[Missing required option: ]f> but was:<[]f>
+Modified: org.apache.commons.cli.Parser
+
+Available API/signatures:
+[org.apache.commons.cli.Parser | java]
+package org.apache.commons.cli;
+public abstract class Parser implements CommandLineParser {
+public CommandLine parse(Options options, String[] arguments)
+private void processProperties(Properties properties)
+private void checkRequiredOptions()
+public void processArgs(Option opt, ListIterator iter)
+private void processOption(String arg, ListIterator iter)
+final Option opt = options.getOption(arg);
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+import junit.framework.TestCase;
+
+public class ParserRequiredOptionTest extends TestCase {
+
+    public void testMissingSingleRequiredOptionIncludesSingularPrefix() throws Exception {
+        Options options = new Options();
+        Option option = new Option("f", false, "flag");
+        option.setRequired(true);
+        options.addOption(option);
+
+        try {
+            new PosixParser().parse(options, new String[0]);
+            fail("Expected MissingOptionException");
+        } catch (MissingOptionException expected) {
+            assertEquals("Missing required option: f", expected.getMessage());
+        }
+    }
+
+    public void testMissingMultipleRequiredOptionsIncludesPluralPrefix() throws Exception {
+        Options options = new Options();
+
+        Option first = new Option("f", false, "first");
+        first.setRequired(true);
+        options.addOption(first);
+
+        Option second = new Option("x", false, "second");
+        second.setRequired(true);
+        options.addOption(second);
+
+        try {
+            new PosixParser().parse(options, new String[0]);
+            fail("Expected MissingOptionException");
+        } catch (MissingOptionException expected) {
+            assertEquals("Missing required options: fx", expected.getMessage());
+        }
+    }
+
+    public void testMissingOneOfMultipleRequiredOptionsUsesSingularPrefix() throws Exception {
+        Options options = new Options();
+
+        Option first = new Option("f", false, "first");
+        first.setRequired(true);
+        options.addOption(first);
+
+        Option second = new Option("x", false, "second");
+        second.setRequired(true);
+        options.addOption(second);
+
+        try {
+            new PosixParser().parse(options, new String[] { "-f" });
+            fail("Expected MissingOptionException");
+        } catch (MissingOptionException expected) {
+            assertEquals("Missing required option: x", expected.getMessage());
+        }
+    }
+
+    public void testRequiredOptionIsAcceptedWhenPresent() throws Exception {
+        Options options = new Options();
+        Option option = new Option("f", false, "flag");
+        option.setRequired(true);
+        options.addOption(option);
+
+        CommandLine commandLine = new PosixParser().parse(options, new String[] { "-f" });
+
+        assertTrue(commandLine.hasOption("f"));
+    }
+
+    public void testNoArgumentsAreAcceptedWhenThereAreNoRequiredOptions() throws Exception {
+        Options options = new Options();
+
+        CommandLine commandLine = new PosixParser().parse(options, null);
+
+        assertEquals(0, commandLine.getArgs().length);
+    }
+
+    public void testRequiredOptionWithoutRequiredArgumentThrowsMissingArgumentException() throws Exception {
+        Options options = new Options();
+        Option option = new Option("f", true, "file");
+        option.setRequired(true);
+        options.addOption(option);
+
+        try {
+            new PosixParser().parse(options, new String[] { "-f" });
+            fail("Expected MissingArgumentException");
+        } catch (MissingArgumentException expected) {
+            assertEquals("Missing argument for option:f", expected.getMessage());
+        }
+    }
+
+    public void testUnrecognizedOptionThrowsUnrecognizedOptionException() throws Exception {
+        Options options = new Options();
+
+        try {
+            new PosixParser().parse(options, new String[] { "-z" });
+            fail("Expected UnrecognizedOptionException");
+        } catch (UnrecognizedOptionException expected) {
+            assertEquals("Unrecognized option: -z", expected.getMessage());
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.cli.ParserRequiredOptionTest::testUnrecognizedOptionThrowsUnrecognizedOptionException
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.apache.commons.cli.ParserRequiredOptionTest::testUnrecognizedOptionThrowsUnrecognizedOptionException

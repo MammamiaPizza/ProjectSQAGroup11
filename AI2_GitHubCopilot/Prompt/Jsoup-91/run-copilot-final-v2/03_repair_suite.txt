@@ -1,0 +1,200 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 91  Version: Jsoup-91b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1192
+Trigger failures:
+- org.jsoup.integration.ConnectTest::testBinaryThrowsExceptionWhenTypeIgnored
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.integration.ConnectTest::testBinaryResultThrows
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.integration.ParseTest::testBinaryThrowsException
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.UncheckedIOException, org.jsoup.parser.CharacterReader
+
+Available API/signatures:
+[org.jsoup.UncheckedIOException | java]
+package org.jsoup;
+public class UncheckedIOException extends RuntimeException {
+public UncheckedIOException(IOException cause) {
+public IOException ioException() {
+
+[org.jsoup.parser.CharacterReader | java]
+package org.jsoup.parser;
+public final class CharacterReader {
+static final char EOF = (char) -1;
+private static final int readAheadLimit = (int) (maxBufferLen * 0.75);
+public CharacterReader(Reader input, int sz) {
+public CharacterReader(Reader input) {
+public CharacterReader(String input) {
+private void bufferUp() {
+final int read = reader.read(charBuf);
+public int pos() {
+public boolean isEmpty() {
+private boolean isEmptyNoBufferUp() {
+public char current() {
+public void advance() {
+public String consumeTo(char c) {
+public String consumeToAny(final char... chars) {
+String consumeToAnySorted(final char... chars) {
+@Override
+public String toString() {
+private static String cacheString(final char[] charBuf, final String[] stringCache, final int start, final int count) {
+static boolean rangeEquals(final char[] charBuf, final int start, int count, final String cached) {
+boolean rangeEquals(final int start, final int count, final String cached) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+ import java.io.IOException;
+ import java.io.Reader;
+ import org.jsoup.UncheckedIOException;
+
+ public class CharacterReaderTest {
+
+     @Test
+     public void testUncheckedIOExceptionWrapsIOException() {
+         IOException original = new IOException("original");
+         UncheckedIOException wrapped = new UncheckedIOException(original);
+         assertSame("getCause should return original IOException", original, wrapped.getCause());
+         assertSame("ioException should return original IOException", original,
+wrapped.ioException());
+     }
+
+     @Test
+     public void testUncheckedIOExceptionIsRuntimeException() {
+         UncheckedIOException ex = new UncheckedIOException(new IOException());
+         assertTrue("Should be a RuntimeException", ex instanceof RuntimeException);
+     }
+
+     @Test
+     public void testBufferUpThrowsUncheckedIOExceptionOnReadError() {
+         // A reader that always fails on read
+         Reader failingReader = new Reader() {
+             boolean readCalled = false;
+             @Override
+             public int read(char[] cbuf, int off, int len) throws IOException {
+                 readCalled = true;
+                 throw new IOException("simulated binary read error");
+             }
+             @Override
+             public void close() throws IOException {}
+             @Override
+             public boolean markSupported() { return true; }
+         };
+         CharacterReader cr = new CharacterReader(failingReader, 1024);
+         try {
+             cr.current(); // triggers bufferUp
+             fail("Expected UncheckedIOException");
+         } catch (UncheckedIOException e) {
+             assertTrue(e.getCause() instanceof IOException);
+             assertEquals("simulated binary read error", e.getCause().getMessage());
+         }
+     }
+
+     @Test
+     public void testEmptyInput() {
+         CharacterReader cr = new CharacterReader("");
+         assertTrue(cr.isEmpty());
+         assertEquals(CharacterReader.EOF, cr.current());
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testNullReaderThrowsIllegalArgumentException() {
+         new CharacterReader((Reader) null);
+     }
+
+     @Test
+     public void testValidTextCurrentAndAdvance() {
+         CharacterReader cr = new CharacterReader("Hello");
+         assertFalse(cr.isEmpty());
+         assertEquals('H', cr.current());
+         cr.advance();
+         assertEquals('e', cr.current());
+         cr.advance();
+         assertEquals('l', cr.current());
+     }
+
+     @Test
+     public void testRangeEqualsFromStartOfBuffer() {
+  // buf contains "abcdef"        CharacterReader cr = new CharacterReader("abcdef");
+         assertTrue(cr.rangeEquals(0, 3, "abc"));
+         assertTrue(cr.rangeEquals(0, 6, "abcdef"));
+         assertFalse(cr.rangeEquals(0, 6, "abcdeg"));
+     }
+
+     @Test
+     public void testRangeEqualsAfterAdvance() {
+  CharacterReader cr = new CharacterReader("abcdef");
+         cr.advance(); cr.advance(); // positions at 'c'        assertTrue(cr.rangeEquals(0, 2,
+"cd"));
+         assertTrue(cr.rangeEquals(0, 4, "cdef"));
+     }
+
+     @Test
+     public void testRangeEqualsMismatch() {
+         CharacterReader cr = new CharacterReader("abc");
+         assertFalse(cr.rangeEquals(0, 2, "abX"));
+         assertFalse(cr.rangeEquals(0, 3, "ABCD"));
+     }
+
+     @Test
+     public void testRangeEqualsWithCountExceedingBuffer() {
+         CharacterReader cr = new CharacterReader("abc");
+         // start=0, count=5 exceeds available chars        assertFalse(cr.rangeEquals(0, 5,
+"abc??"));
+     }
+
+     @Test
+     public void testConsumeToAndPos() {
+         CharacterReader cr = new CharacterReader("hello world");
+         assertEquals(0, cr.pos());
+         String part = cr.consumeto(' ');
+         assertEquals("hello", part);
+         assertEquals(6, cr.pos()); // after space        cr.advance(); // skip space        String
+rest = cr.consumeTo('d');
+         assertEquals("worl", rest);
+         assertEquals(11, cr.pos());
+     }
+
+     @Test
+     public void testBuffferUpReFillsFromLargeReader() throws IOException {
+  // Simulate a reader with data larger than the initial buffer        final String longString =
+generateString(2048, 'a') + "END";
+         Reader largeReader = new java.io.StringReader(longString);
+         CharacterReader cr = new CharacterReader(largeReader, 100); // small buffer        //
+consume almost all, then verify we reach 'E'   for (int i = 0; i < 2048; i++) cr.advance();
+         assertEquals('E', cr.current());
+         cr.advance(); cr.advance(); cc.advance(); // skip E,N,D -> should be EOF  cr.advance();
+         assertEquals(CharacterReader.EOF, cr.current());
+     }
+
+     private String generateString(int length, char c) {
+         StringBuilder sb = new StringBuilder(length);
+         for (int i = 0; i < length; i++) sb.append(c);
+         return sb.toString();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-91f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-91f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-91f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-91f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-91f-copilot/.test_suite/org/jsoup/parser/CharacterReaderTest.java:86: error: not a statement
+ [javac] "cd"));
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,483 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 31  Version: Jsoup-31b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.parser.Token, org.jsoup.parser.TokeniserState, org.jsoup.parser.XmlTreeBuilder
+Modified: org.jsoup.parser.Token, org.jsoup.parser.TokeniserState, org.jsoup.parser.XmlTreeBuilder
+Triggers: org.jsoup.parser.XmlTreeBuilderTest::handlesXmlDeclarationAsDeclaration
+
+Bug/specification summary:
+Bug report: 242
+Trigger failures:
+- org.jsoup.parser.XmlTreeBuilderTest::handlesXmlDeclarationAsDeclaration
+ --> junit.framework.AssertionFailedError: expected:<<[?xml encoding='UTF-8' ?]> <body> One </body>...> but was:<<[!--?xml encoding='UTF-8' ?--]> <body> One </body>...>
+Modified: org.jsoup.parser.Token, org.jsoup.parser.TokeniserState, org.jsoup.parser.XmlTreeBuilder
+
+Prompt-01 test plan:
+TARGETS: XML declaration tokenization and XmlTreeBuilder handling of `<?xml ... ?>`.
+ORACLES: Trigger expects XML declaration preserved, not serialized as `<!--?xml ... ?-->`.
+CASES: `<?xml encoding='UTF-8' ?><body>One</body>` parses with declaration before body.
+CASES: Verify declaration data/serialization retains `?xml encoding='UTF-8' ?`.
+CASES: Boundary declaration spacing around attributes and closing `?>`.
+RISKS: Available context omits public parser entry-point signatures and full expected XML semantics.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.parser.Token (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+abstract class Token {
+private Token() {
+static class Doctype extends Token {
+final StringBuilder name = new StringBuilder();
+final StringBuilder publicIdentifier = new StringBuilder();
+final StringBuilder systemIdentifier = new StringBuilder();
+public String getSystemIdentifier() {
+public boolean isForceQuirks() {
+static abstract class Tag extends Token {
+protected String tagName;
+@SuppressWarnings({"TypeMayBeWeakened"})
+static class StartTag extends Tag {
+@Override
+public String toString() {
+static class EndTag extends Tag{
+static class Comment extends Token {
+final StringBuilder data = new StringBuilder();
+static class Character extends Token {
+static class EOF extends Token {
+enum TokenType {
+
+/* HEADER */
+package org.jsoup.parser;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+
+/* METHOD Token */
+private Token() {
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ if (attributes != null && attributes.size() > 0)
+ return "<" + name() + " " + attributes.toString() + ">";
+ else
+ return "<" + name() + ">";
+ }
+
+/* METHOD getSystemIdentifier */
+public String getSystemIdentifier() {
+ return systemIdentifier.toString();
+ }
+
+/* METHOD isForceQuirks */
+public boolean isForceQuirks() {
+ return forceQuirks;
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "</" + name() + ">";
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "<!--" + getData() + "-->";
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return getData();
+ }
+
+/* METHOD appendAttributeValue */
+void appendAttributeValue(String append) {
+ pendingAttributeValue = pendingAttributeValue == null ? new StringBuilder(append) : pendingAttributeValue.append(append);
+ }
+
+/* METHOD StartTag */
+StartTag() {
+ super();
+ attributes = new Attributes();
+ type = TokenType.StartTag;
+ }
+
+/* METHOD Comment */
+Comment() {
+ type = TokenType.Comment;
+ }
+
+/* METHOD isComment */
+boolean isComment() {
+ return type == TokenType.Comment;
+ }
+
+/* METHOD tokenType */
+String tokenType() {
+ return this.getClass().getSimpleName();
+ }
+
+/* METHOD Doctype */
+Doctype() {
+ type = TokenType.Doctype;
+ }
+
+/* METHOD newAttribute */
+void newAttribute() {
+ if (attributes == null)
+ attributes = new Attributes();
+
+ if (pendingAttributeName != null) {
+ Attribute attribute;
+ if (pendingAttributeValue == null)
+ attribute = new Attribute(pendingAttributeName, "");
+ else
+ attribute = new Attribute(pendingAttributeName, pendingAttributeValue.toString());
+ attributes.put(attribute);
+ }
+ pendingAttributeName = null;
+ if (pendingAttributeValue != null)
+ pendingAttributeValue.delete(0, pendingAttributeValue.length());
+ }
+
+/* METHOD finaliseTag */
+void finaliseTag() {
+ // finalises for emit
+ if (pendingAttributeName != null) {
+ // todo: check if attribute name exists; if so, drop and error
+ newAttribute();
+ }
+ }
+
+/* METHOD name */
+String name() {
+ Validate.isFalse(tagName.length() == 0);
+ return tagName;
+ }
+
+/* METHOD appendAttributeName */
+void appendAttributeName(String append) {
+ pendingAttributeName = pendingAttributeName == null ? append : pendingAttributeName.concat(append);
+ }
+
+/* METHOD appendAttributeName */
+void appendAttributeName(char append) {
+ appendAttributeName(String.valueOf(append));
+ }
+
+/* METHOD appendAttributeValue */
+void appendAttributeValue(char append) {
+ appendAttributeValue(String.valueOf(append));
+ }
+
+/* METHOD StartTag */
+StartTag(String name, Attributes attributes) {
+ this();
+ this.tagName = name;
+ this.attributes = attributes;
+ }
+
+===== org.jsoup.parser.TokeniserState (java) =====
+/* API SIGNATURES */
+package org.jsoup.parser;
+enum TokeniserState {
+private void anythingElse(Tokeniser t, CharacterReader r) {
+abstract void read(Tokeniser t, CharacterReader r);
+private static final String replacementStr = String.valueOf(Tokeniser.replacementChar);
+
+/* HEADER */
+package org.jsoup.parser;
+enum TokeniserState {
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ t.transition(BeforeDoctypePublicIdentifier);
+ break;
+ case '"':
+ t.error(this);
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ t.error(this);
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ char c = r.consume();
+ switch (c) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ break;
+ case '"':
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_doubleQuoted);
+ break;
+ case '\'':
+ // set public id to empty string
+ t.transition(DoctypePublicIdentifier_singleQuoted);
+ break;
+ case '>':
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ case eof:
+ t.eofError(this);
+ t.doctypePending.forceQuirks = true;
+ t.emitDoctypePending();
+ t.transition(Data);
+ break;
+ default:
+ t.error(this);
+ t.doctypePending.forceQuirks = true;
+ t.transition(BogusDoctype);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ switch (r.current()) {
+ case '<':
+ t.advanceTransition(ScriptDataLessthanSign);
+ break;
+ case nullChar:
+ t.error(this);
+ r.advance();
+ t.emit(replacementChar);
+ break;
+ case eof:
+ t.emit(new Token.EOF());
+ break;
+ default:
+ String data = r.consumeToAny('<', nullChar);
+ t.emit(data);
+ break;
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ switch (r.current()) {
+ case '!':
+ t.advanceTransition(MarkupDeclarationOpen);
+ break;
+ case '/':
+ t.advanceTransition(EndTagOpen);
+ break;
+ case '?':
+ t.advanceTransition(BogusComment);
+ break;
+ default:
+ if (r.matchesLetter()) {
+ t.createTagPending(true);
+ t.transition(TagName);
+ } else {
+ t.error(this);
+ t.emit('<'); // char that got us here
+ t.transition(Data);
+ }
+ break;
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ if (r.isEmpty()) {
+ t.eofError(this);
+ t.emit("</");
+ t.transition(Data);
+ } else if (r.matchesLetter()) {
+ t.createTagPending(false);
+ t.transition(TagName);
+ } else if (r.matches('>')) {
+ t.error(this);
+ t.advanceTransition(Data);
+ } else {
+ t.error(this);
+ t.advanceTransition(BogusComment);
+ }
+ }
+
+/* METHOD read */
+void read(Tokeniser t, CharacterReader r) {
+ // previous TagOpen state did NOT consume, will have a letter char in current
+ String tagName = r.consumeToAny('\t', '\n', '\r', '\f', ' ', '/', '>', nullChar).toLowerCase();
+ t.tagPending.appendTagName(tagName);
+
+ switch (r.consume()) {
+ case '\t':
+ case '\n':
+ case '\r':
+ case '\f':
+ case ' ':
+ t.transition(BeforeAttributeName);
+ break;
+ case '/':
+ t.transition(SelfClosingStartTag);
+ break;
+ case '>':
+ t.emitTagPending();
+ t.transition(Data);
+ break;
+ case nullChar: // replacement
+ t.tagPending.appendTagName(replacementStr);
+ break;
+ case eof: // should emit pending tag?
+ t.eofError(this);
+ t.transition(Data);
+ // no default, as covered with above consumeToAny
+ }
+ }
+
+===== org.jsoup.parser.XmlTreeBuilder (java) =====
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.*;
+
+import java.util.Iterator;
+
+/**
+ * @author Jonathan Hedley
+ */
+public class XmlTreeBuilder extends TreeBuilder {
+ @Override
+ protected void initialiseParse(String input, String baseUri, ParseErrorList errors) {
+ super.initialiseParse(input, baseUri, errors);
+ stack.add(doc); // place the document onto the stack. differs from HtmlTreeBuilder (not on stack)
+ }
+
+ @Override
+ protected boolean process(Token token) {
+ // start tag, end tag, doctype, comment, character, eof
+ switch (token.type) {
+ case StartTag:
+ insert(token.asStartTag());
+ break;
+ case EndTag:
+ popStackToClose(token.asEndTag());
+ break;
+ case Comment:
+ insert(token.asComment());
+ break;
+ case Character:
+ insert(token.asCharacter());
+ break;
+ case Doctype:
+ insert(token.asDoctype());
+ break;
+ case EOF: // could put some normalisation here if desired
+ break;
+ default:
+ Validate.fail("Unexpected token type: " + token.type);
+ }
+ return true;
+ }
+
+ private void insertNode(Node node) {
+ currentElement().appendChild(node);
+ }
+
+ Element insert(Token.StartTag startTag) {
+ Tag tag = Tag.valueOf(startTag.name());
+ // todo: wonder if for xml parsing, should treat all tags as unknown? because it's not html.
+ Element el = new Element(tag, baseUri, startTag.attributes);
+ insertNode(el);
+ if (startTag.isSelfClosing()) {
+ tokeniser.acknowledgeSelfClosingFlag();
+ if (!tag.isKnownTag()) // unknown tag, remember this is self closing for output. see above.
+ tag.setSelfClosing();
+ } else {
+ stack.add(el);
+ }
+ return el;
+ }
+
+ void insert(Token.Comment commentToken) {
+ Comment comment = new Comment(commentToken.getData(), baseUri);
+ Node insert = comment;
+ insertNode(insert);
+ }
+
+ void insert(Token.Character characterToken) {
+ Node node = new TextNode(characterToken.getData(), baseUri);
+ insertNode(node);
+ }
+
+ void insert(Token.Doctype d) {
+ DocumentType doctypeNode = new DocumentType(d.getName(), d.getPublicIdentifier(), d.getSystemIdentifier(), baseUri);
+ insertNode(doctypeNode);
+ }
+
+ /**
+ * If the stack contains an element with this tag's name, pop up the stack to remove the first occurrence. If not
+ * found, skips.
+ *
+ * @param endTag
+ */
+ private void popStackToClose(Token.EndTag endTag) {
+ String elName = endTag.name();
+ Element firstFound = null;
+
+ Iterator<Element> it = stack.descendingIterator();
+ while (it.hasNext()) {
+ Element next = it.next();
+ if (next.nodeName().equals(elName)) {
+ firstFound = next;
+ break;
+ }
+ }
+ if (firstFound == null)
+ return; // not found, skip
+
+ it = stack.descendingIterator();
+ while (it.hasNext()) {
+ Element next = it.next();
+ if (next == firstFound) {
+ it.remove();
+ break;
+ } else {
+ it.remove();
+ }
+ }
+ }
+}

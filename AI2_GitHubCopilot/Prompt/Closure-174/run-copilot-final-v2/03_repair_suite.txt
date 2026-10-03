@@ -1,0 +1,226 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 174  Version: Closure-174b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1103
+Trigger failures:
+- com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103a
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable a is in a goog.scope and is not an alias. at testcode line 1 : 30 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103b
+ --> java.lang.RuntimeException: INTERNAL COMPILER ERROR.
+ - com.google.javascript.jscomp.ScopedAliasesTest::testIssue1103c
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_GOOG_SCOPE_NON_ALIAS_LOCAL. The local variable a is in a goog.scope and is not an alias. at testcode line 1 : 52 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.JsAst, com.google.javascript.jscomp.NodeUtil, com.google.javascript.jscomp.ScopedAliases
+
+Available API/signatures:
+[com.google.javascript.jscomp.JsAst | java]
+package com.google.javascript.jscomp;
+public class JsAst implements SourceAst {
+private static final Logger logger_ = Logger.getLogger(JsAst.class.getName());
+public JsAst(SourceFile sourceFile) {
+@Override
+public Node getAstRoot(AbstractCompiler compiler) {
+public void clearAst() {
+public InputId getInputId() {
+public SourceFile getSourceFile() {
+public void setSourceFile(SourceFile file) {
+private void parse(AbstractCompiler compiler) {
+
+[com.google.javascript.jscomp.NodeUtil | java]
+package com.google.javascript.jscomp;
+public final class NodeUtil {
+static final long MAX_POSITIVE_INTEGER_NUMBER = (long) Math.pow(2, 53);
+private NodeUtil() {}
+static TernaryValue getImpureBooleanValue(Node n) {
+static TernaryValue getPureBooleanValue(Node n) {
+static String getStringValue(Node n) {
+static String getStringValue(double value) {
+static String getArrayElementStringValue(Node n) {
+static String arrayToString(Node literal) {
+static Double getNumberValue(Node n) {
+static Double getStringNumberValue(String rawJsString) {
+static String trimJsWhiteSpace(String s) {
+public static TernaryValue isStrWhiteSpaceChar(int c) {
+static String getFunctionName(Node n) {
+public static String getNearestFunctionName(Node n) {
+static boolean isImmutableValue(Node n) {
+static boolean isSymmetric
+...[truncated deterministically]...
+ueName(@Nullable Node lValue) {
+static boolean isExpressionResultUsed(Node expr) {
+static boolean isExecutedExactlyOnce(Node n) {
+static Node booleanNode(boolean value) {
+static Node numberNode(double value, Node srcref) {
+static boolean isNaN(Node n) {
+public static Map<Node, Node> mapMainToC
+...[truncated deterministically]...
+() {
+public abstract void applyAlias();
+private class AliasedNode extends AliasUsage {
+public void applyAlias() {
+private class AliasedTypeNode extends AliasUsage {
+private class Traversal implements NodeTraversal.ScopedCallback {
+private final List<Node> aliasDefinitionsInOrder = Lists.newArrayList();
+private final List<Node> scopeCalls = Lists.newArrayList();
+private final List<AliasUsage> al
+...[truncated deterministically]...
+formation> getSourceRegion(Node n) {
+private void findAliases(NodeTraversal t) {
+private void recordAlias(Var aliasVar) {
+private void findNamespaceShadows(NodeTraversal t) {
+private void renameNamespaceShadows(NodeTraversal t) {
+private void validateScopeCall(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void fixTypeNode(Node typeNode) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+
+ - Tests verifying that ScopedAliases does not incorrectly report
+ - JSC_GOOG_SCOPE_NON_ALIAS_LOCAL for non-alias variables inside goog.scope,
+ - and does not cause internal compiler errors for various goog.scope patterns.
+  */
+ public class Bug1103Test extends CompilerTestCase {
+
+  private static final String EXTERNS =
+      "var goog = {};\n" +
+      "goog.provide = function(name) {};\n" +
+      "goog.require = function(name) { return {}; };\n" +
+      "goog.scope = function(fn) { fn.call(this); };\n";
+
+  @Override @Before protected void setUp() throws Exception {
+    super.setUp(); }
+
+  @Override protected CompilerPass getProcessor(Compiler compiler) {
+    return new ScopedAliases(compiler, null, null); }
+
+  @Override protected int getNumRepetitions() {
+    return 1; }
+
+  @Test public void testNonAliasLocalVar() {
+    // Plain var inside goog.scope should not trigger any warning.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  var a = 10;\n" +
+        "});\n"); }
+
+  @Test public void testAliasAndNonAlias() {
+    // Mixing a real alias with a plain local variable should be clean.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  var alias = goog.require('another.thing');\n" +
+        "  var b = 5;\n" +
+        "});\n"); }
+
+  @Test public void testOnlyAlias() {
+    // Single alias – the normal use case.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  var Thing = goog.require('some.Thing');\n" +
+        "});\n"); }
+
+  @Test public void testFunctionInsideScopeWithNonAlias() {
+    // A function declaration containing a non-alias variable should not
+    // cause an internal compiler error (triggered Issue 1103b).
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  function f() {\n" +
+        "    var x = 1;\n" +
+        "  }\n" +
+        "});\n"); }
+
+  @Test public void testFunctionExpressionInsideScope() {
+    // A function expression assigned to a var is not an alias – no error.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  var fn = function() { return true; };\n" +
+        "});\n"); }
+
+  @Test public void testNestedScope() {
+    // Nested goog.scope calls should not crash the compiler.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  goog.scope(function() {\n" +
+        "    var a = 1;\n" +
+        "  });\n" +
+        "});\n"); }
+
+  @Test public void testMultipleScopes() {
+    // Multiple goog.scope calls in the same closure should be handled safely.
+    testSame(EXTERNS,
+        "goog.provide('example1');\n" +
+        "goog.provide('example2');\n" +
+        "goog.scope(function() {\n" +
+        "  var x = 1;\n" +
+        "});\n" +
+        "goog.scope(function() {\n" +
+        "  var y = 2;\n" +
+        "});\n"); }
+
+  @Test public void testNonAliasWithTypeAnnotation() {
+    // A documented non-alias local should not be mistaken for an alias error.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  /** @type {number} */\n" +
+        "  var a = 10;\n" +
+        "});\n"); }
+
+  @Test public void testNonAliasAssignmentExpression() {
+    // A string literal assignment is clearly not an alias.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  var label = 'hello';\n" +
+        "});\n"); }
+
+  @Test public void testAliasReferencesAnotherAlias() {
+    // Two aliases where the second uses the first – must not crash.
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {\n" +
+        "  var Base = goog.require('base.Class');\n" +
+        "  var Derived = goog.require('derived.Class');\n" +
+        "  Derived.prototype = new Base();\n" +
+        "});\n"); }
+
+  @Test public void testPlainVarAtTopOfScope() {
+    // The simplest trigger for the false positive (line 1 column ~30).
+    testSame(EXTERNS,
+        "goog.provide('example');\n" +
+        "goog.scope(function() {var a=1;});\n"); }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-174f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-174f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-174f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-174f-copilot/.test_suite/com/google/javascript/jscomp/Bug1103Test.java:12: error: cannot find symbol
+ [javac] public class Bug1103Test extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 16 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

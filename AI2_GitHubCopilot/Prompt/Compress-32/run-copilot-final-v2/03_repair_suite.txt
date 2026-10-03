@@ -1,0 +1,261 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 32  Version: Compress-32b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-314
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::shouldReadBigGid
+ --> java.lang.NumberFormatException: For input string: "4294967294"
+Modified: org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarArchiveInputStream | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarArchiveInputStream extends ArchiveInputStream {
+public TarArchiveInputStream(InputStream is) {
+public TarArchiveInputStream(InputStream is, String encoding) {
+public TarArchiveInputStream(InputStream is, int blockSize) {
+public TarArchiveInputStream(InputStream is, int blockSize, int recordSize) {
+@Override
+public void close() throws IOException {
+public int getRecordSize() {
+public int available() throws IOException {
+public long skip(final long n) throws IOException {
+final long skipped = is.skip(Math.min(n, available));
+public boolean markSupported() {
+public void mark(int markLimit) {
+public synchronized void reset() {
+public TarArchiveEntry getNextTarEntry() throws IOException {
+/* skip to the end of the last record */
+private void skipRecordPadding() throws IOException {
+protected byte[] getLongNameData() throws IOException {
+private byte[] getRecord() throws IOException {
+protected boolean isEOFRecord(byte[] record) {
+return record == null || ArchiveUtils.isArrayZero(record, recordSize);
+protected byte[] readRecord() throws IOException {
+byte[] record = new byte[recordSize];
+int readNow = IOUtils.readFully(is, record);
+return record;
+private void paxHeaders() throws IOException{
+private void applyPaxHeadersToCurrentEntry(Map<String, String> headers) {
+private void readGNUSparse() throws IOException {
+public ArchiveEntry getNextEntry() throws IOException {
+private void tryToConsumeSecondEOFRecord() throws IOException {
+public int read(byte[] buf, int offset, int numToRead) throws IOException {
+public boolean canReadEntryData(ArchiveEntry ae) {
+public TarArchiveEntry getCurrentEntry() {
+protected final void setCurrentEntry(TarArchiveEntry e) {
+protected final boolean isAtEOF() {
+protected final void setAtEOF(boolean b) {
+private void consumeRemainderOfLastBlock() throws IOException {
+public static boolean matches(byte[] signature, int length) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+public class TarArchiveInputStreamTest {
+
+ private static final int HEADER_SIZE = 512;
+ private static final int UID_OFFSET = 108;
+ private static final int GID_OFFSET = 116;
+ private static final int SIZE_OFFSET = 124;
+ private static final int CHKSUM_OFFSET = 148;
+ private static final int TYPEFLAG_OFFSET = 156;
+ private static final int MAGIC_OFFSET = 257;
+ private static final int VERION_OFFSET = 263;
+
+ @Test
+ public void testNormalUidGid() throws Exception {
+     byte[] tar = createSimpleTar("test.txt", 1000L, 1000L, 0L);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("uid", 1000L, e.getLongUserId());
+     assertEquals("gid", 1000L, e.getLongGroupId());
+ }
+
+ @Test
+ public void testLargeGidPax() throws Exception {
+     byte[] tar = createPaxTar("test.txt", "4294967294", null, null);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("gid", 4294967294L, e.getLongGroupId());
+ }
+
+ @Test
+ public void testUidBeyondIntegerMax() throws Exception {
+     long largeUid = Integer.MAX_VALUE + 1L;
+     byte[] tar = createPaxTar("test.txt", null, String.valueOf(largeUid), null);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("uid", largeUid, e.getLongUserId());
+ }
+
+ @Test
+ public void testZeroUidGid() throws Exception {
+     byte[] tar = createSimpleTar("test.txt", 0L, 0L, 0L);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("uid", 0L, e.getLongUserId());
+     assertEquals("gid", 0L, e.getLongGroupId());
+ }
+
+ @Test
+ public void testMaxOctalUid() throws Exception {
+     long maxOctal = 02000000L - 1; // max 7 octal digits = 2097151
+     byte[] tar = createSimpleTar("test.txt", maxOctal, maxOctal, 0L);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("uid", maxOctal, e.getLongUserId());
+     assertEquals("gid", maxOctal, e.getLongGroupId());
+ }
+
+ @Test
+ public void testEmptyNumericFieldDefaultsToZero() throws Exception {
+     byte[] tar = new byte[HEADER_SIZE];
+     // craft a valid header but with uid field all spaces
+     fillName(tar, "test.txt");
+     fillOctal(tar,100,8,0644);
+     // uid all spaces -> should parse as 0
+     for(int i=0;i<8;i++) tar[UID_OFFSET+i] = ' ';
+     fillOctal(tar,116,8,0); // normal gid
+     fillOctal(tar,124,12,0);
+     fillOctal(tar,136,12,System.currentTimeMillis()/1000);
+     tar[TYPEFLAG_OFFSET] = '0';
+     fillMagic(tar);
+     fillVersion(tar);
+     computeCheckum(tar);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("uid defaults to 0", 0L, e.getLongUserId());
+     assertEquals("gid", 0L, e.getLongGroupId());
+ }
+
+ @Test
+ public void testBothLargePax() throws Exception {
+     long largeGid = 4294967294L;
+     long largeUid = (long)Integer.MAX_VALUE + 2;
+     byte[] tar = createPaxTar("test.txt", String.valueOf(largeGid), String.valueOf(largeUid),
+null);
+     TarArchiveEntry e = readSingleEntry(tar);
+     assertEquals("gid", largeGid, e.getLongGroupId());
+     assertEquals("uid", largeUid, e.getLongUserId());
+ }
+
+ private TarArchiveEntry readSingleEntry(byte[] tar) throws IOException {
+     TarArchiveInputStream tin = new TarArchiveInputStream(new ByteArrayInputStream(tar));
+     TarArchiveEntry e = tin.getNextTarEntry();
+     assertNotNull("entry is null", e);
+     tin.close();
+     return e;
+ }
+
+ private byte[] createSimpleTar(String name, long uid, long gid, long size) throws IOException {
+     byte[] header = new byte[HEADER_SIZE];
+     fillName(header, name);
+     fillOctal(header,100,8,0644); // mode
+     fillOctal(header,108,8,uid);
+     fillOctal(header,116,8,gid);
+     fillOctal(header,124,12,size);
+     fillOctal(header,136,12,System.currentTimeMillis()/1000);
+     header[TYPEFLAG_OFFSET] = '0';
+     fillMagic(header);
+     fillVersion(header);
+     computeCheckum(header);
+     // no data for size==0
+     return header;
+ }
+
+ private byte[] createPaxTar(String fileName, String gid, String uid, String size) throws
+IOException {
+     ByteArrayOutputStream bos = new ByteArrayOutputStream();
+     StringBuilder sb = new StringBuilder();
+     if(gid != null) sb.append(generatePaxLine("gid", gid));
+     if(uid != null) sb.append(generatePaxLine("uid", uid));
+     if(size != null) sb.append(generatePaxLine("size", size));
+     byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
+     // pax header entry with type 'x'
+     byte[] paxHeader = createSimpleTar("PaxHeaders.X/" + fileName,0,0, body.length);
+     paxHeader[TYPEFLAG_OFFSET] = 'x'; // set type to extended
+     computeCheckum(paxHeader);
+     bos.write(paxHeader);
+     bos.write(body);
+     // pad body to 512
+     int pad = (HEADER_SIZE - (body.length % HEADER_SIZE)) % HEADER_SIZE;
+     if(pad >0) bos.write(new byte[pad]);
+     // actual file entry
+     byte[] fileHeader = createSimpleTar(fileName,0,0,0);
+     bos.write(fileHeader);
+     // pad final record if needed (don't need here)
+     return bos.toByteArray();
+ }
+
+ private String generatePaxLine(String key, String value) {
+     String suffix = " " + key + "=" + value + "\n";
+     int len = suffix.length();
+     while(true) {
+         String prefix = String.valueOf(len);
+         int newLen = prefix.length() + suffix.length();
+         if(newLen == len) return len + suffix;
+         len = newLen;
+     }
+ }
+
+ private void fillName(byte[] header, String name) {
+     byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
+     int len = Math.min(nameBytes.length, 100);
+     System.arraycopy(nameBytes,0,header,0,len);
+ }
+
+ private void fillOctal(byte[] header, int offset, int length, long value) {
+     String format = "%0" + (length-1) + "o\0";
+     String s = String.format(format, value);
+     byte[] b = s.getBytes(StandardCharsets.UTF_8);
+     System.arraycopy(b,0,header,offset, length);
+ }
+
+ private void fillMagic(byte[] header) {
+     byte[] magic = "ustar\0".getBytes(StandardCharsets.UTF_8);
+     System.arraycopy(magic,0,header,MAGIC_OFFSET,6);
+ }
+
+ private void fillVersion(byte[] header) {
+     header[VERSION_OFFSET] = '0';
+     header[VERSION_OFFSET+1] = '0';
+ }
+
+ private void computeCheckum(byte[] header) {
+     // set checksum field to spaces
+     for(int i=CHKSUM_OFFSET;i<CHKSUM_OFFSET+8;i++) header[i] = ' ';
+     int sum =0;
+     for(int i=0;i<HEADER_SIZE;i++) sum += header[i] & 0xFF;
+     String s = String.format("%06o\0 ", sum);
+     byte[] c = s.getBytes(StandardCharsets.UTF_8);
+     System.arraycopy(c,0,header,CHKSUM_OFFSET,8);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Compress-32f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Compress-32f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Compress-32f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Compress-32f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Compress-32f-copilot/.test_suite/org/apache/commons/compress/archivers/tar/TarArchiveInputStreamTest.java:171: error: cannot find symbol
+ [javac] header[VERSION_OFFSET] = '0';
+ [javac] ^
+ [javac] symbol: variable VERSION_OFFSET
+ [javac] location: class TarArchiveInputStreamTest
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

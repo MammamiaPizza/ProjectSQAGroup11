@@ -1,0 +1,167 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 39  Version: Jsoup-39b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 348
+Trigger failures:
+- org.jsoup.helper.DataUtilTest::discardsSpuriousByteOrderMarkWhenNoCharsetSet
+ --> junit.framework.AssertionFailedError: expected:<[One]> but was:<[]>
+Modified: org.jsoup.helper.DataUtil
+
+Available API/signatures:
+[org.jsoup.helper.DataUtil | java]
+package org.jsoup.helper;
+public class DataUtil {
+private static final Pattern charsetPattern = Pattern.compile("(?i)\\bcharset=\\s*(?:\"|')?([^\\s,;\"']*)");
+private DataUtil() {}
+public static Document load(File in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+static Document parseByteData(ByteBuffer byteData, String charsetName, String baseUri, Parser parser) {
+static ByteBuffer readToByteBuffer(InputStream inStream, int maxSize) throws IOException {
+static ByteBuffer readToByteBuffer(InputStream inStream) throws IOException {
+static String getCharsetFromContentType(String contentType) {
+
+Generated JUnit Test:
+package org.jsoup.helper;
+
+import org.junit.Test;
+import static org.junit.Assert.;
+import java.io.;
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
+
+public class DataUtilTest {
+
+ @Test
+ public void discardsSpuriousByteOrderMarkWhenNoCharsetSet() throws IOException {
+     byte[] bomAndContent = new byte[] {
+         (byte)0xEF, (byte)0xBB, (byte)0xBF, // UTF-8 BOM
+         'O', 'n', 'e'
+     };
+     InputStream in = new ByteArrayInputStream(bomAndContent);
+     // charsetName null to trigger the bug path
+     Document doc = DataUtil.load(in, null, "http://example.com");
+     in.close();
+     assertEquals("One", doc.body().text());
+ }
+
+ @Test
+ public void testNoBomNoCharset() throws IOException {
+     byte[] content = "Two".getBytes("UTF-8");
+     InputStream in = new ByteArrayInputStream(content);
+     Document doc = DataUtil.load(in, null, "http://example.com");
+     in.close();
+     assertEquals("Two", doc.body().text());
+ }
+
+ @Test
+ public void testBomWithExplicitCharset() throws IOException {
+     byte[] bomAndContent = new byte[] {
+         (byte)0xEF, (byte)0xBB, (byte)0xBF,
+         'T', 'h', 'r', 'e', 'e'
+     };
+     InputStream in = new ByteArrayInputStream(bomAndContent);
+     // charset explicitly provided: should strip BOM correctly
+     Document doc = DataUtil.load(in, "UTF-8", "http://example.com");
+     in.close();
+     assertEquals("Three", doc.body().text());
+ }
+
+ @Test
+ public void testBomOnlyEmptyContent() throws IOException {
+     byte[] bomOnly = new byte[] { (byte)0xEF, (byte)0xBB, (byte)0xBF };
+     InputStream in = new ByteArrayInputStream(bomOnly);
+     Document doc = DataUtil.load(in, null, "http://example.com");
+     in.close();
+     assertTrue(doc.body().text().isEmpty());
+ }
+
+ @Test
+ public void testBomFollowedBySpace() throws IOException {
+     byte[] bomAndSpace = new byte[] {
+         (byte)0xEF, (byte)0xBB, (byte)0xBF, ' ', 'A'
+     };
+     InputStream in = new ByteArrayInputStream(bomAndSpace);
+     Document doc = DataUtil.load(in, null, "http://example.com");
+     in.close();
+     assertEquals(" A", doc.body().text());
+ }
+
+ @Test
+ public void testGetCharsetFromContentTypeValid() {
+     assertEquals("UTF-8",
+             DataUtil.getCharsetFromContentType("text/html; charset=UTF-8"));
+ }
+
+ @Test
+ public void testGetCharsetFromContentTypeNull() {
+     assertNull(DataUtil.getCharsetFromContentType(null));
+ }
+
+ @Test
+ public void testGetCharsetFromContentTypeUnsupported() {
+     assertNull(DataUtil.getCharsetFromContentType("text/html; charset=FOO-BAR"));
+ }
+
+ @Test
+ public void testGetCharsetFromContentTypeEmpty() {
+     assertNull(DataUtil.getCharsetFromContentType("text/html; charset="));
+ }
+
+ @Test
+ public void testBomWithMetaCharsetSameAsDefault() throws IOException {
+     // BOM followed by HTML containing meta charset=utf-8 (same as default)
+     StringBuilder html = new StringBuilder()
+             .append("<html><head><meta charset=\"utf-8\"></head><body>Same</body></html>");
+     byte[] metaBytes = ("\uFEFF" + html.tostring()).getBytes("UTF-8");
+     InputStream in = new ByteArrayInputStream(metaBytes);
+     Document doc = DataUtil.load(in, null, "http://example.com");
+     in.close();
+     // The bug manifests here as well because doc is reused after initial parse
+     assertEquals("Same", doc.body().text());
+ }
+
+ @Test
+ public void testBomWithCharsetNameAndParser() throws IOException {
+     byte[] bomAndContent = new byte[] {
+         (byte)0xEF, (byte)0xBB, (byte)0xBF,
+         '<','p','>','H','i','<','/','p','>'
+     };
+     InputStream in = new ByteArrayInputStream(bomAndContent);
+     Document doc = DataUtil.load(in, "UTF-8", "http://example.com", Parser.htmlParser());
+     in.close();
+     assertEquals("Hi", doc.body().text());
+ }
+
+ @Test
+ public void testLoadFromInputStreamWithNullCharsetAndParser() throws IOException {
+     byte[] raw = "<p>Hello</p>".getBytes("UTF-8");
+     InputStream in = new ByteArrayInputStream(raw);
+     Document doc = DataUtil.load(in, null, "http://example.com", Parser.htmlParser());
+     in.close();
+     assertEquals("Hello", doc.body().text());
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-39f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-39f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-39f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-39f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-39f-copilot/.test_suite/org/jsoup/helper/DataUtilTest.java:4: error: <identifier> expected
+ [javac] import static org.junit.Assert.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

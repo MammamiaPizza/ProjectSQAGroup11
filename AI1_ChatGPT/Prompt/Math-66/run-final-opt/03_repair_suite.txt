@@ -1,0 +1,129 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 66  Version: Math-66b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-395
+Trigger failures:
+- org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizerTest::testQuinticMin
+ --> junit.framework.AssertionFailedError: expected:<-0.2719561270319131> but was:<-0.2719561299044896>
+ - org.apache.commons.math.optimization.MultiStartUnivariateRealOptimizerTest::testSinMin
+ --> junit.framework.AssertionFailedError
+ - org.apache.commons.math.optimization.univariate.BrentOptimizerTest::testQuinticMinStatistics
+ --> junit.framework.AssertionFailedError: expected:<1880.5> but was:<18.0>
+ - org.apache.commons.math.optimization.univariate.BrentOptimizerTest::testSinMin
+ --> junit.framework.AssertionFailedError: expected:<4.71238898038469> but was:<4.71238897901431>
+Modified: org.apache.commons.math.optimization.univariate.BrentOptimizer
+
+Available API/signatures:
+[org.apache.commons.math.optimization.univariate.BrentOptimizer | java]
+package org.apache.commons.math.optimization.univariate;
+public class BrentOptimizer extends AbstractUnivariateRealOptimizer {
+private static final double GOLDEN_SECTION = 0.5 * (3 - Math.sqrt(5));
+public BrentOptimizer() {
+protected double doOptimize()
+public double optimize(final UnivariateRealFunction f, final GoalType goalType, final double min, final double max, final double startValue) throws MaxIterationsExceededException, FunctionEvaluationException {
+public double optimize(final UnivariateRealFunction f, final GoalType goalType, final double min, final double max) throws MaxIterationsExceededException, FunctionEvaluationException {
+final double tol1 = eps * Math.abs(x) + t;
+
+Generated JUnit Test:
+package org.apache.commons.math.optimization.univariate;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.exception.NotStrictlyPositiveException;
+import org.apache.commons.math.optimization.GoalType;
+import org.junit.Test;
+
+public class BrentOptimizerRegressionTest {
+
+    private static final UnivariateRealFunction QUINTIC = new UnivariateRealFunction() {
+        public double value(double x) {
+            return (x - 1.0) * (x - 0.5) * x * (x + 0.5) * (x + 1.0);
+        }
+    };
+
+    private static final UnivariateRealFunction SIN = new UnivariateRealFunction() {
+        public double value(double x) {
+            return Math.sin(x);
+        }
+    };
+
+    @Test
+    public void testQuinticMinimumHasTriggerAccuracy() throws Exception {
+        BrentOptimizer optimizer = new BrentOptimizer();
+
+        double result = optimizer.optimize(QUINTIC, GoalType.MINIMIZE, -0.3, -0.2);
+
+        assertEquals(-0.2719561270319131, result, 1.0e-10);
+        assertEquals(QUINTIC.value(result), optimizer.getFunctionValue(), 0.0);
+        assertTrue(optimizer.getIterationCount() > 0);
+    }
+
+    @Test
+    public void testSinMinimumHasTriggerAccuracy() throws Exception {
+        BrentOptimizer optimizer = new BrentOptimizer();
+
+        double result = optimizer.optimize(SIN, GoalType.MINIMIZE, 4.0, 5.0);
+
+        assertEquals(4.71238898038469, result, 1.0e-10);
+        assertEquals(-1.0, optimizer.getFunctionValue(), 1.0e-14);
+        assertTrue(optimizer.getIterationCount() > 0);
+    }
+
+    @Test
+    public void testExplicitStartValueFindsQuinticMinimum() throws Exception {
+        BrentOptimizer optimizer = new BrentOptimizer();
+
+        double result = optimizer.optimize(QUINTIC, GoalType.MINIMIZE,
+                                           -0.3, -0.2, -0.25);
+
+        assertEquals(-0.2719561270319131, result, 1.0e-10);
+        assertEquals(QUINTIC.value(result), optimizer.getFunctionValue(), 0.0);
+    }
+
+    @Test
+    public void testMaximizationUsesRequestedGoalType() throws Exception {
+        BrentOptimizer optimizer = new BrentOptimizer();
+
+        double result = optimizer.optimize(SIN, GoalType.MAXIMIZE, 0.0, 3.0, 1.0);
+
+        assertEquals(Math.PI / 2.0, result, 1.0e-10);
+        assertEquals(1.0, optimizer.getFunctionValue(), 1.0e-14);
+    }
+
+    @Test
+    public void testReversedBoundsStillLocateBoundaryMinimum() throws Exception {
+        BrentOptimizer optimizer = new BrentOptimizer();
+        UnivariateRealFunction linear = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x;
+            }
+        };
+
+        double result = optimizer.optimize(linear, GoalType.MINIMIZE, 1.0, 0.0);
+
+        assertEquals(0.0, result, 1.0e-8);
+        assertEquals(result, optimizer.getFunctionValue(), 0.0);
+    }
+
+    @Test(expected = NotStrictlyPositiveException.class)
+    public void testZeroRelativeAccuracyIsRejectedDuringOptimization() throws Exception {
+        BrentOptimizer optimizer = new BrentOptimizer();
+        optimizer.setRelativeAccuracy(0.0);
+
+        optimizer.optimize(SIN, GoalType.MINIMIZE, 4.0, 5.0);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testQuinticMinimumHasTriggerAccuracy
+ - org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testExplicitStartValueFindsQuinticMinimum
+ - org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testMaximizationUsesRequestedGoalType
+Failing generated tests: org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testExplicitStartValueFindsQuinticMinimum, org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testMaximizationUsesRequestedGoalType, org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testQuinticMinimumHasTriggerAccuracy, org.apache.commons.math.optimization.univariate.BrentOptimizerRegressionTest::testSinMinimumHasTriggerAccuracy

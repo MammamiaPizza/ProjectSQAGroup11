@@ -1,0 +1,381 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 80  Version: Math-80b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-318
+Trigger failures:
+- org.apache.commons.math.linear.EigenDecompositionImplTest::testMathpbx02
+ --> junit.framework.AssertionFailedError: expected:<16828.208208485466> but was:<20654.74511575945>
+Modified: org.apache.commons.math.linear.EigenDecompositionImpl
+
+Available API/signatures:
+[org.apache.commons.math.linear.EigenDecompositionImpl | java]
+package org.apache.commons.math.linear;
+public class EigenDecompositionImpl implements EigenDecomposition {
+private boolean isSymmetric(final RealMatrix matrix) {
+final int rows = matrix.getRowDimension();
+final int columns = matrix.getColumnDimension();
+final double mij = matrix.getEntry(i, j);
+final double mji = matrix.getEntry(j, i);
+private void decompose() {
+public RealMatrix getV()
+public RealMatrix getD()
+public RealMatrix getVT()
+public double[] getRealEigenvalues()
+public double getRealEigenvalue(final int i)
+public double[] getImagEigenvalues()
+public double getImagEigenvalue(final int i)
+public RealVector getEigenvector(final int i)
+public double getDeterminant() {
+public DecompositionSolver getSolver() {
+private static class Solver implements DecompositionSolver {
+public double[] solve(final double[] b)
+final double[] vData = v.getDataRef();
+final double s = v.dotProduct(b) / realEigenvalues[i];
+public RealVector solve(final RealVector b)
+public RealMatrix solve(final RealMatrix b)
+final int nColB = b.getColumnDimension();
+public boolean isNonSingular() {
+public RealMatrix getInverse()
+final double[] vK = eigenvectors[k].getDataRef();
+private void transformToTridiagonal(final RealMatrix matrix) {
+private void computeGershgorinCircles() {
+private void findEigenvalues()
+for (final int end : splitIndices) {
+final double[] range = eigenvaluesRange(begin, n);
+final double oneFourth = 0.25 * (3 * range[0] + range[1]);
+final int oneFourthCount = countEigenValues(oneFourth, begin, n);
+final double threeFourth = 0.25 * (range[0] + 3 * range[1]);
+final int threeFourthCount =
+...[truncated deterministically]...
+margin = 2 * (tNorm * MathUtils.EPSILON * n + 2 * minPivot);
+final double middle = 0.5 * (left + right);
+private int countEigenValues(final double t, final int index, final int n) {
+private void ldlTDecomposition(final double lambda, final int index, final int n) {
+private void dqds(final int start, final int end) {
+private void dqd(final int start, final int end) {
+private void computeShiftIncrement(final int start, final int end, final int deflated) {
+final double gap1 = a2 - dN - ((gap2 > 0.0 && gap2 > b2) ? (b2 / gap2) * b2 : (b1 + b2));
+final double a2 = dMin1 / (1 + b2 * b2);
+final double a2 = dMin2 / (1 + b2 * b2);
+private void updateSigma(final double shift) {
+private void findEigenVectors() {
+final double absG = Math.abs(work[sixI] + d[i] * work[sixI + 9] / work[sixI + 10]);
+final double inv = 1.0 / Math.sqrt(n2);
+
+Generated JUnit Test:
+package org.apache.commons.math.linear;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertTrue;
+
+ import java.util.Arrays;
+
+ import org.apache.commons.math.util.MathUtils;
+ import org.junit.Test;
+
+ /**
+  * JUnit tests for {@link EigenDecompositionImpl} focused on the MATH-318 bug
+  * (incorrect eigenvalues) and invariants of the eigen decomposition.
+  */
+ public class EigenDecompositionImplTest {
+
+     /** Tolerance for mathematical invariant checks. */
+     private static final double EPS = 1e-8;
+
+     // ---------- helpers ----------
+
+     private RealMatrix symmetricMatrix(double[][] data) {
+         return MatrixUtils.createRealMatrix(data);
+     }
+
+     /**
+      * Checks that A ≈ V D V<sup>T</sup> within the given tolerance.
+      */
+     private void assertVDVT(RealMatrix a, EigenDecompositionImpl ed, double tol) {
+         RealMatrix v = ed.getV();
+         RealMatrix d = ed.getD();
+         RealMatrix vt = ed.getVT();
+         RealMatrix vdvt = v.multiply(d).multiply(vt);
+         int n = a.getRowDimension();
+         for (int i = 0; i < n; i++) {
+             for (int j = 0; j < n; j++) {
+                 assertEquals("A[" + i + "][" + j + "] = V D V^T", a.getEntry(i, j),
+vdvt.getEntry(i, j), tol);
+             }
+         }
+     }
+
+     // ---------- tests ----------
+
+     @Test(expected = InvalidMatrixException.class)
+     public void testNonSymmetricMatrixThrows() {
+         // deliberately asymmetric matrix
+         double[][] data = {{1, 2}, {3, 4}};
+         RealMatrix m = symmetricMatrix(data);
+         new EigenDecompositionImpl(m, 1e-12);
+     }
+
+     @Test
+     public void test2x2Symmetric() {
+         double[][] data = {{1, 2}, {2, 3}};  // λ ≈ -0.236, 4.236
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(2, ev.length);
+
+         // trace invariant
+         double traceA = a.getEntry(0, 0) + a.getEntry(1, 1);
+         assertEquals(traceA, ev[0] + ev[1], EPS);
+
+         // determinant invariant
+         double detA = a.getEntry(0, 0) * a.getEntry(1, 1) - a.getEntry(0, 1) * a.getEntry(1, 0);
+         assertEquals(detA, ed.getDeterminant(), EPS);
+
+         // spectral decomposition
+         assertVDVT(a, ed, EPS);
+
+         // eigenpair check for the first eigenvector
+         RealVector v0 = ed.getEigenvector(0);
+         RealVector av0 = a.operate(v0);
+         RealVector lambdaV0 = v0.mapMultiply(ed.getRealEigenvalue(0));
+         assertEquals(0.0, av0.subtract(lambdaV0).getNorm(), EPS);
+     }
+
+     @Test
+     public void test3x3Symmetric() {
+         double[][] data = {{7, -2, 0}, {-2, 6, -2}, {0, -2, 5}};
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(3, ev.length);
+
+         // trace
+         double trace = a.getEntry(0, 0) + a.getEntry(1, 1) + a.getEntry(2, 2);
+         assertEquals(trace, ev[0] + ev[1] + ev[2], EPS);
+
+         // determinant
+         assertEquals(ed.getDeterminant(), ev[0] * ev[1] * ev[2], EPS);
+
+         assertVDVT(a, ed, EPS);
+
+         // non-singular
+         assertTrue(ed.getSolver().isNonSingular());
+     }
+
+     @Test
+     public void testRepeatedEigenvalue() {
+         double[][] data = {{3, 0, 0}, {0, 3, 0}, {0, 0, 5}};
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         double[] ev = ed.getRealEigenvalues();
+         Arrays.sort(ev);
+         assertArrayEquals(new double[]{3, 3, 5}, ev, EPS);
+
+         assertEquals(3 * 3 * 5, ed.getDeterminant(), EPS);
+         assertVDVT(a, ed, EPS);
+     }
+
+     @Test
+     public void testSingularMatrix() {
+         double[][] data = {{2, 0, 1}, {0, 3, 0}, {1, 0, 2}};  // eigenvalues 3, 1, 0 -> singular
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(3, ev.length);
+
+         // determinant must be near zero
+         assertEquals(0.0, ed.getDeterminant(), EPS);
+
+         // at least one eigenvalue is zero
+         boolean hasZero = false;
+         for (double v : ev) {
+             if (Math.abs(v) < EPS) {
+                 hasZero = true;
+                 break;
+             }
+         }
+         assertTrue("one eigenvalue should be zero", hasZero);
+
+         assertFalse(ed.getSolver().isNonSingular());
+         assertVDVT(a, ed, EPS);
+     }
+
+     @Test
+     public void testEigenvaluesNearZero() {
+         double[][] data = {{1e-8, 1e-9}, {1e-9, 2e-8}};
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(2, ev.length);
+
+         // trace
+         double trace = a.getEntry(0, 0) + a.getEntry(1, 1);
+         assertEquals(trace, ev[0] + ev[1], EPS);
+
+         // spectral decomposition with a tighter tolerance relative to values
+         RealMatrix v = ed.getV();
+         RealMatrix d = ed.getD();
+         RealMatrix vt = ed.getVT();
+         RealMatrix vdvt = v.multiply(d).multiply(vt);
+         assertEquals(a.getEntry(0, 0), vdvt.getEntry(0, 0), 1e-15);
+         assertEquals(a.getEntry(0, 1), vdvt.getEntry(0, 1), 1e-15);
+     }
+
+     @Test
+     public void testCloseEigenvalues5x5() {
+         // tridiagonal-like matrix with eigenvalues very close to each other
+         // This exercises the splitting and eigenvalue-counting logic.
+         double[][] data = {
+             {10, 2, 0, 0, 0},
+             { 2,  9, 2, 0, 0},
+             { 0,  2, 8, 2, 0},
+             { 0,  0, 2, 7, 2},
+             { 0,  0, 0, 2, 6}
+         };
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-14);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(5, ev.length);
+
+         double trace = 10 + 9 + 8 + 7 + 6;
+         assertEquals(trace, sum(ev), EPS);
+
+         assertVDVT(a, ed, EPS);
+
+         // individual eigenpair
+         for (int i = 0; i < 3; i++) {
+             RealVector vi = ed.getEigenvector(i);
+             RealVector avi = a.operate(vi);
+             RealVector lambdaVi = vi.mapMultiply(ed.getRealEigenvalue(i));
+             assertEquals(0.0, avi.subtract(lambdaVi).getNorm(), EPS);
+         }
+     }
+
+     @Test
+     public void testLargeMatrix6x6() {
+         // 6×6 symmetric matrix with random-ish values, may trigger miscount
+         double[][] data = {
+             {100,   5,   0,   0,   0,   0},
+             {  5, 200,   5,   0,   0,   0},
+             {  0,   5, 150,   5,   0,   0},
+             {  0,   0,   5, 180,   5,   0},
+             {  0,   0,   0,   5, 130,   5},
+             {  0,   0,   0,   0,   5, 170}
+         };
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-14);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(6, ev.length);
+
+         double trace = 100 + 200 + 150 + 180 + 130 + 170;
+         assertEquals(trace, sum(ev), 1e-6); // larger matrix may accumulate error
+
+         // spectral decomposition with relative tolerance
+         RealMatrix v = ed.getV();
+         RealMatrix d = ed.getD();
+         RealMatrix vt = ed.getVT();
+         RealMatrix vdvt = v.multiply(d).multiply(vt);
+         for (int i = 0; i < 6; i++) {
+             for (int j = 0; j < 6; j++) {
+                 double expected = a.getEntry(i, j);
+                 double actual = vdvt.getEntry(i, j);
+                 double tol = Math.abs(expected) * 1e-8;
+                 assertEquals("A[" + i + "][" + j + "]", expected, actual, tol);
+             }
+         }
+     }
+
+     @Test
+     public void testTridiagonalConstructor() {
+         double[] main = {2, 3, 4};
+         double[] secondary = {1, 2};
+         // This corresponds to a symmetric tridiagonal matrix:
+         // [2 1 0; 1 3 2; 0 2 4]
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(main, secondary, 1e-12);
+
+         double[] ev = ed.getRealEigenvalues();
+         assertEquals(3, ev.length);
+
+         // trace = 2+3+4 = 9
+         assertEquals(9.0, sum(ev), EPS);
+
+         // build the full matrix and test spectral decomposition
+         double[][] data = {{2, 1, 0}, {1, 3, 2}, {0, 2, 4}};
+         RealMatrix a = symmetricMatrix(data);
+         assertVDVT(a, ed, EPS);
+     }
+
+     @Test
+     public void testGetDeterminantEqualsProductOfEigenvalues() {
+         double[][] data = {{4, 1, 2}, {1, 3, 0}, {2, 0, 5}};
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         double det = ed.getDeterminant();
+         double product = 1.0;
+         for (double lambda : ed.getRealEigenvalues()) {
+             product *= lambda;
+         }
+         assertEquals(product, det, EPS);
+     }
+
+     @Test
+     public void testVandVTTransposeConsistency() {
+         double[][] data = {{1, 3, 5}, {3, 2, 4}, {5, 4, 6}};
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+
+         RealMatrix v = ed.getV();
+         RealMatrix vt = ed.getVT();
+         int n = a.getRowDimension();
+         for (int i = 0; i < n; i++) {
+             for (int j = 0; j < n; j++) {
+                 assertEquals(v.getEntry(i, j), vt.getEntry(j, i), 1e-15);
+             }
+         }
+     }
+
+     @Test
+     public void testNonSingularCondition() {
+         double[][] data = {{1, 0}, {0, 0}};  // zero eigenvalue
+         RealMatrix a = symmetricMatrix(data);
+         EigenDecompositionImpl ed = new EigenDecompositionImpl(a, 1e-12);
+         assertFalse(ed.getSolver().isNonSingular());
+     }
+
+     // ------- small utilities -------
+
+     private static double sum(double[] arr) {
+         double s = 0;
+         for (double v : arr) s += v;
+         return s;
+     }
+
+     private static void assertArrayEquals(double[] expected, double[] actual, double delta) {
+         assertEquals("arrays have different lengths", expected.length, actual.length);
+         for (int i = 0; i < expected.length; i++) {
+             assertEquals("array element [" + i + "]", expected[i], actual[i], delta);
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - org.apache.commons.math.linear.EigenDecompositionImplTest::testLargeMatrix6x6
+ - org.apache.commons.math.linear.EigenDecompositionImplTest::testSingularMatrix
+ - org.apache.commons.math.linear.EigenDecompositionImplTest::testRepeatedEigenvalue
+Failing generated tests: org.apache.commons.math.linear.EigenDecompositionImplTest::testCloseEigenvalues5x5, org.apache.commons.math.linear.EigenDecompositionImplTest::testLargeMatrix6x6, org.apache.commons.math.linear.EigenDecompositionImplTest::testRepeatedEigenvalue, org.apache.commons.math.linear.EigenDecompositionImplTest::testSingularMatrix

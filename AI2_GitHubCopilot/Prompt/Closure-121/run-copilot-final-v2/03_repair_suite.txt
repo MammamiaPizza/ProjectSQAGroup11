@@ -1,0 +1,148 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 121  Version: Closure-121b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 1053
+Trigger failures:
+- com.google.javascript.jscomp.InlineVariablesTest::testExternalIssue1053
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.InlineVariables
+
+Available API/signatures:
+[com.google.javascript.jscomp.InlineVariables | java]
+package com.google.javascript.jscomp;
+class InlineVariables implements CompilerPass {
+enum Mode {
+private final IdentifyConstants identifyConstants = new IdentifyConstants();
+@Override
+public void process(Node externs, Node root) {
+private Predicate<Var> getFilterForMode() {
+private class IdentifyConstants implements Predicate<Var> {
+public boolean apply(Var var) {
+private class IdentifyLocals implements Predicate<Var> {
+private static class AliasCandidate {
+private class InliningBehavior implements Behavior {
+private final Set<Var> staleVars = Sets.newHashSet();
+final Map<Node, AliasCandidate> aliasCandidates = Maps.newHashMap();
+public void afterExitScope(NodeTraversal t, ReferenceMap referenceMap) {
+private void doInlinesForScope(NodeTraversal t, ReferenceMap referenceMap) {
+private boolean isLValue(Node n) {
+private void blacklistVarReferencesInTree(Node root, Scope scope) {
+private boolean isVarInlineForbidden(Var var) {
+private void inline(Var v, Reference decl, Reference init, Reference ref) {
+private void removeDeclaration(Reference decl) {
+private void inlineValue(Var v, Reference ref, Node value) {
+private boolean isStringWorthInlining(Var var, List<Reference> refs) {
+private boolean canMoveAggressively(Node value) {
+private boolean isValidDeclaration(Reference declaration) {
+private boolean isValidInitialization(Reference initialization) {
+private boolean isValidReference(Reference reference) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+ import com.google.javascript.jscomp.Compiler;
+ import com.google.javascript.jscomp.CompilerOptions;
+ import com.google.javascript.jscomp.CompilerPass;
+ import com.google.javascript.jscomp.CompilerTestCase;
+ import com.google.javascript.jscomp.InlineVariables;
+ import com.google.javascript.jscomp.InlineVariables.Mode;
+
+ public class InlineVariablesTest extends CompilerTestCase {
+
+   public InlineVariablesTest() {
+     super("", false);
+   }
+
+   @Override
+   protected void setUp() throws Exception {
+     super.setUp();
+     setAcceptedLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+     disableNormalize();
+     setExterns("function alert(){}; function foo(){}; function bar(){}; var side;");
+   }
+
+   @Override
+   protected CompilerPass getProcessor(Compiler compiler) {
+     return new InlineVariables(compiler, Mode.ALL, true);
+   }
+
+   /**
+    * Variable with side-effect initializer used multiple times should not be inlined.
+    * Bug 1053: inlining changes evaluation count.
+    */
+   public void testExternalIssue1053() {
+     testSame(
+         "function foo(){window.side=1;return 1}" +
+         "var x=foo();" +
+         "alert(x);" +
+         "alert(x);");
+   }
+
+   /**
+    * A constant initializer should be inlined.
+    */
+   public void testInlineConstant() {
+     test("var x=1; alert(x);", "alert(1);");
+   }
+
+   /**
+    * A variable that is later assigned should not be inlined.
+    */
+   public void testNoInlineWithLValueAssign() {
+     testSame("var x=1; x=2; alert(x);");
+   }
+
+   /**
+    * A variable initialized with a side effect that is used only once can be inlined.
+    */
+   public void testInlineSideEffectUsedOnce() {
+     test("var x=foo(); bar(x);", "bar(foo());");
+   }
+
+   /**
+    * A variable initialized with a side effect used in both branches of a conditional
+    * should not be inlined, because it would cause double evaluation in each branch.
+    */
+   public void testNoInlineSideEffectInConditional() {
+     testSame("var x=foo(); if(cond){bar(x)} else{bar(x)}");
+   }
+
+   /**
+    * Immutable values (numbers) used multiple times are safe to inline.
+    */
+   public void testInlineNumberMultipleRefs() {
+     test("var n=3; alert(n); alert(n);", "alert(3);alert(3);");
+   }
+
+   /**
+    * Short strings are worth inlining when all strings are enabled.
+    */
+   public void testInlineStringShort() {
+     test("var s='hi'; alert(s);", "alert('hi');");
+   }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-121f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-121f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-121f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-121f-copilot/.test_suite/com/google/javascript/jscomp/InlineVariablesTest.java:6: error: cannot find symbol
+ [javac] import com.google.javascript.jscomp.CompilerTestCase;
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] location: package com.google.javascript.jscomp
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 10 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

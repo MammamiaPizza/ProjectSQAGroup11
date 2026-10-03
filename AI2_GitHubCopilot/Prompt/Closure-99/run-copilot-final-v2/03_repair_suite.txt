@@ -1,0 +1,118 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 99  Version: Closure-99b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 125
+Trigger failures:
+- com.google.javascript.jscomp.CheckGlobalThisTest::testPropertyOfMethod
+ --> junit.framework.AssertionFailedError: There should be one error. expected:<1> but was:<0>
+ - com.google.javascript.jscomp.CheckGlobalThisTest::testMethod4
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_USED_GLOBAL_THIS. dangerous use of the global this object at testcode line 1 : 39 expected:<0> but was:<1>
+ - com.google.javascript.jscomp.CheckGlobalThisTest::testInterface1
+ --> junit.framework.AssertionFailedError: Unexpected error(s): JSC_USED_GLOBAL_THIS. dangerous use of the global this object at testcode line 1 : 54 expected:<0> but was:<1>
+Modified: com.google.javascript.jscomp.CheckGlobalThis
+
+Available API/signatures:
+[com.google.javascript.jscomp.CheckGlobalThis | java]
+package com.google.javascript.jscomp;
+final class CheckGlobalThis implements Callback {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private boolean shouldReportThis(Node n, Node parent) {
+private JSDocInfo getFunctionJsDocInfo(Node n) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import com.google.javascript.jscomp.CompilerTestCase;
+
+/**
+
+ - Tests for {@link CheckGlobalThis}.
+  */
+ public class CheckGlobalThisTest extends CompilerTestCase {
+
+  @Override protected CompilerPass getProcessor(Compiler compiler) {
+    return new CheckGlobalThis(compiler, CheckLevel.WARNING); }
+
+  @Override protected int getDefaultOptions() {
+    return super.getDefaultOptions() | CompilerTestCase.IDEA_MODE; }
+
+  // ------------- Trigger tests for bug 125 -------------
+
+  @Test public void testPropertyOfMethod() {
+    // Property-of-method: a function assigned to an object property should
+    // still be checked for global this.  The buggy version misses this.
+    testWarning("var obj={};obj.m=function(){this.x=1;}",
+        CheckGlobalThis.GLOBAL_THIS); }
+
+  @Test public void testMethod4() {
+    // A function annotated with @this must be ignored.
+    testSame("/** @this {Element} */ function f() { this.innerHTML = 'hello'; }"); }
+
+  @Test public void testInterface1() {
+    // A function that is part of an @interface should not trigger a warning.
+    testSame("/** @interface */ function I() {}; I.prototype.m = function() { this.x = 1; };"); }
+
+  // ------------- Basic dangerous uses (should warn) -------------
+
+  @Test public void testPlainFunction() {
+    testWarning("function f() { this.x = 1; }", CheckGlobalThis.GLOBAL_THIS); }
+
+  @Test public void testThisOnLeftSideOfAssignment() {
+    testWarning("var a = this;", CheckGlobalThis.GLOBAL_THIS); }
+
+  @Test public void testNestedFunction() {
+    // The inner function has no safe context, so this is dangerous.
+    testWarning("function f() { function g() { this.y = 2; } }",
+        CheckGlobalThis.GLOBAL_THIS); }
+
+  // ------------- Safe contexts (no warning) -------------
+
+  @Test public void testConstructor() {
+    testSame("/** @constructor */ function C() { this.attr = 5; }"); }
+
+  @Test public void testOverride() {
+    testSame("/** @override */ function f() { this.x = 1; }"); }
+
+  @Test public void testAtThisAnnotationOnAssignment() {
+    testSame("/** @this {Object} */ var f = function() { this.x = 1; };"); }
+
+  @Test public void testPrototypeMethod() {
+    // Methods on prototypes are considered safe.
+    testSame("x.prototype.m = function() { this.x = 1; };"); }
+
+  @Test public void testObjectLiteralMethod() {
+    // Object-literal methods do not have a this annotation point,
+    // so the pass must not flag them.
+    testSame("var a = { m: function() { this.x = 1; } };"); }
+
+  @Test public void testPlainThisWithoutPropertyAccess() {
+    // A plain this that is neither left-hand of assign nor property access
+    // is not considered unsafe by the original contract.
+    testSame("function f() { return this; }"); }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-99f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-99f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-99f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-99f-copilot/.test_suite/com/google/javascript/jscomp/CheckGlobalThisTest.java:3: error: cannot find symbol
+ [javac] import com.google.javascript.jscomp.CompilerTestCase;
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] location: package com.google.javascript.jscomp
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

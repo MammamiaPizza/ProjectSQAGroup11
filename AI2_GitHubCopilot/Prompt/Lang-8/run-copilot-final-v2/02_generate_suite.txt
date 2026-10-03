@@ -1,0 +1,411 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Lang  Bug: 8  Version: Lang-8b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.lang3.time.FastDatePrinter
+Modified: org.apache.commons.lang3.time.FastDatePrinter
+Triggers: org.apache.commons.lang3.time.FastDateFormat_PrinterTest::testCalendarTimezoneRespected, org.apache.commons.lang3.time.FastDatePrinterTest::testCalendarTimezoneRespected
+
+Bug/specification summary:
+Bug report: LANG-818
+Trigger failures:
+- org.apache.commons.lang3.time.FastDateFormat_PrinterTest::testCalendarTimezoneRespected
+ --> junit.framework.AssertionFailedError: expected:<2:43PM [IC]T> but was:<2:43PM [PS]T>
+ - org.apache.commons.lang3.time.FastDatePrinterTest::testCalendarTimezoneRespected
+ --> junit.framework.AssertionFailedError: expected:<2:43PM [IC]T> but was:<2:43PM [PS]T>
+Modified: org.apache.commons.lang3.time.FastDatePrinter
+
+Prompt-01 test plan:
+TARGETS: format(Calendar), applyRules(Calendar), TimeZoneNameRule.appendTo, TimeZoneDisplayKey
+ORACLES: match SimpleDateFormat with same pattern&Calendar; verify timezone display matches
+Calendar.getTimeZone()
+CASES: Calendar TZ != printer TZ; DST on/off; different locales; 12/24h boundaries; null Calendar
+RISKS: TimeZoneNameRule may cache using printer's TZ instead of calendar's; format(long) may expose
+no-calendar path
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.lang3.time.FastDatePrinter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.lang3.time;
+public class FastDatePrinter implements DatePrinter, Serializable {
+public static final int FULL = DateFormat.FULL;
+public static final int LONG = DateFormat.LONG;
+public static final int MEDIUM = DateFormat.MEDIUM;
+public static final int SHORT = DateFormat.SHORT;
+protected FastDatePrinter(String pattern, TimeZone timeZone, Locale locale) {
+private void init() {
+protected List<Rule> parsePattern() {
+protected String parseToken(String pattern, int[] indexRef) {
+protected NumberRule selectNumberRule(int field, int padding) {
+@Override
+public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
+throw new IllegalArgumentException("Unknown class: " +
+public String format(long millis) {
+public String format(Date date) {
+public String format(Calendar calendar) {
+public StringBuffer format(long millis, StringBuffer buf) {
+public StringBuffer format(Date date, StringBuffer buf) {
+public StringBuffer format(Calendar calendar, StringBuffer buf) {
+protected StringBuffer applyRules(Calendar calendar, StringBuffer buf) {
+public String getPattern() {
+public TimeZone getTimeZone() {
+public Locale getLocale() {
+public int getMaxLengthEstimate() {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+private interface Rule {
+private interface NumberRule extends Rule {
+private static class CharacterLiteral implements Rule {
+public int estimateLength() {
+public void appendTo(StringBuffer buffer, Calendar calendar) {
+private static class StringLiteral implements Rule {
+private static class TextField implements Rule {
+private static class UnpaddedNumberField implements NumberRule {
+public final void appendTo(StringBuffer buffer, int value) {
+private static class UnpaddedMonthField implements NumberRule {
+static final UnpaddedMonthField INSTANCE = new UnpaddedMonthField();
+private static class PaddedNumberField implements NumberRule {
+private static class TwoDigitNumberField implements NumberRule {
+private static class TwoDigitYearField implements NumberRule {
+static final TwoDigitYearField INSTANCE = new TwoDigitYearField();
+private static class TwoDigitMonthField implements NumberRule {
+static final TwoDigitMonthField INSTANCE = new TwoDigitMonthField();
+private static class TwelveHourField implements NumberRule {
+public void appendTo(StringBuffer buffer, int value) {
+private static class TwentyFourHourField implements NumberRule {
+static String getTimeZoneDisplay(TimeZone tz, boolean daylight, int style, Locale locale) {
+private static class TimeZoneNameRule implements Rule {
+private static class TimeZoneNumberRule implements Rule {
+static final TimeZoneNumberRule INSTANCE_COLON = new TimeZoneNumberRule(true);
+static final TimeZoneNumberRule INSTANCE_NO_COLON = new TimeZoneNumberRule(false);
+private static class TimeZoneDisplayKey {
+
+/* HEADER */
+package org.apache.commons.lang3.time;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
+import java.text.DateFormat;
+import java.text.DateFormatSymbols;
+import java.text.FieldPosition;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import org.apache.commons.lang3.Validate;
+public class FastDatePrinter implements DatePrinter, Serializable {
+
+/* METHOD FastDatePrinter */
+protected FastDatePrinter(String pattern, TimeZone timeZone, Locale locale) {
+ mPattern = pattern;
+ mTimeZone = timeZone;
+ mLocale = locale;
+
+ init();
+ }
+
+/* METHOD parsePattern */
+protected List<Rule> parsePattern() {
+ DateFormatSymbols symbols = new DateFormatSymbols(mLocale);
+ List<Rule> rules = new ArrayList<Rule>();
+
+ String[] ERAs = symbols.getEras();
+ String[] months = symbols.getMonths();
+ String[] shortMonths = symbols.getShortMonths();
+ String[] weekdays = symbols.getWeekdays();
+ String[] shortWeekdays = symbols.getShortWeekdays();
+ String[] AmPmStrings = symbols.getAmPmStrings();
+
+ int length = mPattern.length();
+ int[] indexRef = new int[1];
+
+ for (int i = 0; i < length; i++) {
+ indexRef[0] = i;
+ String token = parseToken(mPattern, indexRef);
+ i = indexRef[0];
+
+ int tokenLen = token.length();
+ if (tokenLen == 0) {
+ break;
+ }
+
+ Rule rule;
+ char c = token.charAt(0);
+
+ switch (c) {
+ case 'G': // era designator (text)
+ rule = new TextField(Calendar.ERA, ERAs);
+ break;
+ case 'y': // year (number)
+ if (tokenLen == 2) {
+ rule = TwoDigitYearField.INSTANCE;
+ } else {
+ rule = selectNumberRule(Calendar.YEAR, tokenLen < 4 ? 4 : tokenLen);
+ }
+ break;
+ case 'M': // month in year (text and number)
+ if (tokenLen >= 4) {
+ rule = new TextField(Calendar.MONTH, months);
+ } else if (tokenLen == 3) {
+ rule = new TextField(Calendar.MONTH, shortMonths);
+ } else if (tokenLen == 2) {
+ rule = TwoDigitMonthField.INSTANCE;
+ } else {
+ rule = UnpaddedMonthField.INSTANCE;
+ }
+ break;
+ case 'd': // day in month (number)
+ rule = selectNumberRule(Calendar.DAY_OF_MONTH, tokenLen);
+ break;
+ case 'h': // hour in am/pm (number, 1..12)
+ rule = new TwelveHourField(selectNumberRule(Calendar.HOUR, tokenLen));
+ break;
+ case 'H': // hour in day (number, 0..23)
+ rule = selectNumberRule(Calendar.HOUR_OF_DAY, tokenLen);
+ break;
+ case 'm': // minute in hour (number)
+ rule = selectNumberRule(Calendar.MINUTE, tokenLen);
+ break;
+ case 's': // second in minute (number)
+ rule = selectNumberRule(Calendar.SECOND, tokenLen);
+ break;
+ case 'S': // millisecond (number)
+ rule = selectNumberRule(Calendar.MILLISECOND, tokenLen);
+ break;
+ case 'E': // day in week (text)
+ rule = new TextField(Calendar.DAY_OF_WEEK, tokenLen < 4 ? shortWeekdays : weekdays);
+ break;
+ case 'D': // day in year (number)
+ rule = selectNumberRule(Calendar.DAY_OF_YEAR, tokenLen);
+ break;
+ case 'F': // day of week in month (number)
+ rule = selectNumberRule(Calendar.DAY_OF_WEEK_IN_MONTH, tokenLen);
+ break;
+ case 'w': // week in year (number)
+ rule = selectNumberRule(Calendar.WEEK_OF_YEAR, tokenLen);
+ break;
+ case 'W': // week in month (number)
+ rule = selectNumberRule(Calendar.WEEK_OF_MONTH, tokenLen);
+ break;
+ case 'a': // am/pm marker (text)
+ rule = new TextField(Calendar.AM_PM, AmPmStrings);
+ break;
+ case 'k': // hour in day (1..24)
+ rule = new TwentyFourHourField(selectNumberRule(Calendar.HOUR_OF_DAY, tokenLen));
+ break;
+ case 'K': // hour in am/pm (0..11)
+ rule = selectNumberRule(Calendar.HOUR, tokenLen);
+ break;
+ case 'z': // time zone (text)
+ if (tokenLen >= 4) {
+ rule = new TimeZoneNameRule(mTimeZone, mLocale, TimeZone.LONG);
+ } else {
+ rule = new TimeZoneNameRule(mTimeZone, mLocale, TimeZone.SHORT);
+ }
+ break;
+ case 'Z': // time zone (value)
+ if (tokenLen == 1) {
+ rule = TimeZoneNumberRule.INSTANCE_NO_COLON;
+ } else {
+ rule = TimeZoneNumberRule.INSTANCE_COLON;
+ }
+ break;
+ case '\'': // literal text
+ String sub = token.substring(1);
+ if (sub.length() == 1) {
+ rule = new CharacterLiteral(sub.charAt(0));
+ } else {
+ rule = new StringLiteral(sub);
+ }
+ break;
+ default:
+ throw new IllegalArgumentException("Illegal pattern component: " + token);
+ }
+
+ rules.add(rule);
+ }
+
+ return rules;
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object obj) {
+ if (obj instanceof FastDatePrinter == false) {
+ return false;
+ }
+ FastDatePrinter other = (FastDatePrinter) obj;
+ return mPattern.equals(other.mPattern)
+ && mTimeZone.equals(other.mTimeZone) 
+ && mLocale.equals(other.mLocale);
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return "FastDatePrinter[" + mPattern + "," + mLocale + "," + mTimeZone.getID() + "]";
+ }
+
+/* METHOD selectNumberRule */
+protected NumberRule selectNumberRule(int field, int padding) {
+ switch (padding) {
+ case 1:
+ return new UnpaddedNumberField(field);
+ case 2:
+ return new TwoDigitNumberField(field);
+ default:
+ return new PaddedNumberField(field, padding);
+ }
+ }
+
+/* METHOD format */
+@Override
+ public String format(Date date) {
+ Calendar c = new GregorianCalendar(mTimeZone, mLocale); // hard code GregorianCalendar
+ c.setTime(date);
+ return applyRules(c, new StringBuffer(mMaxLengthEstimate)).toString();
+ }
+
+/* METHOD format */
+@Override
+ public StringBuffer format(Date date, StringBuffer buf) {
+ Calendar c = new GregorianCalendar(mTimeZone, mLocale); // hard code GregorianCalendar
+ c.setTime(date);
+ return applyRules(c, buf);
+ }
+
+/* METHOD appendTo */
+@Override
+ public final void appendTo(StringBuffer buffer, int value) {
+ if (value < 100) {
+ for (int i = mSize; --i >= 2; ) {
+ buffer.append('0');
+ }
+ buffer.append((char)(value / 10 + '0'));
+ buffer.append((char)(value % 10 + '0'));
+ } else {
+ int digits;
+ if (value < 1000) {
+ digits = 3;
+ } else {
+ Validate.isTrue(value > -1, "Negative values should not be possible", value);
+ digits = Integer.toString(value).length();
+ }
+ for (int i = mSize; --i >= digits; ) {
+ buffer.append('0');
+ }
+ buffer.append(Integer.toString(value));
+ }
+ }
+
+/* METHOD estimateLength */
+@Override
+ public int estimateLength() {
+ // We have no access to the Calendar object that will be passed to
+ // appendTo so base estimate on the TimeZone passed to the
+ // constructor
+ return Math.max(mStandard.length(), mDaylight.length());
+ }
+
+/* METHOD format */
+@Override
+ public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
+ if (obj instanceof Date) {
+ return format((Date) obj, toAppendTo);
+ } else if (obj instanceof Calendar) {
+ return format((Calendar) obj, toAppendTo);
+ } else if (obj instanceof Long) {
+ return format(((Long) obj).longValue(), toAppendTo);
+ } else {
+ throw new IllegalArgumentException("Unknown class: " +
+ (obj == null ? "<null>" : obj.getClass().getName()));
+ }
+ }
+
+/* METHOD format */
+@Override
+ public String format(long millis) {
+ return format(new Date(millis));
+ }
+
+/* METHOD format */
+@Override
+ public StringBuffer format(long millis, StringBuffer buf) {
+ return format(new Date(millis), buf);
+ }
+
+/* METHOD getTimeZone */
+@Override
+ public TimeZone getTimeZone() {
+ return mTimeZone;
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ return mPattern.hashCode() + 13 * (mTimeZone.hashCode() + 13 * mLocale.hashCode());
+ }
+
+/* METHOD appendTo */
+@Override
+ public void appendTo(StringBuffer buffer, Calendar calendar) {
+ if (zone.useDaylightTime()
+ && calendar.get(Calendar.DST_OFFSET) != 0) {
+ buffer.append(getTimeZoneDisplay(zone, true, mStyle, mLocale));
+ } else {
+ buffer.append(getTimeZoneDisplay(zone, false, mStyle, mLocale));
+ }
+ }
+
+/* METHOD hashCode */
+@Override
+ public int hashCode() {
+ return (mStyle * 31 + mLocale.hashCode() ) * 31 + mTimeZone.hashCode();
+ }
+
+/* METHOD equals */
+@Override
+ public boolean equals(Object obj) {
+ if (this == obj) {
+ return true;
+ }
+ if (obj instanceof TimeZoneDisplayKey) {
+ TimeZoneDisplayKey other = (TimeZoneDisplayKey)obj;
+ return
+ mTimeZone.equals(other.mTimeZone) &&
+ mStyle == other.mStyle &&
+ mLocale.equals(other.mLocale);
+ }
+ return false;
+ }
+
+/* METHOD format */
+@Override
+ public String format(Calendar calendar) {
+ return format(calendar, new StringBuffer(mMaxLengthEstimate)).toString();
+ }
+
+/* METHOD format */
+@Override
+ public StringBuffer format(Calendar calendar, StringBuffer buf) {
+ return applyRules(calendar, buf);
+ }
+
+/* METHOD applyRules */
+protected StringBuffer applyRules(Calendar calendar, StringBuffer buf) {
+ for (Rule rule : mRules) {
+ rule.appendTo(buf, calendar);
+ }
+ return buf;
+ }

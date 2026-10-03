@@ -1,0 +1,366 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 38  Version: JacksonDatabind-38b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.type.CollectionType, com.fasterxml.jackson.databind.type.MapType, com.fasterxml.jackson.databind.type.SimpleType
+Modified: com.fasterxml.jackson.databind.type.CollectionType, com.fasterxml.jackson.databind.type.MapType, com.fasterxml.jackson.databind.type.SimpleType
+Triggers: com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testExplicitMapType, com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testExplicitCollectionType, com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testPOJOSubType
+
+Bug/specification summary:
+Bug report: 1102
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testExplicitMapType
+ --> junit.framework.AssertionFailedError: expected:<class com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test$Point> but was:<class java.util.LinkedHashMap>
+ - com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testExplicitCollectionType
+ --> junit.framework.AssertionFailedError: expected:<class com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test$Point> but was:<class java.util.LinkedHashMap>
+ - com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test::testPOJOSubType
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "x" (class com.fasterxml.jackson.databind.interop.DeprecatedTypeHandling1102Test$Point3D), not marked as ignorable (one known property: "z"])
+Modified: com.fasterxml.jackson.databind.type.CollectionType, com.fasterxml.jackson.databind.type.MapType, com.fasterxml.jackson.databind.type.SimpleType
+
+Prompt-01 test plan:
+TARGETS: Deprecated CollectionType.construct, MapType.construct, and SimpleType.construct type construction.
+ORACLES: Trigger assertions require declared Point content/value type, not LinkedHashMap.
+ORACLES: Trigger POJO subtype deserialization must accept inherited Point field x with Point3D z.
+CASES: Explicit MapType with Point value; deserialize object value and assert Point runtime class.
+CASES: Explicit CollectionType with Point element; deserialize object element and assert Point runtime class.
+CASES: POJO subtype input containing inherited x and subtype z.
+CASES: Deprecated SimpleType.construct for ordinary POJO; Map, Collection, and array rejection.
+RISKS: Construction metadata/bindings may lose generic content type and cause untyped LinkedHashMap fallback.
+RISKS: Available context omits full method bodies and trigger JSON/mapper setup.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.type.CollectionType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+public final class CollectionType
+protected CollectionType(TypeBase base, JavaType elemT) {
+@Deprecated // since 2.7
+public static CollectionType construct(Class<?> rawType, JavaType elemT) {
+@Override
+protected JavaType _narrow(Class<?> subclass) {
+public JavaType withContentType(JavaType contentType) {
+public CollectionType withTypeHandler(Object h) {
+public CollectionType withContentTypeHandler(Object h)
+public CollectionType withValueHandler(Object h) {
+public CollectionType withContentValueHandler(Object h) {
+public CollectionType withStaticTyping() {
+public String toString()
+return "[collection type; class "+_class.getName()+", contains "+_elementType+"]";
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import com.fasterxml.jackson.databind.JavaType;
+
+/* METHOD CollectionType */
+protected CollectionType(TypeBase base, JavaType elemT) {
+ super(base, elemT);
+ }
+
+/* METHOD CollectionType */
+private CollectionType(Class<?> collT, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts, JavaType elemT,
+ Object valueHandler, Object typeHandler, boolean asStatic)
+ {
+ super(collT, bindings, superClass, superInts, elemT, valueHandler, typeHandler, asStatic);
+ }
+
+/* METHOD construct */
+public static CollectionType construct(Class<?> rawType, JavaType elemT) {
+ // First: may need to fabricate TypeBindings (needed for refining into
+ // concrete collection types, as per [databind#1102])
+ return new CollectionType(rawType, null,
+ // !!! TODO: Wrong, does have supertypes, but:
+ _bogusSuperClass(rawType), null, elemT,
+ null, null, false);
+ }
+
+/* METHOD construct */
+public static CollectionType construct(Class<?> rawType, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts, JavaType elemT) {
+ return new CollectionType(rawType, bindings, superClass, superInts, elemT,
+ null, null, false);
+ }
+
+/* METHOD _narrow */
+@Override
+ protected JavaType _narrow(Class<?> subclass) {
+ return new CollectionType(subclass, _bindings,
+ _superClass, _superInterfaces, _elementType, null, null, _asStatic);
+ }
+
+/* METHOD withContentType */
+@Override
+ public JavaType withContentType(JavaType contentType) {
+ if (_elementType == contentType) {
+ return this;
+ }
+ return new CollectionType(_class, _bindings, _superClass, _superInterfaces,
+ contentType, _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withTypeHandler */
+@Override
+ public CollectionType withTypeHandler(Object h) {
+ return new CollectionType(_class, _bindings,
+ _superClass, _superInterfaces, _elementType, _valueHandler, h, _asStatic);
+ }
+
+/* METHOD withContentTypeHandler */
+@Override
+ public CollectionType withContentTypeHandler(Object h)
+ {
+ return new CollectionType(_class, _bindings,
+ _superClass, _superInterfaces, _elementType.withTypeHandler(h),
+ _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withValueHandler */
+@Override
+ public CollectionType withValueHandler(Object h) {
+ return new CollectionType(_class, _bindings,
+ _superClass, _superInterfaces, _elementType, h, _typeHandler, _asStatic);
+ }
+
+/* METHOD withContentValueHandler */
+@Override
+ public CollectionType withContentValueHandler(Object h) {
+ return new CollectionType(_class, _bindings,
+ _superClass, _superInterfaces, _elementType.withValueHandler(h),
+ _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withStaticTyping */
+@Override
+ public CollectionType withStaticTyping() {
+ if (_asStatic) {
+ return this;
+ }
+ return new CollectionType(_class, _bindings,
+ _superClass, _superInterfaces, _elementType.withStaticTyping(),
+ _valueHandler, _typeHandler, true);
+ }
+
+===== com.fasterxml.jackson.databind.type.MapType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+public final class MapType extends MapLikeType
+protected MapType(TypeBase base, JavaType keyT, JavaType valueT) {
+@Deprecated // since 2.7
+public static MapType construct(Class<?> rawType, JavaType keyT, JavaType valueT)
+@Override
+protected JavaType _narrow(Class<?> subclass) {
+public MapType withTypeHandler(Object h) {
+public MapType withContentTypeHandler(Object h)
+public MapType withValueHandler(Object h) {
+public MapType withContentValueHandler(Object h) {
+public MapType withStaticTyping() {
+public JavaType withContentType(JavaType contentType) {
+public MapType withKeyType(JavaType keyType) {
+public MapType withKeyTypeHandler(Object h)
+public MapType withKeyValueHandler(Object h) {
+public String toString()
+return "[map type; class "+_class.getName()+", "+_keyType+" -> "+_valueType+"]";
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import com.fasterxml.jackson.databind.JavaType;
+
+/* METHOD MapType */
+protected MapType(TypeBase base, JavaType keyT, JavaType valueT) {
+ super(base, keyT, valueT);
+ }
+
+/* METHOD MapType */
+private MapType(Class<?> mapType, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts, JavaType keyT, JavaType valueT,
+ Object valueHandler, Object typeHandler, boolean asStatic) {
+ super(mapType, bindings, superClass, superInts,
+ keyT, valueT, valueHandler, typeHandler, asStatic);
+ }
+
+/* METHOD construct */
+public static MapType construct(Class<?> rawType, JavaType keyT, JavaType valueT)
+ {
+ // First: may need to fabricate TypeBindings (needed for refining into
+ // concrete collection types, as per [databind#1102])
+ // !!! TODO: Wrong, does have supertypes
+ return new MapType(rawType, null, _bogusSuperClass(rawType), null,
+ keyT, valueT, null, null, false);
+ }
+
+/* METHOD construct */
+public static MapType construct(Class<?> rawType, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts,
+ JavaType keyT, JavaType valueT) {
+ return new MapType(rawType, bindings, superClass, superInts, keyT, valueT, null, null, false);
+ }
+
+/* METHOD _narrow */
+@Override
+ protected JavaType _narrow(Class<?> subclass) {
+ return new MapType(subclass, _bindings,
+ _superClass, _superInterfaces, _keyType, _valueType,
+ _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withTypeHandler */
+@Override
+ public MapType withTypeHandler(Object h) {
+ return new MapType(_class, _bindings,
+ _superClass, _superInterfaces, _keyType, _valueType, _valueHandler, h, _asStatic);
+ }
+
+/* METHOD withContentTypeHandler */
+@Override
+ public MapType withContentTypeHandler(Object h)
+ {
+ return new MapType(_class, _bindings,
+ _superClass, _superInterfaces, _keyType, _valueType.withTypeHandler(h),
+ _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withValueHandler */
+@Override
+ public MapType withValueHandler(Object h) {
+ return new MapType(_class, _bindings,
+ _superClass, _superInterfaces, _keyType, _valueType, h, _typeHandler, _asStatic);
+ }
+
+/* METHOD withContentValueHandler */
+@Override
+ public MapType withContentValueHandler(Object h) {
+ return new MapType(_class, _bindings,
+ _superClass, _superInterfaces, _keyType, _valueType.withValueHandler(h),
+ _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withStaticTyping */
+@Override
+ public MapType withStaticTyping() {
+ if (_asStatic) {
+ return this;
+ }
+ return new MapType(_class, _bindings,
+ _superClass, _superInterfaces, _keyType.withStaticTyping(), _valueType.withStaticTyping(),
+ _valueHandler, _typeHandler, true);
+ }
+
+/* METHOD withContentType */
+@Override
+ public JavaType withContentType(JavaType contentType) {
+ if (_valueType == contentType) {
+ return this;
+ }
+ return new MapType(_class, _bindings, _superClass, _superInterfaces,
+ _keyType, contentType, _valueHandler, _typeHandler, _asStatic);
+ }
+
+===== com.fasterxml.jackson.databind.type.SimpleType (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+public class SimpleType // note: until 2.6 was final
+protected SimpleType(Class<?> cls) {
+protected SimpleType(TypeBase base) {
+public static SimpleType constructUnsafe(Class<?> raw) {
+@Deprecated
+public static SimpleType construct(Class<?> cls)
+if (Map.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Map (class: "+cls.getName()+")");
+if (Collection.class.isAssignableFrom(cls)) {
+throw new IllegalArgumentException("Can not construct SimpleType for a Collection (class: "+cls.getName()+")");
+throw new IllegalArgumentException("Can not construct SimpleType for an array (class: "+cls.getName()+")");
+@Override
+protected JavaType _narrow(Class<?> subclass)
+public JavaType withContentType(JavaType contentType) {
+public SimpleType withTypeHandler(Object h) {
+public JavaType withContentTy
+...[truncated deterministically]...
+ntentValueHandler(Object h) {
+public SimpleType withStaticTyping() {
+protected String buildCanonicalName()
+final int count = _bindings.size();
+public boolean isContainerType() { return false; }
+public StringBuilder getErasedSignature(StringBuilder sb) {
+public StringBuilder getGenericSignature(StringBuilder sb)
+public String toString()
+sb.append("[simple type, class ").append(buildCanonicalName()).append(']');
+public boolean equals(Object o)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.util.*;
+import com.fasterxml.jackson.databind.JavaType;
+public class SimpleType // note: until 2.6 was final
+
+/* METHOD SimpleType */
+protected SimpleType(TypeBase base) {
+ super(base);
+ }
+
+/* METHOD SimpleType */
+protected SimpleType(Class<?> cls) {
+ this(cls, TypeBindings.emptyBindings(), null, null);
+ }
+
+/* METHOD SimpleType */
+protected SimpleType(Class<?> cls, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts) {
+ this(cls, bindings, superClass, superInts, null, null, false);
+ }
+
+/* METHOD SimpleType */
+protected SimpleType(Class<?> cls, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts,
+ Object valueHandler, Object typeHandler, boolean asStatic)
+ {
+ super(cls, bindings, superClass, superInts,
+ 0, valueHandler, typeHandler, asStatic);
+ }
+
+/* METHOD SimpleType */
+protected SimpleType(Class<?> cls, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInts, int extraHash,
+ Object valueHandler, Object typeHandler, boolean asStatic)
+ {
+ super(cls, bindings, superClass, superInts, 
+ extraHash, valueHandler, typeHandler, asStatic);
+ }
+
+/* METHOD _narrow */
+@Override
+ @Deprecated
+ protected JavaType _narrow(Class<?> subclass)
+ {
+ if (_class == subclass) {
+ return this;
+ }
+ // Should we check that there is a sub-class relationship?
+ // 15-Jan-2016, tatu: Almost yes, but there are some complications with
+ // placeholder values, so no.
+ /*
+ if (!_class.isAssignableFrom(subclass)) {
+ throw new IllegalArgumentException("Class "+subclass.getName()+" not sub-type of "
+ +_class.getName());
+ }
+ */
+ // 15-Jan-2015, tatu: Not correct; should really re-resolve...
+ return new SimpleType(subclass, _bindings, this, _superInterfaces,
+ _valueHandler, _typeHandler, _asStatic);
+ }
+
+/* METHOD withContentValueHandler */
+@Override
+ public SimpleType withContentValueHandler(Object h) {
+ // no content type, so:
+ throw new IllegalArgumentException("Simple types have no content types; can not call withContenValueHandler()");
+ }
+
+/* METHOD withContentType */
+@Override
+ public JavaType withContentType(JavaType contentType) {
+ throw new IllegalArgumentException("Simple types have no content types; can not call withContentType()");
+ }

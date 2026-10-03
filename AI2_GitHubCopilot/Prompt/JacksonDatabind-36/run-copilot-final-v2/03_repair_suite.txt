@@ -1,0 +1,196 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 36  Version: JacksonDatabind-36b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 803
+Trigger failures:
+- com.fasterxml.jackson.databind.TestStdDateFormat::testLenient
+ --> java.lang.NullPointerException
+Modified: com.fasterxml.jackson.databind.util.StdDateFormat
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.util.StdDateFormat | java]
+package com.fasterxml.jackson.databind.util;
+@SuppressWarnings("serial")
+public class StdDateFormat
+/* TODO !!! 24-Nov-2009, tatu: Need to rewrite this class:
+protected final static String DATE_FORMAT_STR_ISO8601 = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+protected final static String DATE_FORMAT_STR_ISO8601_Z = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'";
+protected final static String DATE_FORMAT_STR_PLAIN = "yyyy-MM-dd";
+protected final static String DATE_FORMAT_STR_RFC1123 = "EEE, dd MMM yyyy HH:mm:ss zzz";
+protected final static DateFormat DATE_FORMAT_RFC1123;
+protected final static DateFormat DATE_FORMAT_ISO8601;
+protected final static DateFormat DATE_FORMAT_ISO8601_Z;
+protected final static DateFormat DATE_FORMAT_PLAIN;
+public final static StdDateFormat instance = new StdDateFormat();
+protected transient TimeZone _timezone;
+protected final Locale _locale;
+protected Boolean _lenient;
+protected transient DateFormat _formatRFC1123;
+protected transient DateFormat _formatISO8601;
+protected transient DateFormat _formatISO8601_z;
+protected transient DateFormat _formatPlain;
+public StdDateFormat() {
+@Deprecated // since 2.7
+public StdDateFormat(TimeZone tz, Locale loc) {
+protected StdDateFormat(TimeZone tz, Locale loc, Boolean lenient) {
+public static TimeZone getDefaultTimeZone() {
+public StdDateFormat withTimeZone(TimeZone tz) {
+public StdDateFormat withLocale(Locale loc) {
+@Override
+public StdDateFormat clone() {
+@Deprecated
+public static DateFormat getISO8601Format(TimeZone tz) {
+public static DateFormat getISO8601Format(TimeZone tz, Locale loc) {
+public static DateFormat getRFC1123Format(TimeZone tz, Locale loc) {
+public static DateFormat getRFC1123Format(TimeZone tz) {
+@Override // since 2.6
+public TimeZone getTimeZone() {
+public void setTimeZone(TimeZone tz)
+@Override // since 2.7
+public boolean isLenient() {
+public Date parse(String dateStr) throws ParseException
+public Date parse(String dateStr, ParsePosition pos)
+public String toString() {
+protected boolean looksLikeISO8601(String dateStr)
+protected Date parseAsISO8601(String dateStr, ParsePosition pos, boolean throwErrors)
+protected Date parseAsRFC1123(String dateStr, ParsePosition pos)
+private final static boolean hasTimeZone(String str)
+protected void _clearFormats() {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind;
+
+import static org.junit.Assert.*;
+
+import java.lang.reflect.Constructor;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+
+public class TestStdDateFormat {
+
+ // Helper to create StdDateFormat with explicit lenient flag
+ private static StdDateFormat newStdDateFormat(TimeZone tz, Locale loc, Boolean lenient) throws
+Exception {
+     Constructor<StdDateFormat> ctor = StdDateFormat.class.getDeclaredConstructor(
+             TimeZone.class, Locale.class, Boolean.class);
+     ctor.setAccessible(true);
+     return ctor.newInstance(tz, loc, lenient);
+ }
+
+ @Test
+ public void testDefaultLenient() {
+     assertTrue(StdDateFormat.instance.isLenient());
+ }
+
+ @Test
+ public void testSetTimeZoneAndParseISO8601() throws Exception {
+     StdDateFormat df = new StdDateFormat();
+     df.setTimeZone(TimeZone.getTimeZone("GMT-8:00"));
+     Date d = df.parse("2016-06-15T12:00:00.000-0800");
+     assertNotNull(d);
+ }
+
+ @Test
+ public void testParseISO8601WithZ() throws Exception {
+     StdDateFormat df = new StdDateFormat();
+     Date d = df.parse("2016-06-15T12:00:00.000Z");
+     assertNotNull(d);
+     Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+     cal.setTime(d);
+     assertEquals(12, cal.get(Calendar.HOUR_OF_DAY));
+ }
+
+ @Test
+ public void testParseRFC1123() throws Exception {
+     StdDateFormat df = new StdDateFormat();
+     Date d = df.parse("Wed, 15 Jun 2016 12:00:00 GMT");
+     assertNotNull(d);
+ }
+
+ @Test
+ public void testParsePlainDate() throws Exception {
+     StdDateFormat df = new StdDateFormat();
+     Date d = df.parse("2016-06-15");
+     assertNotNull(d);
+ }
+
+ @Test
+ public void testParseTimestamp() throws Exception {
+     StdDateFormat df = new StdDateFormat();
+     Date d = df.parse("0");
+     assertNotNull(d);
+     assertEquals(0L, d.getTime());
+ }
+
+ @Test
+ public void testParseNegativeTimestamp() throws Exception {
+     StdDateFormat df = new StdDateFormat();
+     Date d = df.parse("-1");
+     assertNotNull(d);
+     assertEquals(-1L, d.getTime());
+ }
+
+ @Test(expected = ParseException.class)
+ public void testParseEmptyString() throws Exception {
+     StdDateFormat.instance.parse("");
+ }
+
+ @Test(expected = NullPointerException.class)
+ public void testParseNullString() throws Exception {
+     StdDateFormat.instance.parse(null);
+ }
+
+ @Test
+ public void testCloneRetainsLenientFalse() throws Exception {
+     StdDateFormat df = newStdDateFormat(TimeZone.getTimeZone("UTC"),
+             Locale.getDefault(), Boolean.FALSE);
+     StdDateFormat clone = df.clone();
+     assertFalse(clone.isLenient());
+ }
+
+ @Test
+ public void testWithTimeZonePreservesLenient() throws Exception {
+     StdDateFormat df = newStdDateFormat(TimeZone.getTimeZone("UTC"),
+             Locale.getDefault(), Boolean.FALSE);
+     StdDateFormat df2 = df.withTimeZone(TimeZone.getTimeZone("PST"));
+     assertFalse(df2.isLenient());
+     assertEquals("PST", df2.getTimeZone().getID());
+ }
+
+ @Test
+ public void testLenientFalseRejectsInvalidDate() throws Exception {
+     // Bug 803 / 36: lenient=false should cause invalid dates to be rejected,
+     // but leads to NullPointerException in the buggy version
+     StdDateFormat df = newStdDateFormat(TimeZone.getTimeZone("UTC"),
+             Locale.getDefault(), Boolean.FALSE);
+     // Try to parse an ISO8601 date that is invalid under strict parsing
+     try {
+         Date d = df.parse("2016-02-30"); // February 30th is invalid
+         // If no exception, the lenient flag was ignored (still a bug)
+         assertNull("Lenient=false should reject invalid date, but returned: " + d, d);
+     } catch (ParseException e) {
+         // expected
+     }
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.databind.TestStdDateFormat::testParseEmptyString
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.databind.TestStdDateFormat::testParseEmptyString

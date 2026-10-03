@@ -1,0 +1,232 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 77  Version: JacksonDatabind-77b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1599
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.IllegalTypesCheckTest::testIssue1599
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([Illegal type]): got one with message "N/A
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializerFactory | java]
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializerFactory
+private final static Class<?>[] INIT_CAUSE_PARAMS = new Class<?>[] { Throwable.class };
+public BeanDeserializerFactory(DeserializerFactoryConfig config) {
+@Override
+public DeserializerFactory withConfig(DeserializerFactoryConfig config)
+if (getClass() != BeanDeserializerFactory.class) {
+final DeserializationConfig config = ctxt.getConfig();
+/* important: introspect actual implementation (abstract class or
+@SuppressWarnings("unchecked")
+final String buildMethodName = (builderConfig == null) ?
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+final boolean isConcrete = !beanDesc.getType().isAbstract();
+final boolean useGettersAsSetters = (ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS)
+if (Collection.class.isAssignableFrom(rawPropertyType)
+|| Map.class.isAssignableFrom(rawPropertyType)) {
+final String name = propDef.getName();
+throw ctxt.mappingException("Could not find creator property with name '%s' (in class %s)",
+/* Otherwise, method may specify more specific (sub-)class for
+&& Throwable.class.isAssignableFrom(propType0.getRawClass())) {
+final AnnotatedMethod getter = propDef.getGetter();
+protected boolean isPotentialBeanType(Class<?> type)
+throw new IllegalArgumentException("Can not deserialize Proxy class "+type.getName()+" as a Bean");
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.interop;
+
+ import static org.junit.Assert.*;
+
+ import java.lang.reflect.InvocationHandler;
+ import java.lang.reflect.Method;
+ import java.lang.reflect.Proxy;
+
+ import org.junit.Rule;
+ import org.junit.Test;
+ import org.junit.rules.ExpectedException;
+
+ import com.fasterxml.jackson.databind.JsonMappingException;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+
+ public class BeanDeserializerFactory_IllegalTypesTest {
+
+     @Rule
+     public ExpectedException thrown = ExpectedException.none();
+
+     private final ObjectMapper mapper = new ObjectMapper();
+
+     // -- Helper types for testing illegal property types --------------------
+
+     public static class MyThrowable extends Throwable {
+         private static final long serialVersionUID = 1L;
+     }
+
+     public static class BeanWithThrowableProperty {
+         public MyThrowable throwable;
+         public MyThrowable getThrowable() { return throwable; }
+         public void setThrowable(MyThrowable t) { this.throwable = t; }
+     }
+
+     public interface AnInterface {}
+     public static class AnInterfaceImpl implements AnInterface {}
+     public static class BeanWithProxyProperty {
+         public AnInterface proxyProp;
+         public AnInterface getProxyProp() { return proxyProp; }
+         public void setProxyProp(AnInterface p) { this.proxyProp = p; }
+     }
+
+     public static class BeanWithMapProperty {
+         public java.util.Map<String,Object> mapProp;
+         public java.util.Map<String,Object> getMapProp() { return mapProp; }
+         public void setMapProp(java.util.Map<String,Object> m) { this.mapProp = m; }
+     }
+
+     // -- Direct deserialization of illegal types ----------------------------
+
+     @Test
+     public void testDirectDeserializationOfThrowable() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{}", MyThrowable.class);
+     }
+
+     @Test
+     public void testDirectDeserializationOfProxyClass() throws Exception {
+         Class<?> proxyClass = Proxy.getProxyClass(
+                 BeanDeserializerFactory_IllegalTypesTest.class.getClassLoader(),
+                 AnInterface.class);
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{}", proxyClass);
+     }
+
+     @Test
+     public void testDirectDeserializationOfAbstractMap() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{}", java.util.Map.class);
+     }
+
+     @Test
+     public void testDirectDeserializationOfAbstractCollection() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("[]", java.util.Collection.class);
+     }
+
+     // -- Bean property of illegal type --------------------------------------
+
+     @Test
+     public void testBeanPropertyOfThrowableSubclass() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{\"throwable\":{}}", BeanWithThrowableProperty.class);
+     }
+
+     @Test
+     public void testBeanFieldOfThrowableWithoutSetter() throws Exception {
+         // Field-only injection (no setter) should also be rejected
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{\"throwable\":{}}", BeanWithThrowableProperty.class);
+     }
+
+     @Test
+     public void testBeanPropertyOfProxySubclass() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{\"proxyProp\":{}}", BeanWithProxyProperty.class);
+     }
+
+     // -- Constructor parameter with illegal type ----------------------------
+
+     public static class ConstructedBean {
+         public final MyThrowable throwable;
+         @com.fasterxml.jackson.annotation.JsonCreator
+         public ConstructedBean(
+                 @com.fasterxml.jackson.annotation.JsonProperty("throwable") MyThrowable throwable)
+{
+             this.throwable = throwable;
+         }
+     }
+
+     @Test
+     public void testConstructorParamOfIllegalType() throws Exception {
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{\"throwable\":{}}", ConstructedBean.class);
+     }
+
+     // -- Custom deserializer override should not be rejected ----------------
+
+     @Test
+     public void testCustomDeserializerOverridesRejection() throws Exception {
+         ObjectMapper localMapper = new ObjectMapper();
+         localMapper.registerModule(new com.fasterxml.jackson.databind.module.SimpleModule()
+             .addDeserializer(MyThrowable.class, new
+com.fasterxml.jackson.databind.JsonDeserializer<MyThrowable>() {
+                 @Override
+                 public MyThrowable deserialize(com.fasterxml.jackson.core.JsonParser p,
+                         com.fasterxml.jackson.databind.DeserializationContext ctxt) throws
+java.io.IOException {
+                     return new MyThrowable();
+                 }
+             }));
+         // Should succeed without exception – false positive check
+         BeanWithThrowableProperty bean = localMapper.readValue("{\"throwable\":{}}",
+BeanWithThrowableProperty.class);
+         assertNotNull(bean);
+         assertNotNull(bean.throwable);
+     }
+
+     // -- Normal concrete type works -----------------------------------------
+
+     @Test
+     public void testSafeConcreteTypeWorks() throws Exception {
+         AnInterfaceImpl obj = mapper.readValue("{}", AnInterfaceImpl.class);
+         assertNotNull(obj);
+     }
+
+     // -- Boundary: Abstract class with materialization ----------------------
+
+     public abstract static class AbstractMaterialized {
+         public int x;
+         public int getX() { return x; }
+         public void setX(int x) { this.x = x; }
+     }
+     public static class ConcreteMaterialized extends AbstractMaterialized { }
+
+     @Test
+     public void testAbstractTypeWithDefaultImplWorks() throws Exception {
+         // Should work if materialization is configured; otherwise may fail.
+         // Here we test that deserializing abstract type without concrete mapping
+         // results in "Illegal type" (since no materialization).
+         thrown.expect(JsonMappingException.class);
+         thrown.expectMessage("Illegal type");
+         mapper.readValue("{\"x\":1}", AbstractMaterialized.class);
+     }
+
+     // -- Edge: Enums should still be deserializable (not illegal) ------------
+
+     enum TestEnum { A, B }
+
+     @Test
+     public void testEnumDeserializationNotBlocked() throws Exception {
+         TestEnum e = mapper.readValue("\"A\"", TestEnum.class);
+         assertEquals(TestEnum.A, e);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 6
+ - com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testAbstractTypeWithDefaultImplWorks
+ - com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testBeanFieldOfThrowableWithoutSetter
+ - com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testDirectDeserializationOfProxyClass
+Failing generated tests: com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testAbstractTypeWithDefaultImplWorks, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testBeanFieldOfThrowableWithoutSetter, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testBeanPropertyOfProxySubclass, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testBeanPropertyOfThrowableSubclass, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testConstructorParamOfIllegalType, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testDirectDeserializationOfAbstractCollection, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testDirectDeserializationOfAbstractMap, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testDirectDeserializationOfProxyClass, com.fasterxml.jackson.databind.interop.BeanDeserializerFactory_IllegalTypesTest::testDirectDeserializationOfThrowable

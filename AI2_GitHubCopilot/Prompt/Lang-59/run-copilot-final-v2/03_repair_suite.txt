@@ -1,0 +1,180 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 59  Version: Lang-59b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-299
+Trigger failures:
+- org.apache.commons.lang.text.StrBuilderAppendInsertTest::testLang299
+ --> java.lang.ArrayIndexOutOfBoundsException
+Modified: org.apache.commons.lang.text.StrBuilder
+
+Available API/signatures:
+[org.apache.commons.lang.text.StrBuilder | java]
+package org.apache.commons.lang.text;
+public class StrBuilder implements Cloneable {
+protected char[] buffer;
+protected int size;
+public StrBuilder() {
+public StrBuilder(int initialCapacity) {
+public StrBuilder(String str) {
+public String getNewLineText() {
+public StrBuilder setNewLineText(String newLine) {
+public String getNullText() {
+public StrBuilder setNullText(String nullText) {
+public int length() {
+public StrBuilder setLength(int length) {
+public int capacity() {
+public StrBuilder ensureCapacity(int capacity) {
+public StrBuilder minimizeCapacity() {
+public int size() {
+public boolean isEmpty() {
+public StrBuilder clear() {
+public char charAt(int index) {
+public StrBuilder setCharAt(int index, char ch) {
+public StrBuilder deleteCharAt(int index) {
+public char[] toCharArray() {
+public char[] toCharArray(int startIndex, int endIndex) {
+public char[] getChars(char[] destination) {
+public void getChars(int startIndex, int endIndex, char destination[], int destinationIndex) {
+public StrBuilder appendNewLine() {
+public StrBuilder appendNull() {
+public StrBuilder append(Object obj) {
+public StrBuilder append(String str) {
+public StrBuilder append(String str, int startIndex, int length) {
+public StrBuilder append(StringBuffer str) {
+public StrBuilder append(StringBuffer str, int startIndex, int length) {
+public StrBuilder append(StrBuilder str) {
+public StrBuilder append(StrBuilder str, int startIndex, int length) {
+public StrBuilder append(char[] chars) {
+public StrBuilder append(char[] chars, int startIndex, int length) {
+public StrBuilder append(boolean value) {
+public StrBuilder append(c
+...[truncated deterministically]...
+lic String toString() {
+public StringBuffer toStringBuffer() {
+protected int validateRange(int startIndex, int endIndex) {
+protected void validateIndex(int index) {
+class StrBuilderTokenizer extends StrTokenizer {
+protected List tokenize(char[] chars, int offset, int count) {
+public String getContent() {
+class StrBuilderReader extends Reader {
+public void close() {
+public int read() {
+public int read(char b[], int off, int len) {
+public long skip(long n) {
+public boolean ready() {
+public boolean markSupported() {
+public void mark(int readAheadLimit) {
+public void reset() {
+class StrBuilderWriter extends Writer {
+public void flush() {
+public void write(int c) {
+public void write(char[] cbuf) {
+public void write(char[] cbuf, int off, int len) {
+public void write(String str) {
+public void write(String str, int off, int len) {
+
+Generated JUnit Test:
+package org.apache.commons.lang.text;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests targeting LANG-299 bug in StrBuilder: ArrayIndexOutOfBoundsException
+  * in append/insert operations due to incorrect buffer capacity management.
+  */
+ public class StrBuilderTest {
+
+     @Test(expected = ArrayIndexOutOfBoundsException.class)
+     public void testAppendFixedWidthPadRightOverflow() {
+         // Bug: when strLen >= width, the method writes strLen chars into a buffer
+         // sized only for 'width' additional chars, causing AIOOBE.
+         StrBuilder sb = new StrBuilder();
+         sb.appendFixedWidthPadRight("hello", 3, ' ');
+     }
+
+     @Test
+     public void testAppendFixedWidthPadRightPadSmaller() {
+         // Normal case: strLen < width, padding fills the gap.
+         StrBuilder sb = new StrBuilder();
+         sb.appendFixedWidthPadRight("hi", 5, '-');
+         assertEquals("hi---", sb.toString());
+     }
+
+     @Test
+     public void testAppendFixedWidthPadRightExactFit() {
+         // Boundary: strLen == width, no padding needed, writes exactly width chars.
+         StrBuilder sb = new StrBuilder();
+         sb.appendFixedWidthPadRight("abc", 3, '_');
+         assertEquals("abc", sb.toString());
+     }
+
+     @Test
+     public void testAppendStringValidSubstring() {
+         StrBuilder sb = new StrBuilder();
+         sb.append("hello", 1, 3);
+         assertEquals("ell", sb.toString());
+     }
+
+     @Test
+     public void testAppendStringZeroLength() {
+         StrBuilder sb = new StrBuilder("test");
+         sb.append("hello", 2, 0);
+         assertEquals("test", sb.toString());
+     }
+
+     @Test(expected = StringIndexOutOfBoundsException.class)
+     public void testAppendStringNegativeStartIndex() {
+         new StrBuilder().append("hello", -1, 3);
+     }
+
+     @Test(expected = StringIndexOutOfBoundsException.class)
+     public void testAppendStringNegativeLength() {
+         new StrBuilder().append("hello", 1, -1);
+     }
+
+     @Test(expected = StringIndexOutOfBoundsException.class)
+     public void testAppendStringStartPlusLengthExceedsSource() {
+         // startIndex + length > str.length() must throw
+         new StrBuilder().append("hello", 1, 5);
+     }
+
+     @Test
+     public void testAppendAfterBufferResize() {
+         // Force buffer resize by appending beyond initial capacity.
+         StrBuilder sb = new StrBuilder(5);
+         sb.append("12345");
+         sb.append("67890");
+         assertEquals("1234567890", sb.toString());
+     }
+
+     @Test(expected = StringIndexOutOfBoundsException.class)
+     public void testInsertCharArrayInvalidOffset() {
+         new StrBuilder().insert(0, new char[] { 'a', 'b' }, -1, 1);
+     }
+
+     @Test(expected = StringIndexOutOfBoundsException.class)
+     public void testInsertCharArrayInvalidLength() {
+         new StrBuilder().insert(0, new char[] { 'a', 'b' }, 0, 3);
+     }
+
+     @Test
+     public void testAppendStringBufferValidSubstring() {
+         StrBuilder sb = new StrBuilder();
+         StringBuffer buf = new StringBuffer("hello");
+         sb.append(buf, 1, 3);
+         assertEquals("ell", sb.toString());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.lang.text.StrBuilderTest::testAppendFixedWidthPadRightOverflow
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.lang.text.StrBuilderTest::testAppendFixedWidthPadRightOverflow

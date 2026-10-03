@@ -1,0 +1,332 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 100  Version: Math-100b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-200
+Trigger failures:
+- org.apache.commons.math.estimation.GaussNewtonEstimatorTest::testBoundParameters
+ --> java.lang.ArrayIndexOutOfBoundsException: 6
+Modified: org.apache.commons.math.estimation.AbstractEstimator
+
+Available API/signatures:
+[org.apache.commons.math.estimation.AbstractEstimator | java]
+package org.apache.commons.math.estimation;
+public abstract class AbstractEstimator implements Estimator {
+protected AbstractEstimator() {
+public final void setMaxCostEval(int maxCostEval) {
+public final int getCostEvaluations() {
+public final int getJacobianEvaluations() {
+protected void updateJacobian() {
+protected final void incrementJacobianEvaluationsCounter() {
+protected void updateResidualsAndCost()
+public double getRMS(EstimationProblem problem) {
+public double getChiSquare(EstimationProblem problem) {
+public double[][] getCovariances(EstimationProblem problem)
+final int rows = problem.getMeasurements().length;
+final int cols = problem.getAllParameters().length;
+public double[] guessParametersErrors(EstimationProblem problem)
+final double c = Math.sqrt(getChiSquare(problem) / (m - p));
+protected void initializeEstimate(EstimationProblem problem) {
+public abstract void estimate(EstimationProblem problem)
+protected WeightedMeasurement[] measurements;
+protected EstimatedParameter[] parameters;
+protected double[] jacobian;
+protected int cols;
+protected int rows;
+protected double[] residuals;
+protected double cost;
+
+Generated JUnit Test:
+package org.apache.commons.math.estimation;
+
+ import java.util.HashMap;
+ import java.util.Map;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ /**
+  * Tests for {@link AbstractEstimator#getCovariances(EstimationProblem)} focusing on
+  * bound-parameter dimension handling.
+  */
+ public class AbstractEstimatorTest {
+
+     // ---- helpers ----
+
+     private static EstimationProblem problem(WeightedMeasurement[] measurements,
+                                              EstimatedParameter[] allParams) {
+         return new EstimationProblem() {
+             @Override
+             public WeightedMeasurement[] getMeasurements() {
+                 return measurements;
+             }
+
+             @Override
+             public EstimatedParameter[] getUnboundParameters() {
+                 java.util.List<EstimatedParameter> list = new java.util.ArrayList<>();
+                 for (EstimatedParameter p : allParams) {
+                     if (!p.isBound()) {
+                         list.add(p);
+                     }
+                 }
+                 return list.toArray(new EstimatedParameter[0]);
+             }
+
+             @Override
+             public EstimatedParameter[] getAllParameters() {
+                 return allParams;
+             }
+         };
+     }
+
+     /**
+      * Minimal concrete estimator that only initialises the internal arrays
+      * so that {@link AbstractEstimator#getCovariances(EstimationProblem)} can be called
+      * without a full estimation loop.
+      */
+     private static class CovEstimator extends AbstractEstimator {
+         @Override
+         public void estimate(EstimationProblem problem) throws EstimationException {
+             initializeEstimate(problem);
+         }
+     }
+
+     /** A {@link WeightedMeasurement} that stores its partials in a map. */
+     private static class WM extends WeightedMeasurement {
+         private final double weight;
+         private final double residual;
+         private final Map<EstimatedParameter, Double> partials = new HashMap<>();
+
+         WM(double weight, double residual) {
+             super(weight, 0.0);  // measuredValue unused; residual & weight are overridden below
+             this.weight = weight;
+             this.residual = residual;
+         }
+
+         void putPartial(EstimatedParameter p, double value) {
+             partials.put(p, value);
+         }
+
+         @Override
+         public double getWeight() { return weight; }
+
+         @Override
+         public double getResidual() { return residual; }
+
+         @Override
+         public double getPartial(EstimatedParameter param) {
+             Double v = partials.get(param);
+             return v == null ? 0.0 : v.doubleValue();
+         }
+     }
+
+     // ---- actual tests ----
+
+     @Test
+     public void testCovariancesNoBoundParams() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 1.0);
+         m1.putPartial(b, 0.0);
+         WM m2 = new WM(1.0, 0.0);
+         m2.putPartial(a, 0.0);
+         m2.putPartial(b, 2.0);
+
+         WeightedMeasurement[] ms = {m1, m2};
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         double[][] cov = est.getCovariances(problem(ms, all));
+         assertEquals(2, cov.length);
+         assertEquals(2, cov[0].length);
+     }
+
+     @Test
+     public void testCovariancesOneBoundParam() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+         b.setBound(true);
+
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 2.0);
+         WM m2 = new WM(1.0, 0.0);
+         m2.putPartial(a, 3.0);
+
+         WeightedMeasurement[] ms = {m1, m2};
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         double[][] cov = est.getCovariances(problem(ms, all));
+         assertEquals(1, cov.length);
+         assertEquals(1, cov[0].length);
+     }
+
+     @Test
+     public void testCovariancesAllBoundParams() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         a.setBound(true);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+         b.setBound(true);
+
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 1.0); // irrelevant; unbound count = 0
+         WeightedMeasurement[] ms = {m1};
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         double[][] cov = est.getCovariances(problem(ms, all));
+         // 0 × 0 matrix expected (no free parameters)
+         assertEquals(0, cov.length);
+     }
+
+     @Test(expected = EstimationException.class)
+     public void testCovariancesZeroMeasurements() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         WeightedMeasurement[] ms = {};
+         EstimatedParameter[] all = {a};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         est.getCovariances(problem(ms, all)); // singular J^T J
+     }
+
+     @Test(expected = EstimationException.class)
+     public void testCovariancesInsufficientMeasurements() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 1.0);
+         m1.putPartial(b, 0.0);
+         WeightedMeasurement[] ms = {m1}; // 1 measurement, 2 unbound → singular
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         est.getCovariances(problem(ms, all));
+     }
+
+     @Test(expected = EstimationException.class)
+     public void testCovariancesSingularMatrix() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 0.0);
+         WM m2 = new WM(1.0, 0.0);
+         m2.putPartial(a, 0.0);
+         WeightedMeasurement[] ms = {m1, m2};
+         EstimatedParameter[] all = {a};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         est.getCovariances(problem(ms, all)); // all-zero Jacobian
+     }
+
+     @Test
+     public void testCovariancesExpectedValues() throws EstimationException {
+         // J = [[1,0],[0,2]]  →  (J^T J) = diag(1,4)  →  cov = diag(1, 0.25)
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 1.0);
+         m1.putPartial(b, 0.0);
+         WM m2 = new WM(1.0, 0.0);
+         m2.putPartial(a, 0.0);
+         m2.putPartial(b, 2.0);
+         WeightedMeasurement[] ms = {m1, m2};
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         double[][] cov = est.getCovariances(problem(ms, all));
+         assertEquals(2, cov.length);
+         assertEquals(1.0, cov[0][0], 1e-12);
+         assertEquals(0.0, cov[0][1], 1e-12);
+         assertEquals(0.0, cov[1][0], 1e-12);
+         assertEquals(0.25, cov[1][1], 1e-12);
+     }
+
+     @Test
+     public void testGuessParametersErrorsNoDegreesOfFreedom() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+         WM m1 = new WM(1.0, 0.0);
+         m1.putPartial(a, 1.0);
+         m1.putPartial(b, 0.0);
+         WM m2 = new WM(1.0, 0.0);
+         m2.putPartial(a, 0.0);
+         m2.putPartial(b, 1.0);
+         WeightedMeasurement[] ms = {m1, m2};  // 2 meas, 2 params → no dof
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         try {
+             est.guessParametersErrors(problem(ms, all));
+             fail("EstimationException expected");
+         } catch (EstimationException e) {
+             // expected
+         }
+     }
+
+     @Test
+     public void testGuessParametersErrorsWithBoundParam() throws EstimationException {
+         EstimatedParameter a = new EstimatedParameter("a", 1.0);
+         EstimatedParameter b = new EstimatedParameter("b", 2.0);
+         b.setBound(true);
+         // 2 measurements, 1 unbound → dof = 1
+         WM m1 = new WM(1.0, 1.0);
+         m1.putPartial(a, 2.0);
+         WM m2 = new WM(1.0, 2.0);
+         m2.putPartial(a, 3.0);
+         WeightedMeasurement[] ms = {m1, m2};
+         EstimatedParameter[] all = {a, b};
+
+         CovEstimator est = new CovEstimator();
+         est.estimate(problem(ms, all));
+         double[] errors = est.guessParametersErrors(problem(ms, all));
+         // guessParametersErrors is expected to report errors for unbound parameters.
+         // The exact length depends on the bug fix: after the fix it should equal the
+         // number of unbound parameters.  With the bug it uses all parameters, so the
+         // assertion below exposes the discrepancy (still no ArrayIndexOutOfBounds).
+         assertEquals("errors array length must match unbound parameter count", 1, errors.length);
+         assertFalse(Double.isNaN(errors[0]));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-100f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-100f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-100f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+ [javac] ^
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/FunctionEvaluationException.java:43: warning: [deprecation] Double(double) in Double has been deprecated
+ [javac] new Object[] { new Double(argument) });
+ [javac] ^
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/ArgumentOutsideDomainException.java:41: warning: [deprecation] Double(double) in Double has been deprecated
+ [javac] new Object[] { new Double(argument), new Double(lower), new Double(upper) });
+ [javac] ^
+ [javac] ^
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/DimensionMismatchException.java:38: warning: [deprecation] Integer(int) in Integer has been deprecated
+ [javac] new Integer(dimension1), new Integer(dimension2)
+ [javac] ^
+ [javac] ^
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/DuplicateSampleAbscissaException.java:38: warning: [deprecation] Double(double) in Double has been deprecated
+ [javac] new Object[] { new Double(abscissa), new Integer(i1), new Integer(i2) });
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/DuplicateSampleAbscissaException.java:38: warning: [deprecation] Integer(int) in Integer has been deprecated
+ [javac] ^
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/MaxIterationsExceededException.java:44: warning: [deprecation] Integer(int) in Integer has been deprecated
+ [javac] new Object[] { new Integer(maxIterations) });
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/analysis/UnivariateRealSolverUtils.java:202: warning: [deprecation] Integer(int) in Integer has been deprecated
+ [javac] ^
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/fraction/FractionConversionException.java:42: warning: [deprecation] Double(double) in Double has been deprecated
+ [javac] new Object[] { new Double(value), new Integer(maxIterations) });
+ [javac] /root/sqa-workspaces/Math-100f-copilot/src/java/org/apache/commons/math/fraction/FractionConversionException.java:42: warning: [deprecation] Integer(int) in Integer has been deprecated

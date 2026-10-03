@@ -1,0 +1,371 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Chart  Bug: 7  Version: Chart-7b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Defects4J project build
+Target: org.jfree.data.time.TimePeriodValues
+Modified: org.jfree.data.time.TimePeriodValues
+Triggers: org.jfree.data.time.junit.TimePeriodValuesTests::testGetMaxMiddleIndex
+
+Bug/specification summary:
+Bug report: UNKNOWN
+Trigger failures:
+- org.jfree.data.time.junit.TimePeriodValuesTests::testGetMaxMiddleIndex
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<3>
+Modified: org.jfree.data.time.TimePeriodValues
+
+Prompt-01 test plan:
+TARGETS: TimePeriodValues.getMaxMiddleIndex() after add/update/delete
+TARGETS: TimePeriodValues.recalculateBounds() internal logic for max middle
+ORACLES: Expected max middle index = index of item with greatest TimePeriod.getMiddleMillisecond()
+CASES: Normal: add periods with distinct middle instants; check max middle index
+CASES: Boundary: all items have identical periods (equal middles); expects last-added index?
+CASES: After delete: remove item with current max middle; verify index shifts to next highest
+CASES: Update item value (not period) should not change max middle index
+RISKS: No public spec for equal-middle tie-breaking; inferred from trigger expecting 1 not 3
+RISKS: Cannot see updateBounds/recalculateBounds implementations; internal errors possible
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jfree.data.time.TimePeriodValues (java) =====
+/* API SIGNATURES */
+package org.jfree.data.time;
+public class TimePeriodValues extends Series implements Serializable {
+protected static final String DEFAULT_DOMAIN_DESCRIPTION = "Time";
+protected static final String DEFAULT_RANGE_DESCRIPTION = "Value";
+public TimePeriodValues(Comparable name) {
+public TimePeriodValues(Comparable name, String domain, String range) {
+public String getDomainDescription() {
+public void setDomainDescription(String description) {
+public String getRangeDescription() {
+public void setRangeDescription(String description) {
+public int getItemCount() {
+public TimePeriodValue getDataItem(int index) {
+public TimePeriod getTimePeriod(int index) {
+public Number getValue(int index) {
+public void add(TimePeriodValue item) {
+private void updateBounds(TimePeriod period, int index) {
+private void recalculateBounds() {
+public void add(TimePeriod period, double value) {
+public void add(TimePeriod period, Number value) {
+public void update(int index, Number value) {
+public void delete(int start, int end) {
+public boolean equals(Object obj) {
+public int hashCode() {
+public Object clone() throws CloneNotSupportedException {
+public TimePeriodValues createCopy(int start, int end)
+public int getMinStartIndex() {
+public int getMaxStartIndex() {
+public int getMinMiddleIndex() {
+public int getMaxMiddleIndex() {
+public int getMinEndIndex() {
+public int getMaxEndIndex() {
+
+/* HEADER */
+package org.jfree.data.time;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+import org.jfree.chart.util.ObjectUtilities;
+import org.jfree.data.general.Series;
+import org.jfree.data.general.SeriesChangeEvent;
+import org.jfree.data.general.SeriesException;
+public class TimePeriodValues extends Series implements Serializable {
+
+/* METHOD TimePeriodValues */
+public TimePeriodValues(Comparable name, String domain, String range) {
+ super(name);
+ this.domain = domain;
+ this.range = range;
+ this.data = new ArrayList();
+ }
+
+/* METHOD TimePeriodValues */
+public TimePeriodValues(Comparable name) {
+ this(name, DEFAULT_DOMAIN_DESCRIPTION, DEFAULT_RANGE_DESCRIPTION);
+ }
+
+/* METHOD update */
+public void update(int index, Number value) {
+ TimePeriodValue item = getDataItem(index);
+ item.setValue(value);
+ fireSeriesChanged();
+ }
+
+/* METHOD equals */
+public boolean equals(Object obj) {
+ if (obj == this) {
+ return true;
+ }
+ if (!(obj instanceof TimePeriodValues)) {
+ return false;
+ }
+ if (!super.equals(obj)) {
+ return false;
+ }
+ TimePeriodValues that = (TimePeriodValues) obj;
+ if (!ObjectUtilities.equal(this.getDomainDescription(), 
+ that.getDomainDescription())) {
+ return false;
+ }
+ if (!ObjectUtilities.equal(this.getRangeDescription(), 
+ that.getRangeDescription())) {
+ return false;
+ }
+ int count = getItemCount();
+ if (count != that.getItemCount()) {
+ return false;
+ }
+ for (int i = 0; i < count; i++) {
+ if (!getDataItem(i).equals(that.getDataItem(i))) {
+ return false;
+ }
+ }
+ return true;
+ }
+
+/* METHOD createCopy */
+public TimePeriodValues createCopy(int start, int end) 
+ throws CloneNotSupportedException {
+
+ TimePeriodValues copy = (TimePeriodValues) super.clone();
+
+ copy.data = new ArrayList();
+ if (this.data.size() > 0) {
+ for (int index = start; index <= end; index++) {
+ TimePeriodValue item = (TimePeriodValue) this.data.get(index);
+ TimePeriodValue clone = (TimePeriodValue) item.clone();
+ try {
+ copy.add(clone);
+ }
+ catch (SeriesException e) {
+ System.err.println("Failed to add cloned item.");
+ }
+ }
+ }
+ return copy;
+
+ }
+
+/* METHOD add */
+public void add(TimePeriodValue item) {
+ if (item == null) {
+ throw new IllegalArgumentException("Null item not allowed.");
+ }
+ this.data.add(item);
+ updateBounds(item.getPeriod(), this.data.size() - 1);
+ fireSeriesChanged();
+ }
+
+/* METHOD getDataItem */
+public TimePeriodValue getDataItem(int index) {
+ return (TimePeriodValue) this.data.get(index);
+ }
+
+/* METHOD getTimePeriod */
+public TimePeriod getTimePeriod(int index) {
+ return getDataItem(index).getPeriod();
+ }
+
+/* METHOD getValue */
+public Number getValue(int index) {
+ return getDataItem(index).getValue();
+ }
+
+/* METHOD add */
+public void add(TimePeriod period, Number value) {
+ TimePeriodValue item = new TimePeriodValue(period, value);
+ add(item);
+ }
+
+/* METHOD getDomainDescription */
+public String getDomainDescription() {
+ return this.domain;
+ }
+
+/* METHOD setDomainDescription */
+public void setDomainDescription(String description) {
+ String old = this.domain;
+ this.domain = description;
+ firePropertyChange("Domain", old, description);
+ }
+
+/* METHOD getRangeDescription */
+public String getRangeDescription() {
+ return this.range;
+ }
+
+/* METHOD setRangeDescription */
+public void setRangeDescription(String description) {
+ String old = this.range;
+ this.range = description;
+ firePropertyChange("Range", old, description);
+ }
+
+/* METHOD getItemCount */
+public int getItemCount() {
+ return this.data.size();
+ }
+
+/* METHOD add */
+public void add(TimePeriod period, double value) {
+ TimePeriodValue item = new TimePeriodValue(period, value);
+ add(item);
+ }
+
+/* METHOD delete */
+public void delete(int start, int end) {
+ for (int i = 0; i <= (end - start); i++) {
+ this.data.remove(start);
+ }
+ recalculateBounds();
+ fireSeriesChanged();
+ }
+
+/* METHOD hashCode */
+public int hashCode() {
+ int result;
+ result = (this.domain != null ? this.domain.hashCode() : 0);
+ result = 29 * result + (this.range != null ? this.range.hashCode() : 0);
+ result = 29 * result + this.data.hashCode();
+ result = 29 * result + this.minStartIndex;
+ result = 29 * result + this.maxStartIndex;
+ result = 29 * result + this.minMiddleIndex;
+ result = 29 * result + this.maxMiddleIndex;
+ result = 29 * result + this.minEndIndex;
+ result = 29 * result + this.maxEndIndex;
+ return result;
+ }
+
+/* METHOD clone */
+public Object clone() throws CloneNotSupportedException {
+ Object clone = createCopy(0, getItemCount() - 1);
+ return clone;
+ }
+
+/* METHOD getMinStartIndex */
+public int getMinStartIndex() {
+ return this.minStartIndex;
+ }
+
+/* METHOD getMaxStartIndex */
+public int getMaxStartIndex() {
+ return this.maxStartIndex;
+ }
+
+/* METHOD getMinMiddleIndex */
+public int getMinMiddleIndex() {
+ return this.minMiddleIndex;
+ }
+
+/* METHOD getMaxMiddleIndex */
+public int getMaxMiddleIndex() {
+ return this.maxMiddleIndex;
+ }
+
+/* METHOD getMinEndIndex */
+public int getMinEndIndex() {
+ return this.minEndIndex;
+ }
+
+/* METHOD getMaxEndIndex */
+public int getMaxEndIndex() {
+ return this.maxEndIndex;
+ }
+
+/* METHOD updateBounds */
+private void updateBounds(TimePeriod period, int index) {
+ 
+ long start = period.getStart().getTime();
+ long end = period.getEnd().getTime();
+ long middle = start + ((end - start) / 2);
+
+ if (this.minStartIndex >= 0) {
+ long minStart = getDataItem(this.minStartIndex).getPeriod()
+ .getStart().getTime();
+ if (start < minStart) {
+ this.minStartIndex = index; 
+ }
+ }
+ else {
+ this.minStartIndex = index;
+ }
+ 
+ if (this.maxStartIndex >= 0) {
+ long maxStart = getDataItem(this.maxStartIndex).getPeriod()
+ .getStart().getTime();
+ if (start > maxStart) {
+ this.maxStartIndex = index; 
+ }
+ }
+ else {
+ this.maxStartIndex = index;
+ }
+ 
+ if (this.minMiddleIndex >= 0) {
+ long s = getDataItem(this.minMiddleIndex).getPeriod().getStart()
+ .getTime();
+ long e = getDataItem(this.minMiddleIndex).getPeriod().getEnd()
+ .getTime();
+ long minMiddle = s + (e - s) / 2;
+ if (middle < minMiddle) {
+ this.minMiddleIndex = index; 
+ }
+ }
+ else {
+ this.minMiddleIndex = index;
+ }
+ 
+ if (this.maxMiddleIndex >= 0) {
+ long s = getDataItem(this.minMiddleIndex).getPeriod().getStart()
+ .getTime();
+ long e = getDataItem(this.minMiddleIndex).getPeriod().getEnd()
+ .getTime();
+ long maxMiddle = s + (e - s) / 2;
+ if (middle > maxMiddle) {
+ this.maxMiddleIndex = index; 
+ }
+ }
+ else {
+ this.maxMiddleIndex = index;
+ }
+ 
+ if (this.minEndIndex >= 0) {
+ long minEnd = getDataItem(this.minEndIndex).getPeriod().getEnd()
+ .getTime();
+ if (end < minEnd) {
+ this.minEndIndex = index; 
+ }
+ }
+ else {
+ this.minEndIndex = index;
+ }
+ 
+ if (this.maxEndIndex >= 0) {
+ long maxEnd = getDataItem(this.maxEndIndex).getPeriod().getEnd()
+ .getTime();
+ if (end > maxEnd) {
+ this.maxEndIndex = index; 
+ }
+ }
+ else {
+ this.maxEndIndex = index;
+ }
+ 
+ }
+
+/* METHOD recalculateBounds */
+private void recalculateBounds() {
+ this.minStartIndex = -1;
+ this.minMiddleIndex = -1;
+ this.minEndIndex = -1;
+ this.maxStartIndex = -1;
+ this.maxMiddleIndex = -1;
+ this.maxEndIndex = -1;
+ for (int i = 0; i < this.data.size(); i++) {
+ TimePeriodValue tpv = (TimePeriodValue) this.data.get(i);
+ updateBounds(tpv.getPeriod(), i);
+ }
+ }

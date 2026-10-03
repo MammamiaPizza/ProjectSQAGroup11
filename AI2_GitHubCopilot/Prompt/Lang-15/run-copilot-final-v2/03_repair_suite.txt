@@ -1,0 +1,190 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 15  Version: Lang-15b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-775
+Trigger failures:
+- org.apache.commons.lang3.reflect.TypeUtilsTest::testGetTypeArguments
+ --> junit.framework.AssertionFailedError: expected:<2> but was:<0>
+ - org.apache.commons.lang3.reflect.TypeUtilsTest::testIsAssignable
+ --> junit.framework.AssertionFailedError: type class org.apache.commons.lang3.reflect.TypeUtilsTest$Thing not assignable to org.apache.commons.lang3.reflect.TypeUtilsTest$This<java.lang.String, java.lang.String>!
+Modified: org.apache.commons.lang3.reflect.TypeUtils
+
+Available API/signatures:
+[org.apache.commons.lang3.reflect.TypeUtils | java]
+package org.apache.commons.lang3.reflect;
+public class TypeUtils {
+public TypeUtils() {
+public static boolean isAssignable(Type type, Type toType) {
+private static boolean isAssignable(Type type, Class<?> toClass) {
+return toClass.equals(Object.class)
+private static Type unrollVariableAssignments(TypeVariable<?> var, Map<TypeVariable<?>, Type> typeVarAssigns) {
+private static Type substituteTypeVariables(Type type, Map<TypeVariable<?>, Type> typeVarAssigns) {
+public static Map<TypeVariable<?>, Type> getTypeArguments(ParameterizedType type) {
+public static Map<TypeVariable<?>, Type> getTypeArguments(Type type, Class<?> toClass) {
+private static Type getClosestParentType(Class<?> cls, Class<?> superClass) {
++ " interface type found: " + midType);
+public static boolean isInstance(Object value, Type type) {
+public static Type[] normalizeUpperBounds(Type[] bounds) {
+public static Type[] getImplicitBounds(TypeVariable<?> typeVariable) {
+return bounds.length == 0 ? new Type[] { Object.class } : normalizeUpperBounds(bounds);
+public static Type[] getImplicitUpperBounds(WildcardType wildcardType) {
+public static Type[] getImplicitLowerBounds(WildcardType wildcardType) {
+public static boolean typesSatisfyVariables(Map<TypeVariable<?>, Type> typeVarAssigns) {
+private static Class<?> getRawType(ParameterizedType parameterizedType) {
+public static Class<?> getRawType(Type type, Type assigningType) {
+public static boolean isArrayType(Type type) {
+public static Type getArrayComponentType(Type type) {
+
+Generated JUnit Test:
+package org.apache.commons.lang3.reflect;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ import java.lang.reflect.*;
+ import java.util.*;
+
+ public class TypeUtilsLANG775Test {
+
+     // ---- helper types ----
+     static class This<X, Y> {}
+     static class Thing extends This<String, String> {}
+
+     static class Single<Z> {}
+     static class SubSingle extends Single<Integer> {}
+
+     static class WildcardFields {
+         List<Integer> intList;
+         List<Number> numList;
+         List<? extends Number> extNumList;
+         List<? super Integer> supIntList;
+         List<String> strList;
+         List listRaw;
+     }
+
+     interface Bounded<T extends Comparable<T>> {}
+     static class BoundedImpl implements Bounded<Integer> {}
+
+     // -------------------- test methods ----
+
+     @Test
+     public void testGetTypeArgumentsWithTwoParams() throws Exception {
+         Map<TypeVariable<?>, Type> args = TypeUtils.getTypeArguments(Thing.class, This.class);
+         assertEquals(2, args.size());
+         for (Map.Entry<TypeVariable<?>, Type> e : args.entrySet()) {
+             assertEquals(String.class, e.getValue());
+         }
+     }
+
+     @Test
+     public void testIsAssignableConcreteSubtypeToSuperType() throws Exception {
+         Type thingSuper = Thing.class.getGenericSuperclass();
+         assertTrue(TypeUtils.isAssignable(Thing.class, thingSuper));
+     }
+
+     @Test
+     public void testGetTypeArgumentsWithSingleParam() throws Exception {
+         Map<TypeVariable<?>, Type> args = TypeUtils.getTypeArguments(SubSingle.class,
+Single.class);
+         assertEquals(1, args.size());
+         assertEquals(Integer.class, args.values().iterator().next());
+     }
+
+     @Test
+     public void testIsAssignableSubSingleToSingle() throws Exception {
+         Type subSingleSuper = SubSingle.class.getGenericSuperclass();
+         assertTrue(TypeUtils.isAssignable(SubSingle.class, subSingleSuper));
+     }
+
+     @Test
+     public void testGetTypeArgumentsWithWildcardParameterizedType() throws Exception {
+         Field f = WildcardFields.class.getDeclaredField("extNumList");
+         Type type = f.getGenericType();
+         assertTrue(type instanceof ParameterizedType);
+         Map<TypeVariable<?>, Type> args = TypeUtils.getTypeArguments((ParameterizedType) type);
+         assertEquals(1, args.size());
+         Type arg = args.values().iterator().next();
+         assertTrue(arg instanceof WildcardType);
+     }
+
+     @Test
+     public void testIsAssignableWildcardUpperBoundTrue() throws Exception {
+         Type intListType = WildcardFields.class.getDeclaredField("intList").getGenericType();
+         Type extNumListType = WildcardFields.class.getDeclaredField("extNumList").getGenericType();
+         assertTrue(TypeUtils.isAssignable(intListType, extNumListType));
+     }
+
+     @Test
+     public void testIsAssignableWildcardLowerBoundTrue() throws Exception {
+         Type intListType = WildcardFields.class.getDeclaredField("intList").getGenericType();
+         Type supIntListType = WildcardFields.class.getDeclaredField("supIntList").getGenericType();
+         assertTrue(TypeUtils.isAssignable(intListType, supIntListType));
+     }
+
+     @Test
+     public void testIsAssignableInvariantFalse() throws Exception {
+         Type strListType = WildcardFields.class.getDeclaredField("strList").getGenericType();
+         Type numListType = WildcardFields.class.getDeclaredField("numList").getGenericType();
+         assertFalse(TypeUtils.isAssignable(strListType, numListType));
+     }
+
+     @Test
+     public void testIsAssignableNullType() throws Exception {
+         Type target = This.class; // any non-null
+         assertTrue(TypeUtils.isAssignable(null, target));
+     }
+
+     @Test
+     public void testGetTypeArgumentsNonAssignableReturnsNull() throws Exception {
+         // String is not related to This
+         Map<TypeVariable<?>, Type> args = TypeUtils.getTypeArguments(String.class, This.class);
+         assertNull(args);
+     }
+
+     @Test
+     public void testIsAssignableRawToParameterized() throws Exception {
+         Type listRawType = WildcardFields.class.getDeclaredField("listRaw").getGenericType();
+         Type intListType = WildcardFields.class.getDeclaredField("intList").getGenericType();
+         // raw List is assignable to List<Integer>? Usually no, but raw is assignable to
+parameterized types per JLS.
+         assertTrue(TypeUtils.isAssignable(listRawType, intListType));
+     }
+
+     @Test
+     public void testGetTypeArgumentsWithBoundedTypeVariable() throws Exception {
+         Type implSuper = BoundedImpl.class.getGenericSuperclass(); // Bounded<Integer>
+         // getTypeArguments(Type, Class<?>) for impl class to Bounded interface
+         Map<TypeVariable<?>, Type> args = TypeUtils.getTypeArguments(BoundedImpl.class,
+Bounded.class);
+         assertEquals(1, args.size());
+         for (Map.Entry<TypeVariable<?>, Type> e : args.entrySet()) {
+             assertEquals(Integer.class, e.getValue());
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Lang-15f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Lang-15f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Lang-15f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- commons-lang3 3.2-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Lang-15f-copilot/target
+compile:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Lang-15f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Lang-15f-copilot/.test_suite/org/apache/commons/lang3/reflect/TypeUtilsLANG775Test.java:111: error: ';' expected
+ [javac] parameterized types per JLS.
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 8 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

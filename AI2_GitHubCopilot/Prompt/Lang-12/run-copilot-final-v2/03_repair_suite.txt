@@ -1,0 +1,175 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 12  Version: Lang-12b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-805
+Trigger failures:
+- org.apache.commons.lang3.RandomStringUtilsTest::testExceptions
+ --> java.lang.ArrayIndexOutOfBoundsException: 1171399597
+ - org.apache.commons.lang3.RandomStringUtilsTest::testLANG805
+ --> java.lang.ArrayIndexOutOfBoundsException: 1859709389
+Modified: org.apache.commons.lang3.RandomStringUtils
+
+Available API/signatures:
+[org.apache.commons.lang3.RandomStringUtils | java]
+package org.apache.commons.lang3;
+public class RandomStringUtils {
+private static final Random RANDOM = new Random();
+public RandomStringUtils() {
+public static String random(int count) {
+public static String randomAscii(int count) {
+public static String randomAlphabetic(int count) {
+public static String randomAlphanumeric(int count) {
+public static String randomNumeric(int count) {
+public static String random(int count, boolean letters, boolean numbers) {
+public static String random(int count, int start, int end, boolean letters, boolean numbers) {
+public static String random(int count, int start, int end, boolean letters, boolean numbers, char... chars) {
+public static String random(int count, String chars) {
+public static String random(int count, char... chars) {
+
+Generated JUnit Test:
+package org.apache.commons.lang3;
+
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for {@link RandomStringUtils} targeting bug LANG-805.
+  * All tests are independent and deterministic.
+  */
+ public class RandomStringUtilsTest {
+
+     @Test
+     public void testLANG805_emptyCharArray() {
+         // Calling random(int, char...) with an empty array exposed AIOOBE in the buggy version.
+         // After fix it must not throw, must return a string of the requested length.
+         int count = 5;
+         String s = RandomStringUtils.random(count, new char[0]);
+         assertNotNull("Result must not be null", s);
+         assertEquals("Length must equal requested count", count, s.length());
+         // Characters are unspecified but must be valid (no assertion on content beyond not
+crashing).
+     }
+
+     @Test
+     public void testNullCharArray() {
+         int count = 3;
+         String s = RandomStringUtils.random(count, (char[]) null);
+         assertEquals("Length must equal count", count, s.length());
+     }
+
+     @Test
+     public void testNullString() {
+         int count = 3;
+         String s = RandomStringUtils.random(count, (String) null);
+         assertEquals("Length must equal count", count, s.length());
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testNegativeCountThrows() {
+         RandomStringUtils.random(-1);
+     }
+
+     @Test
+     public void testZeroCountReturnsEmpty() {
+         // With no chars
+         assertEquals("", RandomStringUtils.random(0));
+         // With specific chars array
+         assertEquals("", RandomStringUtils.random(0, 'a', 'b'));
+         // With a string
+         assertEquals("", RandomStringUtils.random(0, "abc"));
+     }
+
+     @Test
+     public void testSingleChar() {
+         int count = 10;
+         String s = RandomStringUtils.random(count, 'A');
+         assertEquals("Length must equal count", count, s.length());
+         for (char c : s.toCharArray()) {
+             assertEquals("Only the supplied char must appear", 'A', c);
+         }
+     }
+
+     @Test
+     public void testStringChars() {
+         int count = 7;
+         String allowed = "xyz";
+         String s = RandomStringUtils.random(count, allowed);
+         assertEquals("Length must equal count", count, s.length());
+         for (char c : s.toCharArray()) {
+             assertTrue("Character must be from allowed string",
+                     allowed.indexOf(c) >= 0);
+         }
+     }
+
+     @Test
+     public void testStartEndRange() {
+         int count = 4;
+         int start = 65; // 'A'
+         int end = 90;   // 'Z' exclusive, so up to 'Y' actually: end=90 -> range [65,89] = A-Y
+         String s = RandomStringUtils.random(count, start, end, false, false);
+         assertEquals("Length must equal count", count, s.length());
+         for (char c : s.toCharArray()) {
+             assertTrue("Character must be within [" + start + "," + (end - 1) + "]",
+                     c >= start && c < end);
+         }
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testStartGreaterThanEndThrows() {
+         RandomStringUtils.random(5, 100, 50, false, false);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testStartEqualsEndThrows() {
+         RandomStringUtils.random(5, 42, 42, false, false);
+     }
+
+     @Test
+     public void testCharsWithInvalidStartEnd() {
+         // The method signature (int,int,int,boolean,boolean,char...) may be called with
+         // start/end unrelated to the chars array. The implementation should not
+         // throw ArrayIndexOutOfBoundsException.
+         int count = 4;
+         String s = RandomStringUtils.random(count, 100, 200, false, false, 'A');
+         assertEquals("Length must equal count", count, s.length());
+         for (char c : s.toCharArray()) {
+             assertEquals("Only the supplied chars must appear", 'A', c);
+         }
+     }
+
+     @Test
+     public void testLargeCountWithSmallSet() {
+         int count = 100;
+         String s = RandomStringUtils.random(count, 'X', 'Y');
+         assertEquals("Length must equal count", count, s.length());
+         for (char c : s.toCharArray()) {
+             assertTrue("Character must be X or Y", c == 'X' || c == 'Y');
+         }
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Lang-12f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Lang-12f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Lang-12f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- commons-lang3 3.2-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Lang-12f-copilot/target
+compile:
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Lang-12f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Lang-12f-copilot/.test_suite/org/apache/commons/lang3/RandomStringUtilsTest.java:21: error: not a statement
+ [javac] crashing).
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 6 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,143 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 24  Version: Math-24b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-855
+Trigger failures:
+- org.apache.commons.math3.optimization.univariate.BrentOptimizerTest::testMath855
+ --> junit.framework.AssertionFailedError: Best point not reported
+Modified: org.apache.commons.math3.optimization.univariate.BrentOptimizer
+
+Available API/signatures:
+[org.apache.commons.math3.optimization.univariate.BrentOptimizer | java]
+package org.apache.commons.math3.optimization.univariate;
+public class BrentOptimizer extends BaseAbstractUnivariateOptimizer {
+private static final double GOLDEN_SECTION = 0.5 * (3 - FastMath.sqrt(5));
+private static final double MIN_RELATIVE_TOLERANCE = 2 * FastMath.ulp(1d);
+@Override
+protected UnivariatePointValuePair doOptimize() {
+final boolean isMinim = getGoalType() == GoalType.MINIMIZE;
+final double lo = getMin();
+final double mid = getStartValue();
+final double hi = getMax();
+final double m = 0.5 * (a + b);
+final double tol1 = relativeThreshold * FastMath.abs(x) + absoluteThreshold;
+final boolean stop = FastMath.abs(x - m) <= tol2 - 0.5 * (b - a);
+
+Generated JUnit Test:
+package org.apache.commons.math3.optimization.univariate;
+
+import org.apache.commons.math3.analysis.UnivariateFunction;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+import org.apache.commons.math3.optimization.ConvergenceChecker;
+import org.apache.commons.math3.optimization.GoalType;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class BrentOptimizerBestPointTest {
+
+    @Test
+    public void testMinimizationReturnsBestInitialPointAtDefaultTermination() {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-10, 1e-12);
+
+        UnivariatePointValuePair result = optimizer.optimize(100,
+                                                             new UnivariateFunction() {
+                                                                 public double value(double x) {
+                                                                     return x * x;
+                                                                 }
+                                                             },
+                                                             GoalType.MINIMIZE,
+                                                             -1.0, 2.0, 0.0);
+
+        Assert.assertEquals(0.0, result.getPoint(), 0.0);
+        Assert.assertEquals(0.0, result.getValue(), 0.0);
+    }
+
+    @Test
+    public void testMaximizationReturnsBestInitialPointAtDefaultTermination() {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-10, 1e-12);
+
+        UnivariatePointValuePair result = optimizer.optimize(100,
+                                                             new UnivariateFunction() {
+                                                                 public double value(double x) {
+                                                                     return -x * x;
+                                                                 }
+                                                             },
+                                                             GoalType.MAXIMIZE,
+                                                             -1.0, 2.0, 0.0);
+
+        Assert.assertEquals(0.0, result.getPoint(), 0.0);
+        Assert.assertEquals(0.0, result.getValue(), 0.0);
+    }
+
+    @Test
+    public void testConvergenceCheckerDoesNotCauseWorseCurrentPointToBeReturned() {
+        final UnivariatePointValuePair[] compared = new UnivariatePointValuePair[2];
+        ConvergenceChecker<UnivariatePointValuePair> checker =
+            new ConvergenceChecker<UnivariatePointValuePair>() {
+                public boolean converged(int iteration,
+                                         UnivariatePointValuePair previous,
+                                         UnivariatePointValuePair current) {
+                    compared[0] = previous;
+                    compared[1] = current;
+                    return true;
+                }
+            };
+
+        BrentOptimizer optimizer = new BrentOptimizer(1e-10, 1e-12, checker);
+        UnivariatePointValuePair result = optimizer.optimize(100,
+                                                             new UnivariateFunction() {
+                                                                 public double value(double x) {
+                                                                     return x * x;
+                                                                 }
+                                                             },
+                                                             GoalType.MINIMIZE,
+                                                             -1.0, 2.0, 0.0);
+
+        Assert.assertNotNull(compared[0]);
+        Assert.assertNotNull(compared[1]);
+        Assert.assertTrue(compared[1].getValue() > compared[0].getValue());
+        Assert.assertEquals(compared[0].getPoint(), result.getPoint(), 0.0);
+        Assert.assertEquals(compared[0].getValue(), result.getValue(), 0.0);
+    }
+
+    @Test
+    public void testFindsInteriorQuadraticMinimum() {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-10, 1e-12);
+
+        UnivariatePointValuePair result = optimizer.optimize(100,
+                                                             new UnivariateFunction() {
+                                                                 public double value(double x) {
+                                                                     double delta = x - 2.0;
+                                                                     return delta * delta;
+                                                                 }
+                                                             },
+                                                             GoalType.MINIMIZE,
+                                                             0.0, 4.0, 1.0);
+
+        Assert.assertEquals(2.0, result.getPoint(), 1e-8);
+        Assert.assertEquals(0.0, result.getValue(), 1e-16);
+    }
+
+    @Test(expected = NotStrictlyPositiveException.class)
+    public void testRejectsNonPositiveAbsoluteThreshold() {
+        new BrentOptimizer(1e-10, 0.0);
+    }
+
+    @Test(expected = NumberIsTooSmallException.class)
+    public void testRejectsTooSmallRelativeThreshold() {
+        new BrentOptimizer(0.0, 1e-10);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.math3.optimization.univariate.BrentOptimizerBestPointTest::testMaximizationReturnsBestInitialPointAtDefaultTermination
+ - org.apache.commons.math3.optimization.univariate.BrentOptimizerBestPointTest::testMinimizationReturnsBestInitialPointAtDefaultTermination
+
+Failing generated tests: org.apache.commons.math3.optimization.univariate.BrentOptimizerBestPointTest::testMaximizationReturnsBestInitialPointAtDefaultTermination, org.apache.commons.math3.optimization.univariate.BrentOptimizerBestPointTest::testMinimizationReturnsBestInitialPointAtDefaultTermination

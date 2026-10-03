@@ -1,0 +1,144 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 42  Version: Jsoup-42b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.FormElement
+Modified: org.jsoup.nodes.FormElement
+Triggers: org.jsoup.nodes.FormElementTest::createsFormData, org.jsoup.nodes.FormElementTest::usesOnForCheckboxValueIfNoValueSet
+
+Bug/specification summary:
+Bug report: 489
+Trigger failures:
+- org.jsoup.nodes.FormElementTest::createsFormData
+ --> junit.framework.AssertionFailedError: expected:<6> but was:<7>
+ - org.jsoup.nodes.FormElementTest::usesOnForCheckboxValueIfNoValueSet
+ --> junit.framework.AssertionFailedError: expected:<[on]> but was:<[]>
+Modified: org.jsoup.nodes.FormElement
+
+Prompt-01 test plan:
+TARGETS: FormElement.formData(); element selection and checkbox value handling.
+ORACLES: Trigger assertions: form data count is 6; checkbox without value yields "on".
+CASES: Successful controls produce expected key/value entries; unchecked checkbox is excluded.
+CASES: Checked checkbox lacking a value attribute uses default value "on".
+CASES: Boundary: disabled controls and non-submittable elements should not add entries.
+RISKS: Context omits full formData rules and exact fixture markup; derive only from available triggers.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.FormElement (java) =====
+package org.jsoup.nodes;
+
+import org.jsoup.Connection;
+import org.jsoup.Jsoup;
+import org.jsoup.helper.HttpConnection;
+import org.jsoup.helper.Validate;
+import org.jsoup.parser.Tag;
+import org.jsoup.select.Elements;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * A HTML Form Element provides ready access to the form fields/controls that are associated with it. It also allows a
+ * form to easily be submitted.
+ */
+public class FormElement extends Element {
+ private final Elements elements = new Elements();
+
+ /**
+ * Create a new, standalone form element.
+ *
+ * @param tag tag of this element
+ * @param baseUri the base URI
+ * @param attributes initial attributes
+ */
+ public FormElement(Tag tag, String baseUri, Attributes attributes) {
+ super(tag, baseUri, attributes);
+ }
+
+ /**
+ * Get the list of form control elements associated with this form.
+ * @return form controls associated with this element.
+ */
+ public Elements elements() {
+ return elements;
+ }
+
+ /**
+ * Add a form control element to this form.
+ * @param element form control to add
+ * @return this form element, for chaining
+ */
+ public FormElement addElement(Element element) {
+ elements.add(element);
+ return this;
+ }
+
+ /**
+ * Prepare to submit this form. A Connection object is created with the request set up from the form values. You
+ * can then set up other options (like user-agent, timeout, cookies), then execute it.
+ * @return a connection prepared from the values of this form.
+ * @throws IllegalArgumentException if the form's absolute action URL cannot be determined. Make sure you pass the
+ * document's base URI when parsing.
+ */
+ public Connection submit() {
+ String action = hasAttr("action") ? absUrl("action") : baseUri();
+ Validate.notEmpty(action, "Could not determine a form action URL for submit. Ensure you set a base URI when parsing.");
+ Connection.Method method = attr("method").toUpperCase().equals("POST") ?
+ Connection.Method.POST : Connection.Method.GET;
+
+ Connection con = Jsoup.connect(action)
+ .data(formData())
+ .method(method);
+
+ return con;
+ }
+
+ /**
+ * Get the data that this form submits. The returned list is a copy of the data, and changes to the contents of the
+ * list will not be reflected in the DOM.
+ * @return a list of key vals
+ */
+ public List<Connection.KeyVal> formData() {
+ ArrayList<Connection.KeyVal> data = new ArrayList<Connection.KeyVal>();
+
+ // iterate the form control elements and accumulate their values
+ for (Element el: elements) {
+ if (!el.tag().isFormSubmittable()) continue; // contents are form listable, superset of submitable
+ String name = el.attr("name");
+ if (name.length() == 0) continue;
+ String type = el.attr("type");
+
+ if ("select".equals(el.tagName())) {
+ Elements options = el.select("option[selected]");
+ boolean set = false;
+ for (Element option: options) {
+ data.add(HttpConnection.KeyVal.create(name, option.val()));
+ set = true;
+ }
+ if (!set) {
+ Element option = el.select("option").first();
+ if (option != null)
+ data.add(HttpConnection.KeyVal.create(name, option.val()));
+ }
+ } else if ("checkbox".equalsIgnoreCase(type) || "radio".equalsIgnoreCase(type)) {
+ // only add checkbox or radio if they have the checked attribute
+ if (el.hasAttr("checked")) {
+ final String val = el.val();
+ data.add(HttpConnection.KeyVal.create(name, val));
+ }
+ } else {
+ data.add(HttpConnection.KeyVal.create(name, el.val()));
+ }
+ }
+ return data;
+ }
+
+ @Override
+ public boolean equals(Object o) {
+ return super.equals(o);
+ }
+}

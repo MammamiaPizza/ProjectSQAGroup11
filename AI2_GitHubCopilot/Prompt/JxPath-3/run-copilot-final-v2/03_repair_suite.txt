@@ -1,0 +1,285 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 3  Version: JxPath-3b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: JXPATH-68
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.beans.BadlyImplementedFactoryTest::testBadFactoryImplementation
+ --> junit.framework.AssertionFailedError
+Modified: org.apache.commons.jxpath.ri.model.beans.NullPropertyPointer
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.model.beans.NullPropertyPointer | java]
+package org.apache.commons.jxpath.ri.model.beans;
+public class NullPropertyPointer extends PropertyPointer {
+public NullPropertyPointer(NodePointer parent) {
+public QName getName() {
+public void setPropertyIndex(int index) {
+public int getLength() {
+public Object getBaseValue() {
+public Object getImmediateNode() {
+public boolean isLeaf() {
+public NodePointer getValuePointer() {
+protected boolean isActualProperty() {
+public boolean isActual() {
+public boolean isContainer() {
+public void setValue(Object value) {
+public NodePointer createPath(JXPathContext context) {
+public NodePointer createPath(JXPathContext context, Object value) {
+public String getPropertyName() {
+public void setPropertyName(String propertyName) {
+public void setNameAttributeValue(String attributeValue) {
+public boolean isCollection() {
+public int getPropertyCount() {
+public String[] getPropertyNames() {
+public String asPath() {
+private String escape(String string) {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model.beans;
+
+ import java.util.HashMap;
+ import java.util.Map;
+
+ import org.apache.commons.jxpath.JXPathContext;
+ import org.apache.commons.jxpath.JXPathInvalidAccessException;
+ import org.apache.commons.jxpath.Pointer;
+
+ import junit.framework.TestCase;
+
+ /**
+  * Tests for NullPropertyPointer, targeting JXPATH-68 regression:
+  * createPath must not throw AssertionFailedError when a factory is broken.
+  */
+ public class NullPropertyPointerTest extends TestCase {
+
+     private JXPathContext context;
+     private Map bean;
+
+     protected void setUp() {
+         bean = new HashMap();
+         bean.put("name", "test");
+         bean.put("address", null);
+         context = JXPathContext.newContext(bean);
+     }
+
+     // ---------- JXPATH-68: broken factory ----------
+
+     /**
+      * JXPATH-68: createPath must not throw AssertionFailedError
+      * when the factory is broken (returns false / does not create).
+      */
+     public void testCreatePathWithBrokenFactory() {
+         context.setFactory(new BadlyImplementedFactory());
+         try {
+             context.createPath("/address/city");
+         } catch (AssertionError e) {
+             fail("createPath should not throw AssertionError: " + e.getMessage());
+         } catch (JXPathInvalidAccessException e) {
+             // acceptable outcome for a broken factory
+         } catch (Exception e) {
+             // any non-assertion exception is acceptable
+         }
+     }
+
+     /**
+      * JXPATH-68: createPathAndSetValue must not throw
+      * AssertionFailedError when the factory is broken.
+      */
+     public void testCreatePathAndSetValueWithBrokenFactory() {
+         context.setFactory(new BadlyImplementedFactory());
+         try {
+             context.createPathAndSetValue("/address/city", "Springfield");
+         } catch (AssertionError e) {
+             fail("createPathAndSetValue should not throw AssertionError: "
+                     + e.getMessage());
+         } catch (JXPathInvalidAccessException e) {
+             // acceptable
+         } catch (Exception e) {
+             // acceptable if not AssertionError
+         }
+     }
+
+     // ---------- property name ----------
+
+     /**
+      * Empty property name via setPropertyName; getName must reflect it.
+      */
+     public void testSetPropertyNameEmpty() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         npp.setPropertyName("");
+         assertEquals("", npp.getPropertyName());
+         assertEquals("", npp.getName().getName());
+     }
+
+     /**
+      * Null property name via setPropertyName.
+      */
+     public void testSetPropertyNameNull() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         npp.setPropertyName(null);
+         assertNull(npp.getPropertyName());
+     }
+
+     // ---------- setValue ----------
+
+     /**
+      * setValue(null) on a NullPropertyPointer with a container parent
+      * must throw JXPathInvalidAccessException.
+      */
+     public void testSetValueThrowsWhenParentIsContainer() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         try {
+             npp.setValue(null);
+             fail("setValue should throw when the target object is null");
+         } catch (JXPathInvalidAccessException e) {
+             // expected
+         }
+     }
+
+     /**
+      * setValue with a non-null value via a null-property pointer;
+      * the parent is not a dynamic property owner on a plain Map,
+      * so it should throw.
+      */
+     public void testSetValueThrowsOnNonDynamicParent() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         try {
+             npp.setValue("someValue");
+             fail("setValue should throw on non-dynamic parent");
+         } catch (JXPathInvalidAccessException e) {
+             // expected
+         }
+     }
+
+     // ---------- base / immediate node ----------
+
+     /**
+      * getBaseValue on a NullPropertyPointer always returns null.
+      */
+     public void testGetBaseValueReturnsNull() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         assertNull(npp.getBaseValue());
+     }
+
+     /**
+      * getImmediateNode on a NullPropertyPointer always returns null.
+      */
+     public void testGetImmediateNodeReturnsNull() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         assertNull(npp.getImmediateNode());
+     }
+
+     // ---------- isLeaf / isActual / isContainer ----------
+
+     /**
+      * NullPropertyPointer is always a leaf and is never actual.
+      */
+     public void testLeafAndActualFlags() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         assertTrue(npp.isLeaf());
+         assertFalse(npp.isActual());
+         assertTrue(npp.isContainer());
+     }
+
+     // ---------- createPath with value ----------
+
+     /**
+      * createPath(JXPathContext, Object) with a null value through
+      * a null property must not throw AssertionError.
+      */
+     public void testCreatePathWithNullValue() {
+         context.setFactory(new BadlyImplementedFactory());
+         try {
+             context.createPathAndSetValue("/address/city", null);
+         } catch (AssertionError e) {
+             fail("should not throw AssertionError: " + e.getMessage());
+         } catch (Exception e) {
+             // acceptable
+         }
+     }
+
+     // ---------- sequence ----------
+
+     /**
+      * Sequence: navigate to null property, setValue should throw,
+      * then createPath should not throw AssertionError with broken factory.
+      */
+     public void testSequenceSetValueThenCreatePath() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         // setValue must fail
+         try {
+             npp.setValue("x");
+             fail("setValue should have thrown");
+         } catch (JXPathInvalidAccessException e) {
+             // expected
+         }
+         // createPath with broken factory must not throw AssertionError
+         context.setFactory(new BadlyImplementedFactory());
+         try {
+             context.createPath("/address/city");
+         } catch (AssertionError e) {
+             fail("createPath after setValue should not throw AssertionError: "
+                     + e.getMessage());
+         } catch (Exception e) {
+             // acceptable
+         }
+     }
+
+     // ---------- setPropertyIndex no-op ----------
+
+     /**
+      * setPropertyIndex is a no-op on NullPropertyPointer; calling it
+      * must not change state or throw.
+      */
+     public void testSetPropertyIndexIsNoOp() {
+         Pointer ptr = context.getPointer("/address");
+         assertTrue(ptr instanceof NullPropertyPointer);
+         NullPropertyPointer npp = (NullPropertyPointer) ptr;
+         npp.setPropertyIndex(5);
+         // no exception and no observable state change
+         assertEquals(0, npp.getLength());
+         assertNull(npp.getBaseValue());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JxPath-3f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JxPath-3f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JxPath-3f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JxPath-3f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JxPath-3f-copilot/.test_suite/org/apache/commons/jxpath/ri/model/beans/NullPropertyPointerTest.java:35: error: cannot find symbol
+ [javac] context.setFactory(new BadlyImplementedFactory());
+ [javac] ^
+ [javac] symbol: class BadlyImplementedFactory
+ [javac] location: class NullPropertyPointerTest
+ [javac] Note: /root/sqa-workspaces/JxPath-3f-copilot/.test_suite/org/apache/commons/jxpath/ri/model/beans/NullPropertyPointerTest.java uses unchecked or unsafe operations.
+ [javac] Note: Recompile with -Xlint:unchecked for details.
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

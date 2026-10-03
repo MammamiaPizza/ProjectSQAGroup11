@@ -1,0 +1,210 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 1  Version: JacksonCore-1b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 98
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestParserNonStandard::testAllowNaN
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([can not be represented as BigDecimal]): got one with message "null"
+Modified: com.fasterxml.jackson.core.io.NumberInput, com.fasterxml.jackson.core.util.TextBuffer
+
+Available API/signatures:
+[com.fasterxml.jackson.core.io.NumberInput | java]
+package com.fasterxml.jackson.core.io;
+public final class NumberInput
+public final static String NASTY_SMALL_DOUBLE = "2.2250738585072012e-308";
+final static String MIN_LONG_STR_NO_SIGN = String.valueOf(Long.MIN_VALUE).substring(1);
+final static String MAX_LONG_STR = String.valueOf(Long.MAX_VALUE);
+public static int parseInt(char[] digitChars, int offset, int len)
+public static int parseInt(String str)
+public static long parseLong(char[] digitChars, int offset, int len)
+public static long parseLong(String str)
+public static boolean inLongRange(String numberStr, boolean negative)
+public static int parseAsInt(String input, int defaultValue)
+public static long parseAsLong(String input, long defaultValue)
+public static double parseAsDouble(String input, double defaultValue)
+public static double parseDouble(String numStr) throws NumberFormatException
+public static BigDecimal parseBigDecimal(String numStr) throws NumberFormatException
+public static BigDecimal parseBigDecimal(char[] buffer) throws NumberFormatException {
+public static BigDecimal parseBigDecimal(char[] buffer, int offset, int len)
+
+[com.fasterxml.jackson.core.util.TextBuffer | java]
+package com.fasterxml.jackson.core.util;
+public final class TextBuffer
+public TextBuffer(BufferRecycler allocator)
+public void releaseBuffers()
+public void resetWithEmpty()
+public void resetWithShared(char[] buf, int start, int len)
+public void resetWithCopy(char[] buf, int start, int len)
+public void resetWithString(String value)
+private char[] findBuffer(int needed)
+private void clearSegments()
+/* Accessors for implementing public interface
+public int size() {
+public int getTextOffset()
+public boolean hasTextAsCharacters()
+public char[] getTextBuffer()
+public String contentsAsString()
+public char[] contentsAsArray()
+public BigDecimal contentsAsDecimal()
+public double contentsAsDouble()
+public void ensureNotShared() {
+public void append(char c) {
+public void append(char[] c, int start, int len)
+public void append(String
+...[truncated deterministically]...
+blic char[] emptyAndGetCurrentSegment()
+public int getCurrentSegmentSize() {
+public void setCurrentLength(int len) {
+public char[] finishCurrentSegment()
+public char[] expandCurrentSegment()
+@Override
+public String toString() {
+private void unshare(int needExtra)
+private void expand(int minNewSegmentSize)
+private char[] buildResultArray()
+final char[] result = _charArray(size);
+private char[] _charArray(int len) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.io;
+
+ import static org.junit.Assert.*;
+
+ import java.math.BigDecimal;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.util.BufferRecycler;
+ import com.fasterxml.jackson.core.util.TextBuffer;
+
+ public class NumberInputBigDecimalTest {
+
+     @Test
+     public void testParseBigDecimalValid() {
+         assertEquals(BigDecimal.ZERO, NumberInput.parseBigDecimal("0"));
+         assertEquals(new BigDecimal("2.2250738585072012e-308"),
+NumberInput.parseBigDecimal("2.2250738585072012e-308"));
+         assertEquals(BigDecimal.valueOf(1, 0), NumberInput.parseBigDecimal("1"));
+         assertEquals(new BigDecimal("1e308"), NumberInput.parseBigDecimal("1e308"));
+         assertEquals(BigDecimal.ZERO, NumberInput.parseBigDecimal("-0.0"));
+         assertEquals(new BigDecimal(Double.toString(Double.MAX_VALUE)),
+NumberInput.parseBigDecimal(Double.toString(Double.MAX_VALUE)));
+         assertEquals(new BigDecimal(Double.toString(Double.MIN_VALUE)),
+NumberInput.parseBigDecimal(Double.toString(Double.MIN_VALUE)));
+     }
+
+     @Test
+     public void testParseBigDecimalNonFiniteString() {
+         String[] nonFinite = {"NaN", "Infinity", "+Infinity", "-Infinity", "Inf", "+Inf", "-Inf"};
+         for (String s : nonFinite) {
+             try {
+                 NumberInput.parseBigDecimal(s);
+                 fail("Expected NumberFormatException for input: " + s);
+             } catch (NumberFormatException e) {
+                 assertNotNull("Exception message should not be null for input " + s,
+e.getMessage());
+                 assertTrue("Exception message should contain expected substring for input " + s +
+                         ", but was: " + e.getMessage(),
+                         e.getMessage().contains("can not be represented as BigDecimal"));
+             }
+         }
+     }
+
+     @Test
+     public void testParseBigDecimalNonFiniteCharArray() {
+         String[] nonFinite = {"NaN", "Infinity", "+Infinity", "-Infinity", "Inf", "+Inf", "-Inf"};
+         for (String s : nonFinite) {
+             char[] buffer = s.toCharArray();
+             try {
+                 NumberInput.parseBigDecimal(buffer, 0, buffer.length);
+                 fail("Expected NumberFormatException for char[] input: " + s);
+             } catch (NumberFormatException e) {
+                 assertNotNull("Exception message should not be null for input " + s,
+e.getMessage());
+                 assertTrue("Exception message should contain expected substring for input " + s +
+                         ", but was: " + e.getMessage(),
+                         e.getMessage().contains("can not be represented as BigDecimal"));
+             }
+         }
+     }
+
+     @Test
+     public void testContentsAsDecimalValid() {
+         TextBuffer tb = new TextBuffer(null);
+         tb.resetWithString("123.456");
+         BigDecimal result = tb.contentsAsDecimal();
+         assertEquals(new BigDecimal("123.456"), result);
+     }
+
+     @Test
+     public void testContentsAsDecimalNonFinite() {
+         TextBuffer tb = new TextBuffer(null);
+         String[] nonFinite = {"NaN", "Infinity", "-Infinity", "Inf", "-Inf"};
+         for (String s : nonFinite) {
+             tb.resetWithString(s);
+             try {
+                 tb.contentsAsDecimal();
+                 fail("Expected NumberFormatException for TextBuffer contents: " + s);
+             } catch (NumberFormatException e) {
+                 assertNotNull("Exception message should not be null for input " + s,
+e.getMessage());
+                 assertTrue("Exception message should contain expected substring for input " + s +
+                         ", but was: " + e.getMessage(),
+                         e.getMessage().contains("can not be represented as BigDecimal"));
+             }
+         }
+     }
+
+     @Test
+     public void testParseBigDecimalNaNOnly() {
+         try {
+             NumberInput.parseBigDecimal("NaN");
+             fail("Expected NumberFormatException");
+         } catch (NumberFormatException e) {
+             assertNotNull(e.getMessage());
+             assertTrue(e.getMessage().contains("can not be represented as BigDecimal"));
+         }
+     }
+
+     @Test
+     public void testParseBigDecimalInfinityVariants() {
+         String[] infs = {"Infinity", "+Infinity", "-Infinity", "Inf", "+Inf", "-Inf"};
+         for (String s : infs) {
+             try {
+                 NumberInput.parseBigDecimal(s);
+                 fail("Expected NumberFormatException for " + s);
+             } catch (NumberFormatException e) {
+                 assertNotNull(e.getMessage());
+                 assertTrue(e.getMessage().contains("can not be represented as BigDecimal"));
+             }
+         }
+     }
+
+     @Test
+     public void testParseBigDecimalZeroRepresentations() {
+         assertEquals(BigDecimal.ZERO, NumberInput.parseBigDecimal("0"));
+         assertEquals(BigDecimal.ZERO, NumberInput.parseBigDecimal("0.0"));
+         assertEquals(BigDecimal.ZERO, NumberInput.parseBigDecimal("-0"));
+         assertEquals(BigDecimal.ZERO, NumberInput.parseBigDecimal("-0.0"));
+     }
+
+     @Test
+     public void testParseBigDecimalLargeAndSmall() {
+         assertEquals(new BigDecimal("1e308"), NumberInput.parseBigDecimal("1e308"));
+         assertEquals(new BigDecimal("-1e-308"), NumberInput.parseBigDecimal("-1e-308"));
+         assertEquals(new BigDecimal("2.2250738585072012e-308"),
+NumberInput.parseBigDecimal("2.2250738585072012e-308"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.core.io.NumberInputBigDecimalTest::testParseBigDecimalValid
+ - com.fasterxml.jackson.core.io.NumberInputBigDecimalTest::testParseBigDecimalZeroRepresentations
+
+Failing generated tests: com.fasterxml.jackson.core.io.NumberInputBigDecimalTest::testParseBigDecimalValid, com.fasterxml.jackson.core.io.NumberInputBigDecimalTest::testParseBigDecimalZeroRepresentations

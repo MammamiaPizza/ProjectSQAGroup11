@@ -1,0 +1,308 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Mockito  Bug: 19  Version: Mockito-19b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Bug/specification summary:
+Bug report: 205
+Trigger failures:
+- org.mockitousage.annotation.MockInjectionUsingSetterOrPropertyTest::shouldInsertFieldWithCorrectNameWhenMultipleTypesAvailable
+ --> junit.framework.AssertionFailedError: Expected: <null> but was: candidate2
+Modified: org.mockito.internal.configuration.injection.filter.FinalMockCandidateFilter, org.mockito.internal.configuration.injection.filter.MockCandidateFilter, org.mockito.internal.configuration.injection.filter.NameBasedCandidateFilter, org.mockito.internal.configuration.injection.filter.TypeBasedCandidateFilter, org.mockito.internal.configuration.injection.PropertyAndSetterInjection
+
+Available API/signatures:
+[org.mockito.internal.configuration.injection.filter.FinalMockCandidateFilter | java]
+package org.mockito.internal.configuration.injection.filter;
+public class FinalMockCandidateFilter implements MockCandidateFilter {
+public OngoingInjecter filterCandidate(final Collection<Object> mocks, final Field field, final Object fieldInstance) {
+final Object matchingMock = mocks.iterator().next();
+public Object thenInject() {
+
+[org.mockito.internal.configuration.injection.filter.MockCandidateFilter | java]
+package org.mockito.internal.configuration.injection.filter;
+public interface MockCandidateFilter {
+
+[org.mockito.internal.configuration.injection.filter.NameBasedCandidateFilter | java]
+package org.mockito.internal.configuration.injection.filter;
+public class NameBasedCandidateFilter implements MockCandidateFilter {
+private final MockUtil mockUtil = new MockUtil();
+public NameBasedCandidateFilter(MockCandidateFilter next) {
+
+[org.mockito.internal.configuration.injection.filter.TypeBasedCandidateFilter | java]
+package org.mockito.internal.configuration.injection.filter;
+public class TypeBasedCandidateFilter implements MockCandidateFilter {
+public TypeBasedCandidateFilter(MockCandidateFilter next) {
+public OngoingInjecter filterCandidate(Collection<Object> mocks, Field field, Object fieldInstance) {
+
+[org.mockito.internal.configuration.injection.PropertyAndSetterInjection | java]
+package org.mockito.internal.configuration.injection;
+public class PropertyAndSetterInjection extends MockInjectionStrategy {
+private final MockCandidateFilter mockCandidateFilter = new TypeBasedCandidateFilter(new NameBasedCandidateFilter(new FinalMockCandidateFilter()));
+private final ListUtil.Filter<Field> notFinalOrStatic = new ListUtil.Filter<Field>() {
+public boolean isOut(Field object) {
+public boolean processInjection(Field injectMocksField, Object injectMocksFieldOwner, Set<Object> mockCandidates) {
+while (fieldClass != Object.class) {
+private FieldInitializationReport initializeInjectMocksField(Field field, Object fieldOwner) {
+private boolean injectMockCandidates(Class<?> awaitingInjectionClazz, Set<Object> mocks, Object instance) {
+private boolean injectMockCandidatesOnFields(Set<Object> mocks, Object instance, boolean injectionOccurred, List<Field> orderedInstanceFields) {
+private List<Field> orderedInstanceFieldsFrom(Class<?> awaitingInjectionClazz) {
+
+Generated JUnit Test:
+package org.mockito.internal.configuration.injection.filter;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.internal.configuration.injection.PropertyAndSetterInjection;
+
+public class MockInjectionFilterTest {
+
+ // ---- holders ----------------------------------------------------------
+
+ public static class TypeHolder {
+     public Runnable collaborator;
+ }
+
+ public static class NameHolder {
+     public Object collaborator;
+ }
+
+ public static class FinalHolder {
+     public Runnable collaborator;
+ }
+
+ public static class NeedsInjection {
+     public Runnable collaborator;
+ }
+
+ public static class InjectMocksHolder {
+     public NeedsInjection needsInjection = new NeedsInjection();
+ }
+
+ // ---- helpers ----------------------------------------------------------
+
+ private static Field field(Class<?> type, String name) throws Exception {
+     return type.getField(name);
+ }
+
+ private static final class RecordingFilter implements MockCandidateFilter {
+     Collection<Object> received = Collections.emptyList();
+
+     public OngoingInjecter filterCandidate(Collection<Object> mocks, Field fieldToBeInjected,
+             Object fieldInstance) {
+         received = new ArrayList<Object>(mocks);
+         return new OngoingInjecter() {
+             public Object thenInject() {
+                 return null;
+             }
+         };
+     }
+ }
+
+ // ---- TypeBasedCandidateFilter ----------------------------------------
+
+ @Test
+ public void typeBasedFilterKeepsOnlyAssignableMocks() throws Exception {
+     Runnable runnable = Mockito.mock(Runnable.class);
+     List<?> list = Mockito.mock(List.class);
+     Field target = field(TypeHolder.class, "collaborator");
+
+     RecordingFilter next = new RecordingFilter();
+     new TypeBasedCandidateFilter(next)
+             .filterCandidate(Arrays.<Object>asList(runnable, list), target, new TypeHolder());
+
+     assertEquals(1, next.received.size());
+     assertSame(runnable, next.received.iterator().next());
+ }
+
+ @Test
+ public void typeBasedFilterDelegatesEmptyWhenNoTypeMatches() throws Exception {
+     List<?> list = Mockito.mock(List.class);
+     Field target = field(TypeHolder.class, "collaborator");
+
+     RecordingFilter next = new RecordingFilter();
+     new TypeBasedCandidateFilter(next)
+             .filterCandidate(Collections.<Object>singleton(list), target, new TypeHolder());
+
+     assertTrue(next.received.isEmpty());
+ }
+
+ // ---- NameBasedCandidateFilter ----------------------------------------
+
+ @Test
+ public void nameBasedFilterSelectsOnlyTheMatchingName() throws Exception {
+     Object named = Mockito.mock(Object.class, "collaborator");
+     Object other = Mockito.mock(Object.class, "other");
+     Field target = field(NameHolder.class, "collaborator");
+
+     RecordingFilter next = new RecordingFilter();
+     new NameBasedCandidateFilter(next)
+             .filterCandidate(Arrays.asList(named, other), target, new NameHolder());
+
+     assertEquals(1, next.received.size());
+     assertSame(named, next.received.iterator().next());
+ }
+
+ @Test
+ public void nameBasedFilterDelegatesEmptyWhenNoNameMatches() throws Exception {
+     Object first = Mockito.mock(Object.class, "first");
+     Object second = Mockito.mock(Object.class, "second");
+     Field target = field(NameHolder.class, "collaborator");
+
+     RecordingFilter next = new RecordingFilter();
+     new NameBasedCandidateFilter(next)
+             .filterCandidate(Arrays.asList(first, second), target, new NameHolder());
+
+     assertTrue(next.received.isEmpty());
+ }
+
+ @Test
+ public void nameBasedFilterPassesSingleMockThroughRegardlessOfName() throws Exception {
+     Object single = Mockito.mock(Object.class, "unrelated");
+     Field target = field(NameHolder.class, "collaborator");
+
+     RecordingFilter next = new RecordingFilter();
+     new NameBasedCandidateFilter(next)
+             .filterCandidate(Collections.<Object>singleton(single), target, new NameHolder());
+
+     assertEquals(1, next.received.size());
+     assertSame(single, next.received.iterator().next());
+ }
+
+ // ---- FinalMockCandidateFilter ----------------------------------------
+
+ @Test
+ public void finalFilterInjectsAndReturnsSingleCandidate() throws Exception {
+     Runnable mock = Mockito.mock(Runnable.class);
+     Field target = field(FinalHolder.class, "collaborator");
+     FinalHolder holder = new FinalHolder();
+
+     Object result = new FinalMockCandidateFilter()
+             .filterCandidate(Collections.<Object>singleton(mock), target, holder)
+             .thenInject();
+
+     assertSame(mock, result);
+     assertSame(mock, holder.collaborator);
+ }
+
+ @Test
+ public void finalFilterReturnsNullWhenNoCandidateExists() throws Exception {
+     Field target = field(FinalHolder.class, "collaborator");
+     FinalHolder holder = new FinalHolder();
+
+     Object result = new FinalMockCandidateFilter()
+             .filterCandidate(Collections.emptyList(), target, holder)
+             .thenInject();
+
+     assertNull(result);
+     assertNull(holder.collaborator);
+ }
+
+ @Test
+ public void finalFilterReturnsNullAndInjectsNothingForMultipleCandidates() throws Exception {
+     Runnable first = Mockito.mock(Runnable.class, "first");
+     Runnable second = Mockito.mock(Runnable.class, "second");
+     Field target = field(FinalHolder.class, "collaborator");
+     FinalHolder holder = new FinalHolder();
+
+     Object result = new FinalMockCandidateFilter()
+             .filterCandidate(Arrays.<Object>asList(first, second), target, holder)
+             .thenInject();
+
+     assertNull(result);
+     assertNull(holder.collaborator);
+ }
+
+ // ---- full PropertyAndSetterInjection chain ----------------------------
+
+ @Test
+ public void propertyInjectionUsesNameMatchAmongSameTypeMocks() throws Exception {
+     Runnable named = Mockito.mock(Runnable.class, "collaborator");
+     Runnable other = Mockito.mock(Runnable.class, "candidate2");
+     Set<Object> candidates = new LinkedHashSet<Object>(Arrays.<Object>asList(other, named));
+
+     InjectMocksHolder holder = new InjectMocksHolder();
+     Field injectMocksField = field(InjectMocksHolder.class, "needsInjection");
+
+     new PropertyAndSetterInjection().processInjection(injectMocksField, holder, candidates);
+
+     assertSame(named, holder.needsInjection.collaborator);
+ }
+
+ @Test
+ public void propertyInjectionDoesNotInjectWhenNoNameMatchesSeveralSameTypeMocks() throws Exception
+{
+     Runnable first = Mockito.mock(Runnable.class, "candidate1");
+     Runnable second = Mockito.mock(Runnable.class, "candidate2");
+     Set<Object> candidates = new LinkedHashSet<Object>(Arrays.<Object>asList(first, second));
+
+     InjectMocksHolder holder = new InjectMocksHolder();
+     Field injectMocksField = field(InjectMocksHolder.class, "needsInjection");
+
+     new PropertyAndSetterInjection().processInjection(injectMocksField, holder, candidates);
+
+     assertNull(holder.needsInjection.collaborator);
+ }
+
+ @Test
+ public void propertyInjectionInjectsSingleTypeMatchAsFallback() throws Exception {
+     Runnable only = Mockito.mock(Runnable.class, "unrelatedName");
+     Set<Object> candidates = new LinkedHashSet<Object>(Collections.<Object>singleton(only));
+
+     InjectMocksHolder holder = new InjectMocksHolder();
+     Field injectMocksField = field(InjectMocksHolder.class, "needsInjection");
+
+     new PropertyAndSetterInjection().processInjection(injectMocksField, holder, candidates);
+
+     assertSame(only, holder.needsInjection.collaborator);
+ }
+
+ @Test
+ public void propertyInjectionUsesFieldWhenNoSetterIsAvailable() throws Exception {
+     // FinalMockCandidateFilter falls back from property setter to direct field access.
+     Runnable only = Mockito.mock(Runnable.class);
+     Set<Object> candidates = new LinkedHashSet<Object>(Collections.<Object>singleton(only));
+
+     InjectMocksHolder holder = new InjectMocksHolder();
+     Field injectMocksField = field(InjectMocksHolder.class, "needsInjection");
+
+     new PropertyAndSetterInjection().processInjection(injectMocksField, holder, candidates);
+
+     assertSame(only, holder.needsInjection.collaborator);
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Mockito-19f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Mockito-19f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Mockito-19f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+gradle.compile:
+ [exec] Exception in thread "main" java.lang.ClassNotFoundException: org.gradle.launcher.GradleMain
+ [exec] at java.base/java.net.URLClassLoader.findClass(URLClassLoader.java:476)
+ [exec] at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:594)
+ [exec] at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:527)
+BUILD FAILED
+/root/defects4j/framework/projects/Mockito/Mockito.build.xml:143: The following error occurred while executing this line:
+/root/defects4j/framework/projects/Mockito/Mockito.build.xml:79: exec returned: 1
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

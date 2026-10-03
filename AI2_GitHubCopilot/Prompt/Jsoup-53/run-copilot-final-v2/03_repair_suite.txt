@@ -1,0 +1,183 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 53  Version: Jsoup-53b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 611
+Trigger failures:
+- org.jsoup.select.SelectorTest::attributeWithBrackets
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'div[data='End]'': unexpected token at '''
+Modified: org.jsoup.parser.TokenQueue
+
+Available API/signatures:
+[org.jsoup.parser.TokenQueue | java]
+package org.jsoup.parser;
+public class TokenQueue {
+@param data string of data to back queue.
+public TokenQueue(String data) {
+public boolean isEmpty() {
+private int remainingLength() {
+public char peek() {
+@param c character to add
+public void addFirst(Character c) {
+@param seq string to add.
+public void addFirst(String seq) {
+public boolean matches(String seq) {
+public boolean matchesCS(String seq) {
+@param seq list of strings to case insensitively check for
+@return true of any matched, false if none did
+public boolean matchesAny(String... seq) {
+public boolean matchesAny(char... seq) {
+public boolean matchesStartTag() {
+public boolean matchChomp(String seq) {
+@return if starts with whitespace
+public boolean matchesWhitespace() {
+@return if matches a word character
+public boolean matchesWord() {
+public void advance() {
+public char consume() {
+public void consume(String seq) {
+public String consumeTo(String seq) {
+public String consumeToIgnoreCase(String seq) {
+@param seq any number of terminators to consume to. <b>Case insensitive.</b>
+@return consumed string
+public String consumeToAny(String... seq) {
+public String chompTo(String seq) {
+public String chompToIgnoreCase(String seq) {
+public String chompBalanced(char open, char close) {
+public static String unescape(String in) {
+public boolean consumeWhitespace() {
+public String consumeWord() {
+public String consumeTagName() {
+public String consumeElementSelector() {
+Consume a CSS identifier (ID or class) off the queue (letter, digit, -, _)
+@return identifier
+public String consumeCssIdentifier() {
+@return attribute key
+public String consumeAttributeKey() {
+@return remained of queue.
+public String remainder() {
+final String remainder = queue.substring(pos, queue.length());
+@Override
+public String toString() {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+/**
+
+ - Tests for TokenQueue focusing on the bug where quoted attribute values
+ - containing brackets are not correctly handled by chompBalanced.
+  */
+ public class TokenQueueTest {
+  @Test
+  public void testChompBalanced_bracketsInsideSingleQuote() {
+  // closing bracket inside single-quoted attribute value
+  TokenQueue tq = new TokenQueue("[data='End]']");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("data='End]'", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_bracketsInsideDoubleQuote() {
+  // closing bracket inside double-quoted attribute value
+  TokenQueue tq = new TokenQueue("[data="End]"]");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("data="End]"", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_nestedBracketsInsideQuotes() {
+  // multiple brackets inside quotes should be treated as literal
+  TokenQueue tq = new TokenQueue("[test='foo[bar]baz']");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("test='foo[bar]baz'", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_emptyQuotedValue() {
+  // empty quoted string between brackets
+  TokenQueue tq = new TokenQueue("[data='']");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("data=''", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_escapedBracketInQuotes() {
+  // an escaped closing bracket inside quotes should not close the outer pair
+  TokenQueue tq = new TokenQueue("[data='End\]']");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("data='End\]'", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_escapedQuoteInsideQuotes() {
+  // escaped single quote inside single quotes
+  TokenQueue tq = new TokenQueue("[data='It\'s']");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("data='It\'s'", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_simpleBalanced() {
+  // normal balanced brackets without quotes
+  TokenQueue tq = new TokenQueue("[outer[inner]outer]");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("outer[inner]outer", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_adjacentBrackets() {
+  // empty adjacent brackets
+  TokenQueue tq = new TokenQueue("[]");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testChompBalanced_unbalancedOpen() {
+  // no closing bracket – should consume to end
+  TokenQueue tq = new TokenQueue("[data='End");
+  String result = tq.chompBalanced('[', ']');
+  assertEquals("data='End", result);
+  assertTrue(tq.isEmpty());
+  }
+  @Test
+  public void testConsumeAttributeKey_basic() {
+  // key ends before '='
+  TokenQueue tq = new TokenQueue("data='value'] rest");
+  assertEquals("data", tq.consumeAttributeKey());
+  assertEquals('=', tq.consume());
+  }
+  @Test
+  public void testConsumeToAny_multipleDelimiters() {
+  // stops at first of several delimiters
+  TokenQueue tq = new TokenQueue("some=thing] rest");
+  assertEquals("some", tq.consumeToAny("=", "]"));
+  assertEquals('=', tq.consume());
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-53f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-53f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-53f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-53f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-53f-copilot/.test_suite/org/jsoup/parser/TokenQueueTest.java:23: error: ')' expected
+ [javac] TokenQueue tq = new TokenQueue("[data="End]"]");
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 8 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

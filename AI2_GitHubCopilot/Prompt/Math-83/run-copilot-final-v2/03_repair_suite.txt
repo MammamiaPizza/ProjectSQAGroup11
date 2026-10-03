@@ -1,0 +1,246 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Math  Bug: 83  Version: Math-83b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: MATH-286
+Trigger failures:
+- org.apache.commons.math.optimization.linear.SimplexSolverTest::testMath286
+ --> junit.framework.AssertionFailedError: expected:<6.9> but was:<4.6000000000000005>
+Modified: org.apache.commons.math.optimization.linear.SimplexTableau
+
+Available API/signatures:
+[org.apache.commons.math.optimization.linear.SimplexTableau | java]
+package org.apache.commons.math.optimization.linear;
+class SimplexTableau implements Serializable {
+protected transient RealMatrix tableau;
+protected final int numDecisionVariables;
+protected final int numSlackVariables;
+protected int numArtificialVariables;
+protected final double epsilon;
+protected double[][] createTableau(final boolean maximize) {
+public int getNumVariables() {
+public List<LinearConstraint> getNormalizedConstraints() {
+private LinearConstraint normalize(final LinearConstraint constraint) {
+protected final int getNumObjectiveFunctions() {
+private int getConstraintTypeCounts(final Relationship relationship) {
+for (final LinearConstraint constraint : constraints) {
+private void initialize() {
+protected static double getInvertedCoeffiecientSum(final RealVector coefficients) {
+private Integer getBasicRow(final int col) {
+private Integer getBasicRowForSolution(final int col) {
+private Integer getBasicRow(final int col, boolean ignoreObjectiveRows) {
+protected void discardArtificialVariables() {
+protected RealPointValuePair getSolution() {
+protected void divideRow(final int dividendRow, final double divisor) {
+protected final int getWidth() {
+protected final int getHeight() {
+protected final double getEntry(final int row, final int column) {
+protected final int getSlackVariableOffset() {
+protected final int getArtificialVariableOffset() {
+protected final int getRhsOffset() {
+protected final int getNegativeDecisionVariableOffset() {
+protected final int getNumDecisionVariables() {
+protected final int getOriginalNumDecisionVariables() {
+protected final int getNumSlackVariables() {
+protected final int getNumArtificialVariables() {
+protected final double[][] getData() {
+@Override
+public boolean equals(Object other) {
+public int hashCode() {
+private void writeObject(ObjectOutputStream oos)
+private void readObject(ObjectInputStream ois)
+
+Generated JUnit Test:
+package org.apache.commons.math.optimization.linear;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+public class SimplexTableauTest {
+
+ private static final double EPSILON = 1e-10;
+
+ /* Reproduces the MATH-286 bug: expected optimal value 6.9, buggy returns 4.6 */
+ @Test
+ public void testMath286Bug() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{0.8, 0.2, 0.7, 0.3, 0.6, 0.4}, 0);
+     Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1,0,1,0,1,0}, Relationship.EQ, 23.0));
+     constraints.add(new LinearConstraint(new double[]{0,1,0,1,0,1}, Relationship.EQ, 23.0));
+     constraints.add(new LinearConstraint(new double[]{1,0,0,0,0,0}, Relationship.GEQ, 10.0));
+     constraints.add(new LinearConstraint(new double[]{0,0,1,0,0,0}, Relationship.GEQ, 8.0));
+     constraints.add(new LinearConstraint(new double[]{0,0,0,0,1,0}, Relationship.GEQ, 5.0));
+     SimplexSolver solver = new SimplexSolver();
+     RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     assertEquals(6.9, solution.getValue(), EPSILON);
+ }
+
+ /* Basic feasible LP with only LEQ constraints, maximize */
+ @Test
+ public void testMaximizeSimple() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{1, 2}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, 0}, Relationship.LEQ, 5));
+     constraints.add(new LinearConstraint(new double[]{0, 1}, Relationship.LEQ, 3));
+     SimplexSolver solver = new SimplexSolver();
+     RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     assertEquals(11.0, solution.getValue(), EPSILON);
+     assertArrayEquals(new double[]{5, 3}, solution.getPoint(), EPSILON);
+ }
+
+ /* Minimize LP with equality constraint */
+ @Test
+ public void testMinimizeWithEquality() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{1, 2}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, 1}, Relationship.EQ, 10));
+     constraints.add(new LinearConstraint(new double[]{1, -1}, Relationship.LEQ, 4));
+     SimplexSolver solver = new SimplexSolver();
+     RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MINIMIZE, true);
+     // min 1*x1+2*x2  s.t. x1+x2=10, x1-x2<=4, x1,x2>=0  -> x1=7,x2=3, obj=13
+     assertEquals(13.0, solution.getValue(), EPSILON);
+ }
+
+ /* LP with mix of LEQ, GEQ, EQ constraints, maximize */
+ @Test
+ public void testMixedConstraintsMaximize() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{3, 4}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, 2}, Relationship.LEQ, 8));
+     constraints.add(new LinearConstraint(new double[]{1, 0}, Relationship.GEQ, 2));
+     constraints.add(new LinearConstraint(new double[]{0, 1}, Relationship.GEQ, 1));
+     SimplexSolver solver = new SimplexSolver();
+     RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     // Optimum at x1=6,x2=1, obj=3*6+4*1=22
+     assertEquals(22.0, solution.getValue(), EPSILON);
+ }
+
+ /* Infeasible LP */
+ @Test(expected = NoFeasibleSolutionException.class)
+ public void testInfeasibleLP() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{1, 0}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, 0}, Relationship.LEQ, 1));
+     constraints.add(new LinearConstraint(new double[]{1, 0}, Relationship.GEQ, 2));
+     SimplexSolver solver = new SimplexSolver();
+     solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+ }
+
+ /* Unbounded LP */
+ @Test(expected = UnboundedSolutionException.class)
+ public void testUnboundedLP() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{1, 0}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, -1}, Relationship.LEQ, 0));
+     SimplexSolver solver = new SimplexSolver();
+     solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+ }
+
+ /* LP with large coefficients – verifies numeric stability */
+ @Test
+ public void testLargeCoefficients() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{1e10, 2e10}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{3e10, 4e10}, Relationship.LEQ, 7e10));
+     constraints.add(new LinearConstraint(new double[]{1e10, 0}, Relationship.EQ, 1e10));
+     SimplexSolver solver = new SimplexSolver();
+     RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     assertTrue(solution.getValue() > 0);
+ }
+
+ /* Check tableau dimensions after construction */
+ @Test
+ public void testTableauDimensions() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{2, 3}, 5);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, 1}, Relationship.LEQ, 10));
+     constraints.add(new LinearConstraint(new double[]{4, 6}, Relationship.LEQ, 24));
+     SimplexTableau tableau = new SimplexTableau(f, constraints, GoalType.MAXIMIZE, true, EPSILON);
+     assertEquals(2, tableau.getNumDecisionVariables());
+     assertEquals(2, tableau.getNumSlackVariables());
+     assertEquals(0, tableau.getNumArtificialVariables());
+     assertEquals(3, tableau.getHeight()); // 2 constraints + 1 objective
+     assertEquals(2 + 2 + 1 + 1, tableau.getWidth());
+ }
+
+ /* Divide a row and verify the RHS entry changes correctly */
+ @Test
+ public void testDivideRow() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{1}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{2}, Relationship.LEQ, 6));
+     SimplexTableau tableau = new SimplexTableau(f, constraints, GoalType.MAXIMIZE, true, EPSILON);
+     int rhsOffset = tableau.getRhsOffset();
+     double originalRHS = tableau.getEntry(1, rhsOffset);
+     tableau.divideRow(1, 2.0);
+     assertEquals(originalRHS / 2.0, tableau.getEntry(1, rhsOffset), EPSILON);
+ }
+
+ /* After solving a simple LP, the returned point satisfies constraints */
+ @Test
+ public void testSolutionSatisfiesConstraints() {
+     LinearObjectiveFunction f =
+         new LinearObjectiveFunction(new double[]{2, 3}, 0);
+     List<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+     constraints.add(new LinearConstraint(new double[]{1, 1}, Relationship.LEQ, 5));
+     constraints.add(new LinearConstraint(new double[]{2, 1}, Relationship.LEQ, 8));
+     SimplexSolver solver = new SimplexSolver();
+     RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+     double[] point = solution.getPoint();
+     for (final LinearConstraint c : constraints) {
+         double lhs = 0;
+         for (int i = 0; i < point.length; i++) {
+             lhs += c.getCoefficients().getEntry(i) * point[i];
+         }
+         if (c.getRelationship() == Relationship.LEQ) {
+             assertTrue(lhs <= c.getValue() + EPSILON);
+         } else if (c.getRelationship() == Relationship.GEQ) {
+             assertTrue(lhs >= c.getValue() - EPSILON);
+         } else {
+             assertEquals(c.getValue(), lhs, EPSILON);
+         }
+     }
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Math-83f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Math-83f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Math-83f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+[hastarget] Warning: Nashorn engine is planned to be removed from a future JDK release
+init:
+ [echo] -------- Commons MATH 2.1-SNAPSHOT --------
+ [mkdir] Created dir: /root/sqa-workspaces/Math-83f-copilot/target
+ [mkdir] Created dir: /root/sqa-workspaces/Math-83f-copilot/target/classes
+ [mkdir] Created dir: /root/sqa-workspaces/Math-83f-copilot/target/test-classes
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Math-83f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Math-83f-copilot/.test_suite/org/apache/commons/math/optimization/linear/SimplexTableauTest.java:25: error: cannot find symbol
+ [javac] RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+ [javac] ^
+ [javac] symbol: class RealPointValuePair
+ [javac] location: class SimplexTableauTest
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 12 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

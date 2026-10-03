@@ -1,0 +1,205 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 61  Version: JacksonDatabind-61b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1395
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.DefaultTypingWithPrimitivesTest::testDefaultTypingWithLong
+ --> com.fasterxml.jackson.databind.JsonMappingException: Class java.lang.Long not subtype of [simple type, class long] (through reference chain: java.util.HashMap["longAsField"]->com.fasterxml.jackson.databind.jsontype.Data["key"])
+Modified: com.fasterxml.jackson.databind.ObjectMapper, com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ObjectMapper | java]
+package com.fasterxml.jackson.databind;
+final ObjectMapper mapper = new ObjectMapper(); // can use static singleton, inject: just make sure to reuse!
+MyValue older = mapper.readValue(new File("my-older-stuff.json"), MyValue.class);
+public class ObjectMapper
+public enum DefaultTyping {
+public static class DefaultTypeResolverBuilder
+protected final DefaultTyping _appliesFor;
+public DefaultTypeResolverBuilder(DefaultTyping t) {
+@Override
+public boolean useForType(JavaType t)
+&& !TreeNode.class.isAssignableFrom(t.getRawClass()));
+return !t.isFinal() && !TreeNode.class.isAssignableFrom(t.getRawClass());
+SimpleType.constructUnsafe(JsonNode.class);
+protected final static AnnotationIntrospector DEFAULT_ANNOTATION_INTROSPECTOR = new JacksonAnnotationIntrospector();
+protected final static VisibilityChecker<?> STD_VISIBILITY_CHECKER
+...[truncated deterministically]...
+, Object value, SerializationConfig cfg)
+private final void _writeCloseableValue(JsonGenerator g, Object value, SerializationConfig cfg)
+protected Object _readValue(DeserializationConfig cfg, JsonParser p, JavaType valueType)
+protected Object _readMapAndClose(JsonParser p0, JavaType valueType)
+protected JsonToken _initForReading(JsonParser p) throws IOException
+protected void _verifySchemaType(FormatSchema schema)
+
+[com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder | java]
+package com.fasterxml.jackson.databind.jsontype.impl;
+public class StdTypeResolverBuilder
+protected JsonTypeInfo.Id _idType;
+protected JsonTypeInfo.As _includeAs;
+protected String _typeProperty;
+protected boolean _typeIdVisible = false;
+protected
+...[truncated deterministically]...
+defaultImpl;
+protected TypeIdResolver _customIdResolver;
+public StdTypeResolverBuilder() { }
+public static StdTypeResolverBuilder noTypeInfoBuilder() {
+@Override
+public StdTypeResolverBuilder init(JsonTypeInfo.Id idType, TypeIdResolver idRes)
+if ((_defaultImpl == Void.class)
+|| (_defaultImpl == NoClass.class)) {
+case EXISTING_PROPERTY: // as per [#528] same class as PROPERTY
+public StdTypeResolverBuilder inclusion(JsonTypeInfo.As includeAs) {
+public StdTypeResolverBuilder typeProperty(String typeIdPropName) {
+public StdTypeResolverBuilder defaultImpl(Class<?> defaultImpl) {
+public StdTypeResolverBuilder typeIdVisibility(boolean isVisible) {
+@Override public Class<?> getDefaultImpl() { return _defaultImpl; }
+public String getTypeProperty() { return _typeProperty; }
+public boolean isTypeIdVisible() { return _typeIdVisible; }
+
+Generated JUnit Test:
+import static org.junit.Assert.*;
+ import org.junit.*;
+
+ import com.fasterxml.jackson.core.type.TypeReference;
+ import com.fasterxml.jackson.databind.*;
+ import com.fasterxml.jackson.databind.exc.*;
+ import com.fasterxml.jackson.core.JsonProcessingException;
+
+ import java.util.*;
+
+ /**
+  * Tests for Defects4J bug 61: ObjectMapper with default typing incorrectly rejects
+  * wrapper types for primitive fields (Long -> long, Integer -> int, etc.).
+  * The fix should allow such deserialization without JsonMappingException.
+  */
+ public class PrimitiveWrapperDefaultTypingTest {
+
+     private ObjectMapper createMapper() {
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
+         return mapper;
+     }
+
+     static class LongKeyHolder {
+         public long key;
+     }
+
+     static class IntKeyHolder {
+         public int key;
+     }
+
+     static class BooleanKeyHolder {
+         public boolean key;
+     }
+
+     static class DoubleKeyHolder {
+         public double key;
+     }
+
+     static class LongArrayHolder {
+         public long[] key;
+     }
+
+     /**
+      * Bug scenario: deserializing a Long wrapper into a long field fails with
+      * "Class java.lang.Long not subtype of [simple type, class long]".
+      * After the fix this should succeed.
+      */
+     @Test
+     public void testLongWrapperIntoLongField() throws Exception {
+         ObjectMapper mapper = createMapper();
+         Map<String, Object> map = new HashMap<String, Object>();
+         map.put("key", 123L);
+         String json = mapper.writerFor(new TypeReference<HashMap<String, Object>>() {})
+                 .writeValueAsString(map);
+         LongKeyHolder result = mapper.readValue(json, LongKeyHolder.class);
+         assertEquals(123L, result.key);
+     }
+
+     @Test
+     public void testIntegerWrapperIntoIntField() throws Exception {
+         ObjectMapper mapper = createMapper();
+         Map<String, Object> map = new HashMap<String, Object>();
+         map.put("key", 42);
+         String json = mapper.writerFor(new TypeReference<HashMap<String, Object>>() {})
+                 .writeValueAsString(map);
+         IntKeyHolder result = mapper.readValue(json, IntKeyHolder.class);
+         assertEquals(42, result.key);
+     }
+
+     @Test
+     public void testBooleanWrapperIntoBooleanField() throws Exception {
+         ObjectMapper mapper = createMapper();
+         Map<String, Object> map = new HashMap<String, Object>();
+         map.put("key", true);
+         String json = mapper.writerFor(new TypeReference<HashMap<String, Object>>() {})
+                 .writeValueAsString(map);
+         BooleanKeyHolder result = mapper.readValue(json, BooleanKeyHolder.class);
+         assertTrue(result.key);
+     }
+
+     @Test
+     public void testDoubleWrapperIntoDoubleField() throws Exception {
+         ObjectMapper mapper = createMapper();
+         Map<String, Object> map = new HashMap<String, Object>();
+         map.put("key", 3.14d);
+         String json = mapper.writerFor(new TypeReference<HashMap<String, Object>>() {})
+                 .writeValueAsString(map);
+         DoubleKeyHolder result = mapper.readValue(json, DoubleKeyHolder.class);
+         assertEquals(3.14d, result.key, 0.0);
+     }
+
+     @Test
+     public void testLongArrayDeserialization() throws Exception {
+         ObjectMapper mapper = createMapper();
+         LongArrayHolder holder = new LongArrayHolder();
+         holder.key = new long[] { 1L, 2L, 3L };
+         String json = mapper.writeValueAsString(holder);
+         LongArrayHolder result = mapper.readValue(json, LongArrayHolder.class);
+         assertArrayEquals(new long[] { 1L, 2L, 3L }, result.key);
+     }
+
+     @Test(expected = JsonMappingException.class)
+     public void testNullForPrimitiveField() throws Exception {
+         ObjectMapper mapper = createMapper();
+         String json = "{\"key\":null}";
+         mapper.readValue(json, LongKeyHolder.class); // null can't be assigned to long
+     }
+
+     @Test(expected = JsonMappingException.class)
+     public void testMismatchedTypeId() throws Exception {
+         ObjectMapper mapper = createMapper();
+         // manually insert "java.lang.String" as type hint for a long field
+         String json = "{\"key\":[\"java.lang.String\",\"not a number\"]}";
+         mapper.readValue(json, LongKeyHolder.class);
+     }
+
+     @Test(expected = JsonMappingException.class)
+     public void testUnknownClassName() throws Exception {
+         ObjectMapper mapper = createMapper();
+         String json = "{\"key\":[\"com.nonexistent.Fake\",\"dummy\"]}";
+         mapper.readValue(json, LongKeyHolder.class);
+     }
+
+     @Test
+     public void testPrimitiveFieldWithoutExplicitTypeInfo() throws Exception {
+         ObjectMapper mapper = new ObjectMapper(); // no default typing
+         String json = "{\"key\":123}";
+         LongKeyHolder result = mapper.readValue(json, LongKeyHolder.class);
+         assertEquals(123L, result.key);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - PrimitiveWrapperDefaultTypingTest::testBooleanWrapperIntoBooleanField
+ - PrimitiveWrapperDefaultTypingTest::testDoubleWrapperIntoDoubleField
+ - PrimitiveWrapperDefaultTypingTest::testLongWrapperIntoLongField
+Failing generated tests: PrimitiveWrapperDefaultTypingTest::testBooleanWrapperIntoBooleanField, PrimitiveWrapperDefaultTypingTest::testDoubleWrapperIntoDoubleField, PrimitiveWrapperDefaultTypingTest::testIntegerWrapperIntoIntField, PrimitiveWrapperDefaultTypingTest::testLongWrapperIntoLongField

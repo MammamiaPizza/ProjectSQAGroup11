@@ -1,0 +1,255 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 101  Version: JacksonDatabind-101b
+JUnit: powermock-module-junit4-1.7.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 2088
+Trigger failures:
+- com.fasterxml.jackson.databind.struct.TestUnwrapped::testIssue2088UnwrappedFieldsAfterLastCreatorProp
+ --> junit.framework.AssertionFailedError: expected:<4> but was:<0>
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.deser.BeanDeserializer | java]
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializer
+protected transient Exception _nullFromCreator;
+protected BeanDeserializer(BeanDeserializerBase src) {
+protected BeanDeserializer(BeanDeserializerBase src, boolean ignoreAllUnknown) {
+protected BeanDeserializer(BeanDeserializerBase src, NameTransformer unwrapper) {
+public BeanDeserializer(BeanDeserializerBase src, ObjectIdReader oir) {
+public BeanDeserializer(BeanDeserializerBase src, Set<String> ignorableProps) {
+public BeanDeserializer(BeanDeserializerBase src, BeanPropertyMap props) {
+@Override
+public JsonDeserializer<Object> unwrappingDeserializer(NameTransformer transformer)
+if (getClass() != BeanDeserializer.class) {
+public BeanDeserializer withObjectIdReader(ObjectIdReader oir) {
+public BeanDeserializer withIgnorableProperties(Set<String> ignorableProps) {
+public BeanDeserializerBase withBeanProperties(BeanPropertyMap props) {
+protected BeanDeserializerBase asArrayDeserializer() {
+public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+@Deprecated // since 2.8; remove unless getting used
+protected Object _missingToken(JsonParser p, DeserializationContext ctxt) throws IOException {
+public Object deserialize(JsonParser p, DeserializationContext ctxt, Object bean) throws IOException
+final Object bean = _valueInstantiator.createUsingDefault(ctxt);
+public Object deserializeFromObject(JsonParser p, DeserializationContext ctxt) throws IOException
+@SuppressWarnings("resource")
+protected Object _deserializeUsingPropertyBased(final JsonParser p, final DeserializationContext
+...[truncated deterministically]...
+ctxt)
+final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+protected Object deserializeFromNull(JsonParser p, DeserializationContext ctxt)
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+protected Object deserializeUsingPropertyBasedWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+protected Object deserializeWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+protected Object deserializeUsingPropertyBasedWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+protected Exception _creatorReturnedNullException() {
+static class BeanReferring extends Referring
+public void setBean(Object bean) {
+public void handleResolvedForwardReference(Object id, Object value) throws IOException
+
+Generated JUnit Test:
+import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.annotation.JsonProperty;
+ import com.fasterxml.jackson.annotation.JsonUnwrapped;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
+ import org.junit.Test;
+
+ import java.util.HashMap;
+ import java.util.Map;
+
+ import static org.junit.Assert.*;
+
+ /**
+  * JUnit tests for BeanDeserializer._deserializeUsingPropertyBased
+  * when @JsonUnwrapped fields follow the last creator property.
+  *
+  * Bug: After the last creator param, remaining JSON tokens are not parsed
+  * into the unwrapped map, resulting in an empty map (size 0 vs expected 4).
+  */
+ public class UnwrappedAfterCreatorTest {
+
+     // --- Test bean classes ---
+
+     public static class BeanWithUnwrappedAfterCreator {
+         private final String name;
+
+         @JsonUnwrapped
+         private Map<String, String> extras = new HashMap<>();
+
+         @JsonCreator
+         public BeanWithUnwrappedAfterCreator(@JsonProperty("name") String name) {
+             this.name = name;
+         }
+
+         public String getName() { return name; }
+         public Map<String, String> getExtras() { return extras; }
+     }
+
+     public static class BeanWithMultipleCreatorParams {
+         private final String first;
+         private final String last;
+
+         @JsonUnwrapped
+         private Map<String, String> dynamic = new HashMap<>();
+
+         @JsonCreator
+         public BeanWithMultipleCreatorParams(
+                 @JsonProperty("first") String first,
+                 @JsonProperty("last")  String last) {
+             this.first = first;
+             this.last  = last;
+         }
+
+         public String getFirst()   { return first; }
+         public String getLast()    { return last; }
+         public Map<String, String> getDynamic() { return dynamic; }
+     }
+
+     public static class BeanWithOnlyCreatorParam {
+         @JsonCreator
+         public BeanWithOnlyCreatorParam(@JsonProperty("id") int id) { }
+     }
+
+     public static class BeanWithoutUnwrapped {
+         private final String key;
+
+         @JsonCreator
+         public BeanWithoutUnwrapped(@JsonProperty("key") String key) {
+             this.key = key;
+         }
+
+         public String getKey() { return key; }
+     }
+
+     // --- Tests ---
+
+     /**
+      * Normal case: 4 unwrapped fields after the last creator param.
+      * The unwrapped map must contain exactly those 4 entries.
+      */
+     @Test
+     public void testUnwrappedFieldsAfterLastCreatorProp() throws Exception {
+         String json = "{\"name\":\"test\","
+                      + "\"x\":\"1\",\"y\":\"2\",\"z\":\"3\",\"w\":\"4\"}";
+         ObjectMapper mapper = new ObjectMapper();
+         BeanWithUnwrappedAfterCreator bean =
+                 mapper.readValue(json, BeanWithUnwrappedAfterCreator.class);
+
+         assertEquals("test", bean.getName());
+         Map<String, String> extras = bean.getExtras();
+         assertNotNull(extras);
+         assertEquals(4, extras.size());
+         assertEquals("1", extras.get("x"));
+         assertEquals("2", extras.get("y"));
+         assertEquals("3", extras.get("z"));
+         assertEquals("4", extras.get("w"));
+     }
+
+     /**
+      * Boundary: no extra fields beyond the creator param.
+      * The unwrapped map must be empty.
+      */
+     @Test
+     public void testNoUnwrappedFields() throws Exception {
+         String json = "{\"name\":\"only\"}";
+         ObjectMapper mapper = new ObjectMapper();
+         BeanWithUnwrappedAfterCreator bean =
+                 mapper.readValue(json, BeanWithUnwrappedAfterCreator.class);
+
+         assertEquals("only", bean.getName());
+         assertNotNull(bean.getExtras());
+         assertTrue(bean.getExtras().isEmpty());
+     }
+
+     /**
+      * Edge: mixed – creator params are not the last property in JSON.
+      * Unwrapped fields that appear before the last creator param should
+      * also be collected.
+      */
+     @Test
+     public void testUnwrappedFieldsInterleavedWithCreatorParams() throws Exception {
+         String json = "{\"x\":\"1\",\"name\":\"mid\",\"y\":\"2\",\"z\":\"3\"}";
+         ObjectMapper mapper = new ObjectMapper();
+         BeanWithUnwrappedAfterCreator bean =
+                 mapper.readValue(json, BeanWithUnwrappedAfterCreator.class);
+
+         assertEquals("mid", bean.getName());
+         Map<String, String> extras = bean.getExtras();
+         assertEquals(3, extras.size());
+         assertEquals("1", extras.get("x"));
+         assertEquals("2", extras.get("y"));
+         assertEquals("3", extras.get("z"));
+     }
+
+     /**
+      * Edge: multiple creator params with unwrapped fields after all of them.
+      */
+     @Test
+     public void testMultipleCreatorParamsWithUnwrapped() throws Exception {
+         String json = "{\"first\":\"John\",\"last\":\"Doe\","
+                      + "\"a\":\"apple\",\"b\":\"banana\",\"c\":\"cherry\"}";
+         ObjectMapper mapper = new ObjectMapper();
+         BeanWithMultipleCreatorParams bean =
+                 mapper.readValue(json, BeanWithMultipleCreatorParams.class);
+
+         assertEquals("John", bean.getFirst());
+         assertEquals("Doe", bean.getLast());
+         assertEquals(3, bean.getDynamic().size());
+         assertEquals("apple",  bean.getDynamic().get("a"));
+         assertEquals("banana", bean.getDynamic().get("b"));
+         assertEquals("cherry", bean.getDynamic().get("c"));
+     }
+
+     /**
+      * Error: missing required creator param when no unwrapped fields present.
+      * Expect a {@code MismatchedInputException} (or subclass).
+      */
+     @Test(expected = com.fasterxml.jackson.databind.exc.MismatchedInputException.class)
+     public void testMissingCreatorParam() throws Exception {
+         String json = "{}"; // missing "id"
+         ObjectMapper mapper = new ObjectMapper();
+         mapper.readValue(json, BeanWithOnlyCreatorParam.class);
+     }
+
+     /**
+      * Edge: only creator params, no unwrapped property declared.
+      * Normal deserialization should still succeed.
+      */
+     @Test
+     public void testOnlyCreatorParamWithoutUnwrapped() throws Exception {
+         String json = "{\"key\":\"value\"}";
+         ObjectMapper mapper = new ObjectMapper();
+         BeanWithoutUnwrapped bean =
+                 mapper.readValue(json, BeanWithoutUnwrapped.class);
+
+         assertEquals("value", bean.getKey());
+     }
+
+     /**
+      * Edge: extra fields when no @JsonUnwrapped is present.
+      * By default, unknown properties should be ignored (or fail depending on config).
+      * With default ObjectMapper, unknown properties are ignored.
+      */
+     @Test
+     public void testExtraFieldsWithoutUnwrappedProperty() throws Exception {
+         String json = "{\"key\":\"val\",\"unknown\":\"extra\"}";
+         ObjectMapper mapper = new ObjectMapper();
+         BeanWithoutUnwrapped bean =
+                 mapper.readValue(json, BeanWithoutUnwrapped.class);
+         // key must be present; unknown is silently ignored
+         assertEquals("val", bean.getKey());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - UnwrappedAfterCreatorTest::testMultipleCreatorParamsWithUnwrapped
+ - UnwrappedAfterCreatorTest::testMissingCreatorParam
+ - UnwrappedAfterCreatorTest::testExtraFieldsWithoutUnwrappedProperty
+Failing generated tests: UnwrappedAfterCreatorTest::testExtraFieldsWithoutUnwrappedProperty, UnwrappedAfterCreatorTest::testMissingCreatorParam, UnwrappedAfterCreatorTest::testMultipleCreatorParamsWithUnwrapped, UnwrappedAfterCreatorTest::testUnwrappedFieldsAfterLastCreatorProp, UnwrappedAfterCreatorTest::testUnwrappedFieldsInterleavedWithCreatorParams

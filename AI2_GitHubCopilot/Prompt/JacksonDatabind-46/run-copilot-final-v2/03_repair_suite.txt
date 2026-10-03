@@ -1,0 +1,188 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 46  Version: JacksonDatabind-46b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1194
+Trigger failures:
+- com.fasterxml.jackson.databind.type.TestJavaType::testGenericSignature1195
+ --> junit.framework.ComparisonFailure: expected:<...e<Ljava/lang/String;[>];> but was:<...e<Ljava/lang/String;[];>
+Modified: com.fasterxml.jackson.databind.type.ReferenceType
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.type.ReferenceType | java]
+package com.fasterxml.jackson.databind.type;
+public class ReferenceType extends SimpleType
+protected final JavaType _referencedType;
+@Override
+public ReferenceType withTypeHandler(Object h)
+public ReferenceType withContentTypeHandler(Object h)
+public ReferenceType withValueHandler(Object h) {
+public ReferenceType withContentValueHandler(Object h) {
+public ReferenceType withStaticTyping() {
+protected String buildCanonicalName()
+protected JavaType _narrow(Class<?> subclass)
+public JavaType getReferencedType() {
+public boolean isReferenceType() {
+public int containedTypeCount() {
+public JavaType containedType(int index) {
+public String containedTypeName(int index) {
+public Class<?> getParameterSource() {
+public StringBuilder getErasedSignature(StringBuilder sb) {
+public StringBuilder getGenericSignature(StringBuilder sb)
+public String toString()
+.append("[reference type, class ")
+public boolean equals(Object o)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.type;
+
+ import static org.junit.Assert.assertEquals;
+
+ import java.util.List;
+ import java.util.concurrent.atomic.AtomicReference;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.databind.JavaType;
+ import com.fasterxml.jackson.databind.type.TypeFactory;
+
+ /**
+  * Tests for the array-bracket placement bug in ReferenceType signatures (Defects4J bug 46).
+  * The correct JVM descriptor format is [Ljava/lang/String; – bracket before element, not after.
+  */
+ public class ReferenceTypeBug46Test {
+
+     private final TypeFactory tf = TypeFactory.defaultInstance();
+
+     // Helper to build ReferenceType for a given referenced type
+     private ReferenceType ref(JavaType referenced) {
+         return ReferenceType.construct(AtomicReference.class, referenced, null, null);
+     }
+
+     // ---------- generic signature tests ----------
+
+     @Test
+     public void testGenericSignatureNonArray() {
+         ReferenceType ref = ref(tf.constructType(String.class));
+         String sig = ref.getGenericSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<Ljava/lang/String;>;";
+         assertEquals(expected, sig);
+     }
+
+     @Test
+     public void testGenericSignatureStringArray() {
+         JavaType stringArray = tf.constructArrayType(tf.constructType(String.class));
+         ReferenceType ref = ref(stringArray);
+         String sig = ref.getGenericSignature(new StringBuilder()).toString();
+         // Bug 46: old output would be ...<Ljava/lang/String;[]>; - bracket after element
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<[Ljava/lang/String;>;";
+         assertEquals(expected, sig);
+     }
+
+     @Test
+     public void testGenericSignatureIntArray() {
+         JavaType intArray = tf.constructArrayType(tf.constructType(int.class));
+         ReferenceType ref = ref(intArray);
+         String sig = ref.getGenericSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<[I>;";
+         assertEquals(expected, sig);
+     }
+
+     @Test
+     public void testGenericSignatureMultiDimArray() {
+         JavaType objArray = tf.constructArrayType(tf.constructType(Object.class));
+         JavaType multiDim = tf.constructArrayType(objArray);
+         ReferenceType ref = ref(multiDim);
+         String sig = ref.getGenericSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<[[Ljava/lang/Object;>;";
+         assertEquals(expected, sig);
+     }
+
+     @Test
+     public void testGenericSignatureParameterizedArray() {
+         JavaType listOfString = tf.constructParametricType(List.class, String.class);
+         JavaType arrayOfList = tf.constructArrayType(listOfString);
+         ReferenceType ref = ref(arrayOfList);
+         String sig = ref.getGenericSignature(new StringBuilder()).toString();
+         String expected =
+"Ljava/util/concurrent/atomic/AtomicReference<[Ljava/util/List<Ljava/lang/String;>;>;";
+         assertEquals(expected, sig);
+     }
+
+     // ---------- erased signature ----------
+
+     @Test
+     public void testErasedSignatureIsRawClassDescriptor() {
+         // Regardless of array content, erased signature is the reference class descriptor
+         ReferenceType ref = ref(tf.constructArrayType(tf.constructType(String.class)));
+         String erased = ref.getErasedSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference;";
+         assertEquals(expected, erased);
+     }
+
+     // ---------- canonical name ----------
+
+     @Test
+     public void testBuildCanonicalNameNonArray() {
+         ReferenceType ref = ref(tf.constructType(String.class));
+         String name = ref.buildCanonicalName(); // protected but same-package access
+         String expected = "java.util.concurrent.atomic.AtomicReference<java.lang.String>";
+         assertEquals(expected, name);
+     }
+
+     @Test
+     public void testBuildCanonicalNameStringArray() {
+         ReferenceType ref = ref(tf.constructArrayType(tf.constructType(String.class)));
+         String name = ref.buildCanonicalName();
+         // Java canonical representation uses [] after type name
+         String expected = "java.util.concurrent.atomic.AtomicReference<java.lang.String[]>";
+         assertEquals(expected, name);
+     }
+
+     // ---------- withTypeHandler does not corrupt signature ----------
+
+     @Test
+     public void testWithTypeHandlerPreservesGenericSignature() {
+         ReferenceType ref = ref(tf.constructArrayType(tf.constructType(String.class)));
+         ReferenceType withHandler = ref.withTypeHandler(new Object()); // dummy handler
+         String sig = withHandler.getGenericSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<[Ljava/lang/String;>;";
+         assertEquals(expected, sig);
+     }
+
+     // ---------- static typing ----------
+
+     @Test
+     public void testWithStaticTypingPreservesGenericSignature() {
+         ReferenceType ref = ref(tf.constructArrayType(tf.constructType(String.class)));
+         ReferenceType staticRef = ref.withStaticTyping();
+         String sig = staticRef.getGenericSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<[Ljava/lang/String;>;";
+         assertEquals(expected, sig);
+     }
+
+     // ---------- edge: reference to reference type ----------
+
+     @Test
+     public void testGenericSignatureNestedReference() {
+         ReferenceType inner = ref(tf.constructType(String.class));
+         ReferenceType outer = ref(inner);
+         String sig = outer.getGenericSignature(new StringBuilder()).toString();
+         // inner's generic signature is the full ReferenceType signature (not just class)
+         String innerSig = inner.getGenericSignature(new StringBuilder()).toString();
+         String expected = "Ljava/util/concurrent/atomic/AtomicReference<"
+                 + innerSig + ">;";
+         assertEquals(expected, sig);
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - com.fasterxml.jackson.databind.type.ReferenceTypeBug46Test::testBuildCanonicalNameStringArray
+ - com.fasterxml.jackson.databind.type.ReferenceTypeBug46Test::testGenericSignatureIntArray
+ - com.fasterxml.jackson.databind.type.ReferenceTypeBug46Test::testBuildCanonicalNameNonArray
+Failing generated tests: com.fasterxml.jackson.databind.type.ReferenceTypeBug46Test::testBuildCanonicalNameNonArray, com.fasterxml.jackson.databind.type.ReferenceTypeBug46Test::testBuildCanonicalNameStringArray, com.fasterxml.jackson.databind.type.ReferenceTypeBug46Test::testGenericSignatureIntArray

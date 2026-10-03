@@ -1,0 +1,126 @@
+package org.apache.commons.jxpath.ri.compiler;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.JXPathContext;
+
+/**
+ * Tests relational-expression evaluation through the public JXPath API.
+ */
+public class CoreOperationRelationalExpressionTest extends TestCase {
+
+    public void testComplexOperationWithVariablesUsesTheComputedArithmeticValue() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable("a", Integer.valueOf(1));
+        context.getVariables().declareVariable("b", Integer.valueOf(2));
+        context.getVariables().declareVariable("c", Integer.valueOf(3));
+
+        assertEquals(Boolean.TRUE, context.getValue("$a + $b <= $c"));
+    }
+
+    public void testLessOrEqualHandlesLessEqualAndGreaterScalarValues() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable("one", Integer.valueOf(1));
+        context.getVariables().declareVariable("two", Integer.valueOf(2));
+        context.getVariables().declareVariable("three", Integer.valueOf(3));
+
+        assertEquals(Boolean.TRUE, context.getValue("$one <= $two"));
+        assertEquals(Boolean.TRUE, context.getValue("$two <= $two"));
+        assertEquals(Boolean.FALSE, context.getValue("$three <= $two"));
+    }
+
+    public void testCollectionOnLeftMatchesAnyElement() {
+        JXPathContext context = newContext();
+        List values = Arrays.asList(new Object[] {
+            Integer.valueOf(3), Integer.valueOf(1)
+        });
+        context.getVariables().declareVariable("values", values);
+
+        assertEquals(Boolean.TRUE, context.getValue("$values <= 2"));
+    }
+
+    public void testCollectionOnRightPreservesLeftToRightComparisonOrder() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable(
+                "values", Collections.singletonList(Integer.valueOf(1)));
+
+        /*
+         * XPath relational comparisons are directional: 2 <= 1 is false.
+         * Reversing the operands while iterating the right-hand collection
+         * would incorrectly evaluate 1 <= 2.
+         */
+        assertEquals(Boolean.FALSE, context.getValue("2 <= $values"));
+    }
+
+    public void testCollectionOnRightMatchesWhenAnElementIsGreaterThanTheLeftValue() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable(
+                "values", Arrays.asList(new Object[] {
+                    Integer.valueOf(1), Integer.valueOf(3)
+                }));
+
+        /*
+         * The comparison must be evaluated as 2 <= each candidate, rather
+         * than as each candidate <= 2. The second candidate satisfies the
+         * relational expression.
+         */
+        assertEquals(Boolean.TRUE, context.getValue("2 <= $values"));
+    }
+
+    public void testEmptyCollectionOnEitherSideCannotProduceAMatch() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable(
+                "empty", Collections.emptyList());
+
+        assertEquals(Boolean.FALSE, context.getValue("$empty <= 1"));
+        assertEquals(Boolean.FALSE, context.getValue("1 <= $empty"));
+    }
+
+    public void testTwoCollectionsMatchOnlyWhenAnOrderedPairSatisfiesComparison() {
+        JXPathContext matchingContext = newContext();
+        matchingContext.getVariables().declareVariable(
+                "left", Collections.singletonList(Integer.valueOf(2)));
+        matchingContext.getVariables().declareVariable(
+                "right", Arrays.asList(new Object[] {
+                    Integer.valueOf(1), Integer.valueOf(3)
+                }));
+
+        assertEquals(Boolean.TRUE, matchingContext.getValue("$left <= $right"));
+
+        JXPathContext nonMatchingContext = newContext();
+        nonMatchingContext.getVariables().declareVariable(
+                "left", Collections.singletonList(Integer.valueOf(2)));
+        nonMatchingContext.getVariables().declareVariable(
+                "right", Collections.singletonList(Integer.valueOf(1)));
+
+        assertEquals(Boolean.FALSE, nonMatchingContext.getValue("$left <= $right"));
+    }
+
+    public void testNaNDoesNotSatisfyComparisonAndNullConvertsToZero() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable(
+                "notANumber", Double.valueOf(Double.NaN));
+        context.getVariables().declareVariable("nullValue", null);
+
+        assertEquals(Boolean.FALSE, context.getValue("$notANumber <= 1"));
+        assertEquals(Boolean.TRUE, context.getValue("$nullValue <= 1"));
+    }
+
+    public void testNaNOnRightDoesNotSatisfyComparisonAndNullOnRightIsZero() {
+        JXPathContext context = newContext();
+        context.getVariables().declareVariable(
+                "notANumber", Double.valueOf(Double.NaN));
+        context.getVariables().declareVariable("nullValue", null);
+
+        assertEquals(Boolean.FALSE, context.getValue("1 <= $notANumber"));
+        assertEquals(Boolean.FALSE, context.getValue("1 <= $nullValue"));
+    }
+
+    private JXPathContext newContext() {
+        return JXPathContext.newContext(new Object());
+    }
+}

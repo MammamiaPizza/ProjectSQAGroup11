@@ -1,0 +1,83 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 9  Version: Jsoup-9b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.Entities
+Modified: org.jsoup.nodes.Entities
+Triggers: org.jsoup.nodes.EntitiesTest::unescape
+
+Bug/specification summary:
+Bug report: 46
+Trigger failures:
+- org.jsoup.nodes.EntitiesTest::unescape
+ --> junit.framework.AssertionFailedError: expected:<...<> Å π π 新 there &! [¾]> but was:<...<> Å π π 新 there &! [&frac34;]>
+Modified: org.jsoup.nodes.Entities
+
+Prompt-01 test plan:
+TARGETS: Entities.unescape(String) – decode named and numeric HTML character references.
+TARGETS: unescapePattern – regex for &name; &#dec; &#xhex; with optional semicolon.
+ORACLES: HTML5 named references (e.g., &frac34; → ¾, < → <, & → &).
+ORACLES: Numeric entities map to Unicode code points; verify via Integer.parseInt/Character.toChars.
+CASES: Named with/without semicolon (&frac34 vs &frac34;), unknown names (&bad;), empty/malformed.
+CASES: Decimal/hex numeric entities, boundary values (valid max code point, zero, negative).
+CASES: Entities adjacent to text, at start/end, multiple entities, double-encoded (<).
+RISKS: Internal named entity map is not visible; assume full HTML5 set, but gaps possible.
+RISKS: Only unescape method is in scope; escape-mode behavior may differ; no full spec doc.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Entities (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+public class Entities {
+public enum EscapeMode {
+public Map<Character, String> getMap() {
+private static final Pattern unescapePattern = Pattern.compile("&(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]+);?");
+static String escape(String string, Document.OutputSettings out) {
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+static String unescape(String string) {
+
+/* HEADER */
+package org.jsoup.nodes;
+import java.nio.charset.CharsetEncoder;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+public class Entities {
+
+/* METHOD getMap */
+public Map<Character, String> getMap() {
+ return map;
+ }
+
+/* METHOD escape */
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+ StringBuilder accum = new StringBuilder(string.length() * 2);
+ Map<Character, String> map = escapeMode.getMap();
+
+ for (int pos = 0; pos < string.length(); pos++) {
+ Character c = string.charAt(pos);
+ if (map.containsKey(c))
+ accum.append('&').append(map.get(c)).append(';');
+ else if (encoder.canEncode(c))
+ accum.append(c.charValue());
+ else
+ accum.append("&#").append((int) c).append(';');
+ }
+
+ return accum.toString();
+ }
+
+/* METHOD EscapeMode */
+EscapeMode(Map<Character, String> map) {
+ this.map = map;
+ }
+
+/* METHOD escape */
+static String escape(String string, Document.OutputSettings out) {
+ return escape(string, out.encoder(), out.escapeMode());
+ }

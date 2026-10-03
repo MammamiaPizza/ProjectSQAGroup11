@@ -1,0 +1,444 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 33  Version: Closure-33b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.rhino.jstype.PrototypeObjectType
+Modified: com.google.javascript.rhino.jstype.PrototypeObjectType
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testIssue700
+
+Bug/specification summary:
+Bug report: 700
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue700
+ --> junit.framework.AssertionFailedError: unexpected warnings(s):
+Modified: com.google.javascript.rhino.jstype.PrototypeObjectType
+
+Prompt-01 test plan:
+TARGETS: PrototypeObjectType.isSubtype and implicit-prototype handling during TypeCheck.
+ORACLES: Existing TypeCheckTest.testIssue700; expected result is no unexpected warnings.
+CASES: Reproduce issue 700 type-check path involving PrototypeObjectType subtype comparison.
+CASES: Compare types with known and unknown implicit prototype chains.
+RISKS: Constructor/setup APIs for PrototypeObjectType are not provided in this context.
+RISKS: No standalone expected subtype outcomes are specified beyond the trigger warning oracle.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.rhino.jstype.PrototypeObjectType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+class PrototypeObjectType extends ObjectType {
+@Override
+public Property getSlot(String name) {
+public int getPropertiesCount() {
+public boolean hasProperty(String propertyName) {
+public boolean hasOwnProperty(String propertyName) {
+public Set<String> getOwnPropertyNames() {
+public boolean isPropertyTypeDeclared(String property) {
+public boolean isPropertyTypeInferred(String property) {
+public JSType getPropertyType(String property) {
+public boolean isPropertyInExterns(String propertyName) {
+public boolean removeProperty(String name) {
+public Node getPropertyNode(String propertyName) {
+public JSDocInfo getOwnPropertyJSDocInfo(String propertyName) {
+public void setPropertyJSDocInfo(String propertyName, JSDocInfo info) {
+public boolean matchesNumberContext() {
+public boolean matchesStringContext() {
+private boolean hasOverridenNativeProperty(String propertyName) {
+public JSType unboxesTo() {
+public boolean matchesObjectContext() {
+public boolean canBeCalled() {
+public FunctionType getConstructor() {
+public ObjectType getImplicitPrototype() {
+final void setImplicitPrototype(ObjectType implicitPrototype) {
+public String getReferenceName() {
+public boolean hasReferenceName() {
+public boolean isSubtype(JSType that) {
+private boolean implicitPrototypeChainIsUnknown() {
+public boolean hasCachedValues() {
+public boolean isNativeObjectType() {
+public FunctionType getOwnerFunction() {
+public Iterable<ObjectType> getCtorImplementedInterfaces() {
+public Iterable<ObjectType> getCtorExtendedInterfaces() {
+public void matchConstraint(ObjectType constraintObj) {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.common.base.Preconditions.checkState;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import java.util.Map;
+import java.util.Set;
+class PrototypeObjectType extends ObjectType {
+
+/* METHOD PrototypeObjectType */
+PrototypeObjectType(JSTypeRegistry registry, String className,
+ ObjectType implicitPrototype) {
+ this(registry, className, implicitPrototype, false);
+ }
+
+/* METHOD PrototypeObjectType */
+PrototypeObjectType(JSTypeRegistry registry, String className,
+ ObjectType implicitPrototype, boolean nativeType) {
+ super(registry);
+ this.properties = Maps.newTreeMap();
+ this.className = className;
+ this.nativeType = nativeType;
+ if (nativeType || implicitPrototype != null) {
+ setImplicitPrototype(implicitPrototype);
+ } else {
+ setImplicitPrototype(
+ registry.getNativeObjectType(JSTypeNative.OBJECT_TYPE));
+ }
+ }
+
+/* METHOD setPropertyJSDocInfo */
+@Override
+ public void setPropertyJSDocInfo(String propertyName, JSDocInfo info) {
+ if (info != null) {
+ if (!properties.containsKey(propertyName)) {
+ // If docInfo was attached, but the type of the property
+ // was not defined anywhere, then we consider this an explicit
+ // declaration of the property.
+ defineInferredProperty(propertyName, getPropertyType(propertyName),
+ null);
+ }
+
+ // The prototype property is not represented as a normal Property.
+ // We probably don't want to attach any JSDoc to it anyway.
+ Property property = properties.get(propertyName);
+ if (property != null) {
+ property.setJSDocInfo(info);
+ }
+ }
+ }
+
+ @Override
+ public boolean matchesNumberContext() {
+ return isNumberObjectType() || isDateType() || isBooleanObjectType() ||
+ isStringObjectType() || hasOverridenNativeProperty("valueOf");
+ }
+
+ @Override
+ public boolean matchesStringContext() {
+ return isTheObjectType() || isStringObjectType() || isDateType() ||
+ isRegexpType() || isArrayType() || isNumberObjectType() ||
+ isBooleanObjectType() || hasOverridenNativeProperty("toString");
+ }
+
+ /**
+ * Given the name of a native object property, checks whether the property is
+ * present on the object and different from the native one.
+ */
+ private boolean hasOverridenNativeProperty(String propertyName) {
+ if (isNativeObjectType()) {
+ return false;
+ }
+
+ JSType propertyType = getPropertyType(propertyName);
+ ObjectType nativeType =
+ this.isFunctionType() ?
+ registry.getNativeObjectType(JSTypeNative.FUNCTION_PROTOTYPE) :
+ registry.getNativeObjectType(JSTypeNative.OBJECT_PROTOTYPE);
+ JSType nativePropertyType = nativeType.getPropertyType(propertyName);
+ return propertyType != nativePropertyType;
+ }
+
+ @Override
+ public JSType unboxesTo() {
+ if (isStringObjectType()) {
+ return getNativeType(JSTypeNative.STRING_TYPE);
+ } else if (isBooleanObjectType()) {
+ return getNativeType(JSTypeNative.BOOLEAN_TYPE);
+ } else if (isNumberObjectType()) {
+ return getNativeType(JSTypeNative.NUMBER_TYPE);
+ } else {
+ return super.unboxesTo();
+ }
+ }
+
+ @Override
+ public boolean matchesObjectContext() {
+ return true;
+ }
+
+ @Override
+ public boolean canBeCalled() {
+ return isRegexpType();
+ }
+
+ @Override
+ String toStringHelper(boolean forAnnotations) {
+ if (hasReferenceName()) {
+ return getReferenceName();
+ } else if (prettyPrint) {
+ // Don't pretty print recursively.
+ prettyPrint = false;
+
+ // Use a tree set so that the properties are sorted.
+ Set<String> propertyNames = Sets.newTreeSet();
+ for (ObjectType current = this;
+ current != null && !current.isNativeObjectType() &&
+ propertyNames.size() <= MAX_PRETTY_PRINTED_PROPERTIES;
+ current = current.getImplicitPrototype()) {
+ propertyNames.addAll(current.getOwnPropertyNames());
+ }
+
+ StringBuilder sb = new StringBuilder();
+ sb.append("{");
+
+ int i = 0;
+ for (String property : propertyNames) {
+ if (i > 0) {
+ sb.append(", ");
+ }
+
+ sb.append(property);
+ sb.append(": ");
+ sb.append(getPropertyType(property).toStringHelper(forAnnotations));
+
+ ++i;
+ if (!forAnnotations && i == MAX_PRETTY_PRINTED_PROPERTIES) {
+ sb.append(", ...");
+ break;
+ }
+ }
+
+ sb.append("}");
+
+ prettyPrint = true;
+ return sb.toString();
+ } else {
+ return forAnnotations ? "?" : "{...}";
+ }
+ }
+
+/* METHOD matchesNumberContext */
+@Override
+ public boolean matchesNumberContext() {
+ return isNumberObjectType() || isDateType() || isBooleanObjectType() ||
+ isStringObjectType() || hasOverridenNativeProperty("valueOf");
+ }
+
+/* METHOD matchesStringContext */
+@Override
+ public boolean matchesStringContext() {
+ return isTheObjectType() || isStringObjectType() || isDateType() ||
+ isRegexpType() || isArrayType() || isNumberObjectType() ||
+ isBooleanObjectType() || hasOverridenNativeProperty("toString");
+ }
+
+/* METHOD unboxesTo */
+@Override
+ public JSType unboxesTo() {
+ if (isStringObjectType()) {
+ return getNativeType(JSTypeNative.STRING_TYPE);
+ } else if (isBooleanObjectType()) {
+ return getNativeType(JSTypeNative.BOOLEAN_TYPE);
+ } else if (isNumberObjectType()) {
+ return getNativeType(JSTypeNative.NUMBER_TYPE);
+ } else {
+ return super.unboxesTo();
+ }
+ }
+
+/* METHOD matchConstraint */
+@Override
+ public void matchConstraint(ObjectType constraintObj) {
+ // We only want to match contraints on anonymous types.
+
+ // Handle the case where the constraint object is a record type.
+ //
+ // param constraintObj {{prop: (number|undefined)}}
+ // function f(constraintObj) {}
+ // f({});
+ //
+ // We want to modify the object literal to match the constraint, by
+ // taking any each property on the record and trying to match
+ // properties on this object.
+ if (constraintObj.isRecordType()) {
+ for (String prop : constraintObj.getOwnPropertyNames()) {
+ JSType propType = constraintObj.getPropertyType(prop);
+ if (!isPropertyTypeDeclared(prop)) {
+ JSType typeToInfer = propType;
+ if (!hasProperty(prop)) {
+ typeToInfer = getNativeType(JSTypeNative.VOID_TYPE)
+ .getLeastSupertype(propType);
+ }
+ defineInferredProperty(prop, typeToInfer, null);
+ }
+ }
+ }
+ }
+
+/* METHOD isPropertyTypeDeclared */
+@Override
+ public boolean isPropertyTypeDeclared(String property) {
+ StaticSlot<JSType> slot = getSlot(property);
+ if (slot == null) {
+ return false;
+ }
+ return !slot.isTypeInferred();
+ }
+
+/* METHOD isPropertyTypeInferred */
+@Override
+ public boolean isPropertyTypeInferred(String property) {
+ StaticSlot<JSType> slot = getSlot(property);
+ if (slot == null) {
+ return false;
+ }
+ return slot.isTypeInferred();
+ }
+
+/* METHOD getPropertyType */
+@Override
+ public JSType getPropertyType(String property) {
+ StaticSlot<JSType> slot = getSlot(property);
+ if (slot == null) {
+ return getNativeType(JSTypeNative.UNKNOWN_TYPE);
+ }
+ return slot.getType();
+ }
+
+/* METHOD getCtorImplementedInterfaces */
+@Override
+ public Iterable<ObjectType> getCtorImplementedInterfaces() {
+ return isFunctionPrototypeType()
+ ? getOwnerFunction().getImplementedInterfaces()
+ : ImmutableList.<ObjectType>of();
+ }
+
+/* METHOD getCtorExtendedInterfaces */
+@Override
+ public Iterable<ObjectType> getCtorExtendedInterfaces() {
+ return isFunctionPrototypeType()
+ ? getOwnerFunction().getExtendedInterfaces()
+ : ImmutableList.<ObjectType>of();
+ }
+
+/* METHOD getSlot */
+@Override
+ public Property getSlot(String name) {
+ if (properties.containsKey(name)) {
+ return properties.get(name);
+ }
+ ObjectType implicitPrototype = getImplicitPrototype();
+ if (implicitPrototype != null) {
+ Property prop = implicitPrototype.getSlot(name);
+ if (prop != null) {
+ return prop;
+ }
+ }
+ for (ObjectType interfaceType : getCtorExtendedInterfaces()) {
+ Property prop = interfaceType.getSlot(name);
+ if (prop != null) {
+ return prop;
+ }
+ }
+ return null;
+ }
+
+/* METHOD getPropertiesCount */
+@Override
+ public int getPropertiesCount() {
+ ObjectType implicitPrototype = getImplicitPrototype();
+ if (implicitPrototype == null) {
+ return this.properties.size();
+ }
+ int localCount = 0;
+ for (String property : properties.keySet()) {
+ if (!implicitPrototype.hasProperty(property)) {
+ localCount++;
+ }
+ }
+ return implicitPrototype.getPropertiesCount() + localCount;
+ }
+
+/* METHOD hasProperty */
+@Override
+ public boolean hasProperty(String propertyName) {
+ // Unknown types have all properties.
+ return isUnknownType() || getSlot(propertyName) != null;
+ }
+
+/* METHOD hasOwnProperty */
+@Override
+ public boolean hasOwnProperty(String propertyName) {
+ return properties.get(propertyName) != null;
+ }
+
+/* METHOD getOwnPropertyNames */
+@Override
+ public Set<String> getOwnPropertyNames() {
+ return properties.keySet();
+ }
+
+/* METHOD isPropertyInExterns */
+@Override
+ public boolean isPropertyInExterns(String propertyName) {
+ Property p = properties.get(propertyName);
+ if (p != null) {
+ return p.isFromExterns();
+ }
+ ObjectType implicitPrototype = getImplicitPrototype();
+ if (implicitPrototype != null) {
+ return implicitPrototype.isPropertyInExterns(propertyName);
+ }
+ return false;
+ }
+
+/* METHOD removeProperty */
+@Override
+ public boolean removeProperty(String name) {
+ return properties.remove(name) != null;
+ }
+
+/* METHOD getPropertyNode */
+@Override
+ public Node getPropertyNode(String propertyName) {
+ Property p = properties.get(propertyName);
+ if (p != null) {
+ return p.getNode();
+ }
+ ObjectType implicitPrototype = getImplicitPrototype();
+ if (implicitPrototype != null) {
+ return implicitPrototype.getPropertyNode(propertyName);
+ }
+ return null;
+ }
+
+/* METHOD getOwnPropertyJSDocInfo */
+@Override
+ public JSDocInfo getOwnPropertyJSDocInfo(String propertyName) {
+ Property p = properties.get(propertyName);
+ if (p != null) {
+ return p.getJSDocInfo();
+ }
+ return null;
+ }
+
+/* METHOD matchesObjectContext */
+@Override
+ public boolean matchesObjectContext() {
+ return true;
+ }
+
+/* METHOD canBeCalled */
+@Override
+ public boolean canBeCalled() {
+ return isRegexpType();
+ }
+
+/* METHOD getConstructor */
+@Override
+ public FunctionType getConstructor() {
+ return null;
+ }

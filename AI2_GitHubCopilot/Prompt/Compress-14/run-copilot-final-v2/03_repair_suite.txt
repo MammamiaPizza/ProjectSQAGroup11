@@ -1,0 +1,141 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Compress  Bug: 14  Version: Compress-14b
+JUnit: junit-4.10.jar  Build: Maven
+Bug/specification summary:
+Bug report: COMPRESS-181
+Trigger failures:
+- org.apache.commons.compress.archivers.tar.TarArchiveInputStreamTest::workaroundForBrokenTimeHeader
+ --> java.io.IOException: Error detected parsing the header
+Modified: org.apache.commons.compress.archivers.tar.TarUtils
+
+Available API/signatures:
+[org.apache.commons.compress.archivers.tar.TarUtils | java]
+package org.apache.commons.compress.archivers.tar;
+public class TarUtils {
+/** Private constructor to prevent instantiation of this utility class. */
+private TarUtils(){
+public static long parseOctal(final byte[] buffer, final int offset, final int length) {
+public static boolean parseBoolean(final byte[] buffer, final int offset) {
+final String s = "Invalid byte "+currentByte+" at offset "+(current-offset)+" in '"+string+"' len="+length;
+public static String parseName(byte[] buffer, final int offset, final int length) {
+public static int formatNameBytes(String name, byte[] buf, final int offset, final int length) {
+public static int formatOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatLongOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static int formatCheckSumOctalBytes(final long value, byte[] buf, final int offset, final int length) {
+public static long computeCheckSum(final byte[] buf) {
+
+Generated JUnit Test:
+package org.apache.commons.compress.archivers.tar;
+
+ import static org.junit.Assert.*;
+ import org.junit.Test;
+
+ /**
+  * Tests for {@link TarUtils} focusing on {@code parseOctal} and related numeric
+  * field parsing, covering the behavior required for COMPRESS-181 (robust
+  * handling of broken/loosely formatted time headers).
+  */
+ public class TarUtilsTest {
+
+     // -----------------------------------------------------------------------
+     // parseOctal - valid inputs
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testParseOctalValidSmallValue() {
+         byte[] buf = "0000007\0".getBytes();
+         assertEquals(7L, TarUtils.parseOctal(buf, 0, buf.length));
+     }
+
+     @Test
+     public void testParseOctalLeadingSpaces() {
+         byte[] buf = "   7\0".getBytes();
+         assertEquals(7L, TarUtils.parseOctal(buf, 0, buf.length));
+     }
+
+     @Test
+     public void testParseOctalTrailingSpaces() {
+         byte[] buf = "7   \0".getBytes();
+         // The method chops one trailing NUL/space, then a second; here we have
+         // chars: '7',' ',' ',' ', NUL. After stripping, should parse "7".
+         assertEquals(7L, TarUtils.parseOctal(buf, 0, buf.length));
+     }
+
+     @Test
+     public void testParseOctalTrailingNuls() {
+         // field: '7', NUL, NUL, NUL → valid, strips trailing NULs
+         byte[] buf = new byte[] { '7', 0, 0, 0 };
+         assertEquals(7L, TarUtils.parseOctal(buf, 0, buf.length));
+     }
+
+     @Test
+     public void testParseOctalAllSpaces() {
+         // Posix: all spaces means zero
+         byte[] buf = "   \0".getBytes();  // length 4
+         assertEquals(0L, TarUtils.parseOctal(buf, 0, buf.length));
+     }
+
+     @Test
+     public void testParseOctalAllNuls() {
+         byte[] buf = new byte[] { 0, 0, 0, 0 };
+         assertEquals(0L, TarUtils.parseOctal(buf, 0, buf.length));
+     }
+
+     @Test
+     public void testParseOctalLargeValueNearMaxLong() {
+         // 777777777777777777777 (octal) fits in long
+         byte[] buf = "777777777777777777777\0".getBytes();
+         long result = TarUtils.parseOctal(buf, 0, buf.length);
+         // verify it is positive and doesn't overflow
+         assertTrue(result > 0);
+         // round-trip sanity: value should equal its octal representation
+         assertEquals(Long.parseLong("777777777777777777777", 8), result);
+     }
+
+     // -----------------------------------------------------------------------
+     // parseOctal - invalid / exception cases
+     // -----------------------------------------------------------------------
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testParseOctalEmbeddedNonOctal() {
+         byte[] buf = "701A3\0\0".getBytes(); // 'A' is not octal
+         TarUtils.parseOctal(buf, 0, buf.length);
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testParseOctalLengthTooShort() {
+         TarUtils.parseOctal(new byte[] { '0' }, 0, 1); // length < 2
+     }
+
+     @Test(expected = IllegalArgumentException.class)
+     public void testParseOctalZeroLength() {
+         TarUtils.parseOctal(new byte[4], 0, 0);
+     }
+
+     // -----------------------------------------------------------------------
+     // parseBoolean
+     // -----------------------------------------------------------------------
+
+     @Test
+     public void testParseBooleanTrue() {
+         assertTrue(TarUtils.parseBoolean(new byte[] { 1 }, 0));
+     }
+
+     @Test
+     public void testParseBooleanFalse() {
+         assertFalse(TarUtils.parseBoolean(new byte[] { 0 }, 0));
+         // non-1 should be false per implementation
+         assertFalse(TarUtils.parseBoolean(new byte[] { 2, 0 }, 0));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::testParseOctalTrailingNuls
+ - org.apache.commons.compress.archivers.tar.TarUtilsTest::testParseOctalTrailingSpaces
+
+Failing generated tests: org.apache.commons.compress.archivers.tar.TarUtilsTest::testParseOctalTrailingNuls, org.apache.commons.compress.archivers.tar.TarUtilsTest::testParseOctalTrailingSpaces

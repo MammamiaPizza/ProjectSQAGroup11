@@ -1,0 +1,208 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 91  Version: Jsoup-91b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 1192
+Trigger failures:
+- org.jsoup.integration.ConnectTest::testBinaryThrowsExceptionWhenTypeIgnored
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.integration.ConnectTest::testBinaryResultThrows
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.integration.ParseTest::testBinaryThrowsException
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.UncheckedIOException, org.jsoup.parser.CharacterReader
+
+Available API/signatures:
+[org.jsoup.UncheckedIOException | java]
+package org.jsoup;
+public class UncheckedIOException extends RuntimeException {
+public UncheckedIOException(IOException cause) {
+public IOException ioException() {
+
+[org.jsoup.parser.CharacterReader | java]
+package org.jsoup.parser;
+public final class CharacterReader {
+static final char EOF = (char) -1;
+private static final int readAheadLimit = (int) (maxBufferLen * 0.75);
+public CharacterReader(Reader input, int sz) {
+public CharacterReader(Reader input) {
+public CharacterReader(String input) {
+private void bufferUp() {
+final int read = reader.read(charBuf);
+public int pos() {
+public boolean isEmpty() {
+private boolean isEmptyNoBufferUp() {
+public char current() {
+public void advance() {
+public String consumeTo(char c) {
+public String consumeToAny(final char... chars) {
+String consumeToAnySorted(final char... chars) {
+@Override
+public String toString() {
+private static String cacheString(final char[] charBuf, final String[] stringCache, final int start, final int count) {
+static boolean rangeEquals(final char[] charBuf, final int start, int count, final String cached) {
+boolean rangeEquals(final int start, final int count, final String cached) {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.UncheckedIOException;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class CharacterReaderIOExceptionTest {
+
+    @Test
+    public void uncheckedIOExceptionExposesOriginalIOException() {
+        IOException cause = new IOException("binary input");
+        UncheckedIOException exception = new UncheckedIOException(cause);
+
+        assertSame(cause, exception.ioException());
+        assertSame(cause, exception.getCause());
+    }
+
+    @Test
+    public void constructorWrapsIOExceptionThrownDuringInitialRead() {
+        IOException cause = new IOException("initial read failed");
+        CharacterReader reader = null;
+
+        try {
+            reader = new CharacterReader(new ThrowingReader(cause, 0), 4);
+            fail("Expected an UncheckedIOException");
+        } catch (UncheckedIOException exception) {
+            assertSame(cause, exception.ioException());
+        } finally {
+            if (reader != null) {
+                assertTrue(reader.isEmpty());
+            }
+        }
+    }
+
+    @Test
+    public void refillWrapsIOExceptionThrownAfterInitialBufferIsConsumed() {
+        IOException cause = new IOException("refill failed");
+        CharacterReader reader = new CharacterReader(new ThrowingReader(cause, 1), 4);
+
+        assertEquals('a', reader.current());
+        reader.advance();
+        assertEquals('b', reader.current());
+        reader.advance();
+        assertEquals('c', reader.current());
+        reader.advance();
+        assertEquals('d', reader.current());
+        reader.advance();
+
+        try {
+            reader.current();
+            fail("Expected an UncheckedIOException when the buffer is refilled");
+        } catch (UncheckedIOException exception) {
+            assertSame(cause, exception.ioException());
+        }
+    }
+
+    @Test
+    public void readsNormallyAcrossBufferBoundariesAndReachesEof() {
+        CharacterReader reader = new CharacterReader(new StringReader("abcdefghi"), 4);
+        StringBuilder consumed = new StringBuilder();
+
+        while (!reader.isEmpty()) {
+            consumed.append(reader.current());
+            reader.advance();
+        }
+
+        assertEquals("abcdefghi", consumed.toString());
+        assertEquals((char) -1, reader.current());
+        assertTrue(reader.isEmpty());
+        assertEquals(9, reader.pos());
+    }
+
+    @Test
+    public void consumeToLeavesDelimiterAsCurrentCharacter() {
+        CharacterReader reader = new CharacterReader(new StringReader("abc:def"), 4);
+
+        assertEquals("abc", reader.consumeTo(':'));
+        assertEquals(':', reader.current());
+        reader.advance();
+        assertEquals("def", reader.consumeTo((char) -1));
+        assertFalse(reader.isEmpty());
+        reader.advance();
+        assertTrue(reader.isEmpty());
+    }
+
+    private static final class ThrowingReader extends Reader {
+        private final IOException failure;
+        private final int successfulReadsBeforeFailure;
+        private final String data = "abcdef";
+        private int position;
+        private int mark;
+        private int reads;
+
+        private ThrowingReader(IOException failure, int successfulReadsBeforeFailure) {
+            this.failure = failure;
+            this.successfulReadsBeforeFailure = successfulReadsBeforeFailure;
+        }
+
+        @Override
+        public int read(char[] buffer, int offset, int length) throws IOException {
+            if (reads++ >= successfulReadsBeforeFailure) {
+                throw failure;
+            }
+
+            if (position >= data.length()) {
+                return -1;
+            }
+
+            int count = Math.min(length, data.length() - position);
+            data.getChars(position, position + count, buffer, offset);
+            position += count;
+            return count;
+        }
+
+        @Override
+        public long skip(long count) {
+            int skipped = (int) Math.min(count, data.length() - position);
+            position += skipped;
+            return skipped;
+        }
+
+        @Override
+        public boolean markSupported() {
+            return true;
+        }
+
+        @Override
+        public void mark(int readAheadLimit) {
+            mark = position;
+        }
+
+        @Override
+        public void reset() {
+            position = mark;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.parser.CharacterReaderIOExceptionTest::consumeToLeavesDelimiterAsCurrentCharacter
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Failing generated tests: org.jsoup.parser.CharacterReaderIOExceptionTest::consumeToLeavesDelimiterAsCurrentCharacter

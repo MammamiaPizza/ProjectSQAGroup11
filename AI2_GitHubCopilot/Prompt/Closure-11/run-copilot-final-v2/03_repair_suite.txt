@@ -1,0 +1,167 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 11  Version: Closure-11b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 810
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testGetprop4
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.jscomp.TypeCheckTest::testIssue810
+ --> junit.framework.AssertionFailedError: expected a warning
+Modified: com.google.javascript.jscomp.TypeCheck
+
+Available API/signatures:
+[com.google.javascript.jscomp.TypeCheck | java]
+package com.google.javascript.jscomp;
+public class TypeCheck implements NodeTraversal.Callback, CompilerPass {
+"element {0} does not exist on this enum");
+"enum element {0} already defined");
+"enum key {0} must be a syntactic constant");
+"interface members can only be empty property declarations,"
+"interface member functions must have an empty body");
+"an interface can only extend, but not implement interfaces");
+"property {0} already defined on interface {1}; " +
+"property {0} is already defined by the {1} extended interface");
+@Override
+public void process(Node externsRoot, Node jsRoot) {
+public Scope processForTesting(Node externsRoot, Node jsRoot) {
+public void check(Node node, boolean externs) {
+private void checkNoTypeCheckSection(Node n, boolean enterSection) {
+final Scope outerScope = t.getScope();
+final String functionPrivateName = n.getFirstChild().getString();
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void checkTypeofString(NodeTraversal t, Node n, String s) {
+private void doPercentTypedAccounting(NodeTraversal t, Node n) {
+private void visitAssign(NodeTraversal t, Node assign) {
+private void visitObjLitKey(NodeTraversal t, Node key, Node objlit) {
+private boolean propertyIsImplicitCast(ObjectType type, String prop) {
+private static boolean hasUnknownOrEmptySupertype(FunctionType ctor) {
+private void visitGetProp(NodeTraversal t, Node n, Node parent) {
+private boolean isPropertyTest(Node getProp) {
+private void visitGetElem(NodeTraversal t, Node n) {
+private void visitVar(NodeTraversal t, Node n) {
+private void visitNew(NodeTraversal t, Node n) {
+private void visitFunction(NodeTraversal t, Node n) {
+"interface", functionPrivateName));
+private void visitCall(NodeTraversal t, Node n) {
+private void visitReturn(NodeTraversal t, Node n) {
+private void visitBinaryOperator(int op, NodeTraversal t, Node n) {
+"incompatible enum element types");
+private JSType getJSType(Node n) {
+private void ensureTyped(NodeTraversal t, Node n) {
+private void ensureTyped(NodeTraversal t, Node n, JSTypeNative type) {
+private void ensureTyped(NodeTraversal t, Node n, JSType type) {
+private JSType getNativeType(JSTypeNative typeId) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+public class TypeCheckBug810Test extends CompilerTestCase {
+
+  @Override protected void setUp() throws Exception {
+    super.setUp();
+    enableTypeCheck(CheckLevel.WARNING); }
+
+  public void testEnumUnionMissingProperty() {
+    test(
+        "/** @enum {string} / var E = {};" +
+        "/* @type {E|{foo: string}} */ var x;" +
+        "x.foo;",
+        "element foo does not exist on this enum"); }
+
+  public void testEnumUnionPropertyExistsOnEnum() {
+    testSame(
+        "/** @enum {string} / var E = {A: 'a'};" +
+        "/* @type {E|Object} */ var x;" +
+        "x.A;"); }
+
+  public void testEnumUnionPropertyExistsInherited() {
+    testSame(
+        "/** @enum {string} / var E = {A: 'a'};" +
+        "/* @type {E|Object} */ var x;" +
+        "x.toString;"); }
+
+  public void testEnumUnionMissingOnBothEnums() {
+    test(
+        "/** @enum {string} / var E = {};" +
+        "/* @enum {string} / var F = {};" +
+        "/* @type {E|F} */ var x;" +
+        "x.foo;",
+        "element foo does not exist on this enum"); }
+
+  public void testInterfaceUnionMissingProperty() {
+    test(
+        "/** @interface / function I() {};" +
+        "/* @type {I|{foo: string}} */ var x;" +
+        "x.foo;",
+        "property foo never defined on I"); }
+
+  public void testNullUnionMissingProperty() {
+    test(
+        "/** @type {null|{foo: string}} */ var x;" +
+        "x.foo;",
+        "property foo never defined on null"); }
+
+  public void testVoidUnionMissingProperty() {
+    test(
+        "/** @type {void|{foo: string}} */ var x;" +
+        "x.foo;",
+        "property foo never defined on void"); }
+
+  public void testUnionAllMembersHaveProperty() {
+    testSame(
+        "/** @type {{foo: string}|{foo: number}} */ var x;" +
+        "x.foo;"); }
+
+  public void testEnumUnionElementExistsButPropertyMissingOnEnum() {
+    test(
+        "/** @enum {string} / var E = {A: 'a'};" +
+        "/* @type {E|{bar: string}} */ var x;" +
+        "x.bar;",
+        "element bar does not exist on this enum"); }
+
+  public void testEnumUnionRecordMissing() {
+    test(
+        "/** @enum {number} / var E = {A: 1};" +
+        "/* @type {E|{x: number}} */ var x = null;" +
+        "x.y;",
+        "element y does not exist on this enum"); }
+
+  public void testNestedUnionGetpropOnEnum() {
+    test(
+        "/** @enum {string} / var E = {};" +
+        "/* @type {E|{a: {b: string}}} */ var x;" +
+        "x.a.b;",
+        "element a does not exist on this enum"); }
+
+  public void testUnionMultipleEnumsMissingProperty() {
+    test(
+        "/** @enum {string} / var E = {};" +
+        "/* @enum {string} / var F = {};" +
+        "/* @type {E|F|{foo: string}} */ var x;" +
+        "x.foo;",
+        "element foo does not exist on this enum"); }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-11f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-11f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Closure-11f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-11f-copilot/.test_suite/com/google/javascript/jscomp/TypeCheckBug810Test.java:3: error: cannot find symbol
+ [javac] public class TypeCheckBug810Test extends CompilerTestCase {
+ [javac] ^
+ [javac] symbol: class CompilerTestCase
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 16 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

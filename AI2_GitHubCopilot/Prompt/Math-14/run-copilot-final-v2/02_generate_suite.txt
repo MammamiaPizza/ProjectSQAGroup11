@@ -1,0 +1,262 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 14  Version: Math-14b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math3.optim.nonlinear.vector.jacobian.AbstractLeastSquaresOptimizer, org.apache.commons.math3.optim.nonlinear.vector.Weight
+Modified: org.apache.commons.math3.optim.nonlinear.vector.jacobian.AbstractLeastSquaresOptimizer, org.apache.commons.math3.optim.nonlinear.vector.Weight
+Triggers: org.apache.commons.math3.fitting.PolynomialFitterTest::testLargeSample
+
+Bug/specification summary:
+Bug report: MATH-924
+Trigger failures:
+- org.apache.commons.math3.fitting.PolynomialFitterTest::testLargeSample
+ --> java.lang.OutOfMemoryError: Java heap space
+Modified: org.apache.commons.math3.optim.nonlinear.vector.jacobian.AbstractLeastSquaresOptimizer, org.apache.commons.math3.optim.nonlinear.vector.Weight
+
+Prompt-01 test plan:
+TARGETS: Weight(double[]) large-obs constructor; Weight(RealMatrix) dense;
+computeWeightedJacobian(params); getWeightSquareRoot()
+ORACLES: Unweighted == Weight(all-ones) — same cost/RMS/chi-square; Weight(double[]) memory grows
+~linearly, not O(n^2)
+ORACLES: Weighted cost = sum(w_i * res_i^2); chi-square = sum(w_i * r_i^2) when σ_i² = 1/w_i;
+precomputable for known linear model
+CASES: 2-param linear, 3 obs, w=[1,2,0.5] -> compare cost/RMS/chi² with manual values
+CASES: Weight(double[]) with zero entry -> expect IllegalArgumentException or leading to NaN
+(boundary)
+CASES: Weight(RealMatrix) non-diagonal (if accepted) -> check cost uses quadratic form r^T W r
+CASES: 10⁵ obs, 2 params, Weight(double[]) with -Xmx32m -> expect OutOfMemoryError (bug indicator,
+expected=OOME)
+CASES: computeWeightedJacobian for small case: output dimensions (obs×par) and entry values based on
+weight sqrt * Jacobian
+RISKS: OOM test fragile (heap-dep); may use assumeTrue(maxHeap<256M) and
+expected=OutOfMemoryError.class
+RISKS: Protected computeWeightedJacobian needs subclass (e.g., LevenbergMarquardtOptimizer) or
+reflection; Weight internals hidden
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math3.optim.nonlinear.vector.jacobian.AbstractLeastSquaresOptimizer (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math3.optim.nonlinear.vector.jacobian;
+public abstract class AbstractLeastSquaresOptimizer
+protected AbstractLeastSquaresOptimizer(ConvergenceChecker<PointVectorValuePair> checker) {
+protected RealMatrix computeWeightedJacobian(double[] params) {
+protected double computeCost(double[] residuals) {
+final ArrayRealVector r = new ArrayRealVector(residuals);
+public double getRMS() {
+public double getChiSquare() {
+public RealMatrix getWeightSquareRoot() {
+protected void setCost(double cost) {
+final RealMatrix j = computeWeightedJacobian(params);
+final RealMatrix jTj = j.transpose().multiply(j);
+final double[][] cov = computeCovariances(params, covarianceSingularityThreshold);
+@Override
+public PointVectorValuePair optimize(OptimizationData... optData)
+protected double[] computeResiduals(double[] objectiveValue) {
+final double[] target = getTarget();
+private void parseOptimizationData(OptimizationData... optData) {
+private RealMatrix squareRoot(RealMatrix m) {
+final EigenDecomposition dec = new EigenDecomposition(m);
+
+/* HEADER */
+package org.apache.commons.math3.optim.nonlinear.vector.jacobian;
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.TooManyEvaluationsException;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.DiagonalMatrix;
+import org.apache.commons.math3.linear.DecompositionSolver;
+import org.apache.commons.math3.linear.MatrixUtils;
+import org.apache.commons.math3.linear.QRDecomposition;
+import org.apache.commons.math3.linear.EigenDecomposition;
+import org.apache.commons.math3.optim.OptimizationData;
+import org.apache.commons.math3.optim.ConvergenceChecker;
+import org.apache.commons.math3.optim.PointVectorValuePair;
+import org.apache.commons.math3.optim.nonlinear.vector.Weight;
+import org.apache.commons.math3.optim.nonlinear.vector.JacobianMultivariateVectorOptimizer;
+import org.apache.commons.math3.util.FastMath;
+
+/* METHOD AbstractLeastSquaresOptimizer */
+protected AbstractLeastSquaresOptimizer(ConvergenceChecker<PointVectorValuePair> checker) {
+ super(checker);
+ }
+
+/* METHOD computeCost */
+protected double computeCost(double[] residuals) {
+ final ArrayRealVector r = new ArrayRealVector(residuals);
+ return FastMath.sqrt(r.dotProduct(getWeight().operate(r)));
+ }
+
+/* METHOD optimize */
+@Override
+ public PointVectorValuePair optimize(OptimizationData... optData)
+ throws TooManyEvaluationsException {
+ // Retrieve settings.
+ parseOptimizationData(optData);
+ // Set up base class and perform computation.
+ return super.optimize(optData);
+ }
+
+/* METHOD computeWeightedJacobian */
+protected RealMatrix computeWeightedJacobian(double[] params) {
+ return weightMatrixSqrt.multiply(MatrixUtils.createRealMatrix(computeJacobian(params)));
+ }
+
+/* METHOD getWeightSquareRoot */
+public RealMatrix getWeightSquareRoot() {
+ return weightMatrixSqrt.copy();
+ }
+
+/* METHOD computeCovariances */
+public double[][] computeCovariances(double[] params,
+ double threshold) {
+ // Set up the Jacobian.
+ final RealMatrix j = computeWeightedJacobian(params);
+
+ // Compute transpose(J)J.
+ final RealMatrix jTj = j.transpose().multiply(j);
+
+ // Compute the covariances matrix.
+ final DecompositionSolver solver
+ = new QRDecomposition(jTj, threshold).getSolver();
+ return solver.getInverse().getData();
+ }
+
+/* METHOD getRMS */
+public double getRMS() {
+ return FastMath.sqrt(getChiSquare() / getTargetSize());
+ }
+
+/* METHOD computeSigma */
+public double[] computeSigma(double[] params,
+ double covarianceSingularityThreshold) {
+ final int nC = params.length;
+ final double[] sig = new double[nC];
+ final double[][] cov = computeCovariances(params, covarianceSingularityThreshold);
+ for (int i = 0; i < nC; ++i) {
+ sig[i] = FastMath.sqrt(cov[i][i]);
+ }
+ return sig;
+ }
+
+/* METHOD getChiSquare */
+public double getChiSquare() {
+ return cost * cost;
+ }
+
+/* METHOD setCost */
+protected void setCost(double cost) {
+ this.cost = cost;
+ }
+
+/* METHOD computeResiduals */
+protected double[] computeResiduals(double[] objectiveValue) {
+ final double[] target = getTarget();
+ if (objectiveValue.length != target.length) {
+ throw new DimensionMismatchException(target.length,
+ objectiveValue.length);
+ }
+
+ final double[] residuals = new double[target.length];
+ for (int i = 0; i < target.length; i++) {
+ residuals[i] = target[i] - objectiveValue[i];
+ }
+
+ return residuals;
+ }
+
+/* METHOD parseOptimizationData */
+private void parseOptimizationData(OptimizationData... optData) {
+ // The existing values (as set by the previous call) are reused if
+ // not provided in the argument list.
+ for (OptimizationData data : optData) {
+ if (data instanceof Weight) {
+ weightMatrixSqrt = squareRoot(((Weight) data).getWeight());
+ // If more data must be parsed, this statement _must_ be
+ // changed to "continue".
+ break;
+ }
+ }
+ }
+
+/* METHOD squareRoot */
+private RealMatrix squareRoot(RealMatrix m) {
+ final EigenDecomposition dec = new EigenDecomposition(m);
+ return dec.getSquareRoot();
+ }
+
+===== org.apache.commons.math3.optim.nonlinear.vector.Weight (java) =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.math3.optim.nonlinear.vector;
+
+import org.apache.commons.math3.optim.OptimizationData;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.DiagonalMatrix;
+import org.apache.commons.math3.linear.NonSquareMatrixException;
+
+/**
+ * Weight matrix of the residuals between model and observations.
+ * <br/>
+ * Immutable class.
+ *
+ * @version $Id: Weight.java 1416643 2012-12-03 19:37:14Z tn $
+ * @since 3.1
+ */
+public class Weight implements OptimizationData {
+ /** Weight matrix. */
+ private final RealMatrix weightMatrix;
+
+ /**
+ * Creates a diagonal weight matrix.
+ *
+ * @param weight List of the values of the diagonal.
+ */
+ public Weight(double[] weight) {
+ final int dim = weight.length;
+ weightMatrix = org.apache.commons.math3.linear.MatrixUtils.createRealMatrix(dim, dim);
+ for (int i = 0; i < dim; i++) {
+ weightMatrix.setEntry(i, i, weight[i]);
+ }
+ }
+
+ /**
+ * @param weight Weight matrix.
+ * @throws NonSquareMatrixException if the argument is not
+ * a square matrix.
+ */
+ public Weight(RealMatrix weight) {
+ if (weight.getColumnDimension() != weight.getRowDimension()) {
+ throw new NonSquareMatrixException(weight.getColumnDimension(),
+ weight.getRowDimension());
+ }
+
+ weightMatrix = weight.copy();
+ }
+
+ /**
+ * Gets the initial guess.
+ *
+ * @return the initial guess.
+ */
+ public RealMatrix getWeight() {
+ return weightMatrix.copy();
+ }
+}

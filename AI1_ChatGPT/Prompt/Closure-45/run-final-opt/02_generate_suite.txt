@@ -1,0 +1,390 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 45  Version: Closure-45b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.RemoveUnusedVars
+Modified: com.google.javascript.jscomp.RemoveUnusedVars
+Triggers: com.google.javascript.jscomp.RemoveUnusedVarsTest::testIssue618_1
+
+Bug/specification summary:
+Bug report: 618
+Trigger failures:
+- com.google.javascript.jscomp.RemoveUnusedVarsTest::testIssue618_1
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.RemoveUnusedVars
+
+Prompt-01 test plan:
+TARGETS: RemoveUnusedVars.process and unused-variable/reference traversal behavior 
+TARGETS: removeUnreferencedFunctionArgs and CallSiteOptimizer.optimize/applyChanges 
+ORACLES: RemoveUnusedVarsTest::testIssue618_1 assertion outcome 
+CASES: Unreferenced function arguments with call sites eligible for signature updates 
+CASES: Referenced arguments must remain; nonmodifiable call sites must prevent unsafe removal 
+CASES: Assignments and function scopes affecting whether a Var is referenced/removable 
+RISKS: Source and failing test body are unavailable; exact Issue 618 expected output is unknown
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.RemoveUnusedVars (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class RemoveUnusedVars
+private final Set<Var> referenced = Sets.newHashSet();
+private final List<Var> maybeUnreferenced = Lists.newArrayList();
+private final List<Scope> allFunctionScopes = Lists.newArrayList();
+private final Map<Node, Assign> assignsByNode = Maps.newHashMap();
+@Override
+public void process(Node externs, Node root) {
+private void traverseAndRemoveUnusedReferences(Node root) {
+private void traverseNode(Node n, Node parent, Scope scope) {
+private boolean isRemovableVar(Var var) {
+private void traverseFunction(Node n, Scope parentScope) {
+final Node body = n.getLastChild();
+private void collectMaybeUnreferencedVars(Scope scope) {
+private void removeUnreferencedFunctionArgs(Scope fnScope) {
+private static Node getFunctionArgList(Node function) {
+private static class CallSiteOptimizer {
+private final List<Node> toRemove = Lists.newArrayList();
+private final List<Node> toReplaceWithZero = Lists.newArrayList();
+public void optimize(Scope fnScope, Set<Var> referenced) {
+public void applyChanges() {
+private boolean canRemoveArgFromCallSites(Node function, int argIndex) {
+private void tryRemoveAllFollowingArgs(Node function, final int argIndex) {
+private static boolean isModifiableCallSite(UseSite site) {
+private boolean canChangeSignature(Node function) {
+private Definition getFunctionDefinition(Node function) {
+private void interpretAssigns() {
+private void removeAllAssigns(Var var) {
+private boolean markReferencedVar(Var var) {
+private void removeUnreferencedVars() {
+private class Continuation {
+private static class Assign {
+static Assign maybeCreateAssign(Node assignNode) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.CodingConvention.SubclassRelationship;
+import com.google.javascript.jscomp.DefinitionsRemover.Definition;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.*;
+class RemoveUnusedVars
+
+/* METHOD RemoveUnusedVars */
+RemoveUnusedVars(
+ AbstractCompiler compiler,
+ boolean removeGlobals,
+ boolean preserveFunctionExpressionNames,
+ boolean modifyCallSites) {
+ this.compiler = compiler;
+ this.codingConvention = compiler.getCodingConvention();
+ this.removeGlobals = removeGlobals;
+ this.preserveFunctionExpressionNames = preserveFunctionExpressionNames;
+ this.modifyCallSites = modifyCallSites;
+ }
+
+/* METHOD applyChanges */
+public void applyChanges() {
+ for (Node n : toRemove) {
+ n.getParent().removeChild(n);
+ compiler.reportCodeChange();
+ }
+ for (Node n : toReplaceWithZero) {
+ n.getParent().replaceChild(n, IR.number(0).srcref(n));
+ compiler.reportCodeChange();
+ }
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ Preconditions.checkState(compiler.getLifeCycleStage().isNormalized());
+ SimpleDefinitionFinder defFinder = null;
+
+ if (modifyCallSites) {
+ // For testing, allow the SimpleDefinitionFinder to be build now.
+ defFinder = new SimpleDefinitionFinder(compiler);
+ defFinder.process(externs, root);
+ }
+ process(externs, root, defFinder);
+ }
+
+/* METHOD removeUnreferencedFunctionArgs */
+private void removeUnreferencedFunctionArgs(Scope fnScope) {
+ // TODO(johnlenz): Update type registry for function signature changes.
+
+ Node function = fnScope.getRootNode();
+
+ Preconditions.checkState(function.isFunction());
+ if (NodeUtil.isGetOrSetKey(function.getParent())) {
+ // The parameters object literal setters can not be removed.
+ return;
+ }
+
+ Node argList = getFunctionArgList(function);
+ boolean modifyCallers = modifyCallSites
+ && callSiteOptimizer.canModifyCallers(function);
+ if (!modifyCallers) {
+ // Strip unreferenced args off the end of the function declaration.
+ Node lastArg;
+ while ((lastArg = argList.getLastChild()) != null) {
+ Var var = fnScope.getVar(lastArg.getString());
+ if (!referenced.contains(var)) {
+ argList.removeChild(lastArg);
+ compiler.reportCodeChange();
+ } else {
+ break;
+ }
+ }
+ } else {
+ callSiteOptimizer.optimize(fnScope, referenced);
+ }
+ }
+
+/* METHOD process */
+@Override
+ public void process(
+ Node externs, Node root, SimpleDefinitionFinder defFinder) {
+ if (modifyCallSites) {
+ Preconditions.checkNotNull(defFinder);
+ callSiteOptimizer = new CallSiteOptimizer(compiler, defFinder);
+ }
+ traverseAndRemoveUnusedReferences(root);
+ if (callSiteOptimizer != null) {
+ callSiteOptimizer.applyChanges();
+ }
+ }
+
+/* METHOD removeUnreferencedVars */
+private void removeUnreferencedVars() {
+ CodingConvention convention = codingConvention;
+
+ for (Iterator<Var> it = maybeUnreferenced.iterator(); it.hasNext(); ) {
+ Var var = it.next();
+
+ // Remove calls to inheritance-defining functions where the unreferenced
+ // class is the subclass.
+ for (Node exprCallNode : inheritsCalls.get(var)) {
+ NodeUtil.removeChild(exprCallNode.getParent(), exprCallNode);
+ compiler.reportCodeChange();
+ }
+
+ // Regardless of what happens to the original declaration,
+ // we need to remove all assigns, because they may contain references
+ // to other unreferenced variables.
+ removeAllAssigns(var);
+
+ compiler.addToDebugLog("Unreferenced var: " + var.name);
+ Node nameNode = var.nameNode;
+ Node toRemove = nameNode.getParent();
+ Node parent = toRemove.getParent();
+
+ Preconditions.checkState(
+ toRemove.isVar() ||
+ toRemove.isFunction() ||
+ toRemove.isParamList() &&
+ parent.isFunction(),
+ "We should only declare vars and functions and function args");
+
+ if (toRemove.isParamList() &&
+ parent.isFunction()) {
+ // Don't remove function arguments here. That's a special case
+ // that's taken care of in removeUnreferencedFunctionArgs.
+ } else if (NodeUtil.isFunctionExpression(toRemove)) {
+ if (!preserveFunctionExpressionNames) {
+ toRemove.getFirstChild().setString("");
+ compiler.reportCodeChange();
+ }
+ // Don't remove bleeding functions.
+ } else if (parent != null &&
+ parent.isFor() &&
+ parent.getChildCount() < 4) {
+ // foreach iterations have 3 children. Leave them alone.
+ } else if (toRemove.isVar() &&
+ nameNode.hasChildren() &&
+ NodeUtil.mayHaveSideEffects(nameNode.getFirstChild())) {
+ // If this is a single var declaration, we can at least remove the
+ // declaration itself and just leave the value, e.g.,
+ // var a = foo(); => foo();
+ if (toRemove.getChildCount() == 1) {
+ parent.replaceChild(toRemove,
+ IR.exprResult(nameNode.removeFirstChild()));
+ compiler.reportCodeChange();
+ }
+ } else if (toRemove.isVar() &&
+ toRemove.getChildCount() > 1) {
+ // For var declarations with multiple names (i.e. var a, b, c),
+ // only remove the unreferenced name
+ toRemove.removeChild(nameNode);
+ compiler.reportCodeChange();
+ } else if (parent != null) {
+ NodeUtil.removeChild(parent, toRemove);
+ compiler.reportCodeChange();
+ }
+ }
+ }
+
+/* METHOD optimize */
+public void optimize(Scope fnScope, Set<Var> referenced) {
+ Node function = fnScope.getRootNode();
+ Preconditions.checkState(function.isFunction());
+ Node argList = getFunctionArgList(function);
+
+ // In this path we try to modify all the call sites to remove unused
+ // function parameters.
+ boolean changeCallSignature = canChangeSignature(function);
+ markUnreferencedFunctionArgs(
+ fnScope, function, referenced,
+ argList.getFirstChild(), 0, changeCallSignature);
+ }
+
+/* METHOD removeAllAssigns */
+private void removeAllAssigns(Var var) {
+ for (Assign assign : assignsByVar.get(var)) {
+ assign.remove();
+ compiler.reportCodeChange();
+ }
+ }
+
+/* METHOD canChangeSignature */
+private boolean canChangeSignature(Node function) {
+ Definition definition = getFunctionDefinition(function);
+ CodingConvention convention = compiler.getCodingConvention();
+
+ Preconditions.checkState(!definition.isExtern());
+
+ Collection<UseSite> useSites = defFinder.getUseSites(definition);
+ for (UseSite site : useSites) {
+ Node parent = site.node.getParent();
+
+ // This was a use site removed by something else before we run.
+ // 1. By another pass before us which means the definition graph is
+ // no updated properly.
+ // 2. By the continuations algorithm above.
+ if (parent == null) {
+ continue; // Ignore it.
+ }
+
+ // Ignore references within goog.inherits calls.
+ if (parent.isCall() &&
+ convention.getClassesDefinedByCall(parent) != null) {
+ continue;
+ }
+
+ // Accessing the property directly prevents rewrite.
+ if (!SimpleDefinitionFinder.isCallOrNewSite(site)) {
+ if (!(parent.isGetProp() &&
+ NodeUtil.isFunctionObjectCall(parent.getParent()))) {
+ return false;
+ }
+ }
+
+ if (NodeUtil.isFunctionObjectApply(parent)) {
+ return false;
+ }
+
+ // TODO(johnlenz): support specialization
+
+ // Multiple definitions prevent rewrite.
+ // Attempt to validate the state of the simple definition finder.
+ Node nameNode = site.node;
+ Collection<Definition> singleSiteDefinitions =
+ defFinder.getDefinitionsReferencedAt(nameNode);
+ Preconditions.checkState(singleSiteDefinitions.size() == 1);
+ Preconditions.checkState(singleSiteDefinitions.contains(definition));
+ }
+
+ return true;
+ }
+
+/* METHOD traverseAndRemoveUnusedReferences */
+private void traverseAndRemoveUnusedReferences(Node root) {
+ Scope scope = new SyntacticScopeCreator(compiler).createScope(root, null);
+ traverseNode(root, null, scope);
+
+ if (removeGlobals) {
+ collectMaybeUnreferencedVars(scope);
+ }
+
+ interpretAssigns();
+ removeUnreferencedVars();
+ for (Scope fnScope : allFunctionScopes) {
+ removeUnreferencedFunctionArgs(fnScope);
+ }
+ }
+
+/* METHOD traverseFunction */
+private void traverseFunction(Node n, Scope parentScope) {
+ Preconditions.checkState(n.getChildCount() == 3);
+ Preconditions.checkState(n.isFunction());
+
+ final Node body = n.getLastChild();
+ Preconditions.checkState(body.getNext() == null &&
+ body.isBlock());
+
+ Scope fnScope =
+ new SyntacticScopeCreator(compiler).createScope(n, parentScope);
+ traverseNode(body, n, fnScope);
+
+ collectMaybeUnreferencedVars(fnScope);
+ allFunctionScopes.add(fnScope);
+ }
+
+/* METHOD CallSiteOptimizer */
+CallSiteOptimizer(
+ AbstractCompiler compiler,
+ SimpleDefinitionFinder defFinder) {
+ this.compiler = compiler;
+ this.defFinder = defFinder;
+ }
+
+/* METHOD markUnreferencedFunctionArgs */
+private boolean markUnreferencedFunctionArgs(
+ Scope scope, Node function, Set<Var> referenced,
+ Node param, int paramIndex,
+ boolean canChangeSignature) {
+ if (param != null) {
+ // Take care of the following siblings first.
+ boolean hasFollowing = markUnreferencedFunctionArgs(
+ scope, function, referenced, param.getNext(), paramIndex+1,
+ canChangeSignature);
+
+ Var var = scope.getVar(param.getString());
+ if (!referenced.contains(var)) {
+ Preconditions.checkNotNull(var);
+
+ // Remove call parameter if we can generally change the signature
+ // or if it is the last parameter in the parameter list.
+ boolean modifyAllCallSites = canChangeSignature || !hasFollowing;
+ if (modifyAllCallSites) {
+ modifyAllCallSites = canRemoveArgFromCallSites(
+ function, paramIndex);
+ }
+
+ tryRemoveArgFromCallSites(function, paramIndex, modifyAllCallSites);
+
+ // Remove an unused function parameter if all the call sites can
+ // be modified to remove it, or if it is the last parameter.
+ if (modifyAllCallSites || !hasFollowing) {
+ toRemove.add(param);
+ return hasFollowing;
+ }
+ }
+ return true;
+ } else {
+ // Anything past the last formal parameter can be removed from the call
+ // sites.
+ tryRemoveAllFollowingArgs(function, paramIndex-1);
+ return false;
+ }
+ }

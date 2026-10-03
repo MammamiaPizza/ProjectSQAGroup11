@@ -1,0 +1,500 @@
+The previously generated JUnit Test Suite failed to compile or run.
+Analyze the production source code, generated test, Project Context, behavioral specification, and error
+output. Return a corrected complete Java Test Class.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Preserve all valid and meaningful Test Cases.
+4. Fix package, import, syntax, type, constructor, method-call, dependency, mock, and assertion errors.
+5. Use only methods, fields, constructors, and dependencies that exist in the supplied Project Context.
+6. Do not invent missing APIs, dependencies, or expected behavior.
+7. Do not change an assertion only to make the test pass unless the supplied specification, API
+documentation, public contract, or bug report supports the change.
+8. Do not remove a Test Case merely to hide an error unless the scenario is impossible according to the
+supplied context.
+9. Do not modify the intended behavior being tested.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Keep the Test Cases independent and free from execution-order dependencies.
+12. Briefly explain the cause of each error and the correction made.
+13. Return the complete corrected Java Test Class.
+Project ID:
+Csv
+Bug ID:
+3
+Source Version:
+Csv-3b
+JUnit Version:
+junit-4.11.jar
+Build Tool:
+Maven
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: Csv
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: Csv
+       Program: commons-csv
+    Build file: /root/defects4j/framework/projects/Csv/Csv.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/commons-csv.git
+     Commit db: /root/defects4j/framework/projects/Csv/active-bugs.csv
+Number of bugs: 16
+--------------------------------------------------------------------------------
+
+Summary for Bug: Csv-3
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+2c6120826245f89fedf2f936ab4a0c3edd8717f3
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2013-05-03 01:10:34 +0000
+--------------------------------------------------------------------------------
+Bug report id:
+CSV-58
+--------------------------------------------------------------------------------
+Bug report url:
+https://issues.apache.org/jira/browse/CSV-58
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - org.apache.commons.csv.CSVLexerTest::testEscapedMySqlNullValue
+   --> junit.framework.AssertionFailedError: 
+ - org.apache.commons.csv.CSVLexerTest::testEscapedCharacter
+   --> junit.framework.AssertionFailedError: 
+ - org.apache.commons.csv.CSVParserTest::testBackslashEscaping
+   --> junit.framework.AssertionFailedError: Records do not match expected result (entry 8): arrays first differed at element [1]; expected:<   "quoted "" [/]" / string"   > but was:<   "quoted "" []" / string"   >
+--------------------------------------------------------------------------------
+List of modified sources:
+ - org.apache.commons.csv.Lexer
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: org.apache.commons.csv.Lexer =====
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.csv;
+
+import static org.apache.commons.csv.Constants.BACKSPACE;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.END_OF_STREAM;
+import static org.apache.commons.csv.Constants.FF;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.TAB;
+import static org.apache.commons.csv.Constants.UNDEFINED;
+
+import java.io.IOException;
+
+/**
+ * Abstract lexer class; contains common utility routines shared by lexers
+ *
+ * @version $Id$
+ */
+abstract class Lexer {
+
+    /**
+     * Constant char to use for disabling comments, escapes and encapsulation. The value -2 is used because it
+     * won't be confused with an EOF signal (-1), and because the Unicode value {@code FFFE} would be encoded as two
+     * chars (using surrogates) and thus there should never be a collision with a real text char.
+     */
+    private static final char DISABLED = '\ufffe';
+
+    private final char delimiter;
+    private final char escape;
+    private final char quoteChar;
+    private final char commmentStart;
+
+    final boolean ignoreSurroundingSpaces;
+    final boolean ignoreEmptyLines;
+
+    final CSVFormat format;
+
+    /** The input stream */
+    final ExtendedBufferedReader in;
+
+    Lexer(final CSVFormat format, final ExtendedBufferedReader in) {
+        this.format = format;
+        this.in = in;
+        this.delimiter = format.getDelimiter();
+        this.escape = mapNullToDisabled(format.getEscape());
+        this.quoteChar = mapNullToDisabled(format.getQuoteChar());
+        this.commmentStart = mapNullToDisabled(format.getCommentStart());
+        this.ignoreSurroundingSpaces = format.getIgnoreSurroundingSpaces();
+        this.ignoreEmptyLines = format.getIgnoreEmptyLines();
+    }
+
+    private final char mapNullToDisabled(final Character c) {
+        return c == null ? DISABLED : c.charValue();
+    }
+
+    long getLineNumber() {
+        return in.getLineNumber();
+    }
+
+    // TODO escape handling needs more work
+    /**
+     * Handle an escape sequence.
+     * The current character must be the escape character.
+     * On return, the next character is available by calling {@link ExtendedBufferedReader#getLastChar()}
+     * on the input stream.
+     * 
+     * @return the unescaped character (as an int) or {@link END_OF_STREAM} if char following the escape is invalid. 
+     * @throws IOException if there is a problem reading the stream or the end of stream is detected: 
+     * the escape character is not allowed at end of strem
+     */
+    int readEscape() throws IOException {
+        // the escape char has just been read (normally a backslash)
+        final int c = in.read();
+        switch (c) {
+        case 'r':
+            return CR;
+        case 'n':
+            return LF;
+        case 't':
+            return TAB;
+        case 'b':
+            return BACKSPACE;
+        case 'f':
+            return FF;
+        case CR:
+        case LF:
+        case FF: // TODO is this correct?
+        case TAB: // TODO is this correct? Do tabs need to be escaped?
+        case BACKSPACE: // TODO is this correct?
+            return c;
+        case END_OF_STREAM:
+            throw new IOException("EOF whilst processing escape sequence");
+        default:
+            // Now check for meta-characters
+                return c;
+            // indicate unexpected char - available from in.getLastChar()
+        }
+    }
+
+    void trimTrailingSpaces(final StringBuilder buffer) {
+        int length = buffer.length();
+        while (length > 0 && Character.isWhitespace(buffer.charAt(length - 1))) {
+            length = length - 1;
+        }
+        if (length != buffer.length()) {
+            buffer.setLength(length);
+        }
+    }
+
+    /**
+     * Greedily accepts \n, \r and \r\n This checker consumes silently the second control-character...
+     *
+     * @return true if the given or next character is a line-terminator
+     */
+    boolean readEndOfLine(int c) throws IOException {
+        // check if we have \r\n...
+        if (c == CR && in.lookAhead() == LF) {
+            // note: does not change c outside of this method!
+            c = in.read();
+        }
+        return c == LF || c == CR;
+    }
+
+    abstract Token nextToken(Token reusableToken) throws IOException;
+
+    /**
+     * @return true if the given char is a whitespace character
+     */
+    boolean isWhitespace(final int c) {
+        return c != format.getDelimiter() && Character.isWhitespace((char) c);
+    }
+
+    /**
+     * Checks if the current character represents the start of a line: a CR, LF or is at the start of the file.
+     *
+     * @param c the character to check
+     * @return true if the character is at the start of a line.
+     */
+    boolean isStartOfLine(final int c) {
+        return c == LF || c == CR || c == UNDEFINED;
+    }
+
+    /**
+     * @return true if the given character indicates end of file
+     */
+    boolean isEndOfFile(final int c) {
+        return c == END_OF_STREAM;
+    }
+
+    boolean isDelimiter(final int c) {
+        return c == delimiter;
+    }
+
+    boolean isEscape(final int c) {
+        return c == escape;
+    }
+
+    boolean isQuoteChar(final int c) {
+        return c == quoteChar;
+    }
+
+    boolean isCommentStart(final int c) {
+        return c == commmentStart;
+    }
+}
+
+Related classes and project context:
+Modified classes:
+- org.apache.commons.csv.Lexer
+
+Triggering tests:
+- org.apache.commons.csv.CSVLexerTest::testEscapedMySqlNullValue
+- org.apache.commons.csv.CSVLexerTest::testEscapedCharacter
+- org.apache.commons.csv.CSVParserTest::testBackslashEscaping
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+import static org.apache.commons.csv.Constants.BACKSPACE;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.END_OF_STREAM;
+import static org.apache.commons.csv.Constants.FF;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.TAB;
+import static org.apache.commons.csv.Constants.UNDEFINED;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.io.StringReader;
+
+import org.junit.Test;
+
+public class LexerTest {
+
+    private static final CSVFormat ESCAPING_FORMAT = CSVFormat.DEFAULT
+            .withDelimiter(';')
+            .withEscape('\\')
+            .withQuoteChar('"')
+            .withCommentStart('#');
+
+    private static final class TestLexer extends Lexer {
+
+        TestLexer(final CSVFormat format, final ExtendedBufferedReader reader) {
+            super(format, reader);
+        }
+
+        @Override
+        Token nextToken(final Token reusableToken) throws IOException {
+            return reusableToken;
+        }
+    }
+
+    private TestLexer lexer(final String input) {
+        return lexer(input, ESCAPING_FORMAT);
+    }
+
+    private TestLexer lexer(final String input, final CSVFormat format) {
+        return new TestLexer(format, new ExtendedBufferedReader(new StringReader(input)));
+    }
+
+    private int readEscapedCharacter(final String input) throws IOException {
+        final TestLexer lexer = lexer(input);
+        assertEquals('\\', lexer.in.read());
+        return lexer.readEscape();
+    }
+
+    @Test
+    public void readEscapeTranslatesStandardEscapeLetters() throws Exception {
+        assertEquals(CR, readEscapedCharacter("\\r"));
+        assertEquals(LF, readEscapedCharacter("\\n"));
+        assertEquals(TAB, readEscapedCharacter("\\t"));
+        assertEquals(BACKSPACE, readEscapedCharacter("\\b"));
+        assertEquals(FF, readEscapedCharacter("\\f"));
+    }
+
+    @Test
+    public void readEscapeAcceptsEscapedMetaCharacters() throws Exception {
+        assertEquals(';', readEscapedCharacter("\\;"));
+        assertEquals('\\', readEscapedCharacter("\\\\"));
+        assertEquals('"', readEscapedCharacter("\\\""));
+        assertEquals('#', readEscapedCharacter("\\#"));
+    }
+
+    @Test
+    public void readEscapeReturnsEndOfStreamForInvalidEscapedCharacterAndPreservesLastCharacter()
+            throws Exception {
+        final TestLexer lexer = lexer("\\N");
+
+        assertEquals('\\', lexer.in.read());
+
+        // \N is significant for MYSQL null values and must not silently lose its backslash.
+        assertEquals(END_OF_STREAM, lexer.readEscape());
+        assertEquals('N', lexer.in.getLastChar());
+    }
+
+    @Test
+    public void readEscapeAcceptsLiteralControlCharacters() throws Exception {
+        assertEquals(CR, readEscapedCharacter("\\\r"));
+        assertEquals(LF, readEscapedCharacter("\\\n"));
+        assertEquals(TAB, readEscapedCharacter("\\\t"));
+        assertEquals(BACKSPACE, readEscapedCharacter("\\\b"));
+        assertEquals(FF, readEscapedCharacter("\\\f"));
+    }
+
+    @Test
+    public void readEscapeThrowsIOExceptionWhenEscapeIsAtEndOfInput() throws Exception {
+        final TestLexer lexer = lexer("\\");
+        assertEquals('\\', lexer.in.read());
+
+        try {
+            lexer.readEscape();
+            fail("An escape character at end of input must be rejected");
+        } catch (final IOException expected) {
+            assertTrue(expected.getMessage().contains("EOF"));
+        }
+    }
+
+    @Test
+    public void trimTrailingSpacesRemovesOnlyTrailingWhitespace() {
+        final TestLexer lexer = lexer("");
+
+        final StringBuilder content = new StringBuilder(" value \t\n");
+        lexer.trimTrailingSpaces(content);
+        assertEquals(" value", content.toString());
+
+        final StringBuilder whitespaceOnly = new StringBuilder(" \t");
+        lexer.trimTrailingSpaces(whitespaceOnly);
+        assertEquals("", whitespaceOnly.toString());
+
+        final StringBuilder noTrailingWhitespace = new StringBuilder("a b");
+        lexer.trimTrailingSpaces(noTrailingWhitespace);
+        assertEquals("a b", noTrailingWhitespace.toString());
+    }
+
+    @Test
+    public void readEndOfLineConsumesBothCharactersOfCrLf() throws Exception {
+        final TestLexer lexer = lexer("\r\nx");
+
+        assertEquals(CR, lexer.in.read());
+        assertTrue(lexer.readEndOfLine(CR));
+        assertEquals('x', lexer.in.read());
+    }
+
+    @Test
+    public void readEndOfLineRecognizesSingleCrAndLfButNotOrdinaryCharacters() throws Exception {
+        final TestLexer crLexer = lexer("\rx");
+        assertEquals(CR, crLexer.in.read());
+        assertTrue(crLexer.readEndOfLine(CR));
+        assertEquals('x', crLexer.in.read());
+
+        final TestLexer lfLexer = lexer("\nx");
+        assertEquals(LF, lfLexer.in.read());
+        assertTrue(lfLexer.readEndOfLine(LF));
+        assertEquals('x', lfLexer.in.read());
+
+        final TestLexer ordinaryLexer = lexer("x");
+        assertEquals('x', ordinaryLexer.in.read());
+        assertFalse(ordinaryLexer.readEndOfLine('x'));
+    }
+
+    @Test
+    public void characterClassificationUsesConfiguredFormatAndRecognizesStreamMarkers() {
+        final TestLexer lexer = lexer("");
+
+        assertTrue(lexer.isDelimiter(';'));
+        assertFalse(lexer.isDelimiter(','));
+
+        assertTrue(lexer.isEscape('\\'));
+        assertFalse(lexer.isEscape('/'));
+
+        assertTrue(lexer.isQuoteChar('"'));
+        assertFalse(lexer.isQuoteChar('\''));
+
+        assertTrue(lexer.isCommentStart('#'));
+        assertFalse(lexer.isCommentStart('!'));
+
+        assertTrue(lexer.isWhitespace(' '));
+        assertTrue(lexer.isWhitespace('\t'));
+        assertFalse(lexer.isWhitespace(';'));
+
+        assertTrue(lexer.isStartOfLine(CR));
+        assertTrue(lexer.isStartOfLine(LF));
+        assertTrue(lexer.isStartOfLine(UNDEFINED));
+        assertFalse(lexer.isStartOfLine('x'));
+
+        assertTrue(lexer.isEndOfFile(END_OF_STREAM));
+        assertFalse(lexer.isEndOfFile('x'));
+    }
+
+    @Test
+    public void disabledOptionalCharactersDoNotMatchRealInputCharacters() {
+        final TestLexer lexer = lexer("", CSVFormat.DEFAULT);
+
+        assertFalse(lexer.isEscape('\\'));
+        assertTrue(lexer.isQuoteChar('"'));
+        assertFalse(lexer.isCommentStart('#'));
+    }
+}
+
+Compiler or Test Runner error:
+
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /root/sqa-workspaces/Csv-3f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Csv-3f-ai -Dd4j.test.dir=/root/sqa-workspaces/Csv-3f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+commons-csv-from-maven.compile:
+    [mkdir] Created dir: /root/sqa-workspaces/Csv-3f-ai/target/classes
+    [javac] /root/sqa-workspaces/Csv-3f-ai/maven-build.xml:79: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 11 source files to /root/sqa-workspaces/Csv-3f-ai/target/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] 4 warnings
+    [javac] Creating empty /root/sqa-workspaces/Csv-3f-ai/target/classes/org/apache/commons/csv/package-info.class
+    [mkdir] Created dir: /root/sqa-workspaces/Csv-3f-ai/target/classes/META-INF
+     [copy] Copying 2 files to /root/sqa-workspaces/Csv-3f-ai/target/classes/META-INF
+
+compile:
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target/classes/..
+    [mkdir] Created dir: /root/sqa-workspaces/Csv-3f-ai/.classes_testgen
+    [javac] /root/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /root/sqa-workspaces/Csv-3f-ai/.classes_testgen
+    [javac] /root/sqa-workspaces/Csv-3f-ai/.test_suite/org/apache/commons/csv/LexerTest.java:23: error: cannot find symbol
+    [javac]             .withDelimiter(';')
+    [javac]             ^
+    [javac]   symbol:   method withDelimiter(char)
+    [javac]   location: variable DEFAULT of type CSVFormat
+    [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 5 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.
+
+
+Generated tests failing on fixed:
+(none listed; inspect log)

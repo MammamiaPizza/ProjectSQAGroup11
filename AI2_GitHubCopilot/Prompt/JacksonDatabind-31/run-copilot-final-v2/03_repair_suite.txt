@@ -1,0 +1,289 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 31  Version: JacksonDatabind-31b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 984
+Trigger failures:
+- com.fasterxml.jackson.databind.util.TestTokenBuffer::testOutputContext
+ --> junit.framework.AssertionFailedError: Expected name 'b' (JsonParser), TokenBuffer had 'a'
+Modified: com.fasterxml.jackson.databind.util.TokenBuffer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.util.TokenBuffer | java]
+package com.fasterxml.jackson.databind.util;
+public class TokenBuffer
+protected final static int DEFAULT_GENERATOR_FEATURES = JsonGenerator.Feature.collectDefaults();
+protected ObjectCodec _objectCodec;
+protected int _generatorFeatures;
+protected boolean _closed;
+protected boolean _hasNativeTypeIds;
+protected boolean _hasNativeObjectIds;
+protected boolean _mayHaveNativeIds;
+protected boolean _forceBigDecimal;
+protected Segment _first;
+protected Segment _last;
+protected int _appendAt;
+protected Object _typeId;
+protected Object _objectId;
+protected boolean _hasNativeId = false;
+protected JsonWriteContext _writeContext;
+@Deprecated
+public TokenBuffer(ObjectCodec codec) {
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+public TokenBuffer(JsonParser p) {
+public TokenBuffer(JsonParser p, DeserializationContext ctxt)
+public TokenBuffer forceUseOfBigDecimal(boolean b) {
+@Override
+public Version version() {
+public JsonParser asParser()
+public JsonParser asParser(ObjectCodec codec)
+public JsonParser asParser(JsonParser src)
+public JsonToken firstToken() {
+@SuppressWarnings("resource")
+public TokenBuffer append(TokenBuffer other) throws IOException
+public void serialize(JsonGenerator gen) throws IOException
+public TokenBuffer deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+public String toString()
+private final void _appendNativeIds(StringBuilder sb)
+public JsonGenerator enable(Feature f) {
+public JsonGenerator disable(Feature f) {
+public boolean isEnabled(Feature f) {
+public int getFeatureMask() {
+public JsonGenerator setFeatureMask(int mask) {
+public Jso
+...[truncated deterministically]...
+Type(int index)
+public Object get(int index) {
+public Segment next() { return _next; }
+public boolean hasIds() {
+public Segment append(int index, JsonToken tokenType)
+public Segment append(int index, JsonToken tokenType, Object value)
+public Segment appendRaw(int index, int rawTokenType, Object value)
+private void set(int index, JsonToken tokenType)
+private void set(int index, JsonToken tokenType, Object value)
+private void set(int index, int rawTokenType, Object value)
+private void set(int index, int rawTokenType, Object value, Object objectId, Object typeId)
+private final void assignNativeIds(int index, Object objectId, Object typeId)
+public Object findObjectId(int index) {
+public Object findTypeId(int index) {
+private final int _typeIdIndex(int i) { return i+i; }
+private final int _objectIdIndex(int i) { return i+i+1; }
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.util;
+
+ import static org.junit.Assert.*;
+ import java.io.IOException;
+ import org.junit.Before;
+ import org.junit.Test;
+ import com.fasterxml.jackson.core.*;
+ import com.fasterxml.jackson.core.json.JsonWriteContext;
+
+ /**
+  * Tests focused on the context-name propagation bug (JacksonDatabind #31 / report #984).
+  * Write operations must be correctly reflected by both getOutputContext() and asParser().
+  */
+ public class TokenBufferContextPropagationTest {
+
+     // ------------------ helpers ----------------
+     private TokenBuffer buffer() {
+         return new TokenBuffer((ObjectCodec) null);
+     }
+
+     private JsonParser parser(TokenBuffer tb) throws IOException {
+         return tb.asParser();
+     }
+
+     private void assertNextToken(JsonParser p, JsonToken token) throws IOException {
+         assertNotNull("Expected more tokens", p.nextToken());
+         assertEquals(token, p.getCurrentToken());
+     }
+
+     // ------------------ tests ----------------
+
+     @Test
+     public void outputContextShouldHaveNameAfterWriteFieldName() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("a");
+         assertEquals("a", tb.getOutputContext().getCurrentName());
+         tb.close();
+     }
+
+     @Test
+     public void outputContextShouldHaveNoNameAtRoot() throws IOException {
+         TokenBuffer tb = buffer();
+         // Root context exists from start
+         assertNull(tb.getOutputContext().getCurrentName());
+         tb.close();
+     }
+
+     @Test
+     public void outputContextShouldNullAfterEndObject() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("x");
+         tb.writeEndObject();
+         // After writing END_OBJECT context reverts to parent (root)
+         assertNull(tb.getOutputContext().getCurrentName());
+         tb.close();
+     }
+
+     @Test
+     public void outputContextShouldReflectNestedObject() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("outer");
+         tb.writeStartObject();
+         tb.writeFieldName("inner");
+         JsonWriteContext ctx = tb.getOutputContext();
+         assertEquals("inner", ctx.getCurrentName());
+         tb.close();
+     }
+
+     @Test
+     public void asParserShouldMatchSimpleFieldName() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("key");
+         tb.writeNumber(123);
+         tb.writeEndObject();
+
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("key", p.getCurrentName());
+         p.close();
+     }
+
+     @Test
+     public void asParserShouldPropagateNestedFieldName() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("a");
+         tb.writeStartObject();
+         tb.writeFieldName("b"); // inner field name – bug would keep "a" here
+         tb.writeEndObject();
+         tb.writeEndObject();
+
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("a", p.getCurrentName());
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("b", p.getCurrentName()); // [bug#31] expected "b", not "a"
+         p.close();
+     }
+
+     @Test
+     public void asParserShouldPreserveFieldNameThroughArray() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("arr");
+         tb.writeStartArray();
+         tb.writeNumber(1);
+         tb.writeEndArray();
+         tb.writeEndObject();
+
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("arr", p.getCurrentName());
+         assertNextToken(p, JsonToken.START_ARRAY);
+         // Inside array the current name should remain the object property name
+         assertEquals("arr", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_NUMBER_INT);
+         assertEquals("arr", p.getCurrentName());
+         assertNextToken(p, JsonToken.END_ARRAY);
+         assertEquals("arr", p.getCurrentName());
+         p.close();
+     }
+
+     @Test
+     public void asParserShouldHaveNullNameInEmptyObject() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeEndObject();
+
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNull(p.getCurrentName());
+         assertNextToken(p, JsonToken.END_OBJECT);
+         assertNull(p.getCurrentName());
+         p.close();
+     }
+
+     @Test
+     public void writeFieldNameNullShouldBeHandledGracefully() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         try {
+             tb.writeFieldName((String) null);
+             // Should reach here without exception
+         } catch (NullPointerException e) {
+             fail("writeFieldName(null) threw NullPointerException");
+         }
+         tb.writeEndObject();
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         // Name was null; current name may be null or empty – just verify no corruption
+         p.close();
+         tb.close();
+     }
+
+     @Test
+     public void rootFieldNameShouldBeAccessibleViaParser() throws IOException {
+         TokenBuffer tb = buffer();
+         // Writing a field name without START_OBJECT is not standard JSON but TokenBuffer allows it
+         tb.writeFieldName("rootField");
+         tb.writeString("value");
+
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("rootField", p.getCurrentName());
+         assertNextToken(p, JsonToken.VALUE_STRING);
+         // After value the name may still be the last field name
+         assertEquals("rootField", p.getCurrentName());
+         p.close();
+     }
+
+     @Test
+     public void closedBufferAsParserShouldStillWork() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeStartObject();
+         tb.writeFieldName("x");
+         tb.writeNumber(1);
+         tb.writeEndObject();
+         tb.close();
+
+         // asParser should return a valid parser even after closing the generator half
+         JsonParser p = parser(tb);
+         assertNextToken(p, JsonToken.START_OBJECT);
+         assertNextToken(p, JsonToken.FIELD_NAME);
+         assertEquals("x", p.getCurrentName());
+         p.close();
+     }
+
+     @Test
+     public void outputContextShouldReflectWriteFieldNameOnRoot() throws IOException {
+         TokenBuffer tb = buffer();
+         tb.writeFieldName("rootField");
+         JsonWriteContext ctx = tb.getOutputContext();
+         // Without a preceding START_OBJECT the context may be root; still name should be set
+         assertEquals("rootField", ctx.getCurrentName());
+         tb.close();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.fasterxml.jackson.databind.util.TokenBufferContextPropagationTest::asParserShouldPreserveFieldNameThroughArray
+ - com.fasterxml.jackson.databind.util.TokenBufferContextPropagationTest::writeFieldNameNullShouldBeHandledGracefully
+
+Failing generated tests: com.fasterxml.jackson.databind.util.TokenBufferContextPropagationTest::asParserShouldPreserveFieldNameThroughArray, com.fasterxml.jackson.databind.util.TokenBufferContextPropagationTest::writeFieldNameNullShouldBeHandledGracefully

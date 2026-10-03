@@ -1,0 +1,395 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 73  Version: JacksonDatabind-73b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.introspect.POJOPropertiesCollector, com.fasterxml.jackson.databind.introspect.POJOPropertyBuilder
+Modified: com.fasterxml.jackson.databind.introspect.POJOPropertiesCollector, com.fasterxml.jackson.databind.introspect.POJOPropertyBuilder
+Triggers: com.fasterxml.jackson.databind.deser.ReadOrWriteOnlyTest::testReadOnlyAndWriteOnly, com.fasterxml.jackson.databind.deser.ReadOrWriteOnlyTest::testReadOnly935
+
+Bug/specification summary:
+Bug report: 935
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.ReadOrWriteOnlyTest::testReadOnlyAndWriteOnly
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "x" (class com.fasterxml.jackson.databind.deser.ReadOrWriteOnlyTest$ReadXWriteY), not marked as ignorable (one known property: "y"])
+ - com.fasterxml.jackson.databind.deser.ReadOrWriteOnlyTest::testReadOnly935
+ --> com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: Unrecognized field "fullName" (class com.fasterxml.jackson.databind.deser.ReadOrWriteOnlyTest$Pojo935), not marked as ignorable (2 known properties: "lastName", "firstName"])
+Modified: com.fasterxml.jackson.databind.introspect.POJOPropertiesCollector, com.fasterxml.jackson.databind.introspect.POJOPropertyBuilder
+
+Prompt-01 test plan:
+TARGETS: POJOPropertiesCollector._doCollect() property merging for _forSerialization flag;
+POJOPropertyBuilder.anyVisible()/isExplicitlyNamed() for read/write-only
+TARGETS: _addFields/_addMethods/_addInjectables collection logic; _collectIgnorals handling of
+access=READ_ONLY/WRITE_ONLY
+ORACLES: Expect getter with @JsonProperty(access=READ_ONLY) output on serialize, not on deserialize;
+setter with WRITE_ONLY accept on deserialize only
+ORACLES: No UnrecognizedPropertyException for fields legitimately read-only during deserialization
+or write-only during serialization
+CASES: Pojo with @JsonProperty(access=READ_ONLY) on getter, WRITE_ONLY on setter; serialize gives
+read-only field, deserialize gives write-only field
+CASES: Boundary: same logical property via getter+setter with opposite access; should not lose
+property on both sides
+CASES: Error: deserialize JSON with extra unknown field not matching any property; expect
+UnrecognizedPropertyException only for truly unknown
+RISKS: Cannot see diff; must deduce fix from bug label #935 and test failures; risk of
+misinterpreting visibility during merging of fields/methods/ctors
+RISKS: Need to ensure test uses default ObjectMapper settings; annotation-based access control might
+conflict with @JsonIgnore if both present
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.introspect.POJOPropertiesCollector (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.introspect;
+public class POJOPropertiesCollector
+protected final MapperConfig<?> _config;
+protected final boolean _forSerialization;
+protected final boolean _stdBeanNaming;
+protected final JavaType _type;
+protected final AnnotatedClass _classDef;
+protected final VisibilityChecker<?> _visibilityChecker;
+protected final AnnotationIntrospector _annotationIntrospector;
+protected final String _mutatorPrefix;
+protected boolean _collected;
+protected LinkedHashMap<String, POJOPropertyBuilder> _properties;
+protected LinkedList<POJOPropertyBuilder> _creatorProperties ;
+protected LinkedList<AnnotatedMember> _anyGetters;
+protected LinkedList<AnnotatedMethod> _anySetters;
+protected LinkedList<AnnotatedMember> _anySetterField;
+protected LinkedList<AnnotatedMethod> _jsonValueGetters;
+protected HashSet<String> _ignoredPropertyNames;
+protected LinkedHashMap<Object, AnnotatedMember> _injectables;
+public MapperConfig<?> getConfig() {
+public JavaType getType() {
+public AnnotatedClass getClassDef() {
+public AnnotationIntrospector getAnnotationIntrospector() {
+public List<BeanPropertyDefinition> getProperties() {
+public Map<Object, AnnotatedMember> getInjectables() {
+public AnnotatedMethod getJsonValueMethod()
+public AnnotatedMember getAnyGetter()
+public AnnotatedMember getAnySetterField()
+publi
+...[truncated deterministically]...
+ROPERTY_MUTATORS);
+private void _collectIgnorals(String name)
+protected void _renameProperties(Map<String, POJOPropertyBuilder> props)
+protected void _renameWithWrappers(Map<String, POJOPropertyBuilder> props)
+protected void _sortProperties(Map<String, POJOPropertyBuilder> props)
+protected void reportProblem(String msg) {
+private PropertyNamingStrategy _findNamingStrategy()
+/* Alas, there's no way to force return type of "either class
+if (namingClass == PropertyNamingStrategy.class) {
+if (!PropertyNamingStrategy.class.isAssignableFrom(namingClass)) {
+protected void _updateCreatorProperty(POJOPropertyBuilder prop, List<POJOPropertyBuilder> creatorProperties) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.introspect;
+import java.lang.reflect.Modifier;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.cfg.HandlerInstantiator;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
+import com.fasterxml.jackson.databind.util.BeanUtil;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+public class POJOPropertiesCollector
+
+/* METHOD POJOPropertiesCollector */
+protected POJOPropertiesCollector(MapperConfig<?> config, boolean forSerialization,
+ JavaType type, AnnotatedClass classDef, String mutatorPrefix)
+ {
+ _config = config;
+ _stdBeanNaming = config.isEnabled(MapperFeature.USE_STD_BEAN_NAMING);
+ _forSerialization = forSerialization;
+ _type = type;
+ _classDef = classDef;
+ _mutatorPrefix = (mutatorPrefix == null) ? "set" : mutatorPrefix;
+ _annotationIntrospector = config.isAnnotationProcessingEnabled() ?
+ _config.getAnnotationIntrospector() : null;
+ if (_annotationIntrospector == null) {
+ _visibilityChecker = _config.getDefaultVisibilityChecker();
+ } else {
+ _visibilityChecker = _annotationIntrospector.findAutoDetectVisibility(classDef,
+ _config.getDefaultVisibilityChecker());
+ }
+ }
+
+/* METHOD collectAll */
+protected void collectAll()
+ {
+ LinkedHashMap<String, POJOPropertyBuilder> props = new LinkedHashMap<String, POJOPropertyBuilder>();
+
+ // First: gather basic data
+ _addFields(props);
+ _addMethods(props);
+ // 25-Jan-2016, tatu: Avoid introspecting (constructor-)creators for non-static
+ // inner classes, see [databind#1502]
+ if (!_classDef.isNonStaticInnerClass()) {
+ _addCreators(props);
+ }
+ _addInjectables(props);
+
+ // Remove ignored properties, first; this MUST precede annotation merging
+ // since logic relies on knowing exactly which accessor has which annotation
+ _removeUnwantedProperties(props);
+
+ // then merge annotations, to simplify further processi
+...[truncated deterministically]...
+y.mergeAnnotations(_forSerialization);
+ }
+ // and then remove unneeded accessors (wrt read-only, read-write)
+ _removeUnwantedAccessor(props);
+
+ // Rename remaining properties
+ _renameProperties(props);
+
+ // And use custom naming strategy, if applicable...
+ PropertyNamingStrategy naming = _findNamingStrategy();
+ if (naming != null) {
+ _renameUsing(props, naming);
+ }
+
+ /* Sort by visibility (explicit over implicit); drop all but first
+ * of member type (getter, setter etc) if there is visibility
+ * difference
+ */
+ for (POJOPropertyBuilder property : props.values()) {
+ property.trimByVisibility();
+ }
+
+ /* and, if required, apply wrapper name: note, MUST be done after
+ * annotations are merged.
+ */
+ if (_config.isEnabled(MapperFeature.USE_WRAPPER_NAME_AS_PROPERTY_NAME)) {
+ _renameWithWrappers(props);
+ }
+ 
+ // well, almost last: there's still ordering...
+ _sortProperties(props);
+ _properties = props;
+ _collected = true;
+ }
+
+ /*
+ /**********************************************************
+ /* Overridable internal methods, adding members
+ /*****************
+...[truncated deterministically]...
+(AnnotatedClass) in 2.6
+ if (f.isTransient()) {
+ // 20-May-2016, tatu: as per [databind#1184] explicit annotation should override
+ // "default" `transient`
+ if (!hasName) {
+ visible = false;
+ if (transientAsIgnoral) {
+ ignored = true;
+ }
+ }
+ }
+ /* [databind#190]: this is the place to prune final fields, if they are not
+ * to be used as mutators. Must verify they are not explicitly included.
+ * Also: if 'ignored' is set, need to included until a later point, to
+ * avoid losing ignoral information.
+ */
+ if (pruneFinalFields && (pn == null) && !ignored && Modifier.isFinal(f.getModifiers())) {
+ continue;
+ }
+
+ //if field has annotation @JsonAnySetter
+ if(f.hasAnnotation(JsonAnySetter.class)) {
+ if (_anySetterField == null) {
+ _anySetterField = new LinkedList<AnnotatedMember>();
+ }
+ _anySetterField.add(f);
+ }
+ _property(props, implName).addField(f, pn, nameExplicit, visible, ignored);
+ }
+ }
+
+===== com.fasterxml.jackson.databind.introspect.POJOPropertyBuilder (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.introspect;
+public class POJOPropertyBuilder
+protected final boolean _forSerialization;
+protected final MapperConfig<?> _config;
+protected final AnnotationIntrospector _annotationIntrospector;
+protected final PropertyName _name;
+protected final PropertyName _internalName;
+protected Linked<AnnotatedField> _fields;
+protected Linked<AnnotatedParameter> _ctorParameters;
+protected Linked<AnnotatedMethod> _getters;
+protected Linked<AnnotatedMethod> _setters;
+public POJOPropertyBuilder(POJOPropertyBuilder src, PropertyName newName)
+@Override
+public POJOPropertyBuilder withName(PropertyName newName) {
+public POJOPropertyBuilder withSimpleName(String newSimpleName)
+public int compareTo(POJOPropertyBuilder other)
+public String getName() {
+public PropertyName getFullName() {
+public boolean hasName(PropertyName name) {
+public String getInternalName() { return _internalName.getSimpleName(); }
+public PropertyName getWrapperName() {
+public PropertyName withMember(AnnotatedMember member) {
+public boolean isExplicitlyIncluded() {
+public boolean isExplicitlyNamed() {
+public boolean hasGetter() { return _getters != null; }
+public boolean hasSetter() { return _setters != null; }
+public boolean hasField() { return _fields != null; }
+public boolean hasConstructorParameter() { return _ctorParamet
+...[truncated deterministically]...
+AnnotatedMember>
+public MemberIterator(Linked<T> first) {
+public boolean hasNext() {
+public T next() {
+public void remove() {
+protected final static class Linked<T>
+public final T value;
+public final Linked<T> next;
+public final PropertyName name;
+public final boolean isNameExplicit;
+public final boolean isVisible;
+public final boolean isMarkedIgnored;
+public Linked<T> withoutNext() {
+public Linked<T>
+...[truncated deterministically]...
+c String toString() {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.introspect;
+import java.util.*;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+public class POJOPropertyBuilder
+
+/* METHOD POJOPropertyBuilder */
+public POJOPropertyBuilder(POJOPropertyBuilder src, PropertyName newName)
+ {
+ _config = src._config;
+ _annotationIntrospector = src._annotationIntrospector;
+ _internalName = src._internalName;
+ _name = newName;
+ _fields = src._fields;
+ _ctorParameters = src._ctorParameters;
+ _getters = src._getters;
+ _setters = src._setters;
+ _forSerialization = src._forSerialization;
+ }
+
+/* METHOD POJOPropertyBuilder */
+public POJOPropertyBuilder(MapperConfig<?> config, AnnotationIntrospector ai,
+ boolean forSerialization, PropertyName internalName) {
+ this(config, ai, forSerialization, internalName, internalName);
+ }
+
+/* METHOD POJOPropertyBuilder */
+protected POJOPropertyBuilder(MapperConfig<?> config, AnnotationIntrospector ai,
+ boolean forSerialization, PropertyName internalName, PropertyName name)
+ {
+ _config = config;
+ _annotationIntrospector = ai;
+ _internalName = internalName;
+ _name = name;
+ _forSerialization = forSerialization;
+ }
+
+/* METHOD getGetter */
+@Override
+ public AnnotatedMethod getGetter()
+ {
+ // Easy with zero or one getters...
+ Linked<AnnotatedMethod> curr = _getters;
+ if (curr == null) {
+ return null;
+ }
+ Linked<AnnotatedMethod> next = curr.next;
+ if (next == null) {
+ return curr.value;
+ }
+ // But if multiple, verify that they do not conflict...
+ for (; next != null; next = next.next) {
+ /* [JACKSON-255] Allow masking, i.e. do not report exception if one
+ * is in super-class from the other
+ */
+ Class<?> currClass = curr.value.getDeclaringClass();
+ Class<?> nextClass = next.value.getDeclaringClass();
+...[truncated deterministically]...
+s)) { // next is more specific
+ curr = next;
+ continue;
+ }
+ if (nextClass.isAssignableFrom(currClass)) { // current more specific
+ continue;
+ }
+ }
+ /* 30-May-2014, tatu: Three levels of precedence:
+ * 
+ * 1. Regular getters ("getX")
+ * 2. Is-getters ("isX")
+ * 3. Implicit, possible getters ("x")
+ */
+ int priNext = _getterPriority(next.value);
+ int priCurr = _getterPriority(curr.value);
+
+ if (priNext != priCurr) {
+ if (priNext < priCurr) {
+ curr = next;
+ }
+ continue;
+ }
+ throw new IllegalArgumentException("Conflicting getter definitions for property \""+getName()+"\": "
+ +curr.value.getFullName()+" vs "+next.value.getFullName());
+ }
+ // One more thing; to avoid having to do it again...
+ _getters = curr.withoutNext();
+ return curr.value;
+ }
+
+/* METHOD compareTo */
+@Override
+ public int compareTo(POJOPropertyBuilder other)
+ {
+ // first, if one has ctor params, that should come first:
+ if (_ctorParameters != null) {
+ if (other._ctorParameters == null) {
+ return -1;
+ }
+ } else if (other._ctorParameters != null) {
+ return 1;
+ }
+ /* otherwise sort by external name (including sorting of
+ * ctor parameters)
+ */
+ return getName().compareTo(other.getName());
+ }
+
+/* METHOD getField */
+@Override
+ public AnnotatedField getField()
+ {
+ if (_fields == null) {
+ return null;
+ }
+ // If multiple, verify that they do not conflict...
+ AnnotatedField field = _fields.value;
+ Linked<AnnotatedField> next = _fields.next;
+ for (; next != null; next = next.next) {
+ AnnotatedField nextField = next.value;
+ Class<?> fieldClass = field.getDeclaringClass();
+ Class<?> nextClass = nextField.getDeclaringClass();
+ if (fieldClass != nextClass) {
+ if (fieldClass.isAssignableFrom(nextClass)) { // next is more specific
+...[truncated deterministically]...
+if (nextClass.isAssignableFrom(fieldClass)) { // getter more specific
+ continue;
+ }
+ }
+ throw new IllegalArgumentException("Multiple fields representing property \""+getName()+"\": "
+ +field.getFullName()+" vs "+nextField.getFullName());
+ }
+ return field;
+ }

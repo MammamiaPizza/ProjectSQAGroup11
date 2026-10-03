@@ -1,0 +1,392 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 48  Version: Jsoup-48b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.helper.HttpConnection
+Modified: org.jsoup.helper.HttpConnection
+Triggers: org.jsoup.helper.HttpConnectionTest::sameHeadersCombineWithComma
+
+Bug/specification summary:
+Bug report: 618
+Trigger failures:
+- org.jsoup.helper.HttpConnectionTest::sameHeadersCombineWithComma
+ --> junit.framework.AssertionFailedError: expected:<no-cache[, no-store]> but was:<no-cache[]>
+Modified: org.jsoup.helper.HttpConnection
+
+Prompt-01 test plan:
+TARGETS: HttpConnection.Base.header(String,String), especially repeated header names with differing case. 
+ORACLES: Trigger specifies "Cache-Control": "no-cache" then "no-store" yields "no-cache, no-store". 
+CASES: Add same-name headers twice; verify header(name) combines values with comma and space. 
+CASES: Repeat using case variants to verify case-insensitive existing-header lookup/combination. 
+RISKS: Public headers() map may expose one normalized/original key; assert only documented header lookup behavior. 
+RISKS: Context lacks implementation details for null, empty, removal, and unrelated header semantics.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.helper.HttpConnection (java) =====
+/* API SIGNATURES */
+package org.jsoup.helper;
+public class HttpConnection implements Connection {
+public static final String CONTENT_ENCODING = "Content-Encoding";
+public static Connection connect(String url) {
+public static Connection connect(URL url) {
+private static String encodeUrl(String url) {
+private static String encodeMimeName(String val) {
+private HttpConnection() {
+public Connection url(URL url) {
+public Connection url(String url) {
+public Connection userAgent(String userAgent) {
+public Connection timeout(int millis) {
+public Connection maxBodySize(int bytes) {
+public Connection followRedirects(boolean followRedirects) {
+public Connection referrer(String referrer) {
+public Connection method(Method method) {
+public Connection ignoreHttpErrors(boolean ignoreHttpErrors) {
+public Connection ignoreContentType(boolean ignoreContentType) {
+public Connection validateTLSCertificates(boolean value) {
+public Connection data(String key, String value) {
+public Connection data(String key, String filename, InputStream inputStream) {
+public Connection data(Map<String, String> data) {
+public Connection data(String... keyvals) {
+public Connection data(Collection<Connection.KeyVal> data) {
+public Connection header(String name, String value) {
+public Connection cookie(String name, String value) {
+public Connection cookies(Map<String, String> cookies) {
+public Connection parser(Parser parser) {
+public Document get() throws IOException {
+public Document post() throws IOException {
+public Connection.Response execute() throws IOException {
+public Connection.Request request() {
+public Connection request(Connection.Request request) {
+public Connection.Response response() {
+public Connection response(Connection.Response response) {
+public Connection postDataCharset(String charset) {
+@SuppressWarnings({"unchecked"})
+private static abstract class Base<T extends Connection.Base> implements Connection.Base<T> {
+private Base() {
+public URL url() {
+public T url(URL url) {
+public Method method() {
+public T method(Method method) {
+public String header(String name) {
+public T header(String name, String value) {
+public boolean hasHeader(String name) {
+public boolean hasHeaderWithValue(String name, String value) {
+public T removeHeader(String name) {
+public Map<String, String> headers() {
+private String getHeaderCaseInsensitive(String name) {
+private Map.Entry<String, String> scanHeaders(String name) {
+public String cookie(String name) {
+public T cookie(String name, String value) {
+public boolean hasCookie(String name) {
+public T removeCookie(String name) {
+public Map<String, String> cookies() {
+public static class Request extends HttpConnection.Base<Connection.Req
+...[truncated deterministically]...
+ic LinkedHashMap<String, List<String>> createHeaderMap(HttpURLConnection conn) {
+final LinkedHashMap<String, List<String>> headers = new LinkedHashMap<String, List<String>>();
+final String key = conn.getHeaderFieldKey(i);
+final String val = conn.getHeaderField(i);
+final ArrayList<String> vals = new ArrayList<String>();
+private static String setOutputContentType(final Connection.Request req) {
+private static void writePost(final Connection.Request req, final OutputStream outputStream, final String bound) throws IOException {
+final Collection<Connection.KeyVal> data = req.data();
+final BufferedWriter w = new BufferedWriter(new OutputStreamWriter(outputStream, DataUtil.defaultCharset));
+private static String getRequestCookieString(Connection.Request req) {
+private static void serialiseRequestUrl(Connection.Request req) throws IOException {
+public static class KeyVal implements Connection.KeyVal {
+public static KeyVal create(String key, String value) {
+public static KeyVal create(String key, String filename, InputStream stream) {
+private KeyVal() {}
+public KeyVal key(String key) {
+public String key() {
+public KeyVal value(String value) {
+public String value() {
+public KeyVal inputStream(InputStream inputStream) {
+public InputStream inputStream() {
+public boolean hasInputStream() {
+@Override
+public String toString() {
+
+/* HEADER */
+package org.jsoup.helper;
+import org.jsoup.Connection;
+import org.jsoup.HttpStatusException;
+import org.jsoup.UnsupportedMimeTypeException;
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
+import org.jsoup.parser.TokenQueue;
+import javax.net.ssl.*;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
+import java.util.*;
+import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
+public class HttpConnection implements Connection {
+
+/* METHOD url */
+public Connection url(String url) {
+ Validate.notEmpty(url, "Must supply a valid URL");
+ try {
+ req.url(new URL(encodeUrl(url)));
+ } catch (MalformedURLException e) {
+ throw new IllegalArgumentException("Malformed URL: " + url, e);
+ }
+ return this;
+ }
+
+/* METHOD url */
+public T url(URL url) {
+ Validate.notNull(url, "URL must not be null");
+ this.url = url;
+ return (T) this;
+ }
+
+/* METHOD url */
+public Connection url(URL url) {
+ req.url(url);
+ return this;
+ }
+
+/* METHOD url */
+public URL url() {
+ return url;
+ }
+
+/* METHOD HttpConnection */
+private HttpConnection() {
+ req = new Request();
+ res = new Response();
+ }
+
+/* METHOD Base */
+private Base() {
+ headers = new LinkedHashMap<String, String>();
+ cookies = new LinkedHashMap<String, String>();
+ }
+
+/* METHOD connect */
+public static Connection connect(String url) {
+ Connection con = new HttpConnection();
+ con.url(url);
+ return con;
+ }
+
+/* METHOD connect */
+public static Connection connect(URL url) {
+ Connection con = new HttpConnection();
+ con.url(url);
+ return con;
+ }
+
+/* METHOD data */
+public Connection data(String... keyvals) {
+ Validate.notNull(keyvals, "Data key value pairs must not be null");
+ Validate.isTrue(keyvals.length %2 == 0, "Must supply an even number of key value pairs");
+ for (int i = 0; i < keyvals.length; i += 2) {
+ String key = keyvals[i];
+ String value = keyvals[i+1];
+ Validate.notEmpty(key, "Data key must not be empty");
+ Validate.notNull(value, "Data value must not be null");
+ req.data(KeyVal.create(key, value));
+ }
+ return this;
+ }
+
+/* METHOD parse */
+public Document parse() throws IOException {
+ Validate.isTrue(executed, "Request must be executed (with .execute(), .get(), or .post() before parsing response");
+ Document doc = DataUtil.parseByteData(byteData, charset, url.toExternalForm(), req.parser());
+ byteData.rewind();
+ charset = doc.outputSettings().charset().name(); // update charset from meta-equiv, possibly
+ return doc;
+ }
+
+/* METHOD userAgent */
+public Connection userAgent(String userAgent) {
+ Validate.notNull(userAgent, "User agent must not be null");
+ req.header("User-Agent", userAgent);
+ return this;
+ }
+
+/* METHOD followRedirects */
+public Connection followRedirects(boolean followRedirects) {
+ req.followRedirects(followRedirects);
+ return this;
+ }
+
+/* METHOD referrer */
+public Connection referrer(String referrer) {
+ Validate.notNull(referrer, "Referrer must not be null");
+ req.header("Referer", referrer);
+ return this;
+ }
+
+/* METHOD validateTLSCertificates */
+public Connection validateTLSCertificates(boolean value) {
+ req.validateTLSCertificates(value);
+ return this;
+ }
+
+/* METHOD data */
+public Connection data(String key, String filename, InputStream inputStream) {
+ req.data(KeyVal.create(key, filename, inputStream));
+ return this;
+ }
+
+/* METHOD data */
+public Connection data(Map<String, String> data) {
+ Validate.notNull(data, "Data map must not be null");
+ for (Map.Entry<String, String> entry : data.entrySet()) {
+ req.data(KeyVal.create(entry.getKey(), entry.getValue()));
+ }
+ return this;
+ }
+
+/* METHOD data */
+public Conn
+...[truncated deterministically]...
+req.data(entry);
+ }
+ return this;
+ }
+
+/* METHOD cookies */
+public Connection cookies(Map<String, String> cookies) {
+ Validate.notNull(cookies, "Cookie map must not be null");
+ for (Map.Entry<String, String> entry : cookies.entrySet()) {
+ req.cookie(entry.getKey(), entry.getValue());
+ }
+ return this;
+ }
+
+/* METHOD method */
+public T method(Method method) {
+ Validate.notNull(method, "Method must not be null");
+ this.method = method;
+ return (T) this;
+ }
+
+/* METHOD header */
+public String header(String name) {
+ Validate.notNull(name, "Header name must not be null");
+ return getHeaderCaseInsensitive(name);
+ }
+
+/* METHOD header */
+public T header(String name, String value) {
+ Validate.notEmpty(name, "Header name must not be empty");
+ Validate.notNull(value, "Header value must not be null");
+ removeHeader(name); // ensures we don't get an "accept-encoding" and a "Accept-Encoding"
+ headers.put(name, value);
+ return (T) this;
+ }
+
+ public boolean hasHeader(String name) {
+ Validate.notEmpty(name, "Header name must not be empty");
+ return getHeaderCaseInsensitive(name) != null;
+ }
+
+ /**
+ * Test if the request has a header with this value (case insensitive).
+ */
+ public boolean hasHeaderWithValue(String name, String value) {
+ return hasHeader(name) && header(name).equalsIgnoreCase(value);
+ }
+
+ public T removeHeader(String name) {
+ Validate.notEmpty(name, "Header name must not be empty");
+ Map.Entry<String, String> entry = scanHeaders(name); // remove is case insensitive too
+ if (entry != null)
+ headers.remove(entry.getKey()); // ensures correct case
+ return (T) this;
+ }
+
+ public Map<String, String> headers() {
+ return headers;
+ }
+
+ private String getHeaderCaseInsensitive(String name) {
+ Validate.notNull(name, "Header name must not be null");
+ // quick evals for common case of title case, lower case, then scan for mixed
+ String value = headers.get(name);
+ if (value == null)
+ value = headers.get(name.toLowerCase());
+ if (value == null) {
+ Map.Entry<String, String> entry = scanHeaders(name);
+ if (entry != null)
+ value = entry.getValue();
+ }
+ return value;
+ }
+
+ private Map.Entry<String, String> scanHeaders(String name) {
+ String lc = name.toLowerCase();
+ for (Map.Entry<String, String> entry : headers.entrySet()) {
+ if (entry.getKey().toLowerCase().equals(lc))
+ return entry;
+ }
+ return null;
+ }
+
+ public String cookie(String name) {
+ Validate.notEmpty(name, "Cookie name must not be empty");
+ return cookies.get(name);
+ }
+
+ public T cookie(String name, String value) {
+ Validate.notEmpty(name, "Cookie name must not be empty");
+ Validate.notNull(value, "Cookie value must not be null");
+ cookies.put(name, value);
+ return (T) this;
+ }
+
+ public boolean hasCookie(String name) {
+ Validate.notEmpty(name, "Cookie name must not be empty");
+ return cookies.containsKey(name);
+ }
+
+ public T removeCookie(String name) {
+ Validate.notEmpt
+...[truncated deterministically]...
+}
+
+ res.charset = DataUtil.getCharsetFromContentType(res.contentType); // may be null, readInputStream deals with it
+ if (conn.getContentLength() != 0) { // -1 means unknown, chunked. sun throws an IO exception on 500 response with no content when trying to read body
+ InputStream bodyStream = null;
+ InputStream dataStream = null;
+ try {
+ dataStream = conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream();
+ bodyStream = res.hasHeaderWithValue(CONTENT_ENCODING, "gzip") ?
+ new BufferedInputStream(new GZIPInputStream(dataStream)) :
+ new BufferedInputStream(dataStream);
+
+ res.byteData = DataUtil.readToByteBuffer(bodyStream, req.maxBodySize());
+ } finally {
+ if (bodyStream != null) bodyStream.close();
+ if (dataStream != null) dataStream.close();
+ }
+ } else {
+ res.byteData = DataUtil.emptyByteBuffer();
+ }
+ } finally {
+ // per Java's documentation, this is not necessary, and precludes keepalives. However in practise,
+ // connection errors will not be released quickly enough and can cause a too many open files error.
+ conn.disconnect();
+ }
+
+ res.executed = true;
+ return res;
+ }

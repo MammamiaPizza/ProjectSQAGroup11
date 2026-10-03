@@ -1,0 +1,309 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 54  Version: Closure-54b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.TypedScopeCreator, com.google.javascript.rhino.jstype.FunctionType
+Modified: com.google.javascript.jscomp.TypedScopeCreator, com.google.javascript.rhino.jstype.FunctionType
+Triggers: com.google.javascript.jscomp.TypeCheckTest::testIssue537a, com.google.javascript.jscomp.TypeCheckTest::testIssue537b, com.google.javascript.jscomp.TypedScopeCreatorTest::testPropertyOnUnknownSuperClass2
+
+Bug/specification summary:
+Bug report: 537
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue537a
+ --> junit.framework.ComparisonFailure: expected:<[Function Foo.prototype.method: called with 1 argument(s). Function requires at least 0 argument(s) and no more than 0 argument(s).]> but was:<[Property baz never defined on Bar]>
+ - com.google.javascript.jscomp.TypeCheckTest::testIssue537b
+ --> junit.framework.ComparisonFailure: expected:<[Function Bar.prototype.baz: called with 1 argument(s). Function requires at least 0 argument(s) and no more than 0 argument(s).]> but was:<[Property baz never defined on Bar]>
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testPropertyOnUnknownSuperClass2
+ --> junit.framework.ComparisonFailure: expected:<[?]> but was:<[number]>
+Modified: com.google.javascript.jscomp.TypedScopeCreator, com.google.javascript.rhino.jstype.FunctionType
+
+Prompt-01 test plan:
+TARGETS: TypedScopeCreator property resolution for 'this' inside constructor of a class extending an
+unknown superclass.
+TARGETS: FunctionType.getPrototype()/setPrototypeBasedOn handling when superclass type is
+unresolvable.
+ORACLES: testIssue537a expects arg-mismatch error ("called with 1 argument(s)... max 0") not
+"Property baz never defined on Bar".
+ORACLES: testIssue537b expects same arg-count error for Bar.prototype.baz.
+ORACLES: testPropertyOnUnknownSuperClass2 expects unknown type "?" not "number" for property on
+instance extended from unknown superclass.
+CASES: Normal: class extends known class; call this.method() with wrong args → arg-mismatch error
+(existing behavior).
+CASES: Boundary: class extends undefined identifier; call this.prop() → check call signature, not
+"Property never defined".
+CASES: Boundary: inside constructor of class extending unknown, type of this and this.prop should be
+"?".
+RISKS: Changing TypedScopeCreator may unintentionally alter prototype chains for known superclasses;
+regression tests needed.
+RISKS: Limited visibility: FunctionType changes could affect interface resolution; test generation
+must stay conservative.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.TypedScopeCreator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private final List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+@Override
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static class DiscoverEnumsAndTypedefs
+public void visit(NodeTraversal t, Node node, Node parent) {
+private JSType getNativeType(JSTypeNative nativeType) {
+private abstract class AbstractScopeBuilder
+private final List<Node> nonExternFunctions = Lists.newArrayList();
+private AbstractScopeBuilder(Scope scope) {
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void attachLiteralTypes(NodeTraversal t, Node n) {
+private void defineObjectLiteral(NodeTraversal t, Node objectLit) {
+private void defineName(Node name, Node var, Node parent, JSDocInfo info) {
+@Nullable Node rValue,
+@Nullable String name,
+@Nullable JSDocInfo info,
+@Nullable Node lvalueNode) {
+private void defineSlot(Node name, Node parent, JSType type) {
+private boolean isQnameRootedInGlobalScope(Node n) {
+private FunctionType getFunctionType(@Nullable Var v) {
+private ObjectType getObjectSlot(String slotName) {
+private final class CollectProperties
+private static final class StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class GlobalScopeBuilder extends AbstractScopeBuilder {
+private GlobalScopeBuilder(Scope scope) {
+@Override public void visit(NodeTraversal t, Node n, Node parent) {
+private final class LocalScopeBuilder extends AbstractScopeBuilder {
+private LocalScopeBuilder(Scope scope) {
+private void handleFunctionInputs(Node fnNode) {
+private void declareArguments(Node functionNode) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import static com.google.javascript.jscomp.TypeCheck.ENUM_DUP;
+import static com.google.javascript.jscomp.TypeCheck.ENUM_NOT_CONSTANT;
+import static com.google.javascript.jscomp.TypeCheck.MULTIPLE_VAR_DEF;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ARRAY_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.BOOLEAN_OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.BOOLEAN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.DATE_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.EVAL_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.FUNCTION_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.GLOBAL_THIS;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NO_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NULL_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NUMBER_OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NUMBER_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.RANGE_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.REFERENCE_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.REGEXP_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.REGEXP_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.STRING_OBJECT_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.STRING_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.SYNTAX_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.TYPE_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.URI_ERROR_FUNCTION_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.VOID_TYPE;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.javascript.jscomp.CodingConvention.DelegateRelationship;
+import com.google.javascript.jscomp.CodingConvention.ObjectLiteralCast;
+import com.google.javascript.jscomp.CodingConvention.SubclassRelationship;
+import com.google.javascript.jscomp.CodingConvention.SubclassType;
+import com.google.javascript.jscomp.NodeTraversal.AbstractShallowStatementCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.InputId;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.EnumType;
+import com.google.javascript.rhino.jstype.FunctionParamBuilder;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.ObjectType;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import javax.annotation.Nullable;
+
+===== com.google.javascript.rhino.jstype.FunctionType (java) =====
+/* API SIGNATURES */
+package com.google.javascript.rhino.jstype;
+public class FunctionType extends PrototypeObjectType {
+private enum Kind {
+private List<ObjectType> implementedInterfaces = ImmutableList.of();
+private List<ObjectType> extendedInterfaces = ImmutableList.of();
+/** Creates an instance for a function that is an interface. */
+private FunctionType(JSTypeRegistry registry, String name, Node source) {
+@Override
+public boolean isInstanceType() {
+public boolean isConstructor() {
+public boolean isInterface() {
+public boolean isOrdinaryFunction() {
+public FunctionType toMaybeFunctionType() {
+public boolean canBeCalled() {
+public boolean hasImplementedInterfaces() {
+public Iterable<Node> getParameters() {
+public Node getParametersNode() {
+public int getMinArguments() {
+public int getMaxArguments() {
+public JSType getReturnType() {
+public boolean isReturnTypeInferred() {
+public StaticSlot<JSType> getSlot(String name) {
+public Set<String> getOwnPropertyNames() {
+public ObjectType getPrototype() {
+public void setPrototypeBasedOn(ObjectType baseType) {
+public boolean setPrototype(PrototypeObjectType prototype) {
+public Iterable<ObjectType> getAllImplementedInterfaces() {
+private void addRelatedInterfaces(ObjectType instance, Set<ObjectType> set) {
+/** Returns interfaces implemented directly by a class or its superclass. */
+public It
+...[truncated deterministically]...
+onType otherType) {
+public String toString() {
+private void appendVarArgsString(StringBuilder builder, JSType paramType) {
+public boolean isSubtype(JSType that) {
+public <T> T visit(Visitor<T> visitor) {
+public ObjectType getInstanceType() {
+public boolean hasInstanceType() {
+public ObjectType getTypeOfThis() {
+public Node getSource() {
+public void setSource(Node source) {
+private void addSubType(FunctionType subType) {
+public void clearCachedValues() {
+public List<FunctionType> getSubTypes() {
+public boolean hasCachedValues() {
+public String getTemplateTypeName() {
+public String toDebugHashCodeString() {
+private String getDebugHashCodeStringOf(JSType type) {
+
+/* HEADER */
+package com.google.javascript.rhino.jstype;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.U2U_CONSTRUCTOR_TYPE;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+public class FunctionType extends PrototypeObjectType {
+
+/* METHOD FunctionType */
+FunctionType(JSTypeRegistry registry, String name, Node source,
+ ArrowType arrowType, ObjectType typeOfThis,
+ String templateTypeName, boolean isConstructor, boolean nativeType) {
+ super(registry, name,
+ registry.getNativeObjectType(JSTypeNative.FUNCTION_INSTANCE_TYPE),
+ nativeType);
+ Preconditions.checkArgument(source == null ||
+ Token.FUNCTION == source.getType());
+ Preconditions.checkNotNull(arrowType);
+ this.source = source;
+ this.kind = isConstructor ? Kind.CONSTRUCTOR : Kind.ORDINARY;
+ if (isConstructor) {
+ this.typeOfThis = typeOfThis != null ?
+ typeOfThis : new InstanceObjectType(registry, this, nativeType);
+ } else {
+ this.typeOfThis = typeOfThis != null ?
+ typeOfThis :
+ registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+ }
+ this.call = arrowType;
+ this.templateTypeName = templateTypeName;
+ }
+
+/* METHOD FunctionType */
+private FunctionType(JSTypeRegistry registry, String name, Node source) {
+ super(registry, name,
+ registry.getNativeObjectType(JSTypeNative.FUNCTION_INSTANCE_TYPE));
+ Preconditions.checkArgument(source == null ||
+ Token.FUNCTION == source.getType());
+ Preconditions.checkArgument(name != null);
+ this.source = source;
+ this.call = new ArrowType(registry, new Node(Token.L
+...[truncated deterministically]...
+tType(registry, this);
+ }
+
+/* METHOD setPrototypeBasedOn */
+public void setPrototypeBasedOn(ObjectType baseType) {
+ // This is a bit weird. We need to successfully handle these
+ // two cases:
+ // Foo.prototype = new Bar();
+ // and
+ // Foo.prototype = {baz: 3};
+ // In the first case, we do not want new properties to get
+ // added to Bar. In the second case, we do want new properties
+ // to get added to the type of the anonymous object.
+ //
+ // We handle this by breaking it into two cases:
+ //
+ // In the first case, we create a new PrototypeObjectType and set
+ // its implicit prototype to the type being assigned. This ensures
+ // that Bar will not get any properties of Foo.prototype, but properties
+ // later assigned to Bar will get inherited properly.
+ //
+ // In the second case, we just use the anonymous object as the prototype.
+ if (baseType.hasReferenceName() ||
+ baseType.isUnknownType() ||
+ isNativeObjectType() ||
+ baseType.isFunctionPrototypeType() ||
+ !(baseType instanceof PrototypeObjectType)) {
+
+ baseType = new PrototypeObjectType(
+ registry, this.getReferenceName() + ".prototype", baseType);
+ }
+ setPrototype((PrototypeObjectType) baseType);
+ }
+
+/* METHOD resolveInternal */
+@Override
+ JSType resolveInternal(ErrorReporter t, StaticScope<JSType> scope) {
+ setResolvedTypeInternal(this);
+
+ call = (ArrowType) safeResolve(call, t, scope);
+ prototype = (PrototypeObjectType) safeResolve(prototype, t, scope);
+
+ // Warning about typeOfThis if it doesn't resolve to an ObjectType
+ // is handled further upstream.
+ //
+ // TODO(nicksantos): Handle this correctly if we have a UnionType.
+ //
+ // TODO(nicksantos): In ES3, the runtime coerces "null" to the global
+ // activation object. In ES5
+...[truncated deterministically]...
+ementedInterfaces = resolvedInterfaces.build();
+ }
+
+ if (subTypes != null) {
+ for (int i = 0; i < subTypes.size(); i++) {
+ subTypes.set(
+ i, JSType.toMaybeFunctionType(subTypes.get(i).resolve(t, scope)));
+ }
+ }
+
+ return super.resolveInternal(t, scope);
+ }

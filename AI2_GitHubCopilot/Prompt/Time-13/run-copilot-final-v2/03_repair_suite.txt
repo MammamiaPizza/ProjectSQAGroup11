@@ -1,0 +1,199 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 13  Version: Time-13b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: 160
+Trigger failures:
+- org.joda.time.format.TestISOPeriodFormat::testFormatStandard_negative
+ --> junit.framework.ComparisonFailure: expected:<PT[-]0.008S> but was:<PT[]0.008S>
+Modified: org.joda.time.format.PeriodFormatterBuilder
+
+Available API/signatures:
+[org.joda.time.format.PeriodFormatterBuilder | java]
+package org.joda.time.format;
+public class PeriodFormatterBuilder {
+public PeriodFormatterBuilder() {
+public PeriodFormatter toFormatter() {
+public PeriodPrinter toPrinter() {
+public PeriodParser toParser() {
+public void clear() {
+public PeriodFormatterBuilder append(PeriodFormatter formatter) {
+public PeriodFormatterBuilder append(PeriodPrinter printer, PeriodParser parser) {
+public PeriodFormatterBuilder appendLiteral(String text) {
+public PeriodFormatterBuilder minimumPrintedDigits(int minDigits) {
+public PeriodFormatterBuilder maximumParsedDigits(int maxDigits) {
+public PeriodFormatterBuilder rejectSignedValues(boolean v) {
+public PeriodFormatterBuilder printZeroRarelyLast() {
+public PeriodFormatterBuilder printZeroRarelyFirst() {
+public PeriodFormatterBuilder printZeroIfSupported() {
+public PeriodFormatterBuilder printZeroAlways() {
+public PeriodFormatterBuilder printZeroNever() {
+public PeriodFormatterBuilder appendPrefix(String text) {
+private PeriodFormatterBuilder appendPrefix(PeriodFieldAffix prefix) {
+public PeriodFormatterBuilder appendYears() {
+public PeriodFormatterBuilder appendMonths() {
+public PeriodFormatterBuilder appendWeeks() {
+public PeriodFormatterBuilder appendDays() {
+public PeriodFormatterBuilder appendHours() {
+public PeriodFormatterBuilder appendMinutes() {
+public PeriodFormatterBuilder appendSeconds() {
+public PeriodFormatterBuilder appendSecondsWithMillis() {
+public PeriodFormatterBuilder appendSecondsWithOptionalMillis() {
+public PeriodFormatterBuilder appendMillis() {
+public PeriodFormatterBuilder appendMillis3Digit() {
+private void appendField(int type)
+...[truncated deterministically]...
+tr, final int position) {
+static class PluralAffix implements PeriodFieldAffix {
+static class CompositeAffix implements PeriodFieldAffix {
+static class FieldFormatter
+public int countFieldsToPrint(ReadablePeriod period, int stopAt, Locale locale) {
+public int calculatePrintedLength(ReadablePeriod period, Locale locale) {
+public void printTo(StringBuffer buf, ReadablePeriod period, Locale locale) {
+public void printTo(Writer out, ReadablePeriod period, Locale locale) throws IOException {
+private int parseInt(String text, int position, int length) {
+static class Literal
+static final Literal EMPTY = new Literal("");
+static class Separator
+static class Composite
+private void decompose(List<Object> elementPairs, List<Object> printerList, List<Object> parserList) {
+private void addArrayToList(List<Object> list, Object[] array) {
+
+Generated JUnit Test:
+package org.joda.time.format;
+
+import org.joda.time.Period;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class TestPeriodFormatterBuilderBug13 {
+
+ private PeriodFormatter isoWithMillis() {
+     return new PeriodFormatterBuilder()
+             .appendPrefix("PT")
+             .appendSecondsWithMillis()
+             .appendSuffix("S")
+             .toFormatter();
+ }
+
+ private PeriodFormatter isoWithOptionalMillis() {
+     return new PeriodFormatterBuilder()
+             .appendPrefix("PT")
+             .appendSecondsWithOptionalMillis()
+             .appendSuffix("S")
+             .toFormatter();
+ }
+
+ private PeriodFormatter simpleSeconds() {
+     return new PeriodFormatterBuilder()
+             .appendSeconds()
+             .appendSuffix("S")
+             .toFormatter();
+ }
+
+ @Test
+ public void testNegativeMillisOnly() {
+     Period p = Period.millis(-8);
+     assertEquals("PT-0.008S", isoWithMillis().print(p));
+ }
+
+ @Test
+ public void testNegativeSecondsAndMillis() {
+     Period p = Period.millis(-1008);
+     assertEquals("PT-1.008S", isoWithMillis().print(p));
+ }
+
+ @Test
+ public void testZeroPeriod() {
+     Period p = Period.ZERO;
+     assertEquals("PT0.000S", isoWithMillis().print(p));
+ }
+
+ @Test
+ public void testPositiveMillis() {
+     Period p = Period.millis(8);
+     assertEquals("PT0.008S", isoWithMillis().print(p));
+ }
+
+ @Test
+ public void testNegativeLargeSeconds() {
+     Period p = Period.seconds(-12345);
+     assertEquals("PT-12345.000S", isoWithMillis().print(p));
+ }
+
+ @Test
+ public void testNegativeOptionalMillis() {
+     Period p = Period.millis(-1);
+     assertEquals("PT-0.001S", isoWithOptionalMillis().print(p));
+ }
+
+ @Test
+ public void testNegativeSecondsOnly() {
+     Period p = Period.seconds(-5);
+     assertEquals("-5S", simpleSeconds().print(p));
+ }
+
+ @Test
+ public void testNegativeMinutesAndSeconds() {
+     PeriodFormatter f = new PeriodFormatterBuilder()
+             .appendPrefix("P")
+             .appendMinutes()
+             .appendSuffix("M")
+             .appendSeparator("T")
+             .appendSecondsWithMillis()
+             .appendSuffix("S")
+             .toFormatter();
+     Period p = Period.minutes(-2).withSeconds(-3).withMillis(-500);
+     assertEquals("P-2MT-3.500S", f.print(p));
+ }
+
+ @Test
+ public void testNegativeMillisOnlyNoPrefix() {
+     PeriodFormatter f = new PeriodFormatterBuilder()
+             .appendSecondsWithMillis()
+             .appendSuffix("s")
+             .toFormatter();
+     Period p = Period.millis(-8);
+     assertEquals("-0.008s", f.print(p));
+ }
+
+ @Test
+ public void testNegativeWithCustomPrefix() {
+     PeriodFormatter f = new PeriodFormatterBuilder()
+             .appendPrefix("Time:")
+             .appendSecondsWithMillis()
+             .appendSuffix("s")
+             .toFormatter();
+     Period p = Period.millis(-8);
+     assertEquals("Time:-0.008s", f.print(p));
+ }
+
+ @Test
+ public void testNegativeMillis3Digit() {
+     PeriodFormatter f = new PeriodFormatterBuilder()
+             .appendMillis3Digit()
+             .appendSuffix("ms")
+             .toFormatter();
+     Period p = Period.millis(-8);
+     assertEquals("-8ms", f.print(p));
+ }
+
+ @Test
+ public void testNegativeSecondsWithMillisNegativeZeroSeconds() {
+     Period p = new Period(0, 0, 0, 0, 0, 0, 0, -1);
+     assertEquals("PT-0.001S", isoWithMillis().print(p));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.joda.time.format.TestPeriodFormatterBuilderBug13::testNegativeMillis3Digit
+
+Extract test suite......................................................... OK
+Failing generated tests: org.joda.time.format.TestPeriodFormatterBuilderBug13::testNegativeMillis3Digit

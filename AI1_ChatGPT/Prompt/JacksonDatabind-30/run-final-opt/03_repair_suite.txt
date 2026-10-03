@@ -1,0 +1,145 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonDatabind  Bug: 30  Version: JacksonDatabind-30b
+JUnit: powermock-module-junit4-1.6.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 965
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TestExternalId::testBigDecimal965
+ --> junit.framework.AssertionFailedError: Expected BigDecimal = -10000000000.0000000001; got back BigDecimal = -1.0E+10
+Modified: com.fasterxml.jackson.databind.ObjectMapper, com.fasterxml.jackson.databind.util.TokenBuffer
+
+Available API/signatures:
+[com.fasterxml.jackson.databind.ObjectMapper | java]
+package com.fasterxml.jackson.databind;
+final ObjectMapper mapper = new ObjectMapper(); // can use static singleton, inject: just make sure to reuse!
+MyValue older = mapper.readValue(new File("my-older-stuff.json"), MyValue.class);
+public class ObjectMapper
+public enum DefaultTyping {
+public static class DefaultTypeResolverBuilder
+protected final DefaultTyping _appliesFor;
+public DefaultTypeResolverBuilder(DefaultTyping t) {
+@Override
+public boolean useForType(JavaType t)
+&& !TreeNode.class.isAssignableFrom(t.getRawClass()));
+return !t.isFinal() && !TreeNode.class.isAssignableFrom(t.getRawClass());
+private final static JavaType JSON_NODE_TYPE = SimpleType.constructUnsafe(JsonNode.class);
+protected final static AnnotationIntrospector DEFAULT_ANNOTATION_INTROSPECTOR = new JacksonAnnotationIntrospector();
+protected final sta
+...[truncated deterministically]...
+Object value, SerializationConfig cfg)
+private final void _writeCloseableValue(JsonGenerator g, Object value, SerializationConfig cfg)
+protected Object _readValue(DeserializationConfig cfg, JsonParser jp, JavaType valueType)
+protected Object _readMapAndClose(JsonParser jp, JavaType valueType)
+protected JsonToken _initForReading(JsonParser p) throws IOException
+protected void _verifySchemaType(FormatSchema schema)
+
+[com.fasterxml.jackson.databind.util.TokenBuffer | java]
+package com.fasterxml.jackson.databind.util;
+public class TokenBuffer
+protected final static int DEFAULT_GENERATOR_FEATURES = JsonGenerator.Feature.collectDefaults();
+protected ObjectCodec _objectCodec;
+protected int _generatorFeatures;
+protected boolean _closed;
+prot
+...[truncated deterministically]...
+protected Object _typeId;
+protected Object _objectId;
+protected boolean _hasNativeId = false;
+protected JsonWriteContext _writeContext;
+@Deprecated
+public TokenBuffer(ObjectCodec codec) {
+public TokenBuffer(ObjectCodec codec, boolean hasNativeIds)
+public TokenBuffer(JsonParser p) {
+public TokenBuffer(JsonParser p, DeserializationContext ctxt)
+@Override
+public Version version()
+...[truncated deterministically]...
+ivate void set(int index, int rawTokenType, Object value)
+private void set(int index, int rawTokenType, Object value, Object objectId, Object typeId)
+private final void assignNativeIds(int index, Object objectId, Object typeId)
+public Object findObjectId(int index) {
+public Object findTypeId(int index) {
+private final int _typeIdIndex(int i) { return i+i; }
+private final int _objectIdIndex(int i) { return i+i+1; }
+
+Generated JUnit Test:
+package com.fasterxml.jackson.databind.jsontype;
+
+import java.math.BigDecimal;
+
+import org.junit.Test;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class Bug965BigDecimalExternalTypeTest
+{
+    public static class ExternalDecimalBean {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS,
+                include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+                property = "type")
+        public Object value;
+    }
+
+    @Test
+    public void testDelayedExternalTypeIdPreservesLargeNegativeBigDecimalScale() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        BigDecimal expected = new BigDecimal("-10000000000.0000000001");
+
+        ExternalDecimalBean result = mapper.readValue(
+                "{\"value\":-10000000000.0000000001,\"type\":\"java.math.BigDecimal\"}",
+                ExternalDecimalBean.class);
+
+        assertTrue(result.value instanceof BigDecimal);
+        assertEquals(expected, result.value);
+    }
+
+    @Test
+    public void testExternalTypeIdRoundTripPreservesBigDecimalValueAndScale() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        ExternalDecimalBean input = new ExternalDecimalBean();
+        BigDecimal expected = new BigDecimal("-10000000000.0000000001");
+        input.value = expected;
+
+        String json = mapper.writeValueAsString(input);
+        ExternalDecimalBean result = mapper.readValue(json, ExternalDecimalBean.class);
+
+        assertTrue(result.value instanceof BigDecimal);
+        assertEquals(expected, result.value);
+    }
+
+    @Test
+    public void testExternalTypeIdBeforeValuePreservesPositiveDecimalScale() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        BigDecimal expected = new BigDecimal("42.00");
+
+        ExternalDecimalBean result = mapper.readValue(
+                "{\"type\":\"java.math.BigDecimal\",\"value\":42.00}",
+                ExternalDecimalBean.class);
+
+        assertTrue(result.value instanceof BigDecimal);
+        assertEquals(expected, result.value);
+    }
+
+    @Test(expected = JsonMappingException.class)
+    public void testMissingExternalTypeIdIsRejected() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        mapper.readValue("{\"value\":1.25}", ExternalDecimalBean.class);
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testDelayedExternalTypeIdPreservesLargeNegativeBigDecimalScale
+ - com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testExternalTypeIdRoundTripPreservesBigDecimalValueAndScale
+ - com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testExternalTypeIdBeforeValuePreservesPositiveDecimalScale
+Failing generated tests: com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testDelayedExternalTypeIdPreservesLargeNegativeBigDecimalScale, com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testExternalTypeIdBeforeValuePreservesPositiveDecimalScale, com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testExternalTypeIdRoundTripPreservesBigDecimalValueAndScale, com.fasterxml.jackson.databind.jsontype.Bug965BigDecimalExternalTypeTest::testMissingExternalTypeIdIsRejected

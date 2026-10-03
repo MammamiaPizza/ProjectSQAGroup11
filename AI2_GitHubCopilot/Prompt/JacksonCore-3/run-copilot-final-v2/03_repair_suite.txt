@@ -1,0 +1,277 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 3  Version: JacksonCore-3b
+JUnit: junit-4.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 111
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestLocation::testOffsetWithInputOffset
+ --> junit.framework.AssertionFailedError: expected:<0> but was:<3>
+Modified: com.fasterxml.jackson.core.json.UTF8StreamJsonParser
+
+Available API/signatures:
+[com.fasterxml.jackson.core.json.UTF8StreamJsonParser | java]
+package com.fasterxml.jackson.core.json;
+public class UTF8StreamJsonParser
+final static byte BYTE_LF = (byte) '\n';
+private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+private final static int[] _icWS = CharTypes.getInputCodeWS();
+protected ObjectCodec _objectCodec;
+final protected BytesToNameCanonicalizer _symbols;
+protected int[] _quadBuffer = new int[16];
+protected boolean _tokenIncomplete = false;
+protected InputStream _inputStream;
+protected byte[] _inputBuffer;
+protected boolean _bufferRecyclable;
+@Override
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public int releaseBuffered(OutputStream out) throws IOException
+public Object getInputSource() {
+protected final boolean loadMore()
+protected final boolean _loadToHaveAtLeast(int minAvailable)
+protected void _closeInput() throws IOException
+protected void _releaseBuffers() throws IOException
+public String getText()
+public String getValueAsString() throws IOException, JsonParseException
+public String getValueAsString(String defValue) throws IOException, JsonParseException
+protected final String _getText2(JsonToken t)
+public char[] getTextCharacters()
+public int getTextLength()
+public int getTextOffset() throws IOException, JsonParseException
+public byte[] getBinaryValue(Base64Variant b64variant)
+@SuppressWarnings("resource")
+public int readBinaryValue(Base64Variant b64variant, OutputStream out)
+public JsonLocation getTokenLocation()
+public JsonLocation getCurrentLocation()
+public JsonToken nextToken()
+private final
+...[truncated deterministically]...
+fast(int c1) throws IOException
+private final int _decodeUtf8_4(int c) throws IOException
+private final void _skipUtf8_2(int c) throws IOException
+private final void _skipUtf8_3(int c) throws IOException
+private final void _skipUtf8_4(int c) throws IOException
+protected final void _skipCR() throws IOException
+private int nextByte() throws IOException
+protected void _reportInvalidToken(String matchedPart) throws IOException
+protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
+protected void _reportInvalidChar(int c)
+protected void _reportInvalidInitial(int mask)
+protected void _reportInvalidOther(int mask)
+protected void _reportInvalidOther(int mask, int ptr)
+public static int[] growArrayBy(int[] arr, int more)
+protected final byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.json;
+
+ import static org.junit.Assert.*;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.IOException;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.core.*;
+ import com.fasterxml.jackson.core.io.IOContext;
+ import com.fasterxml.jackson.core.sym.BytesToNameCanonicalizer;
+ import com.fasterxml.jackson.core.util.BufferRecycler;
+
+ public class UTF8StreamJsonParserOffsetBugTest extends com.fasterxml.jackson.core.BaseTest {
+
+     private byte[] buf;
+     private int bufLen;
+     private IOContext ioContext;
+     private BytesToNameCanonicalizer symbols;
+
+     @Before
+     public void setUp() {
+         buf = new byte[128];
+         bufLen = 0;
+         ioContext = new IOContext(new BufferRecycler(), null, false);
+         symbols = BytesToNameCanonicalizer.createRoot();
+     }
+
+     private void writeBytes(String str) throws IOException {
+         byte[] b = str.getBytes("UTF-8");
+         System.arraycopy(b, 0, buf, bufLen, b.length);
+         bufLen += b.length;
+     }
+
+     private UTF8StreamJsonParser createParser(int offset) {
+         // offset: how many leading padding bytes before the actual JSON content
+         return new UTF8StreamJsonParser(ioContext, 0,
+                 new ByteArrayInputStream(buf, offset, bufLen - offset),
+                 null, symbols.makeChild(JsonFactory.Feature.collectDefaults()),
+                 buf, offset, bufLen, false);
+     }
+
+     @Test
+     public void testFirstTokenOffsetZeroWithImplicitInputOffset() throws Exception {
+         writeBytes("42");
+         UTF8StreamJsonParser p = createParser(0); // input starts at buffer byte 0
+         assertNull(p.nextToken()); // should be VALUE_NUMBER_INT, but check via nextToken
+         JsonLocation loc = p.getCurrentLocation();
+         assertEquals("Token byte offset with zero input offset", 0, loc.getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testFirstTokenOffsetWithExplicitInputOffset() throws Exception {
+         writeBytes("   true");
+         UTF8StreamJsonParser p = createParser(3); // input starts at buffer byte 3, JSON is "true"
+         // This is the scenario from TestLocation.testOffsetWithInputOffset
+         assertNull(p.nextToken());
+         JsonLocation loc = p.getCurrentLocation();
+         assertEquals("Token byte offset with 3-byte input offset", 0, loc.getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testTokenOffsetAfterLeadingWhitespace() throws Exception {
+         writeBytes("\n\n  [1]");
+         UTF8StreamJsonParser p = createParser(0);
+         assertNull(p.nextToken()); // START_ARRAY
+         JsonLocation loc = p.getCurrentLocation();
+         assertEquals("Token byte offset after newlines and spaces", 4, loc.getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testTokenOffsetAfterLeadingWhitespaceWithInputOffset() throws Exception {
+         writeBytes("  \n  [1]");
+         UTF8StreamJsonParser p = createParser(1); // skip the first byte
+         assertNull(p.nextToken()); // START_ARRAY
+         JsonLocation loc = p.getCurrentLocation();
+         // input offset = 1, leading bytes seen = 3 (space, newline, space, space)
+         assertEquals("Token byte offset after leading WS with input offset", 3,
+loc.getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testTokenLocationContentAfterInputOffset() throws Exception {
+         writeBytes("null");
+         UTF8StreamJsonParser p = createParser(0);
+         assertNull(p.nextToken());
+         JsonLocation tokenLoc = p.getTokenLocation();
+         assertEquals("getTokenLocation byte offset for first token", 0, tokenLoc.getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testCurrentLocationBeforeAnyToken() throws Exception {
+         writeBytes("42");
+         UTF8StreamJsonParser p = createParser(0);
+         JsonLocation loc = p.getCurrentLocation();
+         // Before nextToken() the parser is at start; byte offset should be 0
+         assertEquals("Pre-token current location byte offset", 0, loc.getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testGetTextOffsetMatchesTokenStart() throws Exception {
+         writeBytes("true");
+         UTF8StreamJsonParser p = createParser(0);
+         assertNull(p.nextToken());
+         assertEquals("getTextOffset == getTokenLocation byte offset",
+p.getTokenLocation().getByteOffset(), (long) p.getTextOffset());
+         p.close();
+     }
+
+     @Test
+     public void testGetTextOffsetMatchesTokenStartWithInputOffset() throws Exception {
+         writeBytes("-123");
+         UTF8StreamJsonParser p = createParser(2);
+         assertNull(p.nextToken());
+         assertEquals("getTextOffset == getTokenLocation byte offset with input offset",
+                 p.getTokenLocation().getByteOffset(), (long) p.getTextOffset());
+         p.close();
+     }
+
+     @Test
+     public void testMultipleTokensOffsetsProgression() throws Exception {
+         writeBytes("{\"a\":1}");
+         UTF8StreamJsonParser p = createParser(0);
+         // START_OBJECT
+         assertNull(p.nextToken());
+         assertEquals("START_OBJECT byte offset", 0, p.getCurrentLocation().getByteOffset());
+         // FIELD_NAME
+         assertNull(p.nextToken());
+         assertEquals("FIELD_NAME byte offset", 1, p.getCurrentLocation().getByteOffset());
+         // VALUE_NUMBER_INT
+         assertNull(p.nextToken());
+         assertEquals("VALUE_NUMBER_INT byte offset", 5, p.getCurrentLocation().getByteOffset());
+         // END_OBJECT
+         assertNull(p.nextToken());
+         assertEquals("END_OBJECT byte offset", 6, p.getCurrentLocation().getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testMultipleTokensOffsetsProgressionWithInputOffset() throws Exception {
+         writeBytes("{\"b\":false}");
+         UTF8StreamJsonParser p = createParser(2);
+         // START_OBJECT
+         assertNull(p.nextToken());
+         assertEquals("START_OBJECT byte offset with offset", 0,
+p.getCurrentLocation().getByteOffset());
+         // FIELD_NAME
+         assertNull(p.nextToken());
+         assertEquals("FIELD_NAME byte offset with offset", 1,
+p.getCurrentLocation().getByteOffset());
+         // VALUE_FALSE
+         assertNull(p.nextToken());
+         assertEquals("VALUE_FALSE byte offset with offset", 5,
+p.getCurrentLocation().getByteOffset());
+         // END_OBJECT
+         assertNull(p.nextToken());
+         assertEquals("END_OBJECT byte offset with offset", 10,
+p.getCurrentLocation().getByteOffset());
+         p.close();
+     }
+
+     @Test
+     public void testOffsetAtBufferBoundaryWithInputOffset() throws Exception {
+         // Construct a buffer where JSON starts exactly at the specified offset
+         int startOffset = 5;
+         byte[] data = new byte[startOffset + 10];
+         String json = "[42]";
+         byte[] jsonBytes = json.getBytes("UTF-8");
+         System.arraycopy(jsonBytes, 0, data, startOffset, jsonBytes.length);
+         // Use buffer from 'startOffset' to end
+         UTF8StreamJsonParser p = new UTF8StreamJsonParser(
+                 new IOContext(new BufferRecycler(), null, false), 0,
+                 new ByteArrayInputStream(data, startOffset, jsonBytes.length),
+                 null, symbols.makeChild(JsonFactory.Feature.collectDefaults()),
+                 data, startOffset, startOffset + jsonBytes.length, false);
+         assertNull(p.nextToken()); // START_ARRAY
+         assertEquals(0, p.getCurrentLocation().getByteOffset());
+         p.close();
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonCore-3f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonCore-3f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonCore-3f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonCore-3f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonCore-3f-copilot/.test_suite/com/fasterxml/jackson/core/json/UTF8StreamJsonParserOffsetBugTest.java:16: error: cannot find symbol
+ [javac] public class UTF8StreamJsonParserOffsetBugTest extends com.fasterxml.jackson.core.BaseTest {
+ [javac] ^
+ [javac] symbol: class BaseTest
+ [javac] location: package com.fasterxml.jackson.core
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 44 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

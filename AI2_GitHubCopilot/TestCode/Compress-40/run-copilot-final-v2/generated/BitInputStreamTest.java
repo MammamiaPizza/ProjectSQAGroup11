@@ -1,0 +1,132 @@
+package org.apache.commons.compress.utils;
+
+import static org.junit.Assert.*;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.ByteOrder;
+import org.junit.Test;
+
+public class BitInputStreamTest {
+
+ @Test
+ public void testReadBitsZero() throws IOException {
+     final byte[] input = new byte[] { (byte) 0xFF };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     assertEquals(0, bis.readBits(0));
+     bis.close();
+ }
+
+ @Test(expected = IllegalArgumentException.class)
+ public void testReadBitsNegativeThrows() throws IOException {
+     final byte[] input = new byte[1];
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     try {
+         bis.readBits(-1);
+     } finally {
+         bis.close();
+     }
+ }
+
+ @Test(expected = IllegalArgumentException.class)
+ public void testReadBitsTooLargeThrows() throws IOException {
+     final byte[] input = new byte[1];
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     try {
+         bis.readBits(64);
+     } finally {
+         bis.close();
+     }
+ }
+
+ @Test
+ public void testReadBitsSingleByteLittleEndian() throws IOException {
+     final byte[] input = new byte[] { (byte) 0xAB };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     assertEquals(0xAB, bis.readBits(8));
+     bis.close();
+ }
+
+ @Test
+ public void testReadBitsSingleByteBigEndian() throws IOException {
+     final byte[] input = new byte[] { (byte) 0xAB };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.BIG_ENDIAN);
+     assertEquals(0xAB, bis.readBits(8));
+     bis.close();
+ }
+
+ @Test
+ public void testReadBitsAcrossByteBoundaryLittleEndian() throws IOException {
+     final byte[] input = new byte[] { (byte) 0x12, (byte) 0x34 };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     assertEquals(0x412, bis.readBits(12));
+     bis.close();
+ }
+
+ @Test
+ public void testReadBitsAcrossByteBoundaryBigEndian() throws IOException {
+     final byte[] input = new byte[] { (byte) 0x12, (byte) 0x34 };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.BIG_ENDIAN);
+     assertEquals(0x123, bis.readBits(12));
+     bis.close();
+ }
+
+ @Test
+ public void testEndOfStreamReturnsMinusOne() throws IOException {
+     final byte[] input = new byte[] { (byte) 0x01 };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     bis.readBits(8);
+     assertEquals(-1, bis.readBits(1));
+     bis.close();
+ }
+
+ @Test
+ public void testClearBitCache() throws IOException {
+     final byte[] input = new byte[] { (byte) 0x12, (byte) 0x34 };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     bis.readBits(4);
+     bis.clearBitCache();
+     assertEquals(0x34, bis.readBits(8));
+     bis.close();
+ }
+
+ @Test
+ public void testLittleEndianWithOverflow() throws IOException {
+     final byte[] input = new byte[] { (byte) 0xA2, (byte) 0x04 };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     assertEquals(1186, bis.readBits(11));
+     bis.close();
+ }
+
+ @Test
+ public void testBigEndianWithOverflow() throws IOException {
+     final byte[] input = new byte[] {
+         (byte) 0x72, (byte) 0xD2, (byte) 0xC5, (byte) 0xB8,
+         (byte) 0xC4, (byte) 0x2F, (byte) 0x9D, (byte) 0x72
+     };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.BIG_ENDIAN);
+     assertEquals(8274274654740644818L, bis.readBits(63));
+     bis.close();
+ }
+
+ @Test
+ public void testReadBitsMax63LittleEndian() throws IOException {
+     final byte[] input = new byte[] { 0, 0, 0, 0, 0, 0, 0, (byte) 0xFF };
+     final BitInputStream bis = new BitInputStream(new ByteArrayInputStream(input),
+ByteOrder.LITTLE_ENDIAN);
+     long expected = 0x7F00000000000000L;
+     assertEquals(expected, bis.readBits(63));
+     bis.close();
+ }
+
+}

@@ -1,0 +1,390 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 50  Version: JacksonDatabind-50b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.BeanDeserializer
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializer
+Triggers: com.fasterxml.jackson.databind.objectid.ObjectWithCreator1261Test::testObjectIds1261
+
+Bug/specification summary:
+Bug report: 1261
+Trigger failures:
+- com.fasterxml.jackson.databind.objectid.ObjectWithCreator1261Test::testObjectIds1261
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not deserialize instance of com.fasterxml.jackson.databind.objectid.ObjectWithCreator1261Test$Child out of START_ARRAY token
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializer
+
+Prompt-01 test plan:
+TARGETS: BeanDeserializer._deserializeUsingPropertyBased handling of ObjectId+creator+START_ARRAY
+token.
+TARGETS: BeanDeserializer.deserialize, deserializeFromObject, withObjectIdReader for ObjectId
+resolution path.
+ORACLES: Existing testObjectIds1261 expects successful deserialization of Child with
+@JsonCreator+ObjectId from array.
+ORACLES: Jackson spec: @JsonIdentityInfo with @JsonCreator should support array-based creators for
+ObjectId references.
+CASES: START_ARRAY for ObjectId with property-based creator (trigger); START_OBJECT normal case;
+missing @id property.
+CASES: Array token with no ObjectId reference; duplicate ObjectId; null id; combined with unwrapping
+or external type id.
+RISKS: Cannot see bug fix patch; root cause may span multiple methods beyond
+_deserializeUsingPropertyBased.
+RISKS: Limited to supplied API signatures; dynamic proxy/managed-ref resolution behavior internal to
+Jackson not visible.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.BeanDeserializer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializer
+protected transient Exception _nullFromCreator;
+protected BeanDeserializer(BeanDeserializerBase src) {
+protected BeanDeserializer(BeanDeserializerBase src, boolean ignoreAllUnknown) {
+protected BeanDeserializer(BeanDeserializerBase src, NameTransformer unwrapper) {
+public BeanDeserializer(BeanDeserializerBase src, ObjectIdReader oir) {
+public BeanDeserializer(BeanDeserializerBase src, Set<String> ignorableProps) {
+public BeanDeserializer(BeanDeserializerBase src, BeanPropertyMap props) {
+@Override
+public JsonDeserializer<Object> unwrappingDeserializer(NameTransformer unwrapper)
+if (getClass() != BeanDeserializer.class) {
+public BeanDeserializer withObjectIdReader(ObjectIdReader oir) {
+public BeanDeserializer withIgnorableProperties(Set<String> ignorableProps) {
+public BeanDeserializerBase withBeanProperties(BeanPropertyMap props) {
+protected BeanDeserializerBase asArrayDeserializer() {
+public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+@Deprecated // since 2.8; remove unless getting used
+protected Object _missingToken(JsonParser p, DeserializationContext ctxt) throws IOException {
+public Object deserialize(JsonParser p, DeserializationContext ctxt, Object bean) throws IOException
+final Object bean = _valueInstantiator.createUsingDefault(ctxt);
+public Object deserializeFromObject(JsonParser p, DeserializationContext ctxt) throws IOException
+@SuppressWarnings("resource")
+protected Object _deserializeUsingPropertyBased(final JsonParser p, final DeserializationContext ctxt)
+protected Object deserializeFromNull(JsonParser p, DeserializationContext ctxt)
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+protected Object deserializeWithUnwrapped(JsonParser p, DeserializationContext ctxt, Object bean)
+protected Object deserializeUsingPropertyBasedWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+protected Object deserializeWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+protected Object deserializeUsingPropertyBasedWithExternalTypeId(JsonParser p, DeserializationContext ctxt)
+protected Exception _creatorReturnedNullException() {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser;
+import java.io.IOException;
+import java.util.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.impl.*;
+import com.fasterxml.jackson.databind.util.NameTransformer;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+public class BeanDeserializer
+
+/* METHOD BeanDeserializer */
+public BeanDeserializer(BeanDeserializerBuilder builder, BeanDescription beanDesc,
+ BeanPropertyMap properties, Map<String, SettableBeanProperty> backRefs,
+ HashSet<String> ignorableProps, boolean ignoreAllUnknown,
+ boolean hasViews)
+ {
+ super(builder, beanDesc, properties, backRefs,
+ ignorableProps, ignoreAllUnknown, hasViews);
+ }
+
+/* METHOD BeanDeserializer */
+public BeanDeserializer(BeanDeserializerBase src, ObjectIdReader oir) {
+ super(src, oir);
+ }
+
+/* METHOD deserialize */
+@Override
+ public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+ {
+ // common case first
+ if (p.isExpectedStartObjectToken()) {
+ if (_vanillaProcessing) {
+ return vanillaDeserialize(p, ctxt, p.nextToken());
+ }
+ // 23-Sep-2015, tatu: This is wrong at some many levels, but for now... it is
+ // what it is, including "expected behavior".
+ p.nextToken();
+ if (_objectIdReader != null) {
+ return deserializeWithObjectId(p, ctxt);
+ }
+ return deserializeFromObject(p, ctxt);
+ }
+ return _deserializeOther(p, ctxt, p.getCurrentToken());
+ }
+
+/* METHOD deserialize */
+@Override
+ public Object deserialize(JsonParser p, DeserializationContext ctxt, Object bean) throws IOException
+ {
+ // [databind#631]: Assign current value, to be accessible by custom serializers
+ p.setCurrentValue(bean);
+ if (_injectables != null) {
+ injectValues(ctxt, bean);
+ }
+ if (_unwrappedPropertyHandler != null) {
+ return deserializeWithUnwrapped(p, ctxt, bean);
+ }
+ if (_externalTypeIdHandler != null) {
+ return deserializeWithExternalTypeId(p, ctxt, bean);
+ }
+ String propName;
+
+ // 23-Mar-2010, tatu: In some cases, we start with full JSON object too...
+ if (p.isExpectedStartObjectToken()) {
+ propName = p.nextFieldName();
+ if (propName == null) {
+ return bean;
+ }
+ } else {
+ if (p.hasTokenId(JsonTokenId.ID_FIELD_NAME)) {
+ propName = p.getCurrentName();
+ } else {
+ return bean;
+ }
+ }
+ if (_needViewProcesing) {
+ Class<?> view = ctxt.getActiveView();
+ if (view != null) {
+ return deserializeWithView(p, ctxt, bean, view);
+ }
+ }
+ do {
+ p.nextToken();
+ SettableBeanProperty prop = _beanProperties.find(propName);
+
+ if (prop != null) { // normal case
+ try {
+ prop.deserializeAndSet(p, ctxt, bean);
+ } catch (Exception e) {
+ wrapAndThrow(e, bean, propName, ctxt);
+ }
+ continue;
+ }
+ handleUnknownVanilla(p, ctxt, bean, propName);
+ } while ((propName = p.nextFieldName()) != null);
+ return bean;
+ }
+
+/* METHOD BeanDeserializer */
+protected BeanDeserializer(BeanDeserializerBase src) {
+ super(src, src._ignoreAllUnknown);
+ }
+
+/* METHOD BeanDeserializer */
+protected BeanDeserializer(BeanDeserializerBase src, boolean ignoreAllUnknown) {
+ super(src, ignoreAllUnknown);
+ }
+
+/* METHOD BeanDeserializer */
+protected BeanDeserializer(BeanDeserializerBase src, NameTransformer unwrapper) {
+ super(src, unwrapper);
+ }
+
+/* METHOD BeanDeserializer */
+public BeanDeserializer(BeanDeserializerBase src, Set<String> ignorableProps) {
+ super(src, ignorableProps);
+ }
+
+/* METHOD BeanDeserializer */
+public BeanDeserializer(BeanDeserializerBase src, BeanPropertyMap props) {
+ super(src, props);
+ }
+
+/* METHOD _deserializeOther */
+protected final Object _deserializeOther(JsonParser p, DeserializationContext ctxt,
+ JsonToken t) throws IOException
+ {
+ // and then others, generally requiring use of @JsonCreator
+ switch (t) {
+ case VALUE_STRING:
+ return deserializeFromString(p, ctxt);
+ case VALUE_NUMBER_INT:
+ return deserializeFromNumber(p, ctxt);
+ case VALUE_NUMBER_FLOAT:
+ return deserializeFromDouble(p, ctxt);
+ case VALUE_EMBEDDED_OBJECT:
+ return deserializeFromEmbedded(p, ctxt);
+ case VALUE_TRUE:
+ case VALUE_FALSE:
+ return deserializeFromBoolean(p, ctxt);
+
+ case VALUE_NULL:
+ return deserializeFromNull(p, ctxt);
+ case START_ARRAY:
+ // these only work if there's a (delegating) creator...
+ return deserializeFromArray(p, ctxt);
+ case FIELD_NAME:
+ case END_OBJECT: // added to resolve [JACKSON-319], possible related issues
+ if (_vanillaProcessing) {
+ return vanillaDeserialize(p, ctxt, t);
+ }
+ if (_objectIdReader != null) {
+ return deserializeWithObjectId(p, ctxt);
+ }
+ return deserializeFromObject(p, ctxt);
+ default:
+ }
+ return ctxt.handleUnexpectedToken(handledType(), p);
+ }
+
+ @Deprecated // since 2.8; remove unless getting used
+ protected Object _missingToken(JsonParser p, DeserializationContext ctxt) throws IOException {
+ throw ctxt.endOfInputException(handledType());
+ }
+
+ /**
+ * Secondary deserialization method, called in cases where POJO
+ * instance is created as part of deserialization, potentially
+ * after collecting some or all of the properties to set.
+ */
+ @Override
+ public Object deserialize(JsonParser p, DeserializationContext ctxt, Object bean) throws IOException
+ {
+ // [databind#631]: Assign current value, to be accessible by custom serializers
+ p.setCurrentValue(bean);
+ if (_injectables != null) {
+ injectValues(ctxt, bean);
+ }
+ if (_unwrappedPropertyHandler != null) {
+ return deserializeWithUnwrapped(p, ctxt, bean);
+ }
+ if (_externalTypeIdHandler != null) {
+ return deserializeWithExternalTypeId(p, ctxt, bean);
+ }
+ String propName;
+
+ // 23-Mar-2010, tatu: In some cases, we start with full JSON object too...
+ if
+...[truncated deterministically]...
+ropName = p.getCurrentName();
+ } else {
+ return bean;
+ }
+ }
+ if (_needViewProcesing) {
+ Class<?> view = ctxt.getActiveView();
+ if (view != null) {
+ return deserializeWithView(p, ctxt, bean, view);
+ }
+ }
+ do {
+ p.nextToken();
+ SettableBeanProperty prop = _beanProperties.find(propName);
+
+ if (prop != null) { // normal case
+ try {
+ prop.deserializeAndSet(p, ctxt, bean);
+ } catch (Exception e) {
+ wrapAndThrow(e, bean, propName, ctxt);
+ }
+ continue;
+ }
+ handleUnknownVanilla(p, ctxt, bean, propName);
+ } while ((propName = p.nextFieldName()) != null);
+ return bean;
+ }
+
+ /*
+ /**********************************************************
+ /* Concrete deserialization methods
+ /**********************************************************
+ */
+
+ /**
+ * Streamlined version that is only used when no "special"
+ * features are enabled.
+ */
+ private final Object vanillaDeserialize(JsonParser p,
+ DeserializationContext ctxt, JsonToken t)
+ throws IOException
+ {
+ final Object bean = _valueInstantiator.createUsingDefault(ctxt);
+ // [databind#631]: Assign current value, to be accessible by custom serializers
+ p.setCurrentValue(bean);
+ if (p.hasToken
+...[truncated deterministically]...
+rnings("resource")
+ protected Object deserializeUsingPropertyBasedWithUnwrapped(JsonParser p, DeserializationContext ctxt)
+ throws IOException
+ {
+ final PropertyBasedCreator creator = _propertyBasedCreator;
+ PropertyValueBuffer buffer = creator.startBuilding(p, ctxt, _objectIdReader);
+
+ TokenBuffer tokens = new TokenBuffer(p, ctxt);
+ tokens.writeStartObject();
+
+ JsonToken t = p.getCurrentToken();
+ for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+ String propName = p.getCurrentName();
+ p.nextToken(); // to point to value
+ // creator property?
+ SettableBeanProperty creatorProp = creator.findCreatorProperty(propName);
+ if (creatorProp != null) {
+ // Last creator property to set?
+ if (buffer.assignParameter(creatorProp, _deserializeWithErrorWrapping(p, ctxt, creatorProp))) {
+ t = p.nextToken(); // to move to following FIELD_NAME/END_OBJECT
+ Object bean;
+ try {
+ bean = creator.build(ctxt, buffer);
+ } catch (Exception e) {
+ bean = wrapInstantiationProblem(e, ctxt);
+ }
+ // [databind#631]: Assign current value, to be accessible by custom serializers
+ p.setCurrentValue(bean);
+ // if so, need to copy all remaining tokens into buffer
+ while (t == JsonToken.FIELD_NAME) {
+ p.nextToken(); // to skip name
+ tokens.copyCurrentStructure(p);
+ t = p.nextToken();
+ }
+ tokens.writeEndObject();
+ if (bean.getClass() != _beanType.getRawClass()) {
+ // !!! 08-Jul-2011, tatu: Could probably support; but for now
+ // it's too complicated, so bail out
+ tokens.close();
+ ctxt.reportMappingException("Can not create polymorphic instances with unwrapped values");
+ return null;
+ }
+ return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens);
+ }
+ continue;
+ }
+
+/* METHOD deserializeFromObject */
+@Override
+ public Object deserializeFromObject(JsonParser p, DeserializationContext ctxt) throws IOException
+ {
+ /* 09-Dec-2014, tatu: As per [#622], we need to allow Object Id references
+ * to come in as JSON Objects as well; but for now assume they will
+ * be simple, single-property references, which means that we can
+ * recognize them without having to buffer anything.
+ * Once again, if we must, we can do more complex handling with buffering,
+ * but let's only do that if and when that becomes necessary.
+ */
+ if (_objectIdReader != null && _objectIdReader.maySerializeAsObject()) {
+ if (p.hasTokenId(JsonTokenId.ID_FIELD_NAME)
+ && _objectIdReader.isValidReferencePropertyName(p.getCurrentName(), p)) {
+ return dese
+...[truncated deterministically]...
+txt, bean);
+ }
+ /* 27-May-2014, tatu: I don't think view processing would work
+ * at this point, so commenting it out; but leaving in place
+ * just in case I forgot something fundamental...
+ */
+ /*
+ if (_needViewProcesing) {
+ Class<?> view = ctxt.getActiveView();
+ if (view != null) {
+ return deserializeWithView(p, ctxt, bean, view);
+ }
+ }
+ */
+ return bean;
+ }

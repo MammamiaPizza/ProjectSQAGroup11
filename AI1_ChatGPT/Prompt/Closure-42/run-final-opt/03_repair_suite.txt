@@ -1,0 +1,168 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 42  Version: Closure-42b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 644
+Trigger failures:
+- com.google.javascript.jscomp.parsing.ParserTest::testForEach
+ --> junit.framework.AssertionFailedError
+Modified: com.google.javascript.jscomp.parsing.IRFactory
+
+Available API/signatures:
+[com.google.javascript.jscomp.parsing.IRFactory | java]
+package com.google.javascript.jscomp.parsing;
+class IRFactory {
+private final Set<String> ALLOWED_DIRECTIVES = Sets.newHashSet("use strict");
+"class", "const", "enum", "export", "extends", "import", "super");
+"class", "const", "enum", "export", "extends", "import", "super",
+"implements", "interface", "let", "package", "private", "protected",
+"public", "static", "yield");
+private final Set<Comment> parsedComments = Sets.newHashSet();
+private Node createTemplateNode() {
+private void setFileOverviewJsDoc(Node irNode) {
+private Node transformBlock(AstNode node) {
+private void handleBlockComment(Comment comment) {
+private void handlePossibleFileOverviewJsDoc(Comment comment, Node irNode) {
+private JSDocInfo handleJsDoc(AstNode node, Node irNode) {
+private Node transform(AstNode node) {
+private Node transformNameAsString(Name node) {
+private Node transformNumberAsString(NumberLiteral literalNode) {
+private static String getStringValue(double value) {
+private void setSourceInfo(Node irNode, AstNode node) {
+private JsDocInfoParser createJsDocInfoParser(Comment node, Node irNode) {
+private void maybeSetLengthFrom(Node node, AstNode source) {
+private int position2charno(int position) {
+private Node justTransform(AstNode node) {
+private class TransformDispatcher extends TypeSafeDispatcher<Node> {
+private Node transformAsString(AstNode n) {
+@Override
+private void parseDirectives(Node node) {
+private boolean isDirective(Node n) {
+private boolean isReservedKeyword(String identifier) {
+private boolean validAssignmentTarget(Node target) {
+private static int transformTokenType(int token) {
+private Node newNode(int type) {
+private Node newNode(int type, Node child1) {
+private Node newNode(int type, Node child1, Node child2) {
+private Node newNode(int type, Node child1, Node child2, Node child3) {
+private Node newStringNode(String value) {
+private Node newStringNode(int type, String value) {
+private Node newNumberNode(Double value) {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp.parsing;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import org.junit.Test;
+
+public class IRFactoryForEachTest {
+
+  private Node parse(String source) {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    Node script = compiler.parseSyntheticCode(source);
+    assertNotNull(script);
+    return script;
+  }
+
+  private Node onlyStatement(Node script) {
+    assertEquals(1, script.getChildCount());
+    Node statement = script.getFirstChild();
+    assertNotNull(statement);
+    return statement;
+  }
+
+  @Test
+  public void testForEachWithVarDeclarationPreservesForEachMarkerAndIterator() {
+    Node loop = onlyStatement(parse("for each (var item in values) item;"));
+
+    assertEquals(Token.FOR_IN, loop.getType());
+    assertTrue(loop.getBooleanProp(Node.IS_FOR_EACH));
+
+    Node iterator = loop.getFirstChild();
+    assertEquals(Token.VAR, iterator.getType());
+    assertEquals(1, iterator.getChildCount());
+    assertEquals(Token.NAME, iterator.getFirstChild().getType());
+    assertEquals("item", iterator.getFirstChild().getString());
+
+    Node iterable = iterator.getNext();
+    assertEquals(Token.NAME, iterable.getType());
+    assertEquals("values", iterable.getString());
+  }
+
+  @Test
+  public void testForEachWithAssignmentTargetPreservesTargetAndMarker() {
+    Node loop = onlyStatement(parse("for each (item in values) item;"));
+
+    assertEquals(Token.FOR_IN, loop.getType());
+    assertTrue(loop.getBooleanProp(Node.IS_FOR_EACH));
+
+    Node iterator = loop.getFirstChild();
+    assertEquals(Token.NAME, iterator.getType());
+    assertEquals("item", iterator.getString());
+
+    Node iterable = iterator.getNext();
+    assertEquals(Token.NAME, iterable.getType());
+    assertEquals("values", iterable.getString());
+  }
+
+  @Test
+  public void testOrdinaryForInIsNotMarkedAsForEach() {
+    Node loop = onlyStatement(parse("for (var item in values) item;"));
+
+    assertEquals(Token.FOR_IN, loop.getType());
+    assertFalse(loop.getBooleanProp(Node.IS_FOR_EACH));
+
+    Node iterator = loop.getFirstChild();
+    assertEquals(Token.VAR, iterator.getType());
+    assertEquals("item", iterator.getFirstChild().getString());
+  }
+
+  @Test
+  public void testForEachWithPropertyAssignmentTargetKeepsPropertyAccess() {
+    Node loop = onlyStatement(parse("for each (holder.item in values) holder.item;"));
+
+    assertEquals(Token.FOR_IN, loop.getType());
+    assertTrue(loop.getBooleanProp(Node.IS_FOR_EACH));
+
+    Node iterator = loop.getFirstChild();
+    assertEquals(Token.GETPROP, iterator.getType());
+    assertEquals(Token.NAME, iterator.getFirstChild().getType());
+    assertEquals("holder", iterator.getFirstChild().getString());
+    assertEquals(Token.STRING, iterator.getFirstChild().getNext().getType());
+    assertEquals("item", iterator.getFirstChild().getNext().getString());
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Closure-42f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Closure-42f-ai -Dd4j.test.dir=/root/sqa-workspaces/Closure-42f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+ [javac] /root/sqa-workspaces/Closure-42f-ai/.test_suite/com/google/javascript/jscomp/parsing/IRFactoryForEachTest.java:19: error: method parseSyntheticCode in class Compiler cannot be applied to given types;
+ [javac] Node script = compiler.parseSyntheticCode(source);
+ [javac] ^
+ [javac] required: String,String
+ [javac] found: String
+ [javac] reason: actual and formal argument lists differ in length
+ [javac] 1 error
+ [javac] 4 warnings
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 31 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

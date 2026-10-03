@@ -1,0 +1,122 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 26  Version: Closure-26b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 732
+Trigger failures:
+- com.google.javascript.jscomp.CommandLineRunnerTest::testTransformAMDAndProcessCJS
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.CommandLineRunnerTest::testProcessCJS
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.ProcessCommonJSModulesTest::testExports
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.ProcessCommonJSModulesTest::testModuleName
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.ProcessCommonJSModulesTest::testDash
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.ProcessCommonJSModulesTest::testVarRenaming
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.ProcessCommonJSModulesTest::testWithoutExports
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.ProcessCommonJSModules
+
+Available API/signatures:
+[com.google.javascript.jscomp.ProcessCommonJSModules | java]
+package com.google.javascript.jscomp;
+public class ProcessCommonJSModules implements CompilerPass {
+public static final String DEFAULT_FILENAME_PREFIX = "." + File.separator;
+@Override
+public void process(Node externs, Node root) {
+public static String toModuleName(String filename) {
+private String normalizeSourceName(String filename) {
+private class ProcessCommonJsModulesCallback extends
+public void visit(NodeTraversal t, Node n, Node parent) {
+private void visitRequireCall(NodeTraversal t, Node require, Node parent) {
+private void visitScript(NodeTraversal t, Node script) {
+private void visitModuleExports(Node prop) {
+private Node getCurrentScriptNode(Node n) {
+private class SuffixVarsCallback extends AbstractPostOrderCallback {
+
+Generated JUnit Test:
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.javascript.rhino.Node;
+
+import java.io.File;
+
+public class ProcessCommonJSModulesBug732Test {
+
+  // ---- Tests for static toModuleName(String) ----
+
+  @Test public void testToModuleNameBasic() {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("foo.js"));
+    assertEquals("module$foo$bar", ProcessCommonJSModules.toModuleName("foo/bar.js")); }
+
+  @Test public void testToModuleNameDash() {
+    assertEquals("module$foo_bar", ProcessCommonJSModules.toModuleName("foo-bar.js")); }
+
+  @Test public void testToModuleNameLeadingDotSlash() {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("./foo.js")); }
+
+  @Test public void testToModuleNameTrailingJsOnly() {
+    assertEquals("module$foo.js_bar", ProcessCommonJSModules.toModuleName("foo.js/bar.js")); }
+
+  @Test public void testToModuleNameEmpty() {
+    assertEquals("module$", ProcessCommonJSModules.toModuleName("")); }
+
+  @Test(expected = NullPointerException.class) public void testToModuleNameNull() {
+    ProcessCommonJSModules.toModuleName(null); }
+
+  // ---- Tests for static toModuleName(required, current) ----
+
+  @Test public void testToModuleNameRelativeSameDir() {
+    assertEquals("module$foo$bar",
+        ProcessCommonJSModules.toModuleName("./bar.js", "foo/foo.js")); }
+
+  @Test public void testToModuleNameRelativeParentDir() {
+    assertEquals("module$bar",
+        ProcessCommonJSModules.toModuleName("../bar.js", "foo/foo.js")); }
+
+  @Test public void testToModuleNameAbsolutePath() {
+    assertEquals("module$bar",
+        ProcessCommonJSModules.toModuleName("/bar.js", "foo/foo.js")); }
+
+  @Test public void testToModuleNameComplexRelative() {
+    assertEquals("module$src$common$util",
+        ProcessCommonJSModules.toModuleName("../../common/util", "src/client/app/app.js")); }
+
+  // ---- Integration tests via pass processing ----
+
+  @Test public void testSuffixVarsRenamesExports() throws Exception {
+    String result = compile("exports = {};");
+    assertTrue(result, result.contains("module$test"));
+    assertFalse(result, result.contains("exports")); }
+
+  @Test public void testRequireCallRewritten() throws Exception {
+    String result = compile("var foo = require('./bar');");
+    assertTrue(result, result.contains("goog.require('module$bar')"));
+    assertTrue(result, result.contains("module$bar")); }
+
+  private String compile(String source) throws Exception {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    compiler.parse(SourceFile.fromCode("test.js", source));
+    ProcessCommonJSModules pass = new ProcessCommonJSModules(compiler, ".");
+    pass.process(null, compiler.getRoot());
+    return compiler.toSource(); }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 4
+ - com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testSuffixVarsRenamesExports
+ - com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testRequireCallRewritten
+ - com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testToModuleNameAbsolutePath
+Failing generated tests: com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testRequireCallRewritten, com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testSuffixVarsRenamesExports, com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testToModuleNameAbsolutePath, com.google.javascript.jscomp.ProcessCommonJSModulesBug732Test::testToModuleNameTrailingJsOnly

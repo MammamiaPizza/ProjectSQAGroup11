@@ -1,0 +1,347 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 53  Version: JacksonDatabind-53b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.type.TypeBindings, com.fasterxml.jackson.databind.type.TypeFactory
+Modified: com.fasterxml.jackson.databind.type.TypeBindings, com.fasterxml.jackson.databind.type.TypeFactory
+Triggers: com.fasterxml.jackson.databind.jsontype.TypeRefinementForMap1215Test::testMapRefinement
+
+Bug/specification summary:
+Bug report: 1215
+Trigger failures:
+- com.fasterxml.jackson.databind.jsontype.TypeRefinementForMap1215Test::testMapRefinement
+ --> com.fasterxml.jackson.databind.JsonMappingException: Can not construct instance of com.fasterxml.jackson.databind.jsontype.TypeRefinementForMap1215Test$HasUniqueId, problem: abstract types either need to be mapped to concrete types, have custom deserializer, or be instantiated with additional type information
+Modified: com.fasterxml.jackson.databind.type.TypeBindings, com.fasterxml.jackson.databind.type.TypeFactory
+
+Prompt-01 test plan:
+TARGETS: TypeBindings.create(Class,JavaType[]) for Map; withUnboundVariable for map; getBoundType
+for "K"/"V".
+ORACLES: getBoundName/getBoundType return correct names/types; withUnboundVariable preserves
+existing bindings; TypeFactory constructs MapType with abstract value type.
+CASES: Normal: Map<String,HasUniqueId>; boundary: single param type, empty bindings, mismatch param
+count -> IllegalArgumentException.
+RISKS: No concrete test data; need to infer fix from TypeBindings internal handling of type
+variables; integration-level test may require JSON deserialization.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.type.TypeBindings (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+public class TypeBindings
+private final static TypeBindings EMPTY = new TypeBindings(NO_STRINGS, NO_TYPES, null);
+private TypeBindings(String[] names, JavaType[] types, String[] uvars)
+public static TypeBindings emptyBindings() {
+protected Object readResolve() {
+public static TypeBindings create(Class<?> erasedType, List<JavaType> typeList)
+public static TypeBindings create(Class<?> erasedType, JavaType[] types)
+throw new IllegalArgumentException("Can not create TypeBindings for class "+erasedType.getName()
++((types.length == 1) ? "" : "s")+": class expects "+names.length);
+public static TypeBindings create(Class<?> erasedType, JavaType typeArg1)
++" with 1 type parameter: class expects "+varLen);
+public static TypeBindings create(Class<?> erasedType, JavaType typeArg1, JavaType typeArg2)
++" with 2 type parameters: class expects "+varLen);
+public static TypeBindings createIfNeeded(Class<?> erasedType, JavaType typeArg1)
+public static TypeBindings createIfNeeded(Class<?> erasedType, JavaType[] types)
+public TypeBindings withUnboundVariable(String name)
+public JavaType findBoundType(String name)
+public boolean isEmpty() {
+public int size() {
+public String getBoundName(int index)
+public JavaType getBoundType(int index)
+public List<JavaType> getTypeParameters()
+public bool
+...[truncated deterministically]...
+eVariable<?>[] VARS_MAP = Map.class.getTypeParameters();
+private final static TypeVariable<?>[] VARS_HASH_MAP = HashMap.class.getTypeParameters();
+private final static TypeVariable<?>[] VARS_LINKED_HASH_MAP = LinkedHashMap.class.getTypeParameters();
+public static TypeVariable<?>[] paramsFor1(Class<?> erasedType)
+if (erasedType == Collection.class) {
+if (erasedType == List.class) {
+if (erasedType == ArrayList.class) {
+if (erasedType == AbstractList.class) {
+if (erasedType == Iterable.class) {
+public static TypeVariable<?>[] paramsFor2(Class<?> erasedType)
+if (erasedType == Map.class) {
+if (erasedType == HashMap.class) {
+if (erasedType == LinkedHashMap.class) {
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.lang.reflect.*;
+import java.util.*;
+import com.fasterxml.jackson.databind.JavaType;
+public class TypeBindings
+
+/* METHOD TypeBindings */
+private TypeBindings(String[] names, JavaType[] types, String[] uvars)
+ {
+ _names = (names == null) ? NO_STRINGS : names;
+ _types = (types == null) ? NO_TYPES : types;
+ if (_names.length != _types.length) {
+ throw new IllegalArgumentException("Mismatching names ("+_names.length+"), types ("+_types.length+")");
+ }
+ int h = 1;
+ for (int i = 0, len = _types.length; i < len; ++i) {
+ h += _types[i].hashCode();
+ }
+ _unboundVariables = uvars;
+ _hashCode = h;
+ }
+
+/* METHOD createIfNeeded */
+public static TypeBindings createIfNeeded(Class<?> erasedType, JavaType[] types)
+ {
+ TypeVariable<?>[] vars = erasedType.getTypeParameters();
+ if (vars == null || vars.length == 0) {
+ return EMPTY;
+ }
+ if (types == null) {
+ types = NO_TYPES;
+ }
+ int len = vars.length;
+ String[] names = new String[len];
+ for (int i = 0; i < len; ++i) {
+ names[i] = vars[i].getName();
+ }
+ // Check here to give better error message
+ if (names.length != types.length) {
+ throw new IllegalArgumentException("Can not create TypeBindings for class "+erasedType.getName()
+ +" with "+types.length+" type parameter"
+ +((types.length == 1) ? "" : "s")+": class expects "+names.length);
+ }
+ return new TypeBindings(names, types, null);
+ }
+
+/* METHOD findBoundType */
+public JavaType findBoundType(String name)
+ {
+ for (int i = 0, len = _names.length; i < len; ++i) {
+ if (name.equals(_names[i])) {
+ JavaType t = _types[i];
+ if (t instanceof ResolvedRecursiveType) {
+ ResolvedRecursiveType rrt = (ResolvedRecursiveType) t;
+ JavaType t2 = rrt.getSelfReferencedType();
+ if (t2 != null) {
+ t = t2;
+ } else {
+ /* 25-Feb-2016, tatu: Looks like a potential problem, but alas
+ * we have a test where this should NOT fail and things... seem
+ * to work. So be it.
+ */
+/*
+ throw new IllegalStateException(String.format
+("Unresolved ResolvedRecursiveType for parameter '%s' (index #%d; erased type %s)",
+name, i, t.getRawClass()));
+*/
+ }
+ }
+ return t;
+ }
+ }
+ return null;
+ }
+
+/* METHOD create */
+public static TypeBindings create(Class<?> erasedType, JavaType[] types)
+ {
+ if (types == null) {
+ types = NO_TYPES;
+ } else switch (types.length) {
+ case 1:
+ return create(erasedType, types[0]);
+ case 2:
+ return create(erasedType, types[0], types[1]);
+ }
+ TypeVariable<?>[] vars = erasedType.getTypeParameters();
+ String[] names;
+ if (vars == null || vars.length == 0) {
+ names = NO_STRINGS;
+ } else {
+ int len = vars.length;
+ names = new String[len];
+ for (int i = 0; i < len; ++i) {
+ names[i] = vars[i].getName();
+ }
+ }
+ // Check here to give better error message
+ if (names.length != types.length) {
+ throw new IllegalArgumentException("Can not create TypeBindings for class "+erasedType.getName()
+ +" with "+types.length+" type parameter"
+ +((types.length == 1) ? "" : "s")+": class expects "+names.length);
+ }
+ return new TypeBindings(names, types, null);
+ }
+
+/* METHOD create */
+public static TypeBindings create(Class<?> erasedType, JavaType typeArg1)
+ {
+ // 30-Oct-2015, tatu: Minor optimization for relatively common cases
+ TypeVariable<?>[] vars = TypeParamStash.paramsFor1(erasedType);
+ int varLen = (vars == null) ? 0 : vars.length;
+ if (varLen != 1) {
+ throw new IllegalArgumentException("Can not create TypeBindings for class "+erasedType.getName()
+ +" with 1 type parameter: class expects "+varLen);
+ }
+ return new TypeBindings(new String[] { vars[0].getName() },
+ new JavaType[] { typeArg1 }, null);
+ }
+
+===== com.fasterxml.jackson.databind.type.TypeFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes" })
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static TypeBindings EMPTY_BINDINGS = TypeBindings.emptyBindings();
+private final static Class<?> CLS_STRING = String.class;
+private final static Class<?> CLS_OBJECT = Object.class;
+private final static Class<?> CLS_COMPARABLE = Comparable.class;
+private final static Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(CLS_INT);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(CLS_LONG);
+protected final static SimpleType CORE_TYPE_STRING = new SimpleType(CLS_STRING);
+protected final static SimpleType CORE_TYPE_OBJECT = new SimpleType(CLS_OBJECT);
+protected final static SimpleType CORE_TYPE_COMPARABLE = new SimpleType(CLS_COMPARABLE);
+protected final static SimpleType CORE_TYPE_ENUM = new SimpleType(CLS_ENUM);
+protected final static SimpleType CORE_TYPE_CLASS = new SimpleType(CLS_CLASS);
+protected final LRUMap<Class<?>, JavaType> _typeCache = new LRUMap<Class<?>, JavaType>(16, 100);
+protected final TypeModifier[] _modifiers;
+protected fin
+...[truncated deterministically]...
+Properties.class) {
+protected JavaType _resolveSuperClass(ClassStack context, Class<?> rawType, TypeBindings parentBindings)
+protected JavaType[] _resolveSuperInterfaces(ClassStack context, Class<?> rawType, TypeBindings parentBindings)
+if (rawType == Map.class) {
+if (rawType == Collection.class) {
+if (rawType == AtomicReference.class) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.LRUMap;
+
+/* METHOD TypeFactory */
+protected TypeFactory(TypeParser p, TypeModifier[] mods, ClassLoader classLoader) {
+ // As per [databind#894] must ensure we have back-linkage from TypeFactory:
+ _parser = p.withFactory(this);
+ _modifiers = mods;
+ _classLoader = classLoader;
+ }
+
+/* METHOD TypeFactory */
+protected TypeFactory(TypeParser p, TypeModifier[] mods) {
+ this(p, mods, null);
+ }
+
+/* METHOD TypeFactory */
+private TypeFactory() {
+ _parser = new TypeParser(this);
+ _modifiers = null;
+ _classLoader = null;
+ }
+
+/* METHOD _unknownType */
+protected JavaType _unknownType() {
+ /* 15-Sep-2015, tatu: Prior to 2.7, we constructed new instance for each call.
+ * This may have been due to potential mutability of the instance; but that
+ * should not be issue any more, and creation is somewhat wasteful. So let's
+ * try reusing singleton/flyweight instance.
+ */
+ return CORE_TYPE_OBJECT;
+ }
+
+ /**
+ * Helper method called to see if requested, non-generic-parameterized
+ * type is one of common, "well-known" types, instances of which are
+ * pre-constructed and do not need dynamic caching.
+ *
+ * @since 2.7
+ */
+ protected JavaType _findWellKnownSimple(Class<?> clz) {
+ if (clz.isPrimitive()) {
+ if (clz == CLS_BOOL) return CORE_TYPE_BOOL;
+ if (clz == CLS_INT) return CORE_TYPE_INT;
+ if (clz == CLS_LONG) return CORE_TYPE_LONG;
+ } else {
+ if (clz == CLS_STRING) return CORE_TYPE_STRING;
+ if (clz == CLS_OBJECT) return CORE_TYPE_OBJECT; // since 2.7
+ }
+ return null;
+ }
+
+ /*
+ /****************************************************
+...[truncated deterministically]...
+*********************************
+ */
+
+ /**
+ * Factory method that can be used if type information is passed
+ * as Java typing returned from <code>getGenericXxx</code> methods
+ * (usually for a return or argument type).
+ */
+ protected JavaType _fromAny(ClassStack context, Type type, TypeBindings bindings)
+ {
+ JavaType resultType;
+
+ // simple class?
+ if (type instanceof Class<?>) {
+ // Important: remove possible bindings since this is type-erased thingy
+ resultType = _fromClass(context, (Class<?>) type, EMPTY_BINDINGS);
+ }
+ // But if not, need to start resolving.
+ else if (type instanceof ParameterizedType) {
+ resultType = _fromParamType(context, (ParameterizedType) type, bindings);
+ }
+ else if (type instanceof JavaType) { // [databind#116]
+ // no need to modify further if we already had JavaType
+ return (JavaType) type;
+ }
+ else if (type instanceof GenericArrayType) {
+ resultType = _fromArrayType(context, (GenericArrayType) type, bindings);
+ }
+...[truncated deterministically]...
+terfaces);
+ }
+ // and since 2.6 one referential type
+ if (rawType == AtomicReference.class) {
+ return _referenceType(rawType, bindings, superClass, superInterfaces);
+ }
+ // 01-Nov-2015, tatu: As of 2.7, couple of potential `CollectionLikeType`s (like
+ // `Iterable`, `Iterator`), and `MapLikeType`s (`Map.Entry`) are not automatically
+ // detected, related to difficulties in propagating type upwards (Iterable, for
+ // example, is a weak, tag-on type). They may be detectable in future.
+ return null;
+ }
+
+ protected JavaType _fromWellKnownInterface(ClassStack context, Class<?> rawType, TypeBindings bindings,
+ JavaType superClass, JavaType[] superInterfaces)
+ {
+ // But that's not all: may be possible current type actually implements an
+ // interface type. So...
+ final int intCount = superInterfaces.length;
+
+ for (int i = 0; i < intCount; ++i) {
+ JavaType result = superInterfaces[i].refine(rawType, bindings, superClass, superInterfaces);
+ if (result != null) {
+ return result;
+ }
+ }
+ return null;
+ }

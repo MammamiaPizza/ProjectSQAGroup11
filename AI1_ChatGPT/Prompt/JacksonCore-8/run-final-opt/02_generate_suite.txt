@@ -1,0 +1,457 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonCore  Bug: 8  Version: JacksonCore-8b
+JUnit: junit-4.11.jar  Build: Maven
+Target: com.fasterxml.jackson.core.util.TextBuffer
+Modified: com.fasterxml.jackson.core.util.TextBuffer
+Triggers: com.fasterxml.jackson.core.util.TestTextBuffer::testEmpty
+
+Bug/specification summary:
+Bug report: 182
+Trigger failures:
+- com.fasterxml.jackson.core.util.TestTextBuffer::testEmpty
+ --> java.lang.NullPointerException
+Modified: com.fasterxml.jackson.core.util.TextBuffer
+
+Prompt-01 test plan:
+TARGETS: TextBuffer.resetWithEmpty(), contentsAsString(), contentsAsArray(), getTextBuffer(), size()
+ORACLES: Trigger TestTextBuffer::testEmpty identifies empty-buffer behavior; failure source is NPE
+CASES: New buffer then resetWithEmpty(): access text/string/array/size without NullPointerException
+CASES: Empty transitions after resetWithString, resetWithShared, resetWithCopy, and releaseBuffers
+CASES: Append after empty reset; verify size and text accessors remain usable
+RISKS: Internal segment/current-buffer state may be null after empty reset
+RISKS: No source for exact empty string/array identity, allocation, or recycler behavior provided
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.core.util.TextBuffer (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.core.util;
+public final class TextBuffer
+public TextBuffer(BufferRecycler allocator) {
+public void releaseBuffers()
+public void resetWithEmpty()
+public void resetWithShared(char[] buf, int start, int len)
+public void resetWithCopy(char[] buf, int start, int len)
+public void resetWithString(String value)
+private char[] buf(int needed)
+private void clearSegments()
+/* Accessors for implementing public interface
+public int size() {
+public int getTextOffset() {
+public boolean hasTextAsCharacters()
+public char[] getTextBuffer()
+public String contentsAsString()
+public char[] contentsAsArray() {
+public BigDecimal contentsAsDecimal() throws NumberFormatException
+public double contentsAsDouble() throws NumberFormatException {
+public void ensureNotShared() {
+public void append(char c) {
+public void append(char[] c, int start, int len)
+public void append(String str, int offset, int len)
+public char[] getCurrentSegment()
+public char[] emptyAndGetCurrentSegment()
+public int getCurrentSegmentSize() { return _currentSize; }
+public void setCurrentLength(int len) { _currentSize = len; }
+public String setCurrentAndReturn(int len) {
+public char[] finishCurrentSegment() {
+public char[] expandCurrentSegment()
+public char[] expandCurrentSegment(int minSize) {
+@Override public String toString() { return contentsAsString(); }
+private void unshare(int needExtra)
+private void expand(int minNewSegmentSize)
+private char[] resultArray()
+final char[] result = carr(size);
+private char[] carr(int len) { return new char[len]; }
+
+/* HEADER */
+package com.fasterxml.jackson.core.util;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
+import com.fasterxml.jackson.core.io.NumberInput;
+
+/* METHOD TextBuffer */
+public TextBuffer(BufferRecycler allocator) {
+ _allocator = allocator;
+ }
+
+/* METHOD finishCurrentSegment */
+public char[] finishCurrentSegment() {
+ if (_segments == null) {
+ _segments = new ArrayList<char[]>();
+ }
+ _hasSegments = true;
+ _segments.add(_currentSegment);
+ int oldLen = _currentSegment.length;
+ _segmentSize += oldLen;
+ _currentSize = 0;
+
+ // Let's grow segments by 50%
+ int newLen = oldLen + (oldLen >> 1);
+ if (newLen < MIN_SEGMENT_LEN) {
+ newLen = MIN_SEGMENT_LEN;
+ } else if (newLen > MAX_SEGMENT_LEN) {
+ newLen = MAX_SEGMENT_LEN;
+ }
+ char[] curr = carr(newLen);
+ _currentSegment = curr;
+ return curr;
+ }
+
+ /**
+ * Method called to expand size of the current segment, to
+ * accommodate for more contiguous content. Usually only
+ * used when parsing tokens like names if even then.
+ */
+ public char[] expandCurrentSegment()
+ {
+ final char[] curr = _currentSegment;
+ // Let's grow by 50% by default
+ final int len = curr.length;
+ int newLen = len + (len >> 1);
+ // but above intended maximum, slow to increase by 25%
+ if (newLen > MAX_SEGMENT_LEN) {
+ newLen = len + (len >> 2);
+ }
+ return (_currentSegment = Arrays.copyOf(curr, newLen));
+ }
+
+/* METHOD expandCurrentSegment */
+public char[] expandCurrentSegment()
+ {
+ final char[] curr = _currentSegment;
+ // Let's grow by 50% by default
+ final int len = curr.length;
+ int newLen = len + (len >> 1);
+ // but above intended maximum, slow to increase by 25%
+ if (newLen > MAX_SEGMENT_LEN) {
+ newLen = len + (len >> 2);
+ }
+ return (_currentSegment = Arrays.copyOf(curr, newLen));
+ }
+
+ /**
+ * Method called to expand size of the current segment, to
+ * accommodate for more contiguous content. Usually only
+ * used when parsing tokens like names if even then.
+ * 
+ * @param minSize Required minimum strength of the current segment
+ *
+ * @since 2.4.0
+ */
+ public char[] expandCurrentSegment(int minSize) {
+ char[] curr = _currentSegment;
+ if (curr.length >= minSize) return curr;
+ _currentSegment = curr = Arrays.copyOf(curr, minSize);
+ return curr;
+ }
+
+ /*
+ /**********************************************************
+ /* Standard methods:
+ /**********************************************************
+ */
+
+ /**
+ * Note: calling this method may not be as efficient as calling
+ * {@link #contentsAsString}, since it's not guaranteed that resulting
+ * String is cached.
+ */
+ @Override public String toString() { return contentsAsString(); }
+
+ /*
+ /**********************************************************
+ /* Internal methods:
+ /**********************************************************
+ */
+
+ /**
+ * Method called if/when we need to append content when we have been
+ * initialized to use shared buffer.
+ */
+ private void unshare(int needExtra)
+ {
+ int sharedLen = _inputLen;
+ _inputLen = 0;
+ char[] inputBuf = _inputBuffer;
+ _inputBuffer = null;
+ int start = _inputStart;
+ _inputStart = -1;
+
+ // Is buffer big enough, or do we need to reallocate?
+ int needed = sharedLen+needExtra;
+ if (_currentSegment == null || needed > _currentSegment.length) {
+ _currentSegment = buf(needed);
+ }
+ if (sharedLen > 0) {
+ System.arraycopy(inputBuf, start, _currentSegment, 0, sharedLen);
+ }
+ _segmentSize = 0;
+ _currentSize = sharedLen;
+ }
+
+ /**
+ * Method called when current segment is full, to allocate new
+ * segment.
+ */
+ private void expand(int minNewSegmentSize)
+ {
+ // First, let's move current segment to segment list:
+ if (_segments == null) {
+ _segments = new ArrayList<char[]>();
+ }
+ char[] curr = _currentSegment;
+ _hasSegments = true;
+ _segments.add(curr);
+ _segmentSize += curr.length;
+ _currentSize = 0;
+ int oldLen = curr.length;
+ 
+ // Let's grow segments by 50% minimum
+ int newLen = oldLen + (oldLen >> 1);
+ if (newLen < MIN_SEGMENT_LEN) {
+ newLen = MIN_SEGMENT_LEN;
+ } else if (newLen > MAX_SEGMENT_LEN) {
+ newLen = MAX_SEGMENT_LEN;
+ }
+ _currentSegment = carr(newLen);
+ }
+
+ private char[] resultArray()
+ {
+ if (_resultString != null) { // Can take a shortcut...
+ return _resultString.toCharArray();
+ }
+ // Do we use shared array?
+ if (_inputStart >= 0) {
+ final int len = _inputLen;
+ if (len < 1) {
+ return NO_CHARS;
+ }
+ final int start = _inputStart;
+ if (start == 0) {
+ return Arrays.copyOf(_inputBuffer, len);
+ }
+ return Arrays.copyOfRange(_inputBuffer, start, start+len);
+ }
+ // nope, not shared
+ int size = size();
+ if (size < 1) {
+ return NO_CHARS;
+ }
+ int offset = 0;
+ final char[] result = carr(size);
+ if (_segments != null) {
+ for (int i = 0, len = _segments.size(); i < len; ++i) {
+ char[] curr = _segments.get(i);
+ int currLen = curr.length;
+ System.arraycopy(curr, 0, result, offset, currLen);
+ offset += currLen;
+ }
+ }
+ System.arraycopy(_currentSegment, 0, result, offset, _currentSize);
+ return result;
+ }
+
+ private char[] carr(int len) { return new char[len]; }
+}
+
+/* METHOD getTextOffset */
+public int getTextOffset() {
+ /* Only shared input buffer can have non-zero offset; buffer
+ * segments start at 0, and if we have to create a combo buffer,
+ * that too will start from beginning of the buffer
+ */
+ return (_inputStart >= 0) ? _inputStart : 0;
+ }
+
+/* METHOD getTextBuffer */
+public char[] getTextBuffer()
+ {
+ // Are we just using shared input buffer?
+ if (_inputStart >= 0) return _inputBuffer;
+ if (_resultArray != null) return _resultArray;
+ if (_resultString != null) {
+ return (_resultArray = _resultString.toCharArray());
+ }
+ // Nope; but does it fit in just one segment?
+ if (!_hasSegments) return _currentSegment;
+ // Nope, need to have/create a non-segmented array and return it
+ return contentsAsArray();
+ }
+
+/* METHOD contentsAsDecimal */
+public BigDecimal contentsAsDecimal() throws NumberFormatException
+ {
+ // Already got a pre-cut array?
+ if (_resultArray != null) {
+ return NumberInput.parseBigDecimal(_resultArray);
+ }
+ // Or a shared buffer?
+ if ((_inputStart >= 0) && (_inputBuffer != null)) {
+ return NumberInput.parseBigDecimal(_inputBuffer, _inputStart, _inputLen);
+ }
+ // Or if not, just a single buffer (the usual case)
+ if ((_segmentSize == 0) && (_currentSegment != null)) {
+ return NumberInput.parseBigDecimal(_currentSegment, 0, _currentSize);
+ }
+ // If not, let's just get it aggregated...
+ return NumberInput.parseBigDecimal(contentsAsArray());
+ }
+
+ /**
+ * Convenience method for converting contents of the buffer
+ * into a Double value.
+ */
+ public double contentsAsDouble() throws NumberFormatException {
+ return NumberInput.parseDouble(contentsAsString());
+ }
+
+ /*
+ /**********************************************************
+ /* Public mutators:
+ /**********************************************************
+ */
+
+ /**
+ * Method called to make sure that buffer is not using shared input
+ * buffer; if it is, it will copy such contents to private buffer.
+ */
+ public void ensureNotShared() {
+ if (_inputStart >= 0) {
+ unshare(16);
+ }
+ }
+
+ public void append(char c) {
+ // Using shared buffer so far?
+ if (_inputStart >= 0) {
+ unshare(16);
+ }
+ _resultString = null;
+ _resultArray = null;
+ // Room in current segment?
+ char[] curr = _currentSegment;
+ if (_currentSize >= curr.length) {
+ expand(1);
+ curr = _currentSegment;
+ }
+ curr[_currentSize++] = c;
+ }
+
+ public void append(char[] c, int start, int len)
+ {
+ // Can't append to shared buf (sanity check)
+ if (_inputStart >= 0) {
+ unshare(len);
+ }
+ _resultString = null;
+ _resultArray = null;
+
+ // Room in current segment?
+ char[] curr = _currentSegment;
+ int max = curr.length - _currentSize;
+ 
+ if (max >= len) {
+ System.arraycopy(c, start, curr, _currentSize, len);
+ _currentSize += len;
+ return;
+ }
+ // No room for all, need to copy part(s):
+ if (max > 0) {
+ System.arraycopy(c, start, curr, _currentSize, max);
+ start += max;
+ len -= max;
+ }
+ /* And then allocate new segment; we are guaranteed to now
+ * have enough room in segment.
+ */
+ // Except, as per [Issue-24], not for HUGE appends... so:
+ do {
+ expand(len);
+ int amount = Math.min(_currentSegment.length, len);
+ System.arraycopy(c, start, _currentSegment, 0, amount);
+ _currentSize += amount;
+ start += amount;
+ len -= amount;
+ } while (len > 0);
+ }
+
+/* METHOD contentsAsDouble */
+public double contentsAsDouble() throws NumberFormatException {
+ return NumberInput.parseDouble(contentsAsString());
+ }
+
+/* METHOD getCurrentSegment */
+public char[] getCurrentSegment()
+ {
+ /* Since the intention of the caller is to directly add stuff into
+ * buffers, we should NOT have anything in shared buffer... ie. may
+ * need to unshare contents.
+ */
+ if (_inputStart >= 0) {
+ unshare(1);
+ } else {
+ char[] curr = _currentSegment;
+ if (curr == null) {
+ _currentSegment = buf(0);
+ } else if (_currentSize >= curr.length) {
+ // Plus, we better have room for at least one more char
+ expand(1);
+ }
+ }
+ return _currentSegment;
+ }
+
+/* METHOD setCurrentAndReturn */
+public String setCurrentAndReturn(int len) {
+ _currentSize = len;
+ // We can simplify handling here compared to full `contentsAsString()`:
+ if (_segmentSize > 0) { // longer text; call main method
+ return contentsAsString();
+ }
+ // more common case: single segment
+ int currLen = _currentSize;
+ String str = (currLen == 0) ? "" : new String(_currentSegment, 0, currLen);
+ _resultString = str;
+ return str;
+ }
+
+/* METHOD resetWithEmpty */
+public void resetWithEmpty()
+ {
+ _inputStart = -1; // indicates shared buffer not used
+ _currentSize = 0;
+ _inputLen = 0;
+
+ _inputBuffer = null;
+ _resultString = null;
+ _resultArray = null;
+
+ // And then reset internal input buffers, if necessary:
+ if (_hasSegments) {
+ clearSegments();
+ }
+ }
+
+/* METHOD resetWithShared */
+public void resetWithShared(char[] buf, int start, int len)
+ {
+ // First, let's clear intermediate values, if any:
+ _resultString = null;
+ _resultArray = null;
+
+ // Then let's mark things we need about input buffer
+ _inputBuffer = buf;
+ _inputStart = start;
+ _inputLen = len;
+
+ // And then reset internal input buffers, if necessary:
+ if (_hasSegments) {
+ clearSegments();
+ }
+ }

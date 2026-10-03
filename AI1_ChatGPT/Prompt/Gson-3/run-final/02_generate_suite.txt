@@ -1,0 +1,313 @@
+You are a software testing specialist.
+Generate a complete JUnit Test Suite for the supplied Java production class from the Defects4J dataset.
+Requirements:
+1. Do not modify the production source code.
+2. Use the JUnit version and build tool configured in the project.
+3. Use the actual package, constructors, methods, fields, and dependencies found in the supplied Project
+Context.
+4. Analyze the public methods, conditions, and reachable branches.
+5. Create Test Cases for normal, boundary, invalid, null, and exceptional cases when applicable.
+6. Maximize statement, branch, and method coverage.
+7. Target behaviors related to the supplied bug report, API contract, or behavioral specification.
+8. Create Test Cases that could distinguish incorrect behavior from the expected behavior described in the
+supplied specification, API documentation, public contract, or bug report.
+9. Do not assume that the current implementation is correct.
+10. Analyze only the Source Version and Project Context supplied in this prompt.
+11. Do not use or reveal another program version unless it is explicitly permitted by the experimental
+protocol.
+12. Derive expected results only from the supplied specification, API documentation, bug report, public
+contract, permitted existing tests, and Project Context.
+13. Avoid duplicate and redundant Test Cases.
+14. Ensure that package declarations, imports, constructors, method calls, and assertions are valid.
+15. Use mocks only when required by the supplied external dependencies.
+16. Do not invent methods, fields, constructors, dependencies, or expected behavior.
+17. Each Test Case must contain at least one meaningful assertion.
+18. The Test Cases must be independent and must not depend on execution order.
+19. Avoid time-dependent, random, network-dependent, or environment-dependent assertions unless they
+are explicitly required and controlled.
+20. Return one complete Java Test Class.
+21. After the Java Test Class, briefly explain the behavior, condition, branch, method, or fault-related behavior
+targeted by each Test Case.
+Project ID:
+Gson
+Bug ID:
+3
+Source Version:
+Gson-3b
+JUnit Version:
+junit-3.8.2.jar
+Build Tool:
+Maven
+Target Class:
+com.google.gson.internal.ConstructorConstructor
+Behavioral specification, API documentation, or bug report:
+Summary of configuration for Project: Gson
+--------------------------------------------------------------------------------
+    Script dir: /root/defects4j/framework
+      Base dir: /root/defects4j
+    Major root: /root/defects4j/major
+      Repo dir: /root/defects4j/project_repos
+--------------------------------------------------------------------------------
+    Project ID: Gson
+       Program: gson
+    Build file: /root/defects4j/framework/projects/Gson/Gson.build.xml
+--------------------------------------------------------------------------------
+           Vcs: Vcs::Git
+    Repository: /root/defects4j/project_repos/gson.git
+     Commit db: /root/defects4j/framework/projects/Gson/active-bugs.csv
+Number of bugs: 18
+--------------------------------------------------------------------------------
+
+Summary for Bug: Gson-3
+--------------------------------------------------------------------------------
+Revision ID (fixed version):
+64107353a37e623ed1f8fecb4422c24212cf6fe1
+--------------------------------------------------------------------------------
+Revision date (fixed version):
+2015-11-05 07:25:34 -0500
+--------------------------------------------------------------------------------
+Bug report id:
+624
+--------------------------------------------------------------------------------
+Bug report url:
+https://github.com/google/gson/issues/624
+--------------------------------------------------------------------------------
+Root cause in triggering tests:
+ - com.google.gson.functional.MapTest::testConcurrentMap
+   --> java.lang.ClassCastException: java.util.LinkedHashMap cannot be cast to java.util.concurrent.ConcurrentMap
+ - com.google.gson.functional.MapTest::testConcurrentNavigableMap
+   --> java.lang.ClassCastException: java.util.TreeMap cannot be cast to java.util.concurrent.ConcurrentNavigableMap
+--------------------------------------------------------------------------------
+List of modified sources:
+ - com.google.gson.internal.ConstructorConstructor
+--------------------------------------------------------------------------------
+Production source code:
+===== TARGET CLASS: com.google.gson.internal.ConstructorConstructor (java) =====
+/*
+ * Copyright (C) 2011 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+import com.google.gson.InstanceCreator;
+import com.google.gson.JsonIOException;
+import com.google.gson.reflect.TypeToken;
+
+/**
+ * Returns a function that can construct an instance of a requested type.
+ */
+public final class ConstructorConstructor {
+  private final Map<Type, InstanceCreator<?>> instanceCreators;
+
+  public ConstructorConstructor(Map<Type, InstanceCreator<?>> instanceCreators) {
+    this.instanceCreators = instanceCreators;
+  }
+
+  public <T> ObjectConstructor<T> get(TypeToken<T> typeToken) {
+    final Type type = typeToken.getType();
+    final Class<? super T> rawType = typeToken.getRawType();
+
+    // first try an instance creator
+
+    @SuppressWarnings("unchecked") // types must agree
+    final InstanceCreator<T> typeCreator = (InstanceCreator<T>) instanceCreators.get(type);
+    if (typeCreator != null) {
+      return new ObjectConstructor<T>() {
+        @Override public T construct() {
+          return typeCreator.createInstance(type);
+        }
+      };
+    }
+
+    // Next try raw type match for instance creators
+    @SuppressWarnings("unchecked") // types must agree
+    final InstanceCreator<T> rawTypeCreator =
+        (InstanceCreator<T>) instanceCreators.get(rawType);
+    if (rawTypeCreator != null) {
+      return new ObjectConstructor<T>() {
+        @Override public T construct() {
+          return rawTypeCreator.createInstance(type);
+        }
+      };
+    }
+
+    ObjectConstructor<T> defaultConstructor = newDefaultConstructor(rawType);
+    if (defaultConstructor != null) {
+      return defaultConstructor;
+    }
+
+    ObjectConstructor<T> defaultImplementation = newDefaultImplementationConstructor(type, rawType);
+    if (defaultImplementation != null) {
+      return defaultImplementation;
+    }
+
+    // finally try unsafe
+    return newUnsafeAllocator(type, rawType);
+  }
+
+  private <T> ObjectConstructor<T> newDefaultConstructor(Class<? super T> rawType) {
+    try {
+      final Constructor<? super T> constructor = rawType.getDeclaredConstructor();
+      if (!constructor.isAccessible()) {
+        constructor.setAccessible(true);
+      }
+      return new ObjectConstructor<T>() {
+        @SuppressWarnings("unchecked") // T is the same raw type as is requested
+        @Override public T construct() {
+          try {
+            Object[] args = null;
+            return (T) constructor.newInstance(args);
+          } catch (InstantiationException e) {
+            // TODO: JsonParseException ?
+            throw new RuntimeException("Failed to invoke " + constructor + " with no args", e);
+          } catch (InvocationTargetException e) {
+            // TODO: don't wrap if cause is unchecked!
+            // TODO: JsonParseException ?
+            throw new RuntimeException("Failed to invoke " + constructor + " with no args",
+                e.getTargetException());
+          } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+          }
+        }
+      };
+    } catch (NoSuchMethodException e) {
+      return null;
+    }
+  }
+
+  /**
+   * Constructors for common interface types like Map and List and their
+   * subtypes.
+   */
+  @SuppressWarnings("unchecked") // use runtime checks to guarantee that 'T' is what it is
+  private <T> ObjectConstructor<T> newDefaultImplementationConstructor(
+      final Type type, Class<? super T> rawType) {
+    if (Collection.class.isAssignableFrom(rawType)) {
+      if (SortedSet.class.isAssignableFrom(rawType)) {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new TreeSet<Object>();
+          }
+        };
+      } else if (EnumSet.class.isAssignableFrom(rawType)) {
+        return new ObjectConstructor<T>() {
+          @SuppressWarnings("rawtypes")
+          @Override public T construct() {
+            if (type instanceof ParameterizedType) {
+              Type elementType = ((ParameterizedType) type).getActualTypeArguments()[0];
+              if (elementType instanceof Class) {
+                return (T) EnumSet.noneOf((Class)elementType);
+              } else {
+                throw new JsonIOException("Invalid EnumSet type: " + type.toString());
+              }
+            } else {
+              throw new JsonIOException("Invalid EnumSet type: " + type.toString());
+            }
+          }
+        };
+      } else if (Set.class.isAssignableFrom(rawType)) {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new LinkedHashSet<Object>();
+          }
+        };
+      } else if (Queue.class.isAssignableFrom(rawType)) {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new LinkedList<Object>();
+          }
+        };
+      } else {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new ArrayList<Object>();
+          }
+        };
+      }
+    }
+
+    if (Map.class.isAssignableFrom(rawType)) {
+      if (SortedMap.class.isAssignableFrom(rawType)) {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new TreeMap<Object, Object>();
+          }
+        };
+      } else if (type instanceof ParameterizedType && !(String.class.isAssignableFrom(
+          TypeToken.get(((ParameterizedType) type).getActualTypeArguments()[0]).getRawType()))) {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new LinkedHashMap<Object, Object>();
+          }
+        };
+      } else {
+        return new ObjectConstructor<T>() {
+          @Override public T construct() {
+            return (T) new LinkedTreeMap<String, Object>();
+          }
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private <T> ObjectConstructor<T> newUnsafeAllocator(
+      final Type type, final Class<? super T> rawType) {
+    return new ObjectConstructor<T>() {
+      private final UnsafeAllocator unsafeAllocator = UnsafeAllocator.create();
+      @SuppressWarnings("unchecked")
+      @Override public T construct() {
+        try {
+          Object newInstance = unsafeAllocator.newInstance(rawType);
+          return (T) newInstance;
+        } catch (Exception e) {
+          throw new RuntimeException(("Unable to invoke no-args constructor for " + type + ". "
+              + "Register an InstanceCreator with Gson for this type may fix this problem."), e);
+        }
+      }
+    };
+  }
+
+  @Override public String toString() {
+    return instanceCreators.toString();
+  }
+}
+
+Related classes and project context:
+Modified classes:
+- com.google.gson.internal.ConstructorConstructor
+
+Triggering tests:
+- com.google.gson.functional.MapTest::testConcurrentMap
+- com.google.gson.functional.MapTest::testConcurrentNavigableMap

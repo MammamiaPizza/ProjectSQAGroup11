@@ -1,0 +1,217 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 25  Version: Math-25b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math3.optimization.fitting.HarmonicFitter
+Modified: org.apache.commons.math3.optimization.fitting.HarmonicFitter
+Triggers: org.apache.commons.math3.optimization.fitting.HarmonicFitterTest::testMath844
+
+Bug/specification summary:
+Bug report: MATH-844
+Trigger failures:
+- org.apache.commons.math3.optimization.fitting.HarmonicFitterTest::testMath844
+ --> junit.framework.AssertionFailedError: Expected exception: org.apache.commons.math3.exception.MathIllegalStateException
+Modified: org.apache.commons.math3.optimization.fitting.HarmonicFitter
+
+Prompt-01 test plan:
+TARGETS: fit() methods; ParameterGuesser.guess(), guessAOmega(), guessPhi(), sortObservations().
+Exception-throwing paths.
+ORACLES: Existing testMath844 expectation; API docs on MathIllegalStateException; optimizer
+convergence contract.
+CASES: Insufficient points (0,1,2); constant/identical y; observations causing guess failure (no
+freq range); exact testMath844 data.
+CASES: Boundary with 3 points; invalid initial guess; non-converging optimizer settings.
+RISKS: Cannot inspect trigger test code—exact exception condition inferred from summary; actual
+fitter internals may vary.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math3.optimization.fitting.HarmonicFitter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math3.optimization.fitting;
+public class HarmonicFitter extends CurveFitter<HarmonicOscillator.Parametric> {
+public HarmonicFitter(final DifferentiableMultivariateVectorOptimizer optimizer) {
+public double[] fit(double[] initialGuess) {
+public double[] fit() {
+public static class ParameterGuesser {
+public ParameterGuesser(WeightedObservedPoint[] observations) {
+public double[] guess() {
+private void sortObservations() {
+private void guessAOmega() {
+final double xRange = observations[last].getX() - observations[0].getX();
+final double y = observations[i].getY();
+private void guessPhi() {
+final double currentYPrime = (currentY - previousY) / (currentX - previousX);
+
+/* HEADER */
+package org.apache.commons.math3.optimization.fitting;
+import org.apache.commons.math3.optimization.DifferentiableMultivariateVectorOptimizer;
+import org.apache.commons.math3.analysis.function.HarmonicOscillator;
+import org.apache.commons.math3.exception.ZeroException;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+import org.apache.commons.math3.exception.MathIllegalStateException;
+import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.util.FastMath;
+public class HarmonicFitter extends CurveFitter<HarmonicOscillator.Parametric> {
+
+/* METHOD HarmonicFitter */
+public HarmonicFitter(final DifferentiableMultivariateVectorOptimizer optimizer) {
+ super(optimizer);
+ }
+
+/* METHOD ParameterGuesser */
+public ParameterGuesser(WeightedObservedPoint[] observations) {
+ if (observations.length < 4) {
+ throw new NumberIsTooSmallException(LocalizedFormats.INSUFFICIENT_OBSERVED_POINTS_IN_SAMPLE,
+ observations.length, 4, true);
+ }
+
+ this.observations = observations.clone();
+ }
+
+/* METHOD fit */
+public double[] fit(double[] initialGuess) {
+ return fit(new HarmonicOscillator.Parametric(), initialGuess);
+ }
+
+/* METHOD fit */
+public double[] fit() {
+ return fit((new ParameterGuesser(getObservations())).guess());
+ }
+
+/* METHOD guess */
+public double[] guess() {
+ sortObservations();
+ guessAOmega();
+ guessPhi();
+ return new double[] { a, omega, phi };
+ }
+
+/* METHOD guessAOmega */
+private void guessAOmega() {
+ // initialize the sums for the linear model between the two integrals
+ double sx2 = 0;
+ double sy2 = 0;
+ double sxy = 0;
+ double sxz = 0;
+ double syz = 0;
+
+ double currentX = observations[0].getX();
+ double currentY = observations[0].getY();
+ double f2Integral = 0;
+ double fPrime2Integral = 0;
+ final double startX = currentX;
+ for (int i = 1; i < observations.length; ++i) {
+ // one step forward
+ final double previousX = currentX;
+ final double previousY = currentY;
+ currentX = observations[i].getX();
+ currentY = observations[i].getY();
+
+ // update the integrals of f<sup>2</sup> and f'<sup>2</sup>
+ // considering a linear model for f (and therefore constant f')
+ final double dx = currentX - previousX;
+ final double dy = currentY - previousY;
+ final double f2StepIntegral =
+ dx * (previousY * previousY + previousY * currentY + currentY * currentY) / 3;
+ final double fPrime2StepIntegral = dy * dy / dx;
+
+ final double x = currentX - startX;
+ f2Integral += f2StepIntegral;
+ fPrime2Integral += fPrime2StepIntegral;
+
+ sx2 += x * x;
+ sy2 += f2Integral * f2Integral;
+ sxy += x * f2Integral;
+ sxz += x * fPrime2Integral;
+ syz += f2Integral * fPrime2Integral;
+ }
+
+ // compute the amplitude and pulsation coefficients
+ double c1 = sy2 * sxz - sxy * syz;
+ double c2 = sxy * sxz - sx2 * syz;
+ double c3 = sx2 * sy2 - sxy * sxy;
+ if ((c1 / c2 < 0) || (c2 / c3 < 0)) {
+ final int last = observations.length - 1;
+ // Range of the observations, assuming that the
+ // observations are sorted.
+ final double xRange = observations[last].getX() - observations[0].getX();
+ if (xRange == 0) {
+ throw new ZeroException();
+ }
+ omega = 2 * Math.PI / xRange;
+
+ double yMin = Double.POSITIVE_INFINITY;
+ double yMax = Double.NEGATIVE_INFINITY;
+ for (int i = 1; i < observations.length; ++i) {
+ final double y = observations[i].getY();
+ if (y < yMin) {
+ yMin = y;
+ }
+ if (y > yMax) {
+ yMax = y;
+ }
+ }
+ a = 0.5 * (yMax - yMin);
+ } else {
+ // In some ill-conditioned cases (cf. MATH-844), the guesser
+ // procedure cannot produce sensible results.
+
+ a = FastMath.sqrt(c1 / c2);
+ omega = FastMath.sqrt(c2 / c3);
+ }
+ }
+
+/* METHOD guessPhi */
+private void guessPhi() {
+ // initialize the means
+ double fcMean = 0;
+ double fsMean = 0;
+
+ double currentX = observations[0].getX();
+ double currentY = observations[0].getY();
+ for (int i = 1; i < observations.length; ++i) {
+ // one step forward
+ final double previousX = currentX;
+ final double previousY = currentY;
+ currentX = observations[i].getX();
+ currentY = observations[i].getY();
+ final double currentYPrime = (currentY - previousY) / (currentX - previousX);
+
+ double omegaX = omega * currentX;
+ double cosine = FastMath.cos(omegaX);
+ double sine = FastMath.sin(omegaX);
+ fcMean += omega * currentY * cosine - currentYPrime * sine;
+ fsMean += omega * currentY * sine + currentYPrime * cosine;
+ }
+
+ phi = FastMath.atan2(-fsMean, fcMean);
+ }
+
+/* METHOD sortObservations */
+private void sortObservations() {
+ // Since the samples are almost always already sorted, this
+ // method is implemented as an insertion sort that reorders the
+ // elements in place. Insertion sort is very efficient in this case.
+ WeightedObservedPoint curr = observations[0];
+ for (int j = 1; j < observations.length; ++j) {
+ WeightedObservedPoint prec = curr;
+ curr = observations[j];
+ if (curr.getX() < prec.getX()) {
+ // the current element should be inserted closer to the beginning
+ int i = j - 1;
+ WeightedObservedPoint mI = observations[i];
+ while ((i >= 0) && (curr.getX() < mI.getX())) {
+ observations[i + 1] = mI;
+ if (i-- != 0) {
+ mI = observations[i];
+ }
+ }
+ observations[i + 1] = curr;
+ curr = observations[j];
+ }
+ }
+ }

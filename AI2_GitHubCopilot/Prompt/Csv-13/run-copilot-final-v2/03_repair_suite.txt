@@ -1,0 +1,165 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 13  Version: Csv-13b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-168
+Trigger failures:
+- org.apache.commons.csv.CSVPrinterTest::testMySqlNullOutput
+ --> junit.framework.AssertionFailedError: expected:<"NULL" [NULL]
+ - org.apache.commons.csv.CSVPrinterTest::testMySqlNullStringDefault
+ --> junit.framework.AssertionFailedError: expected:<\N> but was:<null>
+Modified: org.apache.commons.csv.CSVFormat, org.apache.commons.csv.CSVPrinter
+
+Available API/signatures:
+[org.apache.commons.csv.CSVFormat | java]
+package org.apache.commons.csv;
+public final class CSVFormat implements Serializable {
+public static enum Predefined {
+private Predefined(final CSVFormat format) {
+public CSVFormat getFormat() {
+public static final CSVFormat RFC4180 = DEFAULT.withIgnoreEmptyLines(false);
+public static final CSVFormat EXCEL = DEFAULT.withIgnoreEmptyLines(false).withAllowMissingColumnNames();
+public static final CSVFormat TDF = DEFAULT.withDelimiter(TAB).withIgnoreSurroundingSpaces();
+public static final CSVFormat MYSQL = DEFAULT.withDelimiter(TAB).withEscape(BACKSLASH).withIgnoreEmptyLines(false)
+private static boolean isLineBreak(final char c) {
+private static boolean isLineBreak(final Character c) {
+public static CSVFormat newFormat(final char delimiter) {
+public static CSVFormat valueOf(final String format) {
+private String[] toStringAr
+...[truncated deterministically]...
+c CSVFormat withQuote(final char quoteChar) {
+public CSVFormat withQuote(final Character quoteChar) {
+public CSVFormat withQuoteMode(final QuoteMode quoteModePolicy) {
+public CSVFormat withRecordSeparator(final char recordSeparator) {
+public CSVFormat withRecordSeparator(final String recordSeparator) {
+public CSVFormat withSkipHeaderRecord() {
+public CSVFormat withSkipHeaderRecord(final boolean skipHeaderRecord) {
+
+[org.apache.commons.csv.CSVPrinter | java]
+package org.apache.commons.csv;
+public final class CSVPrinter implements Flushable, Closeable {
+/** True if we just began a new record. */
+public CSVPrinter(final Appendable out, final CSVFormat format) throws IOException {
+for (final String line : format.getHeaderComments()) {
+@Override
+pub
+...[truncated deterministically]...
+ion {
+final String nullString = format.getNullString();
+private void print(final Object object, final CharSequence value, final int offset, final int len)
+private void printAndEscape(final CharSequence value, final int offset, final int len) throws IOException {
+final char delim = format.getDelimiter();
+final char escape = format.getEscapeCharacter().charValue();
+private void p
+...[truncated deterministically]...
+ows IOException {
+for (final Object value : values) {
+public void printRecord(final Object... values) throws IOException {
+public void printRecords(final Iterable<?> values) throws IOException {
+public void printRecords(final Object... values) throws IOException {
+public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+final int columnCount = resultSet.getMetaData().getColumnCount();
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import java.io.IOException;
+import java.io.StringWriter;
+import java.util.Arrays;
+
+import org.junit.Test;
+
+public class CSVPrinterTest {
+
+ @Test
+ public void testMySqlNullStringDefault() {
+     assertEquals("\\N", CSVFormat.MYSQL.getNullString());
+ }
+
+ @Test
+ public void testMySqlNullOutput() throws IOException {
+     final StringWriter sw = new StringWriter();
+     final CSVFormat format = CSVFormat.MYSQL.withNullString("NULL");
+     try (final CSVPrinter printer = new CSVPrinter(sw, format)) {
+         printer.print((Object) null);
+     }
+     assertEquals("NULL", sw.toString());
+ }
+
+ @Test
+ public void testMySqlDefaultNullOutput() throws IOException {
+     final StringWriter sw = new StringWriter();
+     try (final CSVPrinter printer = new CSVPrinter(sw, CSVFormat.MYSQL)) {
+         printer.print((Object) null);
+     }
+     assertEquals("\\N", sw.toString());
+ }
+
+ @Test
+ public void testNullStringNullPrintsEmpty() throws IOException {
+     final StringWriter sw = new StringWriter();
+     final CSVFormat format = CSVFormat.MYSQL.withNullString(null);
+     try (final CSVPrinter printer = new CSVPrinter(sw, format)) {
+         printer.print((Object) null);
+     }
+     assertEquals("", sw.toString());
+ }
+
+ @Test
+ public void testWithNullStringNullConfiguration() {
+     assertNull(CSVFormat.MYSQL.withNullString(null).getNullString());
+ }
+
+ @Test
+ public void testPrintNonNullValueUnaffected() throws IOException {
+     final StringWriter sw = new StringWriter();
+     final CSVFormat format = CSVFormat.MYSQL.withNullString("NULL");
+     try (final CSVPrinter printer = new CSVPrinter(sw, format)) {
+         printer.print("value");
+     }
+     assertEquals("value", sw.toString());
+ }
+
+ @Test
+ public void testMultipleNullsInRecord() throws IOException {
+     final StringWriter sw = new StringWriter();
+     try (final CSVPrinter printer = new CSVPrinter(sw, CSVFormat.MYSQL)) {
+         printer.printRecord((Object) null, "x", (Object) null);
+     }
+     assertEquals("\\N\tx\t\\N\r\n", sw.toString());
+ }
+
+ @Test
+ public void testPrintRecordWithNullIterable() throws IOException {
+     final StringWriter sw = new StringWriter();
+     try (final CSVPrinter printer = new CSVPrinter(sw, CSVFormat.MYSQL)) {
+         printer.printRecord(Arrays.asList((Object) null, "a"));
+     }
+     assertEquals("\\N\ta\r\n", sw.toString());
+ }
+
+ @Test
+ public void testFormatMethodTrimsWithNullString() {
+     assertEquals("\\N", CSVFormat.MYSQL.format((Object) null));
+ }
+
+ @Test
+ public void testFormatMethodCustomNullString() {
+     assertEquals("NULL", CSVFormat.MYSQL.withNullString("NULL").format((Object) null));
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.csv.CSVPrinterTest::testPrintRecordWithNullIterable
+ - org.apache.commons.csv.CSVPrinterTest::testMultipleNullsInRecord
+
+Failing generated tests: org.apache.commons.csv.CSVPrinterTest::testMultipleNullsInRecord, org.apache.commons.csv.CSVPrinterTest::testPrintRecordWithNullIterable

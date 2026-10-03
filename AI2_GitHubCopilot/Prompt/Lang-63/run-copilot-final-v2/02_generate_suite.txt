@@ -1,0 +1,435 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Lang  Bug: 63  Version: Lang-63b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Ant
+Target: org.apache.commons.lang.time.DurationFormatUtils
+Modified: org.apache.commons.lang.time.DurationFormatUtils
+Triggers: org.apache.commons.lang.time.DurationFormatUtilsTest::testJiraLang281
+
+Bug/specification summary:
+Bug report: LANG-281
+Trigger failures:
+- org.apache.commons.lang.time.DurationFormatUtilsTest::testJiraLang281
+ --> junit.framework.ComparisonFailure: expected:<[09]> but was:<[-2]>
+Modified: org.apache.commons.lang.time.DurationFormatUtils
+
+Prompt-01 test plan:
+TARGETS: formatPeriodISO, formatDurationISO, reduceAndCorrect
+ORACLES: Expected ISO duration strings from manual calculation; failing case expects "09" not "-2"
+CASES: start>end (negative period producing incorrect sign), zero duration, crossing month/year
+boundaries, leap year, DST transitions, large durations, equal start/end
+RISKS: Only one test failure known; bug likely in reduceAndCorrect corrections; formatDuration and
+formatPeriod may also exhibit sign errors
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.lang.time.DurationFormatUtils (java) =====
+/* API SIGNATURES */
+package org.apache.commons.lang.time;
+public class DurationFormatUtils {
+public DurationFormatUtils() {
+public static final String ISO_EXTENDED_FORMAT_PATTERN = "'P'yyyy'Y'M'M'd'DT'H'H'm'M's.S'S'";
+public static String formatDurationHMS(long durationMillis) {
+public static String formatDurationISO(long durationMillis) {
+public static String formatDuration(long durationMillis, String format) {
+public static String formatDuration(long durationMillis, String format, boolean padWithZeros) {
+public static String formatPeriodISO(long startMillis, long endMillis) {
+public static String formatPeriod(long startMillis, long endMillis, String format) {
+static int reduceAndCorrect(Calendar start, Calendar end, int field, int difference) {
+static Token[] lexx(String format) {
+static class Token {
+static boolean containsTokenWithValue(Token[] tokens, Object value) {
+public boolean equals(Object obj2) {
+public int hashCode() {
+public String toString() {
+
+/* HEADER */
+package org.apache.commons.lang.time;
+import org.apache.commons.lang.StringUtils;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.TimeZone;
+public class DurationFormatUtils {
+
+/* METHOD DurationFormatUtils */
+public DurationFormatUtils() {
+ super();
+ }
+
+/* METHOD formatPeriod */
+public static String formatPeriod(long startMillis, long endMillis, String format, boolean padWithZeros, 
+ TimeZone timezone) {
+
+ long millis = endMillis - startMillis;
+ if (millis < 28 * DateUtils.MILLIS_PER_DAY) {
+ return formatDuration(millis, format, padWithZeros);
+ }
+
+ Token[] tokens = lexx(format);
+
+ // timezones get funky around 0, so normalizing everything to GMT 
+ // stops the hours being off
+ Calendar start = Calendar.getInstance(timezone);
+ start.setTime(new Date(startMillis));
+ Calendar end = Calendar.getInstance(timezone);
+ end.setTime(new Date(endMillis));
+
+ // initial estimates
+ int milliseconds = end.get(Calendar.MILLISECOND) - start.get(Calendar.MILLISECOND);
+ int seconds = end.get(Calendar.SECOND) - start.get(Calendar.SECOND);
+ int minutes = end.get(Calendar.MINUTE) - start.get(Calendar.MINUTE);
+ int hours = end.get(Calendar.HOUR_OF_DAY) - start.get(Calendar.HOUR_OF_DAY);
+ int days = end.get(Calendar.DAY_OF_MONTH) - start.get(Calendar.DAY_OF_MONTH);
+ int months = end.get(Calendar.MONTH) - start.get(Calendar.MONTH);
+ int years = end.get(Calendar.YEAR) - start.get(Calendar.YEAR);
+
+ // each initial estimate is adjusted in case it is under 0
+ while (milliseconds < 0) {
+ milliseconds += 1000;
+ seconds -= 1;
+ }
+ while (seconds < 0) {
+ seconds += 60;
+ minutes -= 1;
+ }
+ while (minutes < 0) {
+ minutes += 60;
+ hours -= 1;
+ }
+ while (hours < 0) {
+ hours += 24;
+ days -= 1;
+ }
+ while (days < 0) {
+ days += 31;
+//days += 31; // TODO: Need tests to show this is bad and the new code is good.
+// HEN: It's a tricky subject. Jan 15th to March 10th. If I count days-first it is 
+// 1 month and 26 days, but if I count month-first then it is 1 month and 23 days.
+// Also it's contextual - if asked for no M in the format then I should probably 
+// be doing no calculating here.
+ months -= 1;
+ }
+ while (months < 0) {
+ months += 12;
+ years -= 1;
+ }
+ milliseconds -= reduceAndCorrect(start, end, Calendar.MILLISECOND, milliseconds);
+ seconds -= reduceAndCorrect(start, end, Calendar.SECOND, seconds);
+ minutes -= reduceAndCorrect(start, end, Calendar.MINUTE, minutes);
+ hours -= reduceAndCorrect(start, end, Calendar.HOUR_OF_DAY, hours);
+ days -= reduceAndCorrect(start, end, Calendar.DAY_OF_MONTH, days);
+ months -= reduceAndCorrect(start, end, Calendar.MONTH, months);
+ years -= reduceAndCorrect(start, end, Calendar.YEAR, years);
+
+ // This next block of code adds in values that 
+ // aren't requested. This allows the user to ask for the 
+ // number of months and get the real count and not just 0->11.
+ if (!Token.containsTokenWithValue(tokens, y)) {
+ if (Token.containsTokenWithValue(tokens, M)) {
+ months += 12 * years;
+ years = 0;
+ } else {
+ // TODO: this is a bit weak, needs work to know about leap years
+ days += 365 * years;
+ years = 0;
+ }
+ }
+ if (!Token.containsTokenWithValue(tokens, M)) {
+ days += end.get(Calendar.DAY_OF_YEAR) - start.get(Calendar.DAY_OF_YEAR);
+ months = 0;
+ }
+ if (!Token.containsTokenWithValue(tokens, d)) {
+ hours += 24 * days;
+ days = 0;
+ }
+ if (!Token.containsTokenWithValue(tokens, H)) {
+ minutes += 60 * hours;
+ hours = 0;
+ }
+ if (!Token.containsTokenWithValue(tokens, m)) {
+ seconds += 60 * minutes;
+ minutes = 0;
+ }
+ if (!Token.containsTokenWithValue(tokens, s)) {
+ milliseconds += 1000 * seconds;
+ seconds = 0;
+ }
+
+ return format(tokens, years, months, days, hours, minut
+...[truncated deterministically]...
+= end.get(field);
+ int startValue = start.get(field);
+ if (endValue < startValue) {
+ int newdiff = startValue - endValue;
+ end.add( field, newdiff );
+ return newdiff;
+ } else {
+ return 0;
+ }
+ }
+
+ static final Object y = "y";
+ static final Object M = "M";
+ static final Object d = "d";
+ static final Object H = "H";
+ static final Object m = "m";
+ static final Object s = "s";
+ static final Object S = "S";
+ 
+ /**
+ * Parses a classic date format string into Tokens
+ *
+ * @param format to parse
+ * @return Token[] of tokens
+ */
+ static Token[] lexx(String format) {
+ char[] array = format.toCharArray();
+ java.util.ArrayList list = new java.util.ArrayList(array.length);
+
+ boolean inLiteral = false;
+ StringBuffer buffer = null;
+ Token previous = null;
+ int sz = array.length;
+ for(int i=0; i<sz; i++) {
+ char ch = array[i];
+ if(inLiteral && ch != '\'') {
+ buffer.append(ch);
+ continue;
+ }
+ Object value = null;
+ switch(ch) {
+ // TODO: Need to handle escaping of '
+ case '\'' : 
+ if(inLiteral) {
+ buffer = null;
+ inLiteral = false;
+ } else {
+ buffer = new StringBuffer();
+ list.add(new Token(buffer));
+ inLiteral = true;
+ }
+ break;
+ case 'y' : value = y; break;
+ case 'M' : value = M; break;
+ case 'd' : value = d; break;
+ case 'H' : value = H; break;
+ case 'm' : value = m; break;
+ case 's' : value = s; break;
+ case 'S' : value = S; break;
+ default : 
+ if(buffer == null) {
+ buffer = new StringBuffer();
+ list.add(new Token(buffer));
+ }
+ buffer.append(ch);
+ }
+
+ if(value != null) {
+ if(previous != null && previous.getValue() == value) {
+ previous.increment();
+ } else {
+ Token token = new Token(value);
+ list.add(token); 
+ previous = token;
+ }
+ buffer = null; 
+ }
+ }
+
+/* METHOD formatDuration */
+public static String formatDuration(long durationMillis, String format, boolean padWithZeros) {
+
+ Token[] tokens = lexx(format);
+
+ int days = 0;
+ int hours = 0;
+ int minutes = 0;
+ int seconds = 0;
+ int milliseconds = 0;
+ 
+ if (Token.containsTokenWithValue(tokens, d) ) {
+ days = (int) (durationMillis / DateUtils.MILLIS_PER_DAY);
+ durationMillis = durationMillis - (days * DateUtils.MILLIS_PER_DAY);
+ }
+ if (Token.containsTokenWithValue(tokens, H) ) {
+ hours = (int) (durationMillis / DateUtils.MILLIS_PER_HOUR);
+ durationMillis = durationMillis - (hours * DateUtils.MILLIS_PER_HOUR);
+ }
+ if (Token.containsTokenWithValue(tokens, m) ) {
+ minutes = (int) (durationMillis / DateUtils.MILLIS_PER_MINUTE);
+ durationMillis = durationMillis - (minutes * DateUtils.MILLIS_PER_MINUTE);
+ }
+ if (Token.containsTokenWithValue(tokens, s) ) {
+ seconds = (int) (durationMillis / DateUtils.MILLIS_PER_SECOND);
+ durationMillis = durationMillis - (seconds * DateUtils.MILLIS_PER_SECOND);
+ }
+ if (Token.containsTokenWithValue(tokens, S) ) {
+ milliseconds = (int) durationMillis;
+ }
+
+ return format(tokens, 0, 0, days, hours, minutes, seconds, milliseconds, padWithZeros);
+ }
+
+/* METHOD formatDurationWords */
+public static String formatDurationWords(
+ long durationMillis,
+ boolean suppressLeadingZeroElements,
+ boolean suppressTrailingZeroElements) {
+
+ // This method is generally replacable by the format method, but 
+ // there are a series of tweaks and special cases that require 
+ // trickery to replicate.
+ String duration = formatDuration(durationMillis, "d' days 'H' hours 'm' minutes 's'
+...[truncated deterministically]...
+= StringUtils.replaceOnce(duration, " 0 days", "");
+ if (tmp.length() != duration.length()) {
+ duration = tmp;
+ tmp = StringUtils.replaceOnce(duration, " 0 hours", "");
+ if (tmp.length() != duration.length()) {
+ duration = tmp;
+ tmp = StringUtils.replaceOnce(duration, " 0 minutes", "");
+ duration = tmp;
+ if (tmp.length() != duration.length()) {
+ duration = StringUtils.replaceOnce(tmp, " 0 seconds", "");
+ }
+ }
+ }
+ if (duration.length() != 0) {
+ // strip the space off again
+ duration = duration.substring(1);
+ }
+ }
+ if (suppressTrailingZeroElements) {
+ String tmp = StringUtils.replaceOnce(duration, " 0 seconds", "");
+ if (tmp.length() != duration.length()) {
+ duration = tmp;
+ tmp = StringUtils.replaceOnce(duration, " 0 minutes", "");
+ if (tmp.length() != duration.length()) {
+ duration = tmp;
+ tmp = StringUtils.replaceOnce(duration, " 0 hours", "");
+ if (tmp.length() != duration.length()) {
+ duration = StringUtils.replaceOnce(tmp, " 0 days", "");
+ }
+ }
+ }
+ }
+ // handle plurals
+ duration = " " + duration;
+ duration = StringUtils.replaceOnce(duration, " 1 seconds", " 1 second");
+ duration = StringUtils.replaceOnce(duration, " 1 minutes", " 1 minute");
+ duration = StringUtils.replaceOnce(duration, " 1 hours", " 1 hour");
+ duration = StringUtils.replaceOnce(duration, " 1 days", " 1 day");
+ return duration.trim();
+ }
+
+/* METHOD formatPeriodISO */
+public static String formatPeriodISO(long startMillis, long endMillis) {
+ return formatPeriod(startMillis, endMillis, ISO_EXTENDED_FORMAT_PATTERN, false, TimeZone.getDefault());
+ }
+
+/* METHOD formatPeriod */
+public static String formatPeriod(long startMillis, long endMillis, String format) {
+ return formatPeriod(startMillis, endMillis, format, true, TimeZone.getDefault());
+ }
+
+/* METHOD equals */
+public boolean equals(Object obj2) {
+ if (obj2 instanceof Token) {
+ Token tok2 = (Token) obj2;
+ if (this.value.getClass() != tok2.value.getClass()) {
+ return false;
+ }
+ if (this.count != tok2.count) {
+ return false;
+ }
+ if (this.value instanceof StringBuffer) {
+ return this.value.toString().equals(tok2.value.toString());
+ } else if (this.value instanceof Number) {
+ return this.value.equals(tok2.value);
+ } else {
+ return this.value == tok2.value;
+ }
+ } else {
+ return false;
+ }
+ }
+
+/* METHOD formatDurationHMS */
+public static String formatDurationHMS(long durationMillis) {
+ return formatDuration(durationMillis, "H:mm:ss.SSS");
+ }
+
+/* METHOD formatDurationISO */
+public static String formatDurationISO(long durationMillis) {
+ return formatDuration(durationMillis, ISO_EXTENDED_FORMAT_PATTERN, false);
+ }
+
+/* METHOD formatDuration */
+public static String formatDuration(long durationMillis, String format) {
+ return formatDuration(durationMillis, format, true);
+ }
+
+/* METHOD hashCode */
+public int hashCode() {
+ return this.value.hashCode();
+ }
+
+/* METHOD toString */
+public String toString() {
+ return StringUtils.repeat(this.value.toString(), this.count);
+ }
+
+/* METHOD lexx */
+static Token[] lexx(String format) {
+ char[] array = format.toCharArray();
+ java.util.ArrayList list = new java.util.ArrayList(array.length);
+
+ boolean inLiteral = false;
+ StringBuffer buffer = null;
+ Token previous = null;
+ int sz = array.length;
+ for(int i=0; i<sz; i++) {
+ char ch = array[i];
+ if(inLiteral && ch != '\'') {
+ buffer.append(ch);
+ continue;
+ }
+ Object value = null;
+ switch(ch) {
+ // TODO: Need to handle escaping of '
+ case '\'' : 
+ if(inLiteral) {
+ buffer = null;
+ inLiteral = false;
+ } else {
+ buffer = new StringBuffer();
+ list.add(new Token(buffer));
+ inLiteral = true;
+ }
+ break;
+ case 'y' : value = y; break;
+ case 'M' : value = M; break;
+ case 'd' : val
+...[truncated deterministically]...
+fer = new StringBuffer();
+ list.add(new Token(buffer));
+ }
+ buffer.append(ch);
+ }
+
+ if(value != null) {
+ if(previous != null && previous.getValue() == value) {
+ previous.increment();
+ } else {
+ Token token = new Token(value);
+ list.add(token); 
+ previous = token;
+ }
+ buffer = null; 
+ }
+ }
+ return (Token[]) list.toArray( new Token[0] );
+ }

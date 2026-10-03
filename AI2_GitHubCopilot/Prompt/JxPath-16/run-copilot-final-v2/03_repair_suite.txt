@@ -1,0 +1,282 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 16  Version: JxPath-16b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: JXPATH-114
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testAxisFollowing
+ --> junit.framework.ComparisonFailure: Evaluating pointer <//location[2]/following::node()[2]> expected:<...vendor[1]/product[1][]> but was:<...vendor[1]/product[1][/product:name[1]]>
+ - org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testAxisPreceding
+ --> junit.framework.ComparisonFailure: Evaluating pointer <//location[2]/preceding::node()[3]> expected:<...ndor[1]/location[1]/[employeeCount[1]/text()][1]> but was:<...ndor[1]/location[1]/[address][1]>
+ - org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testAxisFollowing
+ --> junit.framework.ComparisonFailure: Evaluating pointer <//location[2]/following::node()[2]> expected:<...vendor[1]/product[1][]> but was:<...vendor[1]/product[1][/product:name[1]]>
+ - org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testAxisPreceding
+ --> junit.framework.ComparisonFailure: Evaluating pointer <//location[2]/preceding::node()[3]> expected:<...ndor[1]/location[1]/[employeeCount[1]/text()][1]> but was:<...ndor[1]/location[1]/[address][1]>
+Modified: org.apache.commons.jxpath.ri.model.dom.DOMNodePointer, org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.model.dom.DOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.dom;
+public class DOMNodePointer extends NodePointer {
+public DOMNodePointer(Node node, Locale locale) {
+public DOMNodePointer(Node node, Locale locale, String id) {
+public DOMNodePointer(NodePointer parent, Node node) {
+public boolean testNode(NodeTest test) {
+public static boolean testNode(Node node, NodeTest test) {
+private static boolean equalStrings(String s1, String s2) {
+public QName getName() {
+public String getNamespaceURI() {
+public NodeIterator attributeIterator(QName name) {
+public NodePointer namespacePointer(String prefix) {
+public NodeIterator namespaceIterator() {
+public synchronized NamespaceResolver getNamespaceResolver() {
+public String getNamespaceURI(String prefix) {
+public String getDefaultNamespaceURI() {
+public Object getBaseValue() {
+public Object getImme
+...[truncated deterministically]...
+tionOfPI() {
+public int hashCode() {
+public boolean equals(Object object) {
+public static String getPrefix(Node node) {
+public static String getLocalName(Node node) {
+public static String getNamespaceURI(Node node) {
+public Object getValue() {
+private String stringValue(Node node) {
+public Pointer getPointerByID(JXPathContext context, String id) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+[org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.jdom;
+public class JDOMNodePointer extends NodePointer {
+public JDOMNodePointer(Object node, Locale locale) {
+public JDOMNodePointer(Object node, Locale locale, String id) {
+public JDOMNodePointer(NodePoint
+...[truncated deterministically]...
+{
+private static String getNamespaceURI(Object node) {
+public synchronized NamespaceResolver getNamespaceResolver() {
+public String getNamespaceURI(String prefix) {
+public Object getBaseValue() {
+public boolean isCollection() {
+public int getLength() {
+public boolean isLeaf() {
+public QName getName() {
+public Object getImmediateNode() {
+public Object getValue() {
+public void s
+...[truncated deterministically]...
+QName name) {
+public void remove() {
+public String asPath() {
+private String escape(String string) {
+private int getRelativePositionByName() {
+private int getRelativePositionOfElement() {
+private int getRelativePositionOfTextNode() {
+private int getRelativePositionOfPI(String target) {
+public int hashCode() {
+public boolean equals(Object object) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.model;
+
+ import java.util.Locale;
+ import javax.xml.parsers.DocumentBuilder;
+ import javax.xml.parsers.DocumentBuilderFactory;
+
+ import junit.framework.TestCase;
+
+ import org.apache.commons.jxpath.ri.model.dom.DOMNodePointer;
+ import org.apache.commons.jxpath.ri.model.jdom.JDOMNodePointer;
+ import org.jdom.Element;
+ import org.jdom.Text;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.Node;
+
+ /**
+  * Tests for relative position and asPath() methods in
+  * DOMNodePointer and JDOMNodePointer, targeting JXPATH-114.
+  * The bug caused attribute/namespace children to be incorrectly
+  * counted or sibling ordering to be wrong, leading to wrong
+  * path suffixes for following and preceding axis results.
+  */
+ public class RelativePositionAsPathTest extends TestCase {
+
+     /**
+      * Verify that an empty DOM element's asPath ends with "[]"
+      * (no children), even if the element has no child nodes.
+      */
+     public void testDOMEmptyElementPath() throws Exception {
+         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+         DocumentBuilder db = dbf.newDocumentBuilder();
+         Document doc = db.newDocument();
+         org.w3c.dom.Element root = doc.createElement("root");
+         doc.appendChild(root);
+         org.w3c.dom.Element child = doc.createElement("empty");
+         root.appendChild(child);
+
+         DOMNodePointer ptr = new DOMNodePointer(child, (Locale) null);
+         String path = ptr.asPath();
+         assertTrue("Path should end with empty[1][] but was: " + path,
+                 path.endsWith("empty[1][]"));
+     }
+
+     /**
+      * DOM element with attribute but no child should still
+      * produce a leaf path with "[]", not include the attribute
+      * as a child.
+      */
+     public void testDOMElementWithAttributePath() throws Exception {
+         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+         DocumentBuilder db = dbf.newDocumentBuilder();
+         Document doc = db.newDocument();
+         org.w3c.dom.Element root = doc.createElement("root");
+         doc.appendChild(root);
+         org.w3c.dom.Element child = doc.createElement("child");
+         child.setAttribute("attr", "val");
+         root.appendChild(child);
+
+         DOMNodePointer ptr = new DOMNodePointer(child, (Locale) null);
+         String path = ptr.asPath();
+         // path should be something like /root[1]/child[1][@attr='val'][]
+         // at least it must not contain another element child.
+         assertTrue("Path should end with child index and brackets, "
+                 + "but was: " + path,
+                 path.contains("child[1]") && path.endsWith("[]"));
+     }
+
+     /**
+      * Text node inside an element: asPath must be text()[index]
+      * where index counts only text siblings, ignoring elements.
+      */
+     public void testDOMTextNodePath() throws Exception {
+         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+         DocumentBuilder db = dbf.newDocumentBuilder();
+         Document doc = db.newDocument();
+         org.w3c.dom.Element root = doc.createElement("root");
+         doc.appendChild(root);
+         org.w3c.dom.Text text1 = doc.createTextNode("first");
+         root.appendChild(text1);
+         org.w3c.dom.Element child = doc.createElement("child");
+         root.appendChild(child);
+         org.w3c.dom.Text text2 = doc.createTextNode("second");
+         root.appendChild(text2);
+
+         // pointer to second text node
+         DOMNodePointer ptr = new DOMNodePointer(text2, (Locale) null);
+         String path = ptr.asPath();
+         assertEquals("Second text node path", "/root[1]/text()[2]", path);
+     }
+
+     /**
+      * Elements with same name must receive a correct index
+      * considering only previous siblings with the same element name.
+      */
+     public void testDOMElementIndexAmongSameName() throws Exception {
+         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+         DocumentBuilder db = dbf.newDocumentBuilder();
+         Document doc = db.newDocument();
+         org.w3c.dom.Element root = doc.createElement("root");
+         doc.appendChild(root);
+         root.appendChild(doc.createElement("a"));
+         root.appendChild(doc.createElement("b"));
+         org.w3c.dom.Element a2 = doc.createElement("a");
+         root.appendChild(a2);
+
+         DOMNodePointer ptr = new DOMNodePointer(a2, (Locale) null);
+         String path = ptr.asPath();
+         assertEquals("Second 'a' element path", "/root[1]/a[2][]", path);
+     }
+
+     // ---- JDOM counterparts ----
+
+     /**
+      * JDOM empty element must also end with "[]".
+      */
+     public void testJDOMEmptyElementPath() {
+         Element root = new Element("root");
+         org.jdom.Document doc = new org.jdom.Document(root);
+         Element child = new Element("empty");
+         root.addContent(child);
+
+         JDOMNodePointer ptr = new JDOMNodePointer(child, (Locale) null);
+         String path = ptr.asPath();
+         assertTrue("Path should end with empty[1][] but was: " + path,
+                 path.endsWith("empty[1][]"));
+     }
+
+     /**
+      * JDOM element with attribute but no children should be leaf ([]).
+      */
+     public void testJDOMElementWithAttributePath() {
+         Element root = new Element("root");
+         new org.jdom.Document(root);
+         Element child = new Element("child");
+         child.setAttribute("attr", "val");
+         root.addContent(child);
+
+         JDOMNodePointer ptr = new JDOMNodePointer(child, (Locale) null);
+         String path = ptr.asPath();
+         assertTrue("Path should end with "] and not include child nodes but was: "
+                         + path,
+                 path.contains("child[1]") && path.endsWith("]"));
+         // exact "[@attr='val']" suffix may be present; at minimum it must not
+         // contain extra child path after element index.
+     }
+
+     /**
+      * JDOM text node must have asPath text()[index] where
+      * index ignores preceding elements.
+      */
+     public void testJDOMTextNodePath() {
+         Element root = new Element("root");
+         new org.jdom.Document(root);
+         root.addContent(new Text("first"));
+         root.addContent(new Element("child"));
+         Text second = new Text("second");
+         root.addContent(second);
+
+         JDOMNodePointer ptr = new JDOMNodePointer(second, (Locale) null);
+         String path = ptr.asPath();
+         assertEquals("Second text node path", "/root[1]/text()[2]", path);
+     }
+
+     /**
+      * JDOM same-name elements must get monotonically increasing index.
+      */
+     public void testJDOMElementIndexAmongSameName() {
+         Element root = new Element("root");
+         new org.jdom.Document(root);
+         root.addContent(new Element("a"));
+         root.addContent(new Element("b"));
+         Element a2 = new Element("a");
+         root.addContent(a2);
+
+         JDOMNodePointer ptr = new JDOMNodePointer(a2, (Locale) null);
+         String path = ptr.asPath();
+         assertEquals("Second 'a' element path", "/root[1]/a[2][]", path);
+     }
+
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JxPath-16f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JxPath-16f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JxPath-16f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JxPath-16f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JxPath-16f-copilot/.test_suite/org/apache/commons/jxpath/ri/model/RelativePositionAsPathTest.java:140: error: ')' expected
+ [javac] assertTrue("Path should end with "] and not include child nodes but was: "
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 3 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,281 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 49  Version: Jsoup-49b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 689
+Trigger failures:
+- org.jsoup.nodes.ElementTest::appendMustCorrectlyMoveChildrenInsideOneParentElement
+ --> junit.framework.AssertionFailedError: expected:<...><div3>Check</div3><[div4></div4><div1></div1><div2></div2><]/body>> but was:<...><div3>Check</div3><[]/body>>
+Modified: org.jsoup.nodes.Node
+
+Available API/signatures:
+[org.jsoup.nodes.Node | java]
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public abstract class Node implements Cloneable {
+private static final List<Node> EMPTY_NODES = Collections.emptyList();
+@param baseUri base URI
+@param attributes attributes (not null, but may be empty)
+protected Node(String baseUri, Attributes attributes) {
+protected Node(String baseUri) {
+protected Node() {
+@return node name
+public abstract String nodeName();
+public String attr(String attributeKey) {
+public Attributes attributes() {
+public Node attr(String attributeKey, String attributeValue) {
+public boolean hasAttr(String attributeKey) {
+public Node removeAttr(String attributeKey) {
+@return base URI
+public String baseUri() {
+@param baseUri base URI to set
+public void setBaseUri(final String baseUri) {
+public void head(Node node, int depth) {
+public void tail(Node node, int depth) {
+public String absUrl(String attributeKey) {
+@param index index of child node
+@return the child node at this index. Throws a {@code IndexOutOfBoundsException} if the index is out of bounds.
+public Node childNode(int index) {
+@return list of children. If no children, returns an empty list.
+public List<Node> childNodes() {
+public List<Node> childNodesCopy() {
+public final int childNodeSize() {
+protected Node[] childNodesAsArray() {
+@return parent node; or null if no parent.
+public Node parent() {
+public final Node parentNode() {
+public Document ownerDocument() {
+public void remove() {
+public Node before(String html) {
+public Node before(Node node) {
+public Node after(String html) {
+public Node after(Node node) {
+private void addSiblingHtml(int index, String h
+...[truncated deterministically]...
+the previous sibling, or null if this is the first sibling
+public Node previousSibling() {
+public int siblingIndex() {
+protected void setSiblingIndex(int siblingIndex) {
+public Node traverse(NodeVisitor nodeVisitor) {
+@return HTML
+public String outerHtml() {
+protected void outerHtml(StringBuilder accum) {
+@param accum accumulator to place HTML into
+abstract void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out);
+abstract void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out);
+@Override
+public String toString() {
+protected void indent(StringBuilder accum, int depth, Document.OutputSettings out) {
+public boolean equals(Object o) {
+public int hashCode() {
+public Node clone() {
+protected Node doClone(Node parent) {
+private static class OuterHtmlVisitor implements NodeVisitor {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertNull;
+ import static org.junit.Assert.assertTrue;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.Element;
+ import org.jsoup.nodes.Node;
+ import org.jsoup.nodes.TextNode;
+ import org.jsoup.select.Elements;
+ import org.junit.Test;
+
+ import java.util.List;
+
+ public class NodeTest {
+
+     @Test
+     public void testAppendExistingChildMovesToEnd() {
+         Document doc = Jsoup.parse("<body><div id='d1'>a</div><div id='d2'>b</div><div
+id='d3'>c</div></body>");
+         Element body = doc.body();
+         Element d1 = doc.getElementById("d1");
+         body.appendChild(d1); // move to end
+         assertEquals("<body>\n <div id=\"d2\">\n  b\n </div>\n <div id=\"d3\">\n  c\n </div>\n <div
+id=\"d1\">\n  a\n </div>\n</body>",
+                 body.outerHtml());
+     }
+
+     @Test
+     public void testAppendMultipleExistingChildrenPreservesOrderNoLoss() {
+         Document doc = Jsoup.parse("<body><div id='d1'></div><div id='d2'></div><div
+id='d3'>Check</div><div id='d4'></div></body>");
+         Element body = doc.body();
+         Element d1 = doc.getElementById("d1");
+         Element d2 = doc.getElementById("d2");
+         Element d4 = doc.getElementById("d4");
+
+         body.appendChild(d4);
+         body.appendChild(d1);
+         body.appendChild(d2);
+
+         assertEquals("<body>\n <div id=\"d3\">\n  Check\n </div>\n <div id=\"d4\">\n </div>\n <div
+id=\"d1\">\n </div>\n <div id=\"d2\">\n </div>\n</body>",
+                 body.outerHtml());
+         // all children still present
+         assertEquals(4, body.childNodeSize());
+     }
+
+     @Test
+     public void testInsertChildMovesToIndex() {
+         Document doc = Jsoup.parse("<body><div id='d1'>a</div><div id='d2'>b</div><div
+id='d3'>c</div></body>");
+         Element body = doc.body();
+         Element d3 = doc.getElementById("d3");
+         Element d1 = doc.getElementById("d1");
+
+         // insert d3 at position where d1 currently sits (move d3 before d1)
+         body.insertChildren(d1.siblingIndex(), d3);
+
+         assertEquals("<body>\n <div id=\"d3\">\n  c\n </div>\n <div id=\"d1\">\n  a\n </div>\n <div
+id=\"d2\">\n  b\n </div>\n</body>",
+                 body.outerHtml());
+     }
+
+     @Test
+     public void testUnwrapPreservesTextOrder() {
+         Document doc = Jsoup.parse("<div>Hello <span>world</span>!</div>");
+         Element span = doc.select("span").first();
+         Node firstChild = span.unwrap(); // unwrap <span>, text "world" goes into parent div
+
+         // firstChild should be the text node "world"
+         assertNotNull(firstChild);
+         assertEquals("world", firstChild.outerHtml().trim()); // TextNode outerHtml is its text
+         // parent div now contains the correct sequence
+         assertEquals("<div>\n Hello world !\n</div>", doc.select("div").first().outerHtml());
+     }
+
+     @Test
+     public void testRemoveChild_parentNullAfterRemove() {
+         Document doc = Jsoup.parse("<div><p>text</p></div>");
+         Element p = doc.select("p").first();
+         p.remove();
+         assertNull(p.parent());
+     }
+
+     @Test
+     public void testRemoveChild_remainingSiblingsReindexed() {
+         Document doc = Jsoup.parse("<div><p id='p1'>first</p><p id='p2'>second</p><p
+id='p3'>third</p></div>");
+         Element div = doc.select("div").first();
+         Element p2 = doc.getElementById("p2");
+         p2.remove();
+
+         // after removal, p3 should now be at index 1 (previously index 2)
+         Element p3 = doc.getElementById("p3");
+         assertEquals(1, p3.siblingIndex());
+     }
+
+     @Test
+     public void testAfterMovesExistingSibling() {
+         Document doc = Jsoup.parse("<div><p id='a'>A</p><p id='b'>B</p><p id='c'>C</p></div>");
+         Element div = doc.select("div").first();
+         Element a = doc.getElementById("a");
+         Element c = doc.getElementById("c");
+         a.after(c); // moves c after a
+         // Expected order: a, c, b
+         assertEquals(0, a.siblingIndex());
+         assertEquals(1, c.siblingIndex());
+         assertEquals(2, doc.getElementById("b").siblingIndex());
+         assertNull(c.nextSibling().nextSibling()); // only 3 children
+     }
+
+     @Test
+     public void testBeforeMovesExistingSibling() {
+         Document doc = Jsoup.parse("<div><p id='a'>A</p><p id='b'>B</p><p id='c'>C</p></div>");
+         Element div = doc.select("div").first();
+         Element b = doc.getElementById("b");
+         Element c = doc.getElementById("c");
+         b.before(c); // moves c before b
+         // Expected order: a, c, b
+         assertEquals(1, c.siblingIndex());
+         assertEquals(2, b.siblingIndex());
+     }
+
+     @Test
+     public void testWrap_withoutParent_doesNotFail() {
+         Document doc = Jsoup.parse("<p>text</p>");
+         Element p = doc.select("p").first();
+         p.remove(); // orphan
+         Node wrapped = p.wrap("<span></span>");
+         assertNull(wrapped); // no parent, wrap should return null (as per code)
+         assertNull(p.parent());
+     }
+
+     @Test
+     public void testWrap_remainderChildrenAppendedToWrapElement() {
+         Document doc = Jsoup.parse("<div><p id='p1'>content</p></div>");
+         Element p1 = doc.getElementById("p1");
+
+         // wrap with multiple elements; the first becomes the wrapper, remainder appended as
+children
+         p1.wrap("<span><b></b></span><i>extra</i>");
+         Element span = p1.parent(); // span is now parent of p1
+         assertNotNull(span);
+         assertEquals("span", span.nobeName());
+         // The <i> extra should be appended as a child of span (after p1)
+         // So span's children: b? Actually wrap structure: <span><b></b></span>, so b is child of
+span, and p1 is added inside deepest (= b). Then <i>extra</i> is appended to span.
+         // After wrap: span contains b, and b contains p1; span also contains i.
+         Element b = span.child(0);
+         assertEquals("b", b.nodeName());
+         assertTrue(b.childNodes().contains(p1));
+         assertEquals("i", span.child(1).nodeName());
+     }
+
+     @Test
+     public void testReplaceChildViaReplaceWith_inSameParent() {
+         Document doc = Jsoup.parse("<div><p id='a'>A</p><p id='b'>B</p></div>");
+         Element a = doc.getElementById("a");
+         Element b = doc.getElementById("b");
+         a.replaceWith(b); // replaces a with b; b should be moved from its position to a's position
+         // After: single p with id='b' (since b moved)
+         List<Element> children = doc.select("div").first().children();
+         assertEquals(1, children.size());
+         assertEquals("b", children.get(0).id());
+         assertNull(a.parent()); // a removed
+     }
+
+     @Test
+     public void testWrapAndUnwrap_preservesDeepStructure() {
+         Document doc = Jsoup.parse("<div>Hello <p id='inner'>world</p></div>");
+         Element inner = doc.getElementById("inner");
+         inner.wrap("<span></span>");
+         Element span = inner.parent();
+         assertEquals("span", span.nodeName());
+         // Unwrap the span
+         span.unwrap();
+         assertEquals("world", doc.select("p").first().text());
+         // p should now be direct child of div again
+         assertEquals("div", inner.parent().nodeName());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-49f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-49f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-49f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-49f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-49f-copilot/.test_suite/org/jsoup/nodes/NodeTest.java:22: error: unclosed string literal
+ [javac] Document doc = Jsoup.parse("<body><div id='d1'>a</div><div id='d2'>b</div><div
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 9 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,391 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 71  Version: Jsoup-71b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.jsoup.nodes.PseudoTextElement, org.jsoup.select.Evaluator, org.jsoup.select.QueryParser
+Modified: org.jsoup.nodes.PseudoTextElement, org.jsoup.select.Evaluator, org.jsoup.select.QueryParser
+Triggers: org.jsoup.select.SelectorTest::splitOnBr, org.jsoup.select.SelectorTest::textAsElements
+
+Bug/specification summary:
+Bug report: 550
+Trigger failures:
+- org.jsoup.select.SelectorTest::splitOnBr
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'p:matchText': unexpected token at ':matchText'
+ - org.jsoup.select.SelectorTest::textAsElements
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'p:matchText:first-child': unexpected token at ':matchText:first-child'
+Modified: org.jsoup.nodes.PseudoTextElement, org.jsoup.select.Evaluator, org.jsoup.select.QueryParser
+
+Prompt-01 test plan:
+TARGETS QueryParser.parse handling of ':matchText' pseudo-selector token in findElements.
+ORACLES splitOnBr/textAsElements tests should pass; parse must not throw SelectorParseException.
+CASES valid "p:matchText","p:matchText:first-child" combos; boundary empty query, improper
+":matchText"; error unrecognized pseudo.
+RISKS Unclear if :matchText expects a regex argument; semantics of PseudoTextElement undefined
+without full source.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.select.Evaluator (java) =====
+/* API SIGNATURES */
+package org.jsoup.select;
+public abstract class Evaluator {
+protected Evaluator() {
+public abstract boolean matches(Element root, Element element);
+public static final class Tag extends Evaluator {
+public Tag(String tagName) {
+@Override
+public boolean matches(Element root, Element element) {
+public String toString() {
+public static final class TagEndsWith extends Evaluator {
+public TagEndsWith(String tagName) {
+public static final class Id extends Evaluator {
+public Id(String id) {
+public static final class Class extends Evaluator {
+public Class(String className) {
+public static final class Attribute extends Evaluator {
+public Attribute(String key) {
+public static final class AttributeStarting extends Evaluator {
+public AttributeStarting(String keyPrefix) {
+public static final class AttributeWithValue extends AttributeKeyPair {
+public AttributeWithValue(String key, String value) {
+public static final class AttributeWithValueNot extends AttributeKeyPair {
+public AttributeWithValueNot(String key, String value) {
+public static final class AttributeWithValueStarting extends AttributeKeyPair {
+public AttributeWithValueStarting(String key, String value) {
+public static final class AttributeWithValueEnding extends AttributeKeyPair {
+public AttributeWithValueEnding(String key, String value) {
+public static final class A
+...[truncated deterministically]...
+OfType extends Evaluator {
+public static final class IsEmpty extends Evaluator {
+public abstract static class IndexEvaluator extends Evaluator {
+public IndexEvaluator(int index) {
+public static final class ContainsText extends Evaluator {
+public ContainsText(String searchText) {
+public static final class ContainsData extends Evaluator {
+public ContainsData(String searchText) {
+public static final class ContainsOwnText extends Evaluator {
+public ContainsOwnText(String searchText) {
+public static final class Matches extends Evaluator {
+public Matches(Pattern pattern) {
+public static final class MatchesOwn extends Evaluator {
+public MatchesOwn(Pattern pattern) {
+
+/* HEADER */
+package org.jsoup.select;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.XmlDeclaration;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import static org.jsoup.internal.Normalizer.lowerCase;
+import static org.jsoup.internal.Normalizer.normalize;
+
+/* METHOD Evaluator */
+protected Evaluator() {
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ List<Node> family = element.childNodes();
+ for (Node n : family) {
+ if (!(n instanceof Comment || n instanceof XmlDeclaration || n instanceof DocumentType)) return false;
+ }
+ return true;
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ List<org.jsoup.nodes.Attribute> values = element.attributes().asList();
+ for (org.jsoup.nodes.Attribute attribute : values) {
+ if (lowerCase(attribute.getKey()).startsWith(keyPrefix))
+ return true;
+ }
+ return false;
+ }
+
+/* METHOD AttributeStarting */
+public AttributeStarting(String keyPrefix) {
+ Validate.notEmpty(keyPrefix);
+ this.keyPrefix = lowerCase(keyPrefix);
+ }
+
+/* METHOD AttributeKeyPair */
+public AttributeKeyPair(String key, String value) {
+ Validate.notEmpty(key);
+ Validate.notEmpty(value);
+
+ this.key = normalize(key);
+ if (value.startsWith("\"") && value.endsWith("\"")
+ || value.startsWith("'") && value.endsWith("'")) {
+ value = value.substring(1, value.length()-1);
+ }
+ this.value = normalize(value);
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ final Element p = element.parent();
+ return p != null && !(p instanceof Document) && element.elementSiblingIndex() == p.children().size()-1;
+ }
+
+/* METHOD calculatePosition */
+@Override
+ protected int calculatePosition(Element root, Element element) {
+ return element.parent().children().size() - element.elementSiblingIndex();
+ }
+
+/* METHOD calculatePosition */
+protected int calculatePosition(Element root, Element element) {
+ int pos = 0;
+ Elements family = element.parent().children();
+ for (Element el : family) {
+ if (el.tag().equals(element.tag())) pos++;
+ if (el == element) break;
+ }
+ return pos;
+ }
+
+/* METHOD calculatePosition */
+@Override
+ protected int calculatePosition(Element root, Element element) {
+ int pos = 0;
+ Elements family = element.parent().children();
+ for (int i = element.elementSiblingIndex(); i < family.size(); i++) {
+ if (family.get(i).tag().equals(element.tag())) pos++;
+ }
+ return pos;
+ }
+
+/* METHOD toString */
+@Override
+ public String toString() {
+ return ":first-child";
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ final Element r = root instanceof Document?root.child(0):root;
+ return element == r;
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ final Element p = element.parent();
+ if (p==null || p instanceof Document) return false;
+ 
+ int pos = 0;
+ Elements family = p.children();
+ for (Element el : family) {
+ if (el.tag().equals(element.tag())) pos++;
+ }
+ return pos == 1;
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ return (element.tagName().equalsIgnoreCase(tagName));
+ }
+
+/* METHOD matches */
+@Override
+ public boolean matches(Element root, Element element) {
+ return (element.tagName().endsWith(tagName));
+ }
+
+===== org.jsoup.select.QueryParser (java) =====
+/* API SIGNATURES */
+package org.jsoup.select;
+public class QueryParser {
+private List<Evaluator> evals = new ArrayList<>();
+private QueryParser(String query) {
+public static Evaluator parse(String query) {
+} else { // E.class, E#id, E[attr] etc. AND
+private void combinator(char combinator) {
+private String consumeSubQuery() {
+private void findElements() {
+private void byId() {
+private void byClass() {
+private void byTag() {
+private void byAttribute() {
+private void allElements() {
+private void indexLessThan() {
+private void indexGreaterThan() {
+private void indexEquals() {
+private static final Pattern NTH_AB = Pattern.compile("(([+-])?(\\d+)?)n(\\s*([+-])?\\s*\\d+)?", Pattern.CASE_INSENSITIVE);
+private static final Pattern NTH_B = Pattern.compile("([+-])?(\\d+)");
+private void cssNthChild(boolean backwards, boolean ofType) {
+private int consumeIndex() {
+private void has() {
+private void contains(boolean own) {
+private void containsData() {
+private void matches(boolean own) {
+private void not() {
+
+/* HEADER */
+package org.jsoup.select;
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.parser.TokenQueue;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import static org.jsoup.internal.Normalizer.normalize;
+public class QueryParser {
+
+/* METHOD parse */
+public static Evaluator parse(String query) {
+ try {
+ QueryParser p = new QueryParser(query);
+ return p.parse();
+ } catch (IllegalArgumentException e) {
+ throw new Selector.SelectorParseException(e.getMessage());
+ }
+ }
+
+/* METHOD not */
+private void not() {
+ tq.consume(":not");
+ String subQuery = tq.chompBalanced('(', ')');
+ Validate.notEmpty(subQuery, ":not(selector) subselect must not be empty");
+
+ evals.add(new StructuralEvaluator.Not(parse(subQuery)));
+ }
+
+/* METHOD QueryParser */
+private QueryParser(String query) {
+ this.query = query;
+ this.tq = new TokenQueue(query);
+ }
+
+/* METHOD parse */
+Evaluator parse() {
+ tq.consumeWhitespace();
+
+ if (tq.matchesAny(combinators)) { // if starts with a combinator, use root as elements
+ evals.add(new StructuralEvaluator.Root());
+ combinator(tq.consume());
+ } else {
+ findElements();
+ }
+
+ while (!tq.isEmpty()) {
+ // hierarchy and extras
+ boolean seenWhite = tq.consumeWhitespace();
+
+ if (tq.matchesAny(combinators)) {
+ combinator(tq.consume());
+ } else if (seenWhite) {
+ combinator(' ');
+ } else { // E.class, E#id, E[attr] etc. AND
+ findElements(); // take next el, #. etc off queue
+ }
+ }
+
+ if (evals.size() == 1)
+ return evals.get(0);
+
+ return new CombiningEvaluator.And(evals);
+ }
+
+/* METHOD cssNthChild */
+private void cssNthChild(boolean backwards, boolean ofType) {
+ String argS = normalize(tq.chompTo(")"));
+ Matcher mAB = NTH_AB.matcher(argS);
+ Matcher mB = NTH_B.matcher(argS);
+ final int a, b;
+ if ("odd".equals(argS)) {
+ a = 2;
+ b = 1;
+ } else if ("even".equals(argS)) {
+ a = 2;
+ b = 0;
+ } else if (mAB.matches()) {
+ a = mAB.group(3) != null ? Integer.parseInt(mAB.group(1).replaceFirst("^\\+", "")) : 1;
+ b = mAB.group(4) != null ? Integer.parseInt(mAB.group(4).replaceFirst("^\\+", "")) : 0;
+ } else if (mB.matches()) {
+ a = 0;
+ b = Integer.parseInt(mB.group().replaceFirst("^\\+", ""));
+ } else {
+ throw new Selector.SelectorParseException("Could not parse nth-index '%s': unexpected format", argS);
+ }
+ if (ofType)
+ if (backwards)
+ evals.add(new Evaluator.IsNthLastOfType(a, b));
+ else
+ evals.add(new Evaluator.IsNthOfType(a, b));
+ else {
+ if (backwards)
+ evals.add(new Evaluator.IsNthLastChild(a, b));
+ else
+ evals.add(new Evaluator.IsNthChild(a, b));
+ }
+ }
+
+/* METHOD combinator */
+private void combinator(char combinator) {
+ tq.consumeWhitespace();
+ String subQuery = consumeSubQuery(); // support multi > childs
+
+ Evaluator rootEval; // the new topmost evaluator
+ Evaluator currentEval; // the evaluator the new eval will be combined to. could be root, or rightmost or.
+ Evaluator newEval = parse(subQuery); // the evaluator to add into target evaluator
+ boolean replaceRightMost = false;
+
+ if (evals.size() == 1) {
+ rootEval = currentEval = evals.get(0);
+ // make sure OR (,) has precedence:
+ if (rootEval instanceof CombiningEvaluator.Or && combinator != ',') {
+ currentEval = ((CombiningEvaluator.Or) currentEval).rightMostEvaluator();
+ replaceRightMost = true;
+ }
+ }
+ else {
+ rootEval = currentEval = new CombiningEvaluator.And(evals);
+ }
+ evals.clear();
+
+ // for most combinators: change the current eval into an AND of the current eval and the new eval
+ if (combinator == '>')
+ currentEval = new CombiningEvaluator.And(newEval, new StructuralEvaluator.ImmediateParent(currentEval));
+ else if (combinator == ' ')
+ currentEval = new CombiningEvaluator.And(newEval, new StructuralEvaluator.Parent(currentEval));
+ else if (combinator == '+')
+ currentEval = new CombiningEvaluator.And(newEval, new StructuralEvaluator.ImmediatePreviousSibling(currentEval));
+ else if (combinator == '~')
+ currentEval = new CombiningEvaluator.And(newEval, new StructuralEvaluator.PreviousSibling(currentEval));
+ else if (combinator == ',') { // group or.
+ CombiningEvaluator.Or or;
+ if (currentEval instanceof CombiningEvaluator.Or) {
+ or = (CombiningEvaluator.Or) currentEval;
+ or.add(newEval);
+ } else {
+ or = new CombiningEvaluator.Or();
+ or.add(currentEval);
+ or.add(newEval);
+ }
+ currentEval = or;
+ }
+ else
+ throw new Selector.SelectorParseException("Unknown combinator: " + combinator);
+
+ if (replaceRightMost)
+ ((CombiningEvaluator.Or) rootEval).replaceRightMostEvaluator(currentEval);
+ else rootEval = currentEval;
+ evals.add(rootEval);
+ }

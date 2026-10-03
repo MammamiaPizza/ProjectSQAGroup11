@@ -1,0 +1,333 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 95  Version: JacksonDatabind-95b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.type.TypeFactory, com.fasterxml.jackson.databind.type.TypeParser
+Modified: com.fasterxml.jackson.databind.type.TypeFactory, com.fasterxml.jackson.databind.type.TypeParser
+Triggers: com.fasterxml.jackson.databind.type.TestTypeFactory::testCanonicalNames
+
+Bug/specification summary:
+Bug report: 1941
+Trigger failures:
+- com.fasterxml.jackson.databind.type.TestTypeFactory::testCanonicalNames
+ --> java.lang.NullPointerException
+Modified: com.fasterxml.jackson.databind.type.TypeFactory, com.fasterxml.jackson.databind.type.TypeParser
+
+Prompt-01 test plan:
+TARGETS: TypeFactory.constructFromCanonical(String) canonical-type parsing used by testCanonicalNames 
+TARGETS: TypeParser.parse(String), parseType/parseTypes, and class lookup/error reporting 
+ORACLES: JavaType canonical-name round-trip/equality expected by existing TestTypeFactory::testCanonicalNames 
+CASES: Normal canonical simple class and nested generic canonical names accepted by TypeFactory parser 
+CASES: Boundary nested/parameterized canonical names; verify all generic arguments are retained 
+CASES: Error malformed canonical syntax and unresolvable class produce IllegalArgumentException, not NPE 
+RISKS: Only trigger name and partial signatures are available; exact canonical inputs/assertions are not shown
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.type.TypeFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.type;
+@SuppressWarnings({"rawtypes" })
+public final class TypeFactory
+protected final static TypeFactory instance = new TypeFactory();
+protected final static TypeBindings EMPTY_BINDINGS = TypeBindings.emptyBindings();
+private final static Class<?> CLS_STRING = String.class;
+private final static Class<?> CLS_OBJECT = Object.class;
+private final static Class<?> CLS_COMPARABLE = Comparable.class;
+private final static Class<?> CLS_CLASS = Class.class;
+private final static Class<?> CLS_ENUM = Enum.class;
+protected final static SimpleType CORE_TYPE_BOOL = new SimpleType(CLS_BOOL);
+protected final static SimpleType CORE_TYPE_INT = new SimpleType(CLS_INT);
+protected final static SimpleType CORE_TYPE_LONG = new SimpleType(CLS_LONG);
+protected final static SimpleType CORE_TYPE_STRING = new SimpleType(CLS_STRING);
+protected final static SimpleType CORE_TYPE_OBJECT = new SimpleType(CLS_OBJECT);
+protected final static SimpleType CORE_TYPE_COMPARABLE = new SimpleType(CLS_COMPARABLE);
+protected final static SimpleType CORE_TYPE_ENUM = new SimpleType(CLS_ENUM);
+protected final static SimpleType CORE_TYPE_CLASS = new SimpleType(CLS_CLASS);
+protected final LRUMap<Object,JavaType> _typeCache;
+protected final TypeModifier[] _modifiers;
+protected final TypeParser _parser;
+protected final ClassL
+...[truncated deterministically]...
+Properties.class) {
+protected JavaType _resolveSuperClass(ClassStack context, Class<?> rawType, TypeBindings parentBindings)
+protected JavaType[] _resolveSuperInterfaces(ClassStack context, Class<?> rawType, TypeBindings parentBindings)
+if (rawType == Map.class) {
+if (rawType == Collection.class) {
+if (rawType == AtomicReference.class) {
+protected JavaType _fromArrayType(ClassStack context, GenericArrayType type, TypeBindings bindings)
+protected JavaType _fromVariable(ClassStack context, TypeVariable<?> var, TypeBindings bindings)
+final String name = var.getName();
+protected JavaType _fromWildcard(ClassStack context, WildcardType type, TypeBindings bindings)
+
+/* HEADER */
+package com.fasterxml.jackson.databind.type;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.LRUMap;
+
+/* METHOD TypeFactory */
+protected TypeFactory(LRUMap<Object,JavaType> typeCache, TypeParser p,
+ TypeModifier[] mods, ClassLoader classLoader)
+ {
+ if (typeCache == null) {
+ typeCache = new LRUMap<Object,JavaType>(16, 200);
+ }
+ _typeCache = typeCache;
+ // As per [databind#894] must ensure we have back-linkage from TypeFactory:
+ _parser = p.withFactory(this);
+ _modifiers = mods;
+ _classLoader = classLoader;
+ }
+
+/* METHOD TypeFactory */
+protected TypeFactory(LRUMap<Object,JavaType> typeCache) {
+ if (typeCache == null) {
+ typeCache = new LRUMap<Object,JavaType>(16, 200);
+ }
+ _typeCache = typeCache;
+ _parser = new TypeParser(this);
+ _modifiers = null;
+ _classLoader = null;
+ }
+
+/* METHOD TypeFactory */
+private TypeFactory() {
+ this(null);
+ }
+
+/* METHOD withModifier */
+public TypeFactory withModifier(TypeModifier mod) 
+ {
+ LRUMap<Object,JavaType> typeCache = _typeCache;
+ TypeModifier[] mods;
+ if (mod == null) { // mostly for unit tests
+ mods = null;
+ // 30-Jun-2016, tatu: for some reason expected semantics are to clear cache
+ // in this case; can't recall why, but keeping the same
+ typeCache = null;
+ } else if (_modifiers == null) {
+ mods = new TypeModifier[] { mod };
+ } else {
+ mods = ArrayBuilders.insertInListNoDup(_modifiers, mod);
+ }
+ return new TypeFactory(typeCache, _parser, mods, _classLoader);
+ }
+
+ public TypeFactory withClassLoader(ClassLoader classLoader) {
+ return new TypeFactory(_typeCache, _parser, _modifiers, classLoader);
+ }
+
+ /**
+ * Mutant factory method that will construct new {@lin
+...[truncated deterministically]...
+t likely one with
+ * bigger maximum size.
+ *
+ * @since 2.8
+ */
+ public TypeFactory withCache(LRUMap<Object,JavaType> cache) {
+ return new TypeFactory(cache, _parser, _modifiers, _classLoader);
+ }
+
+ /**
+ * Method used to access the globally shared instance, which has
+ * no custom configuration. Used by <code>ObjectMapper</code> to
+ * get the default factory when constructed.
+ */
+ public static TypeFactory defaultInstance() { return instance; }
+
+ /**
+ * Method that will clear up any cached type definitions that may
+ * be cached by this {@link TypeFactory} instance.
+ * This method should not be commonly used, that is, only use it
+ * if you know there is a problem with retention of type definitions;
+ * the most likely (and currently only known) problem is retention
+ * of {@link Class} instances via {@link JavaType} reference.
+ * 
+ * @since 2.4.1
+ */
+ public void clearCache() {
+ _typeCache.clear();
+ }
+
+ public ClassLoader getClassLoader() {
+ return _classLoader;
+ }
+ 
+ /*
+ /*****************************************************
+...[truncated deterministically]...
+y(null, type, bindings);
+ }
+ 
+ public JavaType constructType(TypeReference<?> typeRef)
+ {
+ // 19-Oct-2015, tatu: Simpler variant like so should work
+ return _fromAny(null, typeRef.getType(), EMPTY_BINDINGS);
+
+ // but if not, due to funky sub-classing, type variables, what follows
+ // is a more complete processing a la Java ClassMate.
+
+ /*
+ final Class<?> refdRawType = typeRef.getClass();
+ JavaType type = _fromClass(null, refdRawType, EMPTY_BINDINGS);
+ JavaType genType = type.findSuperType(TypeReference.class);
+ if (genType == null) { // sanity check; shouldn't occur
+ throw new IllegalArgumentException("Unparameterized GenericType instance ("+refdRawType.getName()+")");
+ }
+ TypeBindings b = genType.getBindings();
+ JavaType[] params = b.typeParameterArray();
+ if (params.length == 0) {
+ throw new IllegalArgumentException("Unparameterized GenericType instance ("+refdRawType.getName()+")");
+ }
+ return params[0];
+ */
+ }
+
+===== com.fasterxml.jackson.databind.type.TypeParser (java) =====
+package com.fasterxml.jackson.databind.type;
+
+import java.util.*;
+
+import com.fasterxml.jackson.databind.JavaType;
+
+/**
+ * Simple recursive-descent parser for parsing canonical {@link JavaType}
+ * representations and constructing type instances.
+ */
+public class TypeParser
+ implements java.io.Serializable
+{
+ private static final long serialVersionUID = 1L;
+
+ protected final TypeFactory _factory;
+ 
+ public TypeParser(TypeFactory f) {
+ _factory = f;
+ }
+
+ /**
+ * @since 2.6.2
+ */
+ public TypeParser withFactory(TypeFactory f) {
+ return (f == _factory) ? this : new TypeParser(f);
+ }
+
+ public JavaType parse(String canonical) throws IllegalArgumentException
+ {
+ MyTokenizer tokens = new MyTokenizer(canonical.trim());
+ JavaType type = parseType(tokens);
+ // must be end, now
+ if (tokens.hasMoreTokens()) {
+ throw _problem(tokens, "Unexpected tokens after complete type");
+ }
+ return type;
+ }
+
+ protected JavaType parseType(MyTokenizer tokens)
+ throws IllegalArgumentException
+ {
+ if (!tokens.hasMoreTokens()) {
+ throw _problem(tokens, "Unexpected end-of-string");
+ }
+ Class<?> base = findClass(tokens.nextToken(), tokens);
+
+ // either end (ok, non generic type), or generics
+ if (tokens.hasMoreTokens()) {
+ String token = tokens.nextToken();
+ if ("<".equals(token)) {
+ List<JavaType> parameterTypes = parseTypes(tokens);
+ TypeBindings b = TypeBindings.create(base, parameterTypes);
+ return _factory._fromClass(null, base, b);
+ }
+ // can be comma that separates types, or closing '>'
+ tokens.pushBack(token);
+ }
+ return _factory._fromClass(null, base, null);
+ }
+
+ protected List<JavaType> parseTypes(MyTokenizer tokens)
+ throws IllegalArgumentException
+ {
+ ArrayList<JavaType> types = new ArrayList<JavaType>();
+ while (tokens.hasMoreTokens()) {
+ types.add(parseType(tokens));
+ if (!tokens.hasMoreTokens()) break;
+ String token = tokens.nextToken();
+ if (">".equals(token)) return types;
+ if (!",".equals(token)) {
+ throw _problem(tokens, "Unexpected token '"+token+"', expected ',' or '>')");
+ }
+ }
+ throw _problem(tokens, "Unexpected end-of-string");
+ }
+
+ protected Class<?> findClass(String className, MyTokenizer tokens)
+ {
+ try {
+ return _factory.findClass(className);
+ } catch (Exception e) {
+ if (e instanceof RuntimeException) {
+ throw (RuntimeException) e;
+ }
+ throw _problem(tokens, "Can not locate class '"+className+"', problem: "+e.getMessage());
+ }
+ }
+
+ protected IllegalArgumentException _problem(MyTokenizer tokens, String msg)
+ {
+ return new IllegalArgumentException(String.format("Failed to parse type '%s' (remaining: '%s'): %s",
+ tokens.getAllInput(), tokens.getRemainingInput(), msg));
+ }
+
+ final static class MyTokenizer extends StringTokenizer
+ {
+ protected final String _input;
+
+ protected int _index;
+
+ protected String _pushbackToken;
+
+ public MyTokenizer(String str) { 
+ super(str, "<,>", true);
+ _input = str;
+ }
+
+ @Override
+ public boolean hasMoreTokens() {
+ return (_pushbackToken != null) || super.hasMoreTokens();
+ }
+ 
+ @Override
+ public String nextToken() {
+ String token;
+ if (_pushbackToken != null) {
+ token = _pushbackToken;
+ _pushbackToken = null;
+ } else {
+ token = super.nextToken();
+ _index += token.length();
+ token = token.trim();
+ }
+ return token;
+ }
+
+ public void pushBack(String token) {
+ _pushbackToken = token;
+ // let's NOT change index for now, since token may have been trim()ed
+ }
+
+ public String getAllInput() { return _input; }
+// public String getUsedInput() { return _input.substring(0, _index); }
+ public String getRemainingInput() { return _input.substring(_index); }
+ }
+}

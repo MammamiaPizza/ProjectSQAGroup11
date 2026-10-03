@@ -1,0 +1,152 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 36  Version: Jsoup-36b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 321
+Trigger failures:
+- org.jsoup.helper.DataUtilTest::shouldCorrectCharsetForDuplicateCharsetString
+ --> java.nio.charset.IllegalCharsetNameException: charset=iso-8859-1
+ - org.jsoup.helper.DataUtilTest::shouldNotThrowExceptionOnEmptyCharset
+ --> java.nio.charset.IllegalCharsetNameException: 
+ - org.jsoup.helper.DataUtilTest::testQuotedCharset
+ --> java.nio.charset.IllegalCharsetNameException: 'UTF-8'
+ - org.jsoup.helper.DataUtilTest::shouldSelectFirstCharsetOnWeirdMultileCharsetsInMetaTags
+ --> java.nio.charset.IllegalCharsetNameException: ISO-8859-1,
+ - org.jsoup.helper.DataUtilTest::shouldReturnNullForIllegalCharsetNames
+ --> java.nio.charset.IllegalCharsetNameException: $HJKDF§$/(
+ - org.jsoup.integration.ParseTest::testBrokenHtml5CharsetWithASingleDoubleQuote
+ --> java.nio.charset.IllegalCharsetNameException: UTF-8"
+Modified: org.jsoup.helper.DataUtil
+
+Available API/signatures:
+[org.jsoup.helper.DataUtil | java]
+package org.jsoup.helper;
+public class DataUtil {
+private static final Pattern charsetPattern = Pattern.compile("(?i)\\bcharset=\\s*\"?([^\\s;\"]*)");
+private DataUtil() {}
+public static Document load(File in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri) throws IOException {
+public static Document load(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+static Document parseByteData(ByteBuffer byteData, String charsetName, String baseUri, Parser parser) {
+static ByteBuffer readToByteBuffer(InputStream inStream, int maxSize) throws IOException {
+static ByteBuffer readToByteBuffer(InputStream inStream) throws IOException {
+static String getCharsetFromContentType(String contentType) {
+
+Generated JUnit Test:
+package org.jsoup.helper;
+
+ import org.jsoup.nodes.Document;
+ import org.jsoup.parser.Parser;
+ import org.junit.Test;
+
+ import java.io.ByteArrayInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.nio.charset.Charset;
+ import java.nio.charset.IllegalCharsetNameException;
+
+ import static org.junit.Assert.*;
+
+ /**
+  * Tests for DataUtil that reveal charset sanitization issues.
+  */
+ public class DataUtilTest {
+
+     @Test
+     public void testGetCharsetFromContentType_Normal() {
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=UTF-8"));
+         assertEquals("ISO-8859-1", DataUtil.getCharsetFromContentType("text/html;
+charset=ISO-8859-1"));
+     }
+
+     @Test
+     public void testGetCharsetFromContentType_Null() {
+         assertNull(DataUtil.getCharsetFromContentType(null));
+     }
+
+     @Test
+     public void shouldNotThrowExceptionOnEmptyCharset() {
+         assertNull(DataUtil.getCharsetFromContentType("text/html; charset="));
+         assertNull(DataUtil.getCharsetFromContentType("text/html; charset= "));
+     }
+
+     @Test
+     public void testQuoedCharset() {
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=\"UTF-8\""));
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset='UTF-8'"));
+     }
+
+     @Test
+     public void shouldSelectFirstCharsetOnWeirdMultileCharsetsInMetaTags() {
+         assertEquals("ISO-8859-1", DataUtil.getCharsetFromContentType("text/html;
+charset=ISO-8859-1,"));
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=UTF-8,
+ISO-8859-1"));
+     }
+
+     @Test
+     public void shouldReturnNullForIllegalCharsetNames() {
+         assertNull(DataUtil.getCharsetFromContentType("text/html; charset=$HJKDF§$%("));
+         assertNull(DataUtil.getCharsetFromContentType("text/html; charset=###"));
+     }
+
+     @Test
+     public void shouldCorrectCharsetForDuplicateCharsetString() {
+         assertEquals("ISO-8859-1", DataUtil.getCharsetFromContentType(
+                 "text/html; charset=\"ISO-8859-1\" charset=\"UTF-8\""));
+     }
+
+     @Test
+     public void testBrokenHtml5CharsetWithSingleDoubleQuote() {
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=UTF-8\""));
+     }
+
+     @Test
+     public void testCharsetCaseInsensity() {
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=utf-8"));
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=\"utf-8\""));
+     }
+
+     @Test
+     public void testParseWithMalformedCharsetInMeta() throws IOException {
+         String html = "<html><head><meta http-equiv=\"Content-Type\" content=\"text/html;
+charset='UTF-8'\"></head><body></body></html>";
+         InputStream in = new ByteArrayInputStream(html.getBytes("US-ASCII"));
+         Document doc = DataUtil.load(in, null, "]8;id=md-3j18as;http://example.comhttp://example.com]8;;]8;;");]8;;
+         assertNotNull(doc);
+     }
+
+     @Test
+     public void testUnsuportedCharsetAfterCleaning() {
+         assertNull(DataUtil.getCharsetFromContentType("text/html; charset='invalid-charset123'"));
+     }
+
+     @Test
+     public void testCharsetWithExtrWhitespace() {
+         assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset =
+\"UTF-8\""));
+         assertEquals("ISO-8859-1", DataUtil.getCharsetFromContentType("text/html; charset=
+ISO-8859-1 "));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Jsoup-36f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Jsoup-36f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Jsoup-36f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Jsoup-36f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Jsoup-36f-copilot/.test_suite/org/jsoup/helper/DataUtilTest.java:23: error: unclosed string literal
+ [javac] assertEquals("ISO-8859-1", DataUtil.getCharsetFromContentType("text/html;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 4 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

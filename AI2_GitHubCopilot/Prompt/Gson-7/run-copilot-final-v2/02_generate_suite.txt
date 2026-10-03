@@ -1,0 +1,420 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Gson  Bug: 7  Version: Gson-7b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: com.google.gson.stream.JsonReader
+Modified: com.google.gson.stream.JsonReader
+Triggers: com.google.gson.functional.MapTest::testMapDeserializationWithUnquotedLongKeys, com.google.gson.functional.MapTest::testMapDeserializationWithUnquotedIntegerKeys, com.google.gson.stream.JsonReaderTest::testPeekingUnquotedStringsPrefixedWithIntegers
+
+Bug/specification summary:
+Bug report: 604
+Trigger failures:
+- com.google.gson.functional.MapTest::testMapDeserializationWithUnquotedLongKeys
+ --> com.google.gson.JsonSyntaxException: java.lang.IllegalStateException: Expected a long but was STRING at line 1 column 2 path $.
+ - com.google.gson.functional.MapTest::testMapDeserializationWithUnquotedIntegerKeys
+ --> com.google.gson.JsonSyntaxException: java.lang.IllegalStateException: Expected an int but was STRING at line 1 column 2 path $.
+ - com.google.gson.stream.JsonReaderTest::testPeekingUnquotedStringsPrefixedWithIntegers
+ --> java.lang.IllegalStateException: Expected an int but was STRING at line 1 column 2 path $[0]
+Modified: com.google.gson.stream.JsonReader
+
+Prompt-01 test plan:
+TARGETS: JsonReader.nextLong, nextInt, peek, nextString, nextUnquotedValue, peekNumber
+ORACLES: Unquoted numeric keys must parse as long/int, not STRING
+CASES: Unquoted long keys (e.g. 123L), integer keys (42), mixed string+number, boundary
+Long.MAX_VALUE/MIN_VALUE
+RISKS: Only bug report and triggers available; no source diff for exact fix lines
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.gson.stream.JsonReader (java) =====
+/* API SIGNATURES */
+package com.google.gson.stream;
+public class JsonReader implements Closeable {
+private static final char[] NON_EXECUTE_PREFIX = ")]}'\n".toCharArray();
+public JsonReader(Reader in) {
+public final void setLenient(boolean lenient) {
+public final boolean isLenient() {
+public void beginArray() throws IOException {
+public void endArray() throws IOException {
+public void beginObject() throws IOException {
+public void endObject() throws IOException {
+public boolean hasNext() throws IOException {
+public JsonToken peek() throws IOException {
+private int peekKeyword() throws IOException {
+private int peekNumber() throws IOException {
+private boolean isLiteral(char c) throws IOException {
+public String nextName() throws IOException {
+public String nextString() throws IOException {
+public boolean nextBoolean() throws IOException {
+public void nextNull() throws IOException {
+public double nextDouble() throws IOException {
+public long nextLong() throws IOException {
+private String nextQuotedValue(char quote) throws IOException {
+@SuppressWarnings("fallthrough")
+private String nextUnquotedValue() throws IOException {
+private void skipQuotedValue(char quote) throws IOException {
+private void skipUnquotedValue() throws IOException {
+public int nextInt() throws IOException {
+public void close() throws IOException {
+public void skipValue() throws IOException {
+private void push(int newTop) {
+private boolean fillBuffer(int minimum) throws IOException {
+private int nextNonWhitespace(boolean throwOnEof) throws IOException {
+private void checkLenient() throws IOException {
+private void skipToEndOfLine() throws IOException {
+private boolean skipTo(String toFind) throws IOException {
+@Override public String toString() {
+public String getPath() {
+private char readEscapeCharacter() throws IOException {
+private IOException syntaxError(String message) throws IOException {
+private void consumeNonExecutePrefix() throws IOException {
+@Override public void promoteNameToValue(JsonReader reader) throws IOException {
+
+/* HEADER */
+package com.google.gson.stream;
+import com.google.gson.internal.JsonReaderInternalAccess;
+import com.google.gson.internal.bind.JsonTreeReader;
+import java.io.Closeable;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.Reader;
+
+/* METHOD JsonReader */
+public JsonReader(Reader in) {
+ if (in == null) {
+ throw new NullPointerException("in == null");
+ }
+ this.in = in;
+ }
+
+/* METHOD nextString */
+public String nextString() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ String result;
+ if (p == PEEKED_UNQUOTED) {
+ result = nextUnquotedValue();
+ } else if (p == PEEKED_SINGLE_QUOTED) {
+ result = nextQuotedValue('\'');
+ } else if (p == PEEKED_DOUBLE_QUOTED) {
+ result = nextQuotedValue('"');
+ } else if (p == PEEKED_BUFFERED) {
+ result = peekedString;
+ peekedString = null;
+ } else if (p == PEEKED_LONG) {
+ result = Long.toString(peekedLong);
+ } else if (p == PEEKED_NUMBER) {
+ result = new String(buffer, pos, peekedNumberLength);
+ pos += peekedNumberLength;
+ } else {
+ throw new IllegalStateException("Expected a string but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ }
+
+/* METHOD nextLong */
+public long nextLong() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+
+ if (p == PEEKED_LONG) {
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return peekedLong;
+ }
+
+ if (p == PEEKED_NUMBER) {
+ peekedString = new String(buffer, pos, peekedNumberLength);
+ pos += peekedNumberLength;
+ } else if (p == PEEKED_SINGLE_QUOTED || p == PEEKED_DOUBLE_QUOTED) {
+ peekedString = nextQuotedValue(p == PEEKED_SINGLE_QUOTED ? '\'' : '"');
+ try {
+ long result = Long.parseLong(peekedString);
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ } catch (NumberFormatException ignored) {
+ // Fall back to parse as a double below.
+ }
+ } else {
+ throw new IllegalStateException("Expected a long but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+
+ peeked = PEEKED_BUFFERED;
+ double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
+ long result = (long) asDouble;
+ if (result != asDouble) { // Make sure no precision was lost casting to 'long'.
+ throw new NumberFormatException("Expected a long but was " + peekedString
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peekedString = null;
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ }
+
+ /**
+ * Returns the string up to but not including {@code quote}, unescaping any
+ * character escape sequences encountered along the way. The opening quote
+ * should have already been read. This consumes the closing quote, but does
+ * not include it in the returned string.
+ *
+ * @param quote either ' or ".
+ * @throws NumberFormatException if any unicode escape sequences are
+ * malformed.
+ */
+ private String nextQuotedValue(char quote) throws IOException {
+ // Like nextNonWhitespace, this uses locals 'p' and 'l' to save inner-loop field access.
+ char[] buffer = this.buffer;
+ StringBuilder builder = new StringBuilder();
+ while (true) {
+ int p = pos;
+ int l = limit;
+ /* the index of the first character not yet appended to the builder. */
+ int start = p;
+ while (p < l) {
+ int c = buffer[p++];
+
+ if (c == quote) {
+ pos = p;
+ builder.append(buffer, start, p - start - 1);
+ return builder.toString();
+ } else if (c == '\\') {
+ pos = p;
+ builder.append(buffer, start, p - start - 1);
+ builder.append(readEscapeCharacter());
+ p = pos;
+ l = limit;
+ start = p;
+ } else if (c == '\n') {
+ lineNumber++;
+ lineStart = p;
+ }
+ }
+
+ builder.append(buffer, start, p - start);
+ pos = p;
+ if (!fillBuffer(1)) {
+ throw syntaxError("Unterminated string");
+ }
+ }
+ }
+
+ /**
+ * Returns an unquoted value as a string.
+ */
+ @SuppressWarnings("fallthrough")
+ private String nextUnquotedValue() throws IOException {
+ StringBuilder builder = null;
+ int i = 0;
+
+ findNonLiteralCharacter:
+ while (true) {
+ for (; pos + i < limit; i++) {
+ switch (buffer[pos + i]) {
+ case '/':
+ case '\\':
+ case ';':
+ case '#':
+ case '=':
+ checkLenient(); // fall-through
+ case '{':
+ case '}':
+ case '[':
+ case ']':
+ case ':':
+ case ',':
+ case ' ':
+ case '\t':
+ case '\f':
+ case '\r':
+ case '\n':
+ break findNonLiteralCharacter;
+ }
+ }
+
+ // Attempt to load the entire literal into the buffer at once.
+ if (i < buffer.length) {
+ if (fillBuffer(i + 1)) {
+ continue;
+ } else {
+ break;
+ }
+ }
+
+ // use a StringBuilder when the va
+...[truncated deterministically]...
+er, or exactly represented as an int.
+ */
+ public int nextInt() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+
+ int result;
+ if (p == PEEKED_LONG) {
+ result = (int) peekedLong;
+ if (peekedLong != result) { // Make sure no precision was lost casting to 'int'.
+ throw new NumberFormatException("Expected an int but was " + peekedLong
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ }
+
+ if (p == PEEKED_NUMBER) {
+ peekedString = new String(buffer, pos, peekedNumberLength);
+ pos += peekedNumberLength;
+ } else if (p == PEEKED_SINGLE_QUOTED || p == PEEKED_DOUBLE_QUOTED) {
+ peekedString = nextQuotedValue(p == PEEKED_SINGLE_QUOTED ? '\'' : '"');
+ try {
+ result = Integer.parseInt(peekedString);
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ } catch (NumberFormatException ignored) {
+ // Fall back to parse as a double below.
+ }
+ } else {
+ throw new IllegalStateException("Expected an int but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+
+ peeked = PEEKED_BUFFERED;
+ double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
+ result = (int) asDouble;
+ if (result != asDouble) { // Make sure no precision was lost casting to 'int'.
+ throw new NumberFormatException("Expected an int but was " + peekedString
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peekedString = null;
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ }
+
+/* METHOD nextInt */
+public int nextInt() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+
+ int result;
+ if (p == PEEKED_LONG) {
+ result = (int) peekedLong;
+ if (peekedLong != result) { // Make sure no precision was lost casting to 'int'.
+ throw new NumberFormatException("Expected an int but was " + peekedLong
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ }
+
+ if (p == PEEKED_NUMBER) {
+ peekedString = new String(buffer, pos, peekedNumberLength);
+ pos += peekedNumberLength;
+ } else if (p == PEEKED_SINGLE_QUOTED || p == PEEKED_DOUBLE_QUOTED) {
+ peekedString = nextQuotedValue(p == PEEKED_SINGLE_QUOTED ? '\'' : '"');
+ try {
+ result = Integer.parseInt(peekedString);
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ } catch (NumberFormatException ignored) {
+ // Fall back to parse as a double below.
+ }
+ } else {
+ throw new IllegalStateException("Expected an int but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+
+ peeked = PEEKED_BUFFERED;
+ double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
+ result = (int) asDouble;
+ if (result != asDouble) { // Make sure no precision was lost casting to 'int'.
+ throw new NumberFormatException("Expected an int but was " + peekedString
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peekedString = null;
+ peeked = PEEKED_NONE;
+ pathIndices[stackSize - 1]++;
+ return result;
+ }
+
+ /**
+ * Closes this JSON reader and the underlying {@link java.io.Reader}.
+ */
+ public void close() throws IOException {
+ peeked = PEEKED_NONE;
+ stack[0] = JsonScope.CLOSED;
+ stackSize = 1;
+ in.close();
+ }
+
+ /**
+ * Skips the next value recursively. If it is an object or array, all nested
+ * elements are skipped. This method is intended for use when the JSON token
+ * stream contains unrecognized or unhandled values.
+ */
+ public void skipValue() throws IOException {
+ int count = 0;
+ do {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+
+ if (p == PEEKED_BEGIN_ARRAY) {
+ push(JsonScope.EMPTY_ARRAY);
+ count++;
+ } else if (p == PEEKED_BEGIN_OBJECT) {
+ push(JsonScope.EMPTY_OBJECT);
+ count++;
+ } else if (p == PEEKED_END_ARRAY) {
+ stackSize--;
+ count--;
+ } else if (p == PEEKED_END_OBJECT) {
+ stackSize--;
+ count--;
+ } else if (p == PEEKED_UNQUOTED_NAME || p == PEEKED_UNQUOTED) {
+ skipUnquotedValue();
+ } else if (p == PEEKED_SINGLE_QUOTED || p == PEEKED_SINGLE_QUOTED_NAME) {
+ skipQuotedValue('\'');
+ }
+
+/* METHOD nextName */
+public String nextName() throws IOException {
+ int p = peeked;
+ if (p == PEEKED_NONE) {
+ p = doPeek();
+ }
+ String result;
+ if (p == PEEKED_UNQUOTED_NAME) {
+ result = nextUnquotedValue();
+ } else if (p == PEEKED_SINGLE_QUOTED_NAME) {
+ result = nextQuotedValue('\'');
+ } else if (p == PEEKED_DOUBLE_QUOTED_NAME) {
+ result = nextQuotedValue('"');
+ } else {
+ throw new IllegalStateException("Expected a name but was " + peek()
+ + " at line " + getLineNumber() + " column " + getColumnNumber() + " path " + getPath());
+ }
+ peeked = PEEKED_NONE;
+ pathNames[stackSize - 1] = result;
+ return result;
+ }

@@ -1,0 +1,311 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 77  Version: JacksonDatabind-77b
+JUnit: powermock-module-junit4-1.6.3.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+Triggers: com.fasterxml.jackson.databind.interop.IllegalTypesCheckTest::testIssue1599
+
+Bug/specification summary:
+Bug report: 1599
+Trigger failures:
+- com.fasterxml.jackson.databind.interop.IllegalTypesCheckTest::testIssue1599
+ --> junit.framework.AssertionFailedError: Expected an exception with one of substrings ([Illegal type]): got one with message "N/A
+Modified: com.fasterxml.jackson.databind.deser.BeanDeserializerFactory
+
+Prompt-01 test plan:
+TARGETS BeanDeserializerFactory bean eligibility; protected isPotentialBeanType(Class<?>).
+ORACLES IllegalTypesCheckTest.testIssue1599 expects an exception message containing "Illegal type".
+CASES Exercise the trigger’s illegal-type deserialization path and assert the required message substring.
+CASES Cover BeanDeserializerFactory rejection of Proxy classes, whose shown path throws IllegalArgumentException.
+RISKS No modified diff/body or trigger input is provided; exact illegal class and normal-path behavior are unavailable.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.BeanDeserializerFactory (java) =====
+/* API SIGNATURES */
+package com.fasterxml.jackson.databind.deser;
+public class BeanDeserializerFactory
+private final static Class<?>[] INIT_CAUSE_PARAMS = new Class<?>[] { Throwable.class };
+public BeanDeserializerFactory(DeserializerFactoryConfig config) {
+@Override
+public DeserializerFactory withConfig(DeserializerFactoryConfig config)
+if (getClass() != BeanDeserializerFactory.class) {
+final DeserializationConfig config = ctxt.getConfig();
+/* important: introspect actual implementation (abstract class or
+@SuppressWarnings("unchecked")
+final String buildMethodName = (builderConfig == null) ?
+if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+final boolean isConcrete = !beanDesc.getType().isAbstract();
+final boolean useGettersAsSetters = (ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS)
+if (Collection.class.isAssignableFrom(rawPropertyType)
+|| Map.class.isAssignableFrom(rawPropertyType)) {
+final String name = propDef.getName();
+throw ctxt.mappingException("Could not find creator property with name '%s' (in class %s)",
+/* Otherwise, method may specify more specific (sub-)class for
+&& Throwable.class.isAssignableFrom(propType0.getRawClass())) {
+final AnnotatedMethod getter = propDef.getGetter();
+protected boolean isPotentialBeanType(Class<?> type)
+throw new IllegalArgumentException("Can not deserialize Proxy class "+type.getName()+" as a Bean");
+
+/* HEADER */
+package com.fasterxml.jackson.databind.deser;
+import java.util.*;
+import com.fasterxml.jackson.annotation.ObjectIdGenerator;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.annotation.ObjectIdResolver;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
+import com.fasterxml.jackson.databind.cfg.DeserializerFactoryConfig;
+import com.fasterxml.jackson.databind.deser.impl.*;
+import com.fasterxml.jackson.databind.deser.std.ThrowableDeserializer;
+import com.fasterxml.jackson.databind.introspect.*;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+import com.fasterxml.jackson.databind.util.ArrayBuilders;
+import com.fasterxml.jackson.databind.util.ClassUtil;
+import com.fasterxml.jackson.databind.util.SimpleBeanPropertyDefinition;
+public class BeanDeserializerFactory
+
+/* METHOD BeanDeserializerFactory */
+public BeanDeserializerFactory(DeserializerFactoryConfig config) {
+ super(config);
+ }
+
+/* METHOD addObjectIdReader */
+protected void addObjectIdReader(DeserializationContext ctxt,
+ BeanDescription beanDesc, BeanDeserializerBuilder builder)
+ throws JsonMappingException
+ {
+ ObjectIdInfo objectIdInfo = beanDesc.getObjectIdInfo();
+ if (objectIdInfo == null) {
+ return;
+ }
+ Class<?> implClass = objectIdInfo.getGeneratorType();
+ JavaType idType;
+ SettableBeanProperty idProp;
+ ObjectIdGenerator<?> gen;
+
+ ObjectIdResolver resolver = ctxt.objectIdResolverInstance(beanDesc.getClassInfo(), objectIdInfo);
+
+ // Just one special case: Property-based generator is trickier
+ if (implClass == ObjectIdGenerators.PropertyGenerator.class) { // most special one, needs extra work
+ PropertyName propName = objectIdInfo.getPropertyName();
+ idProp = builder.findProperty(propName);
+ if (idProp == null) {
+ throw new IllegalArgumentException("Invalid Object Id definition for "
+ +beanDesc.getBeanClass().getName()+": can not find property with name '"+propName+"'");
+ }
+ idType = idProp.getType();
+ gen = new PropertyBasedObjectIdGenerator(objectIdInfo.getScope());
+ } else {
+ JavaType type = ctxt.constructType(implClass);
+ idType = ctxt.getTypeFactory().findTypeParameters(type, ObjectIdGenerator.class)[0];
+ idProp = null;
+ gen = ctxt.objectIdGeneratorInstance(beanDesc.getClassInfo(), objectIdInfo);
+ }
+ // also: unlike with value deserializers, let's just resolve one we need here
+ JsonDeserializer<?> deser = ctxt.findRootValueDeserializer(idType);
+ builder.setObjectIdReader(ObjectIdReader.construct(idType,
+ objectIdInfo.getPropertyName(), gen, deser, idProp, resolver));
+ }
+ 
+ @SuppressWarnings("unchecked")
+ public JsonDeserializer<Object> buildThrowableDeserializer(DeserializationContext ctxt,
+ JavaType type, BeanDescription beanDesc)
+ throws JsonMappingException
+ {
+ final DeserializationConfig config = ctxt.getConfig();
+ // first: construct like a regular bean deserializer...
+ BeanDeserializerBuilder builder = constructBeanDeserializerBuilder(ctxt, beanDesc);
+ builder.setValueInstantiator(findValueInstantiator(ctxt, beanDesc));
+
+ addBeanProps(ctxt, beanDesc, builder);
+ // (and assume there won't be any back references)
+
+ // But then let's decorate things a bit
+ /* To resolve [JACKSON-95], need to add "initCause" as setter
+ * for exceptions (sub-classes of Throwable).
+ */
+ AnnotatedMethod am = beanDesc.findMethod("initCause", INIT_CAUSE_PARAMS);
+ if (am != null) { // should never be null
+ SimpleBeanPropertyDefinition propDef = SimpleBeanPropertyDefinition.construct(ctxt.getConfig(), am,
+ new PropertyName("cause"));
+ SettableBeanProperty prop = constructSettableProperty(ctxt, beanDesc, propDef,
+ am.getParameterType(0));
+ if (prop != null) {
+ /* 21-Aug-2011, tatus: We may actually have found 'cause' property
+ * to set... but let's replace it just in case,
+ * otherwise can end up with odd errors.
+ */
+ builder.addOrReplaceProperty(prop, true);
+ }
+
+/* METHOD constructSettableProperty */
+protected SettableBeanProperty constructSettableProperty(DeserializationContext ctxt,
+ BeanDescription beanDesc, BeanPropertyDefinition propDef,
+ JavaType propType0)
+ throws JsonMappingException
+ {
+ // need to ensure method is callable (for non-public)
+ AnnotatedMember mutator = propDef.getNonConstructorMutator();
+
+ if (ctxt.canOverrideAccessModifiers()) {
+ // [databind#877]: explicitly prevent forced access to `cause` of `Throwable`;
+ // never needed and attempts may cause problems on some platforms.
+ // !!! NOTE: should be handled better for 2.8 and later
+ if ((mutator instanceof AnnotatedField)
+ && "cause".equals(mutator.getName())
+ && Throwable.class.isAssignableFrom(propType0.getRawClass())) {
+ ;
+ } else {
+ mutator.fixAccess(ctxt.isEnabled(MapperFeature.OVERRIDE_PUBLIC_ACCESS_MODIFIERS));
+ }
+ }
+ // note: this works since we know there's exactly one argument for methods
+ BeanProperty.Std property = new BeanProperty.Std(propDef.getFullName(),
+ propType0, propDef.getWrapperName(),
+ beanDesc.getClassAnnotations(), mutator, propDef.getMetadata());
+ JavaType type = resolveType(ctxt, beanDesc, propType0, mutator);
+ // did type change?
+ if (type != propType0) {
+ property = property.withType(type);
+ }
+
+ // First: does the Method specify the deserializer to use? If so, let's use it.
+ JsonDeserializer<Object> propDeser = findDeserializerFromAnnotation(ctxt, mutator);
+ type = modifyTypeByAnnotation(ctxt, mutator, type);
+ TypeDeserializer typeDeser = type.getTypeHandler();
+ SettableBeanProperty prop;
+ if (mutator instanceof AnnotatedMethod) {
+ prop = new MethodProperty(propDef, type, typeDeser,
+ beanDesc.getClassAnnotations(), (AnnotatedMethod) mutator);
+ } else {
+ prop = new FieldProperty(propDef, type, typeDeser,
+ beanDesc.getClassAnnotations(), (AnnotatedField) mutator);
+ }
+ if (propDeser != null) {
+ prop = prop.withValueDeserializer(propDeser);
+ }
+ // need to retain name of managed forward references:
+ AnnotationIntrospector.ReferenceProperty ref = propDef.findReferenceType();
+ if (ref != null && ref.isManagedReference()) {
+ prop.setManagedReferenceName(ref.getName());
+ }
+ ObjectIdInfo objectIdInfo = propDef.findObjectIdInfo();
+ if(objectIdInfo != null){
+ prop.setObjectIdInfo(objectIdInfo);
+ }
+ return prop;
+ }
+
+/* METHOD createBeanDeserializer */
+@Override
+ public JsonDeserializer<Object> createBeanDeserializer(DeserializationContext ctxt,
+ JavaType type, BeanDescription beanDesc)
+ throws JsonMappingException
+ {
+ final DeserializationConfig
+...[truncated deterministically]...
+!= null) {
+ return custom;
+ }
+ /* One more thing to check: do we have an exception type
+ * (Throwable or its sub-classes)? If so, need slightly
+ * different handling.
+ */
+ if (type.isThrowable()) {
+ return buildThrowableDeserializer(ctxt, type, beanDesc);
+ }
+ /* Or, for abstract types, may have alternate means for resolution
+ * (defaulting, materialization)
+ */
+ // 29-Nov-2015, tatu: Also, filter out calls to primitive types, they are
+ // not something we could materialize anything for
+ if (type.isAbstract() && !type.isPrimitive()) {
+ // Let's make it possible to materialize abstract types.
+ JavaType concreteType = materializeAbstractType(ctxt, type, beanDesc);
+ if (concreteType != null) {
+ /* important: introspect actual implementation (abstract class or
+ * interface doesn't have constructors, for one)
+ */
+ beanDesc = config.introspect(concreteType);
+ return buildBeanDeserializer(ctxt, concreteType, beanDesc);
+ }
+ }
+
+/* METHOD createBuilderBasedDeserializer */
+@Override
+ public JsonDeserializer<Object> createBuilderBasedDeserializer(
+ DeserializationContext ctxt, JavaType valueType, BeanDescription beanDesc,
+ Class<?> builderClass)
+ throws JsonMappingException
+ {
+ // First: need a BeanDescription for builder class
+ JavaType builderType = ctxt.constructType(builderClass);
+ BeanDescription builderDesc = ctxt.getConfig().introspectForBuilder(builderType);
+ return buildBuilderBasedDeserializer(ctxt, valueType, builderDesc);
+ }
+
+/* METHOD buildBeanDeserializer */
+@SuppressWarnings("unchecked")
+ public JsonDeserializer<Object> buildBeanDeserializer(DeserializationContext ctxt,
+ JavaType type, BeanDescription beanDesc)
+ throws JsonMappingException
+ {
+ // First: check what creators we can use, if any
+ ValueInstantiator valueInstantiator;
+ /* 04-Jun-2015, tatu: To work around [databind#636], need to catch the
+ * issue, defer; this seems like a reasonable good place for now.
+ * Note, however, that for non-Bean types (Collections, Maps) this
+ * probably won't work and needs to be added elsewhere.
+ */
+ try {
+ valueInstantiator = findValueInstantiator(ctxt, beanDesc);
+ } catch (NoClassDefFoundError error) {
+ return new NoClassDefFoundDeserializer<Object>(error);
+ }
+ BeanDeserializerBuilder builder = constructBeanDeserializerBuilder(ctxt, beanDesc);
+ builder.setValueInstantiator(valueInstantiator);
+ // And then setters for deserializing from JSON Object
+ addBeanProps(ctxt, beanDesc, builder);
+ addObjectIdReader(ctxt, beanDesc, builder);
+
+ // managed/back reference fields/setters need special handling... first part
+ addReferenceProperties(ctxt, beanDesc, builder);
+ addInjectables(ctxt, beanDesc, builder);
+ 
+ final DeserializationConfig config = ctxt.getConfig();
+ // [JACKSON-440]: update builder now that all information is in?
+ if (_factoryConfig.hasDeserializerModifiers()) {
+ for (BeanDeserializerModifier mod : _factoryConfig.deserializerModifiers()) {
+ builder = mod.updateBuilder(config, beanDesc, builder);
+ }
+ }
+ JsonDeserializer<?> deserializer;
+
+ /* 19-Mar-2012, tatu: This check used to be done earlier; but we have to defer
+ * it a bit to collect information on ObjectIdReader, for example
+...[truncated deterministically]...
+t
+ addBeanProps(ctxt, builderDesc, builder);
+ addObjectIdReader(ctxt, builderDesc, builder);
+ 
+ // managed/back reference fields/setters need special handling... first part
+ addReferenceProperties(ctxt, builderDesc, builder);
+ addInjectables(ctxt, builderDesc, builder);
+
+ JsonPOJOBuilder.Value builderConfig = builderDesc.findPOJOBuilderConfig();
+ final String buildMethodName = (builderConfig == null) ?
+ "build" : builderConfig.buildMethodName;
+ 
+ // and lastly, find build method to use:
+ AnnotatedMethod buildMethod = builderDesc.findMethod(buildMethodName, null);
+ if (buildMethod != null) { // note: can't yet throw error; may be given build method
+ if (config.canOverrideAccessModifiers()) {
+ ClassUtil.checkAndFixAccess(buildMethod.getMember(), config.isEnabled(MapperFeature.OVERRIDE_PUBLIC_ACCESS_MODIFIERS));
+ }
+ }

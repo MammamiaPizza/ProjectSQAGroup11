@@ -1,0 +1,296 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 19  Version: JacksonCore-19b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 317
+Trigger failures:
+- com.fasterxml.jackson.core.json.TestNumericValues::testLongerFloatingPoint
+ --> java.lang.ArrayIndexOutOfBoundsException: 200
+Modified: com.fasterxml.jackson.core.json.ReaderBasedJsonParser, com.fasterxml.jackson.core.json.UTF8StreamJsonParser
+
+Available API/signatures:
+[com.fasterxml.jackson.core.json.ReaderBasedJsonParser | java]
+package com.fasterxml.jackson.core.json;
+public class ReaderBasedJsonParser // final in 2.3, earlier
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1();
+protected Reader _reader;
+protected char[] _inputBuffer;
+protected boolean _bufferRecyclable;
+protected ObjectCodec _objectCodec;
+final protected CharsToNameCanonicalizer _symbols;
+final protected int _hashSeed;
+protected boolean _tokenIncomplete;
+protected long _nameStartOffset;
+protected int _nameStartRow;
+protected int _nameStartCol;
+@Override public ObjectCodec getCodec() { return _objectCodec; }
+@Override public void setCodec(ObjectCodec c) { _objectCodec = c; }
+@Override
+public int releaseBuffered(Writer w) throws IOException {
+@Override public Object getInputSource() { return _reader; }
+protected boolean loadMore() throws IOException
+protected
+...[truncated deterministically]...
+ase64Variant b64variant) throws IOException
+public JsonLocation getTokenLocation()
+final Object src = _ioContext.getSourceReference();
+public JsonLocation getCurrentLocation() {
+private final void _updateLocation()
+private final void _updateNameLocation()
+protected void _reportInvalidToken(String matchedPart) throws IOException {
+protected void _reportInvalidToken(String matchedPart, String msg) throws IOException
+
+[com.fasterxml.jackson.core.json.UTF8StreamJsonParser | java]
+package com.fasterxml.jackson.core.json;
+public class UTF8StreamJsonParser
+final static byte BYTE_LF = (byte) '\n';
+private final static int[] _icUTF8 = CharTypes.getInputCodeUtf8();
+protected final static int[] _icLatin1 = CharTypes.getInputCodeLatin1(
+...[truncated deterministically]...
+protected int _nameStartRow;
+protected int _nameStartCol;
+protected InputStream _inputStream;
+protected byte[] _inputBuffer;
+protected boolean _bufferRecyclable;
+@Override
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public int releaseBuffered(OutputStream out) throws IOException
+public Object getInputSource() {
+protected final boolean loadMore() throws
+...[truncated deterministically]...
+ther(int mask, int ptr)
+public static int[] growArrayBy(int[] arr, int more)
+protected final byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+public JsonLocation getTokenLocation()
+final Object src = _ioContext.getSourceReference();
+public JsonLocation getCurrentLocation()
+private final void _updateLocation()
+private final void _updateNameLocation()
+private final static int pad(int q, int bytes) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.json;
+
+import static org.junit.Assert.;
+import org.junit.Test;
+import java.io.;
+import java.math.BigDecimal;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.CharsToNameCanonicalizer;
+import com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer;
+import com.fasterxml.jackson.core.util.BufferRecycler;
+
+/**
+
+ - Tests for bug #19: ArrayIndexOutOfBoundsException on very long floating-point numbers.
+ - Validates both ReaderBasedJsonParser and UTF8StreamJsonParser.
+  */
+ public class TestLongFloatBug19 {
+  private static final int LONG_LENGTH = 250;
+  private String makeLongFloat(int totalDigits) {
+  StringBuilder sb = new StringBuilder(totalDigits + 10);
+  sb.append("1");
+  for (int i = 1; i < totalDigits - 2; i++) {
+      sb.append("0");
+  }
+  sb.append(".5");
+  return sb.toString();
+  }
+  private String makeLongFloatWithExponent(int totalDigits) {
+  StringBuilder sb = new StringBuilder(totalDigits + 10);
+  sb.append("1");
+  for (int i = 1; i < totalDigits - 2; i++) {
+      sb.append("0");
+  }
+  sb.append("e10");
+  return sb.toString();
+  }
+  private String makeLongIntWithTrailingZeros(int totalDigits) {
+  StringBuilder sb = new StringBuilder(totalDigits);
+  sb.append("9");
+  for (int i = 1; i < totalDigits; i++) {
+      sb.append("0");
+  }
+  return sb.toString();
+  }
+  @Test
+  public void testReaderBasedParserLongFloatNoException() throws Exception {
+  String number = makeLongFloat(LONG_LENGTH);
+  String json = number;
+  ReaderBasedJsonParser parser = createReaderBasedParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull("BigDecimal should not be null", bd);
+  assertTrue("Number parsed should be > 1", bd.compareTo(BigDecimal.ONE) > 0);
+  parser.close();
+  }
+  @Test
+  public void testUTF8StreamParserLongFloatNoException() throws Exception {
+  String number = makeLongFloat(LONG_LENGTH);
+  String json = number;
+  UTF8StreamJsonParser parser = createUTF8StreamParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull("BigDecimal should not be null", bd);
+  assertTrue("Number parsed should be > 1", bd.compareTo(BigDecimal.ONE) > 0);
+  parser.close();
+  }
+  @Test
+  public void testReaderBasedParserBoundary200Digits() throws Exception {
+  String number = makeLongFloat(200);
+  String json = number;
+  ReaderBasedJsonParser parser = createReaderBasedParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  parser.close();
+  }
+  @Test
+  public void testUTF8StreamParserBoundary200Digits() throws Exception {
+  String number = makeLongFloat(200);
+  String json = number;
+  UTF8StreamJsonParser parser = createUTF8StreamParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  parser.close();
+  }
+  @Test
+  public void testReaderBasedParserTrailingZerosLong() throws Exception {
+  String number = makeLongIntWithTrailingZeros(250);
+  String json = number + ".0";
+  ReaderBasedJsonParser parser = createReaderBasedParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  assertTrue(bd.compareTo(BigDecimal.ZERO) > 0);
+  parser.close();
+  }
+  @Test
+  public void testUTF8StreamParserTrailingZerosLong() throws Exception {
+  String number = makeLongIntWithTrailingZeros(250);
+  String json = number + ".0";
+  UTF8StreamJsonParser parser = createUTF8StreamParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  assertTrue(bd.compareTo(BigDecimal.ZERO) > 0);
+  parser.close();
+  }
+  @Test
+  public void testReaderBasedParserScientificLong() throws Exception {
+  String number = makeLongFloatWithExponent(250);
+  String json = number;
+  ReaderBasedJsonParser parser = createReaderBasedParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  assertTrue(bd.compareTo(BigDecimal.ONE) > 0);
+  parser.close();
+  }
+  @Test
+  public void testUTF8StreamParserScientificLong() throws Exception {
+  String number = makeLongFloatWithExponent(250);
+  String json = number;
+  UTF8StreamJsonParser parser = createUTF8StreamParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  assertTrue(bd.compareTo(BigDecimal.ONE) > 0);
+  parser.close();
+  }
+  @Test
+  public void testReaderBasedParserNegativeLongFloat() throws Exception {
+  String number = "-" + makeLongFloat(250);
+  String json = number;
+  ReaderBasedJsonParser parser = createReaderBasedParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  assertTrue(bd.compareTo(BigDecimal.ZERO) < 0);
+  parser.close();
+  }
+  @Test
+  public void testUTF8StreamParserNegativeLongFloat() throws Exception {
+  String number = "-" + makeLongFloat(250);
+  String json = number;
+  UTF8StreamJsonParser parser = createUTF8StreamParser(json);
+  assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+  BigDecimal bd = parser.getBigDecimalValue();
+  assertNotNull(bd);
+  assertTrue(bd.compareTo(BigDecimal.ZERO) < 0);
+  parser.close();
+  }
+  @Test
+  public void testReaderBasedParserMultipleLongNumbers() throws Exception {
+  String longNum = makeLongFloat(250);
+  String json = String.format("[%s, %s, %s]", longNum, longNum, longNum);
+  ReaderBasedJsonParser parser = createReaderBasedParser(json);
+  assertToken(JsonToken.START_ARRAY, parser.nextToken());
+  for (int i = 0; i < 3; i++) {
+      assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+      assertNotNull(parser.getBigDecimalValue());
+  }
+  assertToken(JsonToken.END_ARRAY, parser.nextToken());
+  parser.close();
+  }
+  @Test
+  public void testUTF8StreamParserMultipleLongNumbers() throws Exception {
+  String longNum = makeLongFloat(250);
+  String json = String.format("[%s, %s, %s]", longNum, longNum, longNum);
+  UTF8StreamJsonParser parser = createUTF8StreamParser(json);
+  assertToken(JsonToken.START_ARRAY, parser.nextToken());
+  for (int i = 0; i < 3; i++) {
+      assertToken(JsonToken.VALUE_NUMBER_FLOAT, parser.nextToken());
+      assertNotNull(parser.getBigDecimalValue());
+  }
+  assertToken(JsonToken.END_ARRAY, parser.nextToken());
+  parser.close();
+  }
+  // --- Helpers ---
+  private ReaderBasedJsonParser createReaderBasedParser(String content) throws IOException {
+  Reader reader = new StringReader(content);
+  IOContext ioContext = new IOContext(new BufferRecycler(), null, false);
+  CharsToNameCanonicalizer symbols = CharsToNameCanonicalizer.createRoot();
+  return new ReaderBasedJsonParser(ioContext, 0, reader, null, symbols);
+  }
+  private UTF8StreamJsonParser createUTF8StreamParser(String content) throws IOException {
+  byte[] bytes = content.getBytes("UTF-8");
+  return new UTF8StreamJsonParser(
+          new IOContext(new BufferRecycler(), null, false),
+          0,
+          new ByteArrayInputStream(bytes),
+          null,
+          ByteQuadsCanonicalizer.createRoot(),
+          new byte[0], 0, 0, // dummy empty buffer, real data comes from stream
+          false
+  );
+  }
+  private void assertToken(JsonToken expected, JsonToken actual) {
+  assertEquals("Token mismatch", expected, actual);
+  }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JacksonCore-19f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JacksonCore-19f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JacksonCore-19f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JacksonCore-19f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JacksonCore-19f-copilot/.test_suite/com/fasterxml/jackson/core/json/TestLongFloatBug19.java:3: error: <identifier> expected
+ [javac] import static org.junit.Assert.;
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 18 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

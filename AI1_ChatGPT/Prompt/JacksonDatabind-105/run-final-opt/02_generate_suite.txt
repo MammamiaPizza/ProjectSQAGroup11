@@ -1,0 +1,80 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonDatabind  Bug: 105  Version: JacksonDatabind-105b
+JUnit: powermock-module-junit4-1.7.4.jar  Build: Maven
+Target: com.fasterxml.jackson.databind.deser.std.JdkDeserializers
+Modified: com.fasterxml.jackson.databind.deser.std.JdkDeserializers
+Triggers: com.fasterxml.jackson.databind.deser.jdk.JDKScalarsTest::testVoidDeser
+
+Bug/specification summary:
+Bug report: 2197
+Trigger failures:
+- com.fasterxml.jackson.databind.deser.jdk.JDKScalarsTest::testVoidDeser
+ --> com.fasterxml.jackson.databind.exc.MismatchedInputException: Cannot construct instance of `java.lang.Void` (although at least one Creator exists): no int/Int-argument constructor/factory method to deserialize from Number value (123)
+Modified: com.fasterxml.jackson.databind.deser.std.JdkDeserializers
+
+Prompt-01 test plan:
+TARGETS: JdkDeserializers.find(Class<?>, String), especially lookup for java.lang.Void 
+ORACLES: Trigger expects Void deserialization not to throw MismatchedInputException for numeric JSON 123 
+CASES: Deserialize numeric scalar 123 as Void; verify successful Void/null result 
+CASES: Verify existing UUID, StackTraceElement, AtomicBoolean, and ByteBuffer lookup paths remain available 
+RISKS: Void has no value instances; expected successful result representation is not fully specified here 
+RISKS: Context provides only partial JdkDeserializers source and no direct find() behavior contract
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.databind.deser.std.JdkDeserializers (java) =====
+package com.fasterxml.jackson.databind.deser.std;
+
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import com.fasterxml.jackson.databind.*;
+
+/**
+ * Container class that contains serializers for JDK types that
+ * require special handling for some reason.
+ */
+public class JdkDeserializers
+{
+ private final static HashSet<String> _classNames = new HashSet<String>();
+ static {
+ // note: can skip primitive types; other ways to check them:
+ Class<?>[] types = new Class<?>[] {
+ UUID.class,
+ AtomicBoolean.class,
+ StackTraceElement.class,
+ ByteBuffer.class
+ };
+ for (Class<?> cls : types) { _classNames.add(cls.getName()); }
+ for (Class<?> cls : FromStringDeserializer.types()) { _classNames.add(cls.getName()); }
+ }
+
+ public static JsonDeserializer<?> find(Class<?> rawType, String clsName)
+ {
+ if (_classNames.contains(clsName)) {
+ JsonDeserializer<?> d = FromStringDeserializer.findDeserializer(rawType);
+ if (d != null) {
+ return d;
+ }
+ if (rawType == UUID.class) {
+ return new UUIDDeserializer();
+ }
+ if (rawType == StackTraceElement.class) {
+ return new StackTraceElementDeserializer();
+ }
+ if (rawType == AtomicBoolean.class) {
+ // (note: AtomicInteger/Long work due to single-arg constructor. For now?
+ return new AtomicBooleanDeserializer();
+ }
+ if (rawType == ByteBuffer.class) {
+ return new ByteBufferDeserializer();
+ }
+ }
+ return null;
+ }
+}

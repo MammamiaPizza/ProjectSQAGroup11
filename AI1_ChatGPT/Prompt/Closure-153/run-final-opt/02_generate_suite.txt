@@ -1,0 +1,336 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Closure  Bug: 153  Version: Closure-153b
+JUnit: junit.jar  Build: Ant
+Target: com.google.javascript.jscomp.Normalize, com.google.javascript.jscomp.SyntacticScopeCreator
+Modified: com.google.javascript.jscomp.Normalize, com.google.javascript.jscomp.SyntacticScopeCreator
+Triggers: com.google.javascript.jscomp.NormalizeTest::testDuplicateVarInExterns, com.google.javascript.jscomp.NormalizeTest::testMakeLocalNamesUnique
+
+Bug/specification summary:
+Bug report: 290
+Trigger failures:
+- com.google.javascript.jscomp.NormalizeTest::testDuplicateVarInExterns
+ --> junit.framework.AssertionFailedError: 
+ - com.google.javascript.jscomp.NormalizeTest::testMakeLocalNamesUnique
+ --> junit.framework.AssertionFailedError:
+Modified: com.google.javascript.jscomp.Normalize, com.google.javascript.jscomp.SyntacticScopeCreator
+
+Prompt-01 test plan:
+TARGETS: Normalize.process: removeDuplicateDeclarations for externs/root duplicate vars. 
+TARGETS: Normalize.process: ScopeTicklingCallback and local-name uniquification behavior. 
+TARGETS: SyntacticScopeCreator.createScope/scanVars redeclaration handling during normalization. 
+ORACLES: Existing NormalizeTest assertions for duplicate extern declarations and unique local names. 
+ORACLES: AST/output code and compiler change effects exposed by existing test utilities. 
+CASES: Duplicate extern var declarations, including duplicates shared with root declarations. 
+CASES: Same local identifier across scopes/functions; ensure renamed locals remain distinct. 
+CASES: Var redeclarations with and without initializers, preserving assignments/initialization. 
+RISKS: APIs are package-private/private; tests likely require existing compiler AST test harness. 
+RISKS: Context omits exact expected AST/code and redeclaration semantics beyond trigger names.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.javascript.jscomp.Normalize (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class Normalize implements CompilerPass {
+private void reportCodeChange(String changeDescription) {
+@Override
+public void process(Node externs, Node root) {
+static class PropagateConstantAnnotationsOverVars
+public void visit(NodeTraversal t, Node n, Node parent) {
+static class VerifyConstants extends AbstractPostOrderCallback
+private Map<String, Boolean> constantMap = Maps.newHashMap();
+static class NormalizeStatements implements Callback {
+public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+private void annotateConstantsByConvention(Node n, Node parent) {
+private void normalizeFunctionDeclaration(Node n) {
+private void rewriteFunctionDeclaration(Node n) {
+private void normalizeLabels(Node n) {
+private void splitVarDeclarations(Node n) {
+private void moveNamedFunctions(Node functionBody) {
+private Node addToFront(Node parent, Node newChild, Node after) {
+private void removeDuplicateDeclarations(Node externs, Node root) {
+private final class DuplicateDeclarationHandler implements
+private void replaceVarWithAssignment(Node n, Node parent, Node gramps) {
+private final class ScopeTicklingCallback
+public void enterScope(NodeTraversal t) {
+public void exitScope(NodeTraversal t) {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.javascript.jscomp.MakeDeclaredNamesUnique.BoilerplateRenamer;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.Callback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import java.util.Map;
+import java.util.Set;
+class Normalize implements CompilerPass {
+
+/* METHOD Normalize */
+Normalize(AbstractCompiler compiler, boolean assertOnChange) {
+ this.compiler = compiler;
+ this.assertOnChange = assertOnChange;
+
+ // TODO(nicksantos): assertOnChange should only be true if the tree
+ // is normalized.
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ NodeTraversal.traverse(compiler, root,
+ new NormalizeStatements(compiler, assertOnChange));
+ if (MAKE_LOCAL_NAMES_UNIQUE) {
+ MakeDeclaredNamesUnique renamer = new MakeDeclaredNamesUnique();
+ NodeTraversal t = new NodeTraversal(compiler, renamer);
+ t.traverseRoots(externs, root);
+ }
+ // It is important that removeDuplicateDeclarations runs after
+ // MakeDeclaredNamesUnique in order for catch block exception names to be
+ // handled properly. Specifically, catch block exception names are
+ // only valid within the catch block, but our currect Scope logic
+ // has no concept of this and includes it in the containing function
+ // (or global scope). MakeDeclaredNamesUnique makes the catch exception
+ // names unique so that removeDuplicateDeclarations() will properly handle
+ // cases where a function scope variable conflict with a exception name:
+ // function f() {
+ // try {throw 0;} catch(e) {e; /* catch scope 'e'*/}
+ // var e = 1; // f scope 'e'
+ // }
+ // otherwise 'var e = 1' would be rewritten as 'e = 1'.
+ // TODO(johnlenz): Introduce a seperate scope for catch nodes.
+ removeDuplicateDeclarations(externs, root);
+ new PropagateConstantAnnotationsOverVars(compiler, assertOnChange)
+ .process(externs, root);
+
+ compiler.setNormalized();
+ }
+
+/* METHOD process */
+@Override
+ public void process(Node externs, Node root) {
+ Node externsAndJs = root.getParent();
+ Preconditions.checkState(externsAndJs != null);
+ Preconditions.checkState(externsAndJs.hasChild(externs));
+
+ NodeTraversal.traverseRoots(
+ compiler, Lists.newArrayList(externs, root), this);
+ }
+
+/* METHOD visit */
+@Override
+ public void visit(NodeTraversal t, Node n, Node parent) {
+ switch (n.getType()) {
+ case Token.WHILE:
+ if (CONVERT_W
+...[truncated deterministically]...
+empty = new Node(Token.EMPTY);
+ empty.copyInformationFrom(n);
+ n.addChildBefore(empty, expr);
+ n.addChildAfter(empty.cloneNode(), expr);
+ reportCodeChange("WHILE node");
+ }
+ break;
+
+ case Token.FUNCTION:
+ normalizeFunctionDeclaration(n);
+ break;
+
+ case Token.NAME:
+ case Token.STRING:
+ annotateConstantsByConvention(n, parent);
+ break;
+ }
+ }
+
+/* METHOD onRedeclaration */
+@Override
+ public void onRedeclaration(
+ Scope s, String name, Node n, Node parent, Node gramps,
+ Node nodeWithLineNumber) {
+ Preconditions.checkState(n.getType() == Token.NAME);
+ Var v = s.getVar(name);
+
+ // We allow variables to be duplicate declared if one
+ // declaration appears in source and the other in externs.
+ // This deals with issues where a browser built-in is declared
+ // in one browser but not in another.
+
+ // If name is "arguments", Var maybe null.
+ if (v != null && v.getParentNode().getType() == Token.CATCH) {
+ // Redeclaration of a catch expression variable is hard to model
+ // without support for "with" expressions.
+ // The EcmaScript spec (section 12.14), declares that a catch
+ // "catch (e) {}" is handled like "with ({'e': e}) {}" so that
+ // "var e" would refer to the scope variable, but any following
+ // reference would still refer to "e" of the catch expression.
+ // Until we have support for this disallow it.
+ // Currently the Scope object adds the catch expression to the
+ // function scope, which is technically not true bu
+...[truncated deterministically]...
+JSError.make(
+ NodeUtil.getSourceName(nodeWithLineNumber), nodeWithLineNumber,
+ CATCH_BLOCK_VAR_ERROR, name));
+ } else if (v != null && parent.getType() == Token.FUNCTION) {
+ if (v.getParentNode().getType() == Token.VAR) {
+ s.undeclare(v);
+ s.declare(name, n, n.getJSType(), v.input);
+ replaceVarWithAssignment(v.getNameNode(), v.getParentNode(),
+ v.getParentNode().getParent());
+ }
+ } else if (parent.getType() == Token.VAR) {
+ Preconditions.checkState(parent.hasOneChild());
+
+ replaceVarWithAssignment(n, parent, gramps);
+ }
+ }
+
+===== com.google.javascript.jscomp.SyntacticScopeCreator (java) =====
+/* API SIGNATURES */
+package com.google.javascript.jscomp;
+class SyntacticScopeCreator implements ScopeCreator {
+public Scope createScope(Node n, Scope parent) {
+private void scanRoot(Node n, Scope parent) {
+final Node fnNameNode = n.getFirstChild();
+final Node args = fnNameNode.getNext();
+final Node body = args.getNext();
+private void scanVars(Node n, Node parent) {
+final Node var = n.getFirstChild();
+final Node block = var.getNext();
+interface RedeclarationHandler {
+private class DefaultRedeclarationHandler implements RedeclarationHandler {
+
+/* HEADER */
+package com.google.javascript.jscomp;
+import com.google.common.base.Preconditions;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+class SyntacticScopeCreator implements ScopeCreator {
+
+/* METHOD SyntacticScopeCreator */
+SyntacticScopeCreator(AbstractCompiler compiler) {
+ this.compiler = compiler;
+ this.redeclarationHandler = new DefaultRedeclarationHandler();
+ }
+
+/* METHOD SyntacticScopeCreator */
+SyntacticScopeCreator(
+ AbstractCompiler compiler, RedeclarationHandler redeclarationHandler) {
+ this.compiler = compiler;
+ this.redeclarationHandler = redeclarationHandler;
+ }
+
+/* METHOD onRedeclaration */
+public void onRedeclaration(
+ Scope s, String name,
+ Node n, Node parent, Node gramps, Node nodeWithLineNumber) {
+
+ // Don't allow multiple variables to be declared at the top level scope
+ if (scope.isGlobal()) {
+ Scope.Var origVar = scope.getVar(name);
+ Node origParent = origVar.getParentNode();
+ if (origParent.getType() == Token.CATCH &&
+ parent.getType() == Token.CATCH) {
+ // Okay, both are 'catch(x)' variables.
+ return;
+ }
+
+ boolean allowDupe = false;
+ JSDocInfo info = n.getJSDocInfo();
+ if (info == null) {
+ info = parent.getJSDocInfo();
+ }
+ allowDupe =
+ info != null && info.getSuppressions().contains("duplicate");
+
+ if (!allowDupe) {
+ compiler.report(
+ JSError.make(sourceName, n,
+ VAR_MULTIPLY_DECLARED_ERROR,
+ name,
+ (origVar.input != null
+ ? origVar.input.getName()
+ : "??")));
+ }
+ } else if (name.equals(ARGUMENTS) && !NodeUtil.isVarDeclaration(n)) {
+ // Disallow shadowing "arguments" as we can't handle with our current
+ // scope modeling.
+ compiler.report(
+ JSError.make(sourceName, n,
+ VAR_ARGUMENTS_SHADOWED_ERROR));
+ }
+
+/* METHOD createScope */
+public Scope createScope(Node n, Scope parent) {
+ sourceName = null;
+ if (parent == null) {
+ scope = new Scope(n, compiler);
+ } else {
+ scope = new Scope(parent, n);
+ }
+
+ scanRoot(n, parent);
+
+ sourceName = null;
+ Scope returnedScope = scope;
+ scope = null;
+ return returnedScope;
+ }
+
+/* METHOD declareVar */
+private void declareVar(String name, Node n, Node parent,
+ Node gramps, com.google.javascript.rhino.jstype.JSType declaredType,
+ Node nodeWithLineNumber) {
+
+ if (scope.isDeclared(name, false)
+ || (scope.isLocal() && name.equals(ARGUMENTS))) {
+ redeclarationHandler.onRedeclaration(
+ scope, name, n, parent, gramps, nodeWithLineNumber);
+ } else {
+ scope.declare(name, n, declaredType, compiler.getInput(sourceName));
+ }
+ }
+
+/* METHOD scanRoot */
+private void scanRoot(Node n, Scope parent) {
+ if (n.getType() == Token.FUNCTION) {
+ sourceName = (String) n.getProp(Node.SOURCENAME_PROP);
+
+ final Node fnNameNode = n.getFirstChild();
+ final Node args = fnNameNode.getNext();
+ final Node body = args.getNext();
+
+ // Bleed the function name into the scope, if it hasn't
+ // been declared in the outer scope.
+ String fnName = fnNameNode.getString();
+ if (!fnName.isEmpty() && NodeUtil.isFunctionExpression(n)) {
+ declareVar(fnName, fnNameNode, n, null, null, n);
+ }
+
+ // Args: Declare function variables
+ Preconditions.checkState(args.getType() == Token.LP);
+ for (Node a = args.getFirstChild(); a != null;
+ a = a.getNext()) {
+ Preconditions.checkState(a.getType() == Token.NAME);
+ declareVar(a.getString(), a, args, n, null, n);
+ }
+
+ // Body
+ scanVars(body, n);
+ } else {
+ // It's the global block
+ Preconditions.checkState(scope.getParent() == null);
+ scanVars(n, null);
+ }
+ }

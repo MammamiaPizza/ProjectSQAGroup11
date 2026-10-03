@@ -1,0 +1,221 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 7  Version: JxPath-7b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: JXPATH-93
+Trigger failures:
+- org.apache.commons.jxpath.ri.compiler.CoreOperationTest::testNodeSetOperations
+ --> junit.framework.AssertionFailedError: Evaluating <$array > 0> expected:<true> but was:<false>
+Modified: org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThan, org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanOrEqual, org.apache.commons.jxpath.ri.compiler.CoreOperationLessThan, org.apache.commons.jxpath.ri.compiler.CoreOperationLessThanOrEqual, org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpression
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThan | java]
+package org.apache.commons.jxpath.ri.compiler;
+public class CoreOperationGreaterThan extends CoreOperationRelationalExpression {
+public CoreOperationGreaterThan(Expression arg1, Expression arg2) {
+public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+public String getSymbol() {
+
+[org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanOrEqual | java]
+package org.apache.commons.jxpath.ri.compiler;
+public class CoreOperationGreaterThanOrEqual extends
+public CoreOperationGreaterThanOrEqual(Expression arg1, Expression arg2) {
+public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+public String getSymbol() {
+
+[org.apache.commons.jxpath.ri.compiler.CoreOperationLessThan | java]
+package org.apache.commons.jxpath.ri.compiler;
+public class CoreOperationLessThan extends CoreOperationRelationalExpression {
+public CoreOperationLessThan(Expression arg1, Expression arg2) {
+public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+public String getSymbol() {
+
+[org.apache.commons.jxpath.ri.compiler.CoreOperationLessThanOrEqual | java]
+package org.apache.commons.jxpath.ri.compiler;
+public class CoreOperationLessThanOrEqual extends
+public CoreOperationLessThanOrEqual(Expression arg1, Expression arg2) {
+public Object computeValue(org.apache.commons.jxpath.ri.EvalContext context) {
+public String getSymbol() {
+
+[org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpression | java]
+package org.apache.commons.jxpath.ri.compiler;
+public abstract class CoreOperationRelationalExpression extends CoreOperation {
+protected CoreOperationRelationalExpression(Expression[] args) {
+protected final int getPrecedence() {
+protected final boolean isSymmetric() {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.compiler;
+
+ import java.util.Arrays;
+
+ import junit.framework.TestCase;
+ import org.apache.commons.jxpath.ri.EvalContext;
+
+ /**
+  * Tests for relational comparison operations (&gt;, &gt;=, &lt;, &lt;=).
+  * The buggy implementation does not handle node-set operands per XPath semantics:
+  * when either operand is a node-set, the comparison should return true if
+  * <em>any</em> node in the set satisfies the relation with the other operand.
+  */
+ public class CoreOperationTest extends TestCase {
+
+     /**
+      * A simple Expression stub that returns a constant value,
+      * ignoring the EvalContext.
+      */
+     private static final class ConstantExpression extends Expression {
+         private final Object value;
+
+         ConstantExpression(Object value) {
+             this.value = value;
+         }
+
+         public Object computeValue(EvalContext context) {
+             return value;
+         }
+     }
+
+     // Dummy context – unused by our stubs
+     private static final EvalContext CTX = null;
+
+     private static ConstantExpression num(double v) {
+         return new ConstantExpression(Double.valueOf(v));
+     }
+
+     private static ConstantExpression nodeSet(Double... values) {
+         return new ConstantExpression(Arrays.asList(values));
+     }
+
+     // ---------- GreaterThan ----------
+
+     public void testGreaterThanScalars() {
+         CoreOperationGreaterThan op = new CoreOperationGreaterThan(num(5), num(3));
+         assertTrue("5 > 3", Boolean.TRUE.equals(op.computeValue(CTX)));
+
+         op = new CoreOperationGreaterThan(num(3), num(5));
+         assertFalse("3 > 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+
+         op = new CoreOperationGreaterThan(num(5), num(5));
+         assertFalse("5 > 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testGreaterThanNodeSetWithMatch() {
+         // BUG: [5,3,1] > 0  → any-node-satisfies: 5 > 0 → true
+         CoreOperationGreaterThan op = new CoreOperationGreaterThan(
+                 nodeSet(5.0, 3.0, 1.0), num(0));
+         assertTrue("[5,3,1] > 0", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testGreaterThanNodeSetNoMatch() {
+         CoreOperationGreaterThan op = new CoreOperationGreaterThan(
+                 nodeSet(1.0, 2.0, 3.0), num(5));
+         assertFalse("[1,2,3] > 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testGreaterThanScalarVsNodeSet() {
+         // 10 > [5,15,3] → 10 > 5 is true
+         CoreOperationGreaterThan op = new CoreOperationGreaterThan(
+                 num(10), nodeSet(5.0, 15.0, 3.0));
+         assertTrue("10 > [5,15,3]", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     // ---------- GreaterThanOrEqual ----------
+
+     public void testGreaterThanOrEqualScalars() {
+         CoreOperationGreaterThanOrEqual op =
+                 new CoreOperationGreaterThanOrEqual(num(5), num(5));
+         assertTrue("5 >= 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+
+         op = new CoreOperationGreaterThanOrEqual(num(3), num(5));
+         assertFalse("3 >= 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testGreaterThanOrEqualNodeSetWithMatch() {
+         // BUG: [3,5,1] >= 5 → 5 >= 5 is true
+         CoreOperationGreaterThanOrEqual op = new CoreOperationGreaterThanOrEqual(
+                 nodeSet(3.0, 5.0, 1.0), num(5));
+         assertTrue("[3,5,1] >= 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testGreaterThanOrEqualNodeSetNoMatch() {
+         CoreOperationGreaterThanOrEqual op = new CoreOperationGreaterThanOrEqual(
+                 nodeSet(1.0, 2.0, 3.0), num(5));
+         assertFalse("[1,2,3] >= 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     // ---------- LessThan ----------
+
+     public void testLessThanScalars() {
+         CoreOperationLessThan op = new CoreOperationLessThan(num(3), num(5));
+         assertTrue("3 < 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+
+         op = new CoreOperationLessThan(num(5), num(3));
+         assertFalse("5 < 3", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testLessThanNodeSetWithMatch() {
+         // BUG: [1,2,3] < 5 → 1 < 5, 2 < 5, 3 < 5 → true
+         CoreOperationLessThan op = new CoreOperationLessThan(
+                 nodeSet(1.0, 2.0, 3.0), num(5));
+         assertTrue("[1,2,3] < 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testLessThanNodeSetNoMatch() {
+         CoreOperationLessThan op = new CoreOperationLessThan(
+                 nodeSet(5.0, 6.0, 7.0), num(3));
+         assertFalse("[5,6,7] < 3", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     // ---------- LessThanOrEqual ----------
+
+     public void testLessThanOrEqualScalars() {
+         CoreOperationLessThanOrEqual op =
+                 new CoreOperationLessThanOrEqual(num(5), num(5));
+         assertTrue("5 <= 5", Boolean.TRUE.equals(op.computeValue(CTX)));
+
+         op = new CoreOperationLessThanOrEqual(num(5), num(3));
+         assertFalse("5 <= 3", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     public void testLessThanOrEqualNodeSetWithMatch() {
+         // BUG: [3,5,7] <= 3 → 3 <= 3 is true
+         CoreOperationLessThanOrEqual op = new CoreOperationLessThanOrEqual(
+                 nodeSet(3.0, 5.0, 7.0), num(3));
+         assertTrue("[3,5,7] <= 3", Boolean.TRUE.equals(op.computeValue(CTX)));
+     }
+
+     // ---------- getSymbol ----------
+
+     public void testGetSymbols() {
+         assertEquals(">",
+                 new CoreOperationGreaterThan(num(1), num(2)).getSymbol());
+         assertEquals(">=",
+                 new CoreOperationGreaterThanOrEqual(num(1), num(2)).getSymbol());
+         assertEquals("<",
+                 new CoreOperationLessThan(num(1), num(2)).getSymbol());
+         assertEquals("<=",
+                 new CoreOperationLessThanOrEqual(num(1), num(2)).getSymbol());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/JxPath-7f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/JxPath-7f-copilot -Dd4j.test.dir=/root/sqa-workspaces/JxPath-7f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/JxPath-7f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/JxPath-7f-copilot/.test_suite/org/apache/commons/jxpath/ri/compiler/CoreOperationTest.java:20: error: ConstantExpression is not abstract and does not override abstract method compute(EvalContext) in Expression
+ [javac] private static final class ConstantExpression extends Expression {
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 10 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

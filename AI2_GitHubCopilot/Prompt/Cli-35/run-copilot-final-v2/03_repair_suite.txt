@@ -1,0 +1,202 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 35  Version: Cli-35b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-252
+Trigger failures:
+- org.apache.commons.cli.bug.BugCLI252Test::testExactOptionNameMatch
+ --> org.apache.commons.cli.AmbiguousOptionException: Ambiguous option: '--prefix' (could be: 'prefix', 'prefixplusplus')
+Modified: org.apache.commons.cli.Options
+
+Available API/signatures:
+[org.apache.commons.cli.Options | java]
+package org.apache.commons.cli;
+public class Options implements Serializable
+private final Map<String, Option> shortOpts = new LinkedHashMap<String, Option>();
+private final Map<String, Option> longOpts = new LinkedHashMap<String, Option>();
+private final List<Object> requiredOpts = new ArrayList<Object>();
+private final Map<String, OptionGroup> optionGroups = new HashMap<String, OptionGroup>();
+public Options addOptionGroup(OptionGroup group)
+public Options addOption(String opt, String description)
+public Options addOption(String opt, boolean hasArg, String description)
+public Options addOption(String opt, String longOpt, boolean hasArg, String description)
+public Options addOption(Option opt)
+public Collection<Option> getOptions()
+public List getRequiredOptions()
+public Option getOption(String opt)
+public List<String> getMatchingOptions(String opt)
+public boolean hasOption(String opt)
+public boolean hasLongOption(String opt)
+public boolean hasShortOption(String opt)
+public OptionGroup getOptionGroup(Option opt)
+@Override
+public String toString()
+
+Generated JUnit Test:
+package org.apache.commons.cli.bug;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.List;
+
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+
+ - Tests for Options.getMatchingOptions() exact-match resolution (CLI-252).
+ - Buggy version does not return only the exact match when it exists,
+ - leading to AmbiguousOptionException from parsers that query prefix matches.
+  */
+ public class BugCLI252Test {
+  private Options options;
+  @Before
+  public void setUp() {
+  options = new Options();
+  options.addOption(new Option("a", "prefix", false, "prefix desc"));
+  options.addOption(new Option("b", "prefixplusplus", false, "prefixplusplus desc"));
+  options.addOption(new Option("c", "pref", false, "pref desc"));
+  options.addOption("d", "other", false, "other long option"));
+  }
+  /**
+  - Exact long option name must be the sole match even when other options
+  - share the same prefix. Buggy version returns both, causing ambiguity.
+    */
+   @Test
+   public void testExactOptionNameAtch() {
+   List<String> matches = options.getMatchingOptions("prefix");
+   assertNotNull("Matches should not be null", matches);
+   assertEquals("Exact match must return exactly one result", 1, matches.size());
+   assertTrue("Result must contain the exact match", matches.contains("prefix"));
+   }
+  /**
+  - Exact long option overrides a shorer option whose name is a prefix.
+    */
+   @Test
+   public void testExactOverShorterPrefix() {
+   List<String> matches = options.getMatchingOptions("pref");
+   assertEquals("Exact match 'pref' must be the only result", 1, matches.size());
+   assertTrue(matches.contains("pref"));
+   }
+  /**
+  - When no exact match exists, all options whose long name starts with
+  - the given prefix must be returned.
+    */
+   @Test
+   public void testMultiplePrefixAtchesWithoutExact() {
+   // "prefixplusplus" and "prefix" both start with "prefixp"
+   List<String> matches = options.getMatchingOptions("prefixp");
+   assertNotNull(matches);
+   assertEquals(2, matches.size());
+   assertTrue(matches.contains("prefixplusplus"));
+   assertTrue(matches.contains("prefix"));
+   }
+  /**
+  - Sole prefix match returns the single matching option.
+    */
+   @Test
+   public void testSolePrefixMatch() {
+   // only "other" starts with "oth"
+   List<String> matches = options.getMatchingOptions("oth");
+   assertEquals(1, matches.size());
+   assertTrue(matches.contains("other"));
+   }
+  /**
+  - No match returns an empty list.
+    */
+   @Test
+   public void testNoAtchReturnsEmptyList() {
+   List<String> matches = options.getMatchingOptions("nonexistent");
+   assertNotNull(matches);
+   assertTrue(matches.isEmpty());
+   }
+  /**
+  - Leading hyphens are ignored (up to 2), so "--prefix" must find the exact match.
+    */
+   @Test
+   public void testLeadingHyphensIgnoredForExactMatch() {
+   List<String> matches = options.getMatchingOptions("--prefix");
+   assertEquals("--prefix should resolve to exact match 'prefix'", 1, matches.size());
+   assertTrue(matches.contains("prefix"));
+   }
+  /**
+  - Passing null must throw NullPointerException (stripLeadingHyphens fails on null).
+    */
+   @Test(expected = NullPointerException.class)
+   public void testNullArgumentThrowsNPE() {
+   options.getMatchingOptions(null);
+   }
+  /**
+  - Empty string as prefix usually matches everything (each longOpt starts with "").
+  - Verify that it returns a non-null list containing all long options.
+    */
+   @Test
+   public void testEmptyArgumentReturnsAllLongOptions() {
+   List<String> matches = options.getMatchingOptions("");
+   assertNotNull(matches);
+   // 4 long options were added: prefix, prefixplusplus, pref, other
+   assertEquals(4, matches.size());
+   assertTrue(matches.contains("prefix"));
+   assertTrue(matches.contains("prefixplusplus"));
+   assertTrue(matches.contains("pref"));
+   assertTrue(matches.contains("other"));
+   }
+  /**
+  - hasLongOption correctly reports existence of a long option.
+    */
+   @Test
+   public void testHasLongOptionTrue() {
+   assertTrue(options.hasLongOption("prefix"));
+   assertTrue(options.hasLongOption("other"));
+   }
+  /**
+  - hasLongOption returns false for unknown long option.
+    */
+   @Test
+   public void testHasLongOptionFalse() {
+   assertFalse(options.hasLongOption("unknown"));
+   }
+  /**
+  - hasShortOption correctly reports existence of a short option.
+    */
+   @Test
+   public void testHasShortOptionTrue() {
+   assertTrue(options.hasShortOption("a"));
+   assertTrue(options.hasShortOption("c"));
+   }
+  /**
+  - hasShortOption returns false for unknown short option.
+    */
+   @Test
+   public void testHasShortOptionFalse() {
+   assertFalse(options.hasShortOption("x"));
+   }
+
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Cli-35f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Cli-35f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Cli-35f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+ [mkdir] Created dir: /root/sqa-workspaces/Cli-35f-copilot/target
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Cli-35f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Cli-35f-copilot/.test_suite/org/apache/commons/cli/bug/BugCLI252Test.java:29: error: ';' expected
+ [javac] options.addOption("d", "other", false, "other long option"));
+ [javac] ^
+ [javac] 1 error
+
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 7 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

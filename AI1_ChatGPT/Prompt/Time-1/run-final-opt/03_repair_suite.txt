@@ -1,0 +1,245 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Time  Bug: 1  Version: Time-1b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 93
+Trigger failures:
+- org.joda.time.TestPartial_Constructors::testConstructorEx7_TypeArray_intArray
+ --> junit.framework.AssertionFailedError
+Modified: org.joda.time.field.UnsupportedDurationField, org.joda.time.Partial
+
+Available API/signatures:
+[org.joda.time.field.UnsupportedDurationField | java]
+package org.joda.time.field;
+public final class UnsupportedDurationField extends DurationField implements Serializable {
+public static synchronized UnsupportedDurationField getInstance(DurationFieldType type) {
+private UnsupportedDurationField(DurationFieldType type) {
+public final DurationFieldType getType() {
+public String getName() {
+public boolean isSupported() {
+public boolean isPrecise() {
+public int getValue(long duration) {
+public long getValueAsLong(long duration) {
+public int getValue(long duration, long instant) {
+public long getValueAsLong(long duration, long instant) {
+public long getMillis(int value) {
+public long getMillis(long value) {
+public long getMillis(int value, long instant) {
+public long getMillis(long value, long instant) {
+public long add(long instant, int value) {
+public long add(long instant, long value) {
+public int getDifference(long minuendInstant, long subtrahendInstant) {
+public long getDifferenceAsLong(long minuendInstant, long subtrahendInstant) {
+public long getUnitMillis() {
+public int compareTo(DurationField durationField) {
+public boolean equals(Object obj) {
+public int hashCode() {
+public String toString() {
+private Object readResolve() {
+private UnsupportedOperationException unsupported() {
+
+[org.joda.time.Partial | java]
+package org.joda.time;
+public final class Partial
+public Partial() {
+public Partial(Chronology chrono) {
+public Partial(DateTimeFieldType type, int value) {
+public Partial(DateTimeFieldType type, int value, Chronology chronology) {
+public Partial(DateTimeFieldType[] types, int[] values) {
+public Partial(DateTimeFieldType[] type
+...[truncated deterministically]...
+tChronology() {
+protected DateTimeField getField(int index, Chronology chrono) {
+public DateTimeFieldType getFieldType(int index) {
+public DateTimeFieldType[] getFieldTypes() {
+public int getValue(int index) {
+public int[] getValues() {
+public Partial withChronologyRetainFields(Chronology newChronology) {
+public Partial with(DateTimeFieldType fieldType, int value) {
+public Part
+...[truncated deterministically]...
+ateTimeField getField() {
+protected ReadablePartial getReadablePartial() {
+public Partial getPartial() {
+public int get() {
+public Partial addToCopy(int valueToAdd) {
+public Partial addWrapFieldToCopy(int valueToAdd) {
+public Partial setCopy(int value) {
+public Partial setCopy(String text, Locale locale) {
+public Partial setCopy(String text) {
+public Partial withMaximumValue() {
+public Partial withMinimumValue() {
+
+Generated JUnit Test:
+package org.joda.time;
+
+import junit.framework.TestCase;
+import org.joda.time.chrono.ISOChronology;
+import org.joda.time.field.UnsupportedDurationField;
+
+public class Time1RegressionTest extends TestCase {
+
+    public void testUnsupportedDurationFieldIsCachedAndReportsUnsupported() {
+        UnsupportedDurationField first =
+                UnsupportedDurationField.getInstance(DurationFieldType.eras());
+        UnsupportedDurationField second =
+                UnsupportedDurationField.getInstance(DurationFieldType.eras());
+
+        assertSame(first, second);
+        assertEquals(DurationFieldType.eras(), first.getType());
+        assertEquals("eras", first.getName());
+        assertFalse(first.isSupported());
+        assertTrue(first.isPrecise());
+        assertEquals("UnsupportedDurationField[eras]", first.toString());
+    }
+
+    public void testUnsupportedDurationFieldOperationsThrowUnsupportedOperationException() {
+        UnsupportedDurationField field =
+                UnsupportedDurationField.getInstance(DurationFieldType.eras());
+
+        try {
+            field.getValue(1L);
+            fail("Unsupported duration fields must reject value conversion");
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().indexOf("eras") >= 0);
+        }
+
+        try {
+            field.add(0L, 1);
+            fail("Unsupported duration fields must reject addition");
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().indexOf("eras") >= 0);
+        }
+
+        try {
+            field.getDifference(1L, 0L);
+            fail("Unsupported duration fields must reject difference calculation");
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().indexOf("eras") >= 0);
+        }
+    }
+
+    public void testUnsupportedDurationComparisonIsConsistentWithSupportedDuration() {
+        DurationField unsupported =
+                UnsupportedDurationField.getInstance(DurationFieldType.eras());
+        DurationField years =
+                DurationFieldType.years().getField(ISOChronology.getInstanceUTC());
+
+        assertTrue(unsupported.compareTo(years) > 0);
+        assertTrue(years.compareTo(unsupported) < 0);
+        assertEquals(0, unsupported.compareTo(
+                UnsupportedDurationField.getInstance(DurationFieldType.eras())));
+    }
+
+    public void testPartialRejectsYearBeforeEraBecauseTypesMustBeLargestToSmallest() {
+        try {
+            new Partial(
+                    new DateTimeFieldType[] {
+                        DateTimeFieldType.yearOfEra(),
+                        DateTimeFieldType.era()
+                    },
+                    new int[] { 2020, 1 });
+            fail("A year field must not precede the larger era field");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("largest-smallest") >= 0);
+        }
+    }
+
+    public void testPartialAcceptsEraBeforeYearOfEra() {
+        Partial partial = new Partial(
+                new DateTimeFieldType[] {
+                    DateTimeFieldType.era(),
+                    DateTimeFieldType.yearOfEra()
+                },
+                new int[] { 1, 2020 });
+
+        assertEquals(2, partial.size());
+        assertEquals(DateTimeFieldType.era(), partial.getFieldType(0));
+        assertEquals(DateTimeFieldType.yearOfEra(), partial.getFieldType(1));
+        assertEquals(1, partial.getValue(0));
+        assertEquals(2020, partial.getValue(1));
+    }
+
+    public void testPartialConstructorDefensivelyCopiesTypeAndValueArrays() {
+        DateTimeFieldType[] types = new DateTimeFieldType[] {
+            DateTimeFieldType.year(),
+            DateTimeFieldType.monthOfYear()
+        };
+        int[] values = new int[] { 2020, 2 };
+
+        Partial partial = new Partial(types, values);
+        types[0] = DateTimeFieldType.dayOfMonth();
+        values[0] = 1;
+
+        assertEquals(DateTimeFieldType.year(), partial.getFieldType(0));
+        assertEquals(2020, partial.getValue(0));
+    }
+
+    public void testPartialConstructorRejectsNullAndMismatchedArrays() {
+        try {
+            new Partial((DateTimeFieldType[]) null, new int[0]);
+            fail("Null type arrays must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("Types array") >= 0);
+        }
+
+        try {
+            new Partial(new DateTimeFieldType[0], (int[]) null);
+            fail("Null value arrays must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("Values array") >= 0);
+        }
+
+        try {
+            new Partial(
+                    new DateTimeFieldType[] { DateTimeFieldType.year() },
+                    new int[0]);
+            fail("Type and value arrays of different lengths must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("same length") >= 0);
+        }
+    }
+
+    public void testPartialConstructorRejectsNullTypeAndInvalidValue() {
+        try {
+            new Partial(
+                    new DateTimeFieldType[] { null },
+                    new int[] { 1 });
+            fail("Null field types must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("must not contain null") >= 0);
+        }
+
+        try {
+            new Partial(DateTimeFieldType.dayOfMonth(), 32);
+            fail("Values outside a field's valid range must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    public void testPartialConstructorRejectsRegularFieldsInSmallestToLargestOrder() {
+        try {
+            new Partial(
+                    new DateTimeFieldType[] {
+                        DateTimeFieldType.dayOfMonth(),
+                        DateTimeFieldType.monthOfYear()
+                    },
+                    new int[] { 1, 1 });
+            fail("Fields supplied smallest-to-largest must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("largest-smallest") >= 0);
+        }
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.joda.time.Time1RegressionTest::testUnsupportedDurationComparisonIsConsistentWithSupportedDuration
+
+Extract test suite......................................................... OK
+Failing generated tests: org.joda.time.Time1RegressionTest::testUnsupportedDurationComparisonIsConsistentWithSupportedDuration

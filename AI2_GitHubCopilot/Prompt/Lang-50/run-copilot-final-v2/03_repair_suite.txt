@@ -1,0 +1,227 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Lang  Bug: 50  Version: Lang-50b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: LANG-368
+Trigger failures:
+- org.apache.commons.lang.time.FastDateFormatTest::test_changeDefault_Locale_DateInstance
+ --> junit.framework.AssertionFailedError: expected same:<de_DE> was not:<en_US>
+ - org.apache.commons.lang.time.FastDateFormatTest::test_changeDefault_Locale_DateTimeInstance
+ --> junit.framework.AssertionFailedError: expected same:<de_DE> was not:<en_US>
+Modified: org.apache.commons.lang.time.FastDateFormat
+
+Available API/signatures:
+[org.apache.commons.lang.time.FastDateFormat | java]
+package org.apache.commons.lang.time;
+public class FastDateFormat extends Format {
+public static final int FULL = DateFormat.FULL;
+public static final int LONG = DateFormat.LONG;
+public static final int MEDIUM = DateFormat.MEDIUM;
+public static final int SHORT = DateFormat.SHORT;
+private static Map cInstanceCache = new HashMap(7);
+private static Map cDateInstanceCache = new HashMap(7);
+private static Map cTimeInstanceCache = new HashMap(7);
+private static Map cDateTimeInstanceCache = new HashMap(7);
+private static Map cTimeZoneDisplayCache = new HashMap(7);
+public static FastDateFormat getInstance() {
+public static FastDateFormat getInstance(String pattern) {
+public static FastDateFormat getInstance(String pattern, TimeZone timeZone) {
+public static FastDateFormat getInstance(String pattern, Locale locale) {
+public static synchronized FastDateFormat getInstance(String pattern, TimeZone timeZone, Locale locale) {
+public static FastDateFormat getDateInstance(int style) {
+public static FastDateFormat getDateInstance(int style, Locale locale) {
+public static FastDateFormat getDateInstance(int style, TimeZone timeZone) {
+public static synchronized FastDateFormat getDateInstance(int style, TimeZone timeZone, Locale locale) {
+public static FastDateFormat getTimeInstance(int style) {
+public static FastDateFormat getTimeInstance(int style, Locale locale) {
+public static FastDateFormat getTimeInstance(int style, TimeZone timeZone) {
+public static synchronized FastDateFormat getTimeInstance(int style, TimeZone timeZone, Locale locale) {
+static synchronized String getTimeZoneDisplay(TimeZone tz, bo
+...[truncated deterministically]...
+le {
+private static class TwoDigitYearField implements NumberRule {
+static final TwoDigitYearField INSTANCE = new TwoDigitYearField();
+private static class TwoDigitMonthField implements NumberRule {
+static final TwoDigitMonthField INSTANCE = new TwoDigitMonthField();
+private static class TwelveHourField implements NumberRule {
+public void appendTo(StringBuffer buffer, int value) {
+private static class TwentyFourHourField implements NumberRule {
+private static class TimeZoneNameRule implements Rule {
+private static class TimeZoneNumberRule implements Rule {
+static final TimeZoneNumberRule INSTANCE_COLON = new TimeZoneNumberRule(true);
+static final TimeZoneNumberRule INSTANCE_NO_COLON = new TimeZoneNumberRule(false);
+private static class TimeZoneDisplayKey {
+private static class Pair {
+public Pair(Object obj1, Object obj2) {
+
+Generated JUnit Test:
+package org.apache.commons.lang.time;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotSame;
+
+import java.util.Locale;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+public class FastDateFormatLocaleCacheTest {
+
+ private Locale originalDefault;
+
+ @Before
+ public void setUp() {
+     originalDefault = Locale.getDefault();
+ }
+
+ @After
+ public void tearDown() {
+     Locale.setDefault(originalDefault);
+ }
+
+ @Test
+ public void testGetDateInstanceDefaultLocaleChange() {
+     Locale.setDefault(Locale.GERMANY);
+     FastDateFormat fmt1 = FastDateFormat.getDateInstance(FastDateFormat.FULL);
+     assertEquals("First instance must use current default locale", Locale.GERMANY,
+fmt1.getLocale());
+
+     Locale.setDefault(Locale.US);
+     FastDateFormat fmt2 = FastDateFormat.getDateInstance(FastDateFormat.FULL);
+     assertEquals("After locale change, new instance must reflect new default", Locale.US,
+fmt2.getLocale());
+     assertNotSame("Caching must not return stale instance for different locale", fmt1, fmt2);
+ }
+
+ @Test
+ public void testGetTimeInstanceDefaultLocaleChange() {
+     Locale.setDefault(Locale.GERMANY);
+     FastDateFormat fmt1 = FastDateFormat.getTimeInstance(FastDateFormat.MEDIUM);
+     assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+     Locale.setDefault(Locale.US);
+     FastDateFormat fmt2 = FastDateFormat.getTimeInstance(FastDateFormat.MEDIUM);
+     assertEquals(Locale.US, fmt2.getLocale());
+     assertNotSame(fmt1, fmt2);
+ }
+
+ @Test
+ public void testGetDateTimeInstanceDefaultLocaleChange() {
+     Locale.setDefault(Locale.GERMANY);
+     FastDateFormat fmt1 = FastDateFormat.getDateTimeInstance(FastDateFormat.LONG,
+FastDateFormat.SHORT);
+     assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+     Locale.setDefault(Locale.US);
+     FastDateFormat fmt2 = FastDateFormat.getDateTimeInstance(FastDateFormat.LONG,
+FastDateFormat.SHORT);
+     assertEquals(Locale.US, fmt2.getLocale());
+     assertNotSame(fmt1, fmt2);
+ }
+
+ @Test
+ public void testGetInstanceNoArgsDefaultLocaleChange() {
+     Locale.setDefault(Locale.GERMANY);
+     FastDateFormat fmt1 = FastDateFormat.getInstance();
+     assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+     Locale.setDefault(Locale.US);
+     FastDateFormat fmt2 = FastDateFormat.getInstance();
+     assertEquals(Locale.US, fmt2.getLocale());
+     assertNotSame(fmt1, fmt2);
+ }
+
+ @Test
+ public void testGetInstanceWithPatternDefaultLocaleChange() {
+     String pattern = "yyyy-MM-dd";
+     Locale.setDefault(Locale.GERMANY);
+     FastDateFormat fmt1 = FastDateFormat.getInstance(pattern);
+     assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+     Locale.setDefault(Locale.US);
+     FastDateFormat fmt2 = FastDateFormat.getInstance(pattern);
+     assertEquals(Locale.US, fmt2.getLocale());
+     assertNotSame(fmt1, fmt2);
+ }
+
+ @Test
+ public void testMultipleLocaleChanges() {
+     Locale.setDefault(Locale.GERMANY);
+     FastDateFormat fmt1 = FastDateFormat.getDateInstance(FastDateFormat.SHORT);
+     assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+     Locale.setDefault(Locale.CANADA);
+     FastDateFormat fmt2 = FastDateFormat.getDateInstance(FastDateFormat.SHORT);
+     assertEquals(Locale.CANADA, fmt2.getLocale());
+
+     Locale.setDefault(Locale.US);
+     FastDateFormat fmt3 = FastDateFormat.getDateInstance(FastDateFormat.SHORT);
+     assertEquals(Locale.US, fmt3.getLocale());
+
+     assertNotSame(fmt1, fmt2);
+     assertNotSame(fmt2, fmt3);
+ }
+
+ @Test
+ public void testAllDateStylesDefaultLocaleChange() {
+     int[] styles = {FastDateFormat.FULL, FastDateFormat.LONG, FastDateFormat.MEDIUM,
+FastDateFormat.SHORT};
+     for (int style : styles) {
+         Locale.setDefault(Locale.GERMANY);
+         FastDateFormat fmt1 = FastDateFormat.getDateInstance(style);
+         assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+         Locale.setDefault(Locale.US);
+         FastDateFormat fmt2 = FastDateFormat.getDateInstance(style);
+         assertEquals(Locale.US, fmt2.getLocale());
+         assertNotSame(fmt1, fmt2);
+     }
+ }
+
+ @Test
+ public void testAllTimeStylesDefaultLocaleChange() {
+     int[] styles = {FastDateFormat.FULL, FastDateFormat.LONG, FastDateFormat.MEDIUM,
+FastDateFormat.SHORT};
+     for (int style : styles) {
+         Locale.setDefault(Locale.GERMANY);
+         FastDateFormat fmt1 = FastDateFormat.getTimeInstance(style);
+         assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+         Locale.setDefault(Locale.US);
+         FastDateFormat fmt2 = FastDateFormat.getTimeInstance(style);
+         assertEquals(Locale.US, fmt2.getLocale());
+         assertNotSame(fmt1, fmt2);
+     }
+ }
+
+ @Test
+ public void testAllDateTimeStylesDefaultLocaleChange() {
+     int[] dateStyles = {FastDateFormat.FULL, FastDateFormat.MEDIUM};
+     int[] timeStyles = {FastDateFormat.SHORT, FastDateFormat.MEDIUM};
+     for (int ds : dateStyles) {
+         for (int ts : timeStyles) {
+             Locale.setDefault(Locale.GERMANY);
+             FastDateFormat fmt1 = FastDateFormat.getDateTimeInstance(ds, ts);
+             assertEquals(Locale.GERMANY, fmt1.getLocale());
+
+             Locale.setDefault(Locale.US);
+             FastDateFormat fmt2 = FastDateFormat.getDateTimeInstance(ds, ts);
+             assertEquals(Locale.US, fmt2.getLocale());
+             assertNotSame(fmt1, fmt2);
+         }
+     }
+ }
+
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.lang.time.FastDateFormatLocaleCacheTest::testAllTimeStylesDefaultLocaleChange
+ - org.apache.commons.lang.time.FastDateFormatLocaleCacheTest::testGetTimeInstanceDefaultLocaleChange
+
+Failing generated tests: org.apache.commons.lang.time.FastDateFormatLocaleCacheTest::testAllTimeStylesDefaultLocaleChange, org.apache.commons.lang.time.FastDateFormatLocaleCacheTest::testGetTimeInstanceDefaultLocaleChange

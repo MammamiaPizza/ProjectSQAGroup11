@@ -1,0 +1,294 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonXml  Bug: 1  Version: JacksonXml-1b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 180
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.lists.NestedUnwrappedLists180Test::testNestedUnwrappedLists180
+ --> junit.framework.AssertionFailedError
+ - com.fasterxml.jackson.dataformat.xml.lists.NestedUnwrappedListsTest::testNestedWithEmpty2
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+ - com.fasterxml.jackson.dataformat.xml.lists.NestedUnwrappedListsTest::testNestedWithEmpty
+ --> junit.framework.AssertionFailedError: expected:<1> but was:<0>
+Modified: com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser
+
+Available API/signatures:
+[com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser | java]
+package com.fasterxml.jackson.dataformat.xml.deser;
+public class FromXmlParser
+public final static String DEFAULT_UNNAMED_TEXT_PROPERTY = "";
+public enum Feature implements FormatFeature
+public static int collectDefaults()
+private Feature(boolean defaultState) {
+@Override public boolean enabledByDefault() { return _defaultState; }
+@Override public int getMask() { return _mask; }
+@Override public boolean enabledIn(int flags) { return (flags & getMask()) != 0; }
+protected String _cfgNameForTextElement = DEFAULT_UNNAMED_TEXT_PROPERTY;
+protected int _formatFeatures;
+protected ObjectCodec _objectCodec;
+protected boolean _closed;
+final protected IOContext _ioContext;
+protected XmlReadContext _parsingContext;
+protected final XmlTokenStream _xmlTokens;
+protected boolean _mayBeLeaf;
+protected JsonToken _nextToken;
+protected String _currText;
+protected Set<String> _namesToWrap;
+protected ByteArrayBuilder _byteArrayBuilder = null;
+protected byte[] _binaryValue;
+@Override
+public Version version() {
+public ObjectCodec getCodec() {
+public void setCodec(ObjectCodec c) {
+public void setXMLTextElementName(String name) {
+public boolean requiresCustomCodec() {
+public FromXmlParser enable(Feature f) {
+public FromXmlParser disable(Feature f) {
+public final boolean isEnabled(Feature f) {
+public FromXmlParser configure(Feature f, boolean state) {
+public int getFormatFeatures() {
+public JsonParser overrideFormatFeatures(int values, int mask) {
+public XMLStreamReader getStaxReader() {
+public void addVirtualWrapping(Set<String> namesToWrap)
+public String getCurrentName() throws IOException
+public vo
+...[truncated deterministically]...
+ption {
+public byte[] getBinaryValue(Base64Variant b64variant) throws IOException
+@SuppressWarnings("resource")
+protected byte[] _decodeBase64(Base64Variant b64variant) throws IOException
+final String str = getText();
+public BigInteger getBigIntegerValue() throws IOException {
+public BigDecimal getDecimalValue() throws IOException {
+public double getDoubleValue() throws IOException {
+public float getFloatValue() throws IOException {
+public int getIntValue() throws IOException {
+public long getLongValue() throws IOException {
+public NumberType getNumberType() throws IOException {
+public Number getNumberValue() throws IOException {
+protected void _handleEOF() throws JsonParseException
+protected void _releaseBuffers() throws IOException {
+protected ByteArrayBuilder _getByteArrayBuilder()
+protected boolean _isEmpty(String str)
+
+Generated JUnit Test:
+package com.fasterxml.jackson.dataformat.xml.deser;
+
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+
+ import java.io.IOException;
+ import java.util.List;
+
+ import org.junit.Test;
+
+ import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+
+ public class FromXmlParserBug1Test {
+
+     private final XmlMapper mapper = new XmlMapper();
+
+     // Simple bean with an unwrapped list of strings
+     public static class SimpleUnwrappedList {
+         @JacksonXmlElementWrapper(useWrapping = false)
+         @JacksonXmlProperty(localName = "item")
+         public List<String> items;
+     }
+
+     // Bean with nested unwrapped lists
+     public static class RootWithNested {
+         @JacksonXmlElementWrapper(useWrapping = false)
+         @JacksonXmlProperty(localName = "items")
+         public List<ItemWrapper> items;
+     }
+
+     public static class ItemWrapper {
+         @JacksonXmlElementWrapper(useWrapping = false)
+         @JacksonXmlProperty(localName = "sub")
+         public List<String> subItems;
+     }
+
+     // Deep nesting support
+     public static class RootDeep {
+         @JacksonXmlElementWrapper(useWrapping = false)
+         @JacksonXmlProperty(localName = "level1")
+         public List<Level1> level1List;
+     }
+
+     public static class Level1 {
+         @JacksonXmlElementWrapper(useWrapping = false)
+         @JacksonXmlProperty(localName = "level2")
+         public List<Level2> level2List;
+     }
+
+     public static class Level2 {
+         @JacksonXmlElementWrapper(useWrapping = false)
+         @JacksonXmlProperty(localName = "leaf")
+         public List<String> leafList;
+     }
+
+     @Test
+     public void testEmptyElementInUnwrappedList() throws IOException {
+         String xml = "<SimpleUnwrappedList><item></item></SimpleUnwrappedList>";
+         SimpleUnwrappedList result = mapper.readValue(xml, SimpleUnwrappedList.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected one empty string entry", 1, result.items.size());
+         assertEquals("", result.items.get(0));
+     }
+
+     @Test
+     public void testSelfClosingEmptyElement() throws IOException {
+         String xml = "<SimpleUnwrappedList><item/></SimpleUnwrappedList>";
+         SimpleUnwrappedList result = mapper.readValue(xml, SimpleUnwrappedList.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected one empty string entry for self-closing tag", 1,
+result.items.size());
+         assertEquals("", result.items.get(0));
+     }
+
+     @Test
+     public void testNestedUnwrappedEmptySubElement() throws IOException {
+         String xml = "<RootWithNested><items><sub></sub></items></RootWithNested>";
+         RootWithNested result = mapper.readValue(xml, RootWithNested.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected one outer item", 1, result.items.size());
+         ItemWrapper wrapper = result.items.get(0);
+         assertNotNull(wrapper);
+         assertNotNull(wrapper.subItems);
+         assertEquals("Expected one empty string in nested list", 1, wrapper.subItems.size());
+         assertEquals("", wrapper.subItems.get(0));
+     }
+
+     @Test
+     public void testNestedUnwrappedSelfClosingSubElement() throws IOException {
+         String xml = "<RootWithNested><items><sub/></items></RootWithNested>";
+         RootWithNested result = mapper.readValue(xml, RootWithNested.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals(1, result.items.size());
+         ItemWrapper wrapper = result.items.get(0);
+         assertNotNull(wrapper);
+         assertNotNull(wrapper.subItems);
+         assertEquals(1, wrapper.subItems.size());
+         assertEquals("", wrapper.subItems.get(0));
+     }
+
+     @Test
+     public void testMixedEmptyAndNonEmptyInUnwrapped() throws IOException {
+         String xml =
+"<SimpleUnwrappedList><item></item><item>value</item><item/></SimpleUnwrappedList>";
+         SimpleUnwrappedList result = mapper.readValue(xml, SimpleUnwrappedList.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected three entries", 3, result.items.size());
+         assertEquals("", result.items.get(0));
+         assertEquals("value", result.items.get(1));
+         assertEquals("", result.items.get(2));
+     }
+
+     @Test
+     public void testMultipleEmptySiblings() throws IOException {
+         String xml = "<SimpleUnwrappedList><item></item><item/></SimpleUnwrappedList>";
+         SimpleUnwrappedList result = mapper.readValue(xml, SimpleUnwrappedList.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected two empty entries", 2, result.items.size());
+         assertEquals("", result.items.get(0));
+         assertEquals("", result.items.get(1));
+     }
+
+     @Test
+     public void testNonEmptyElementRemains() throws IOException {
+         String xml = "<SimpleUnwrappedList><item>some text</item></SimpleUnwrappedList>";
+         SimpleUnwrappedList result = mapper.readValue(xml, SimpleUnwrappedList.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected one non-empty entry", 1, result.items.size());
+         assertEquals("some text", result.items.get(0));
+     }
+
+     @Test
+     public void testEmptyListWithNothing() throws IOException {
+         String xml = "<SimpleUnwrappedList></SimpleUnwrappedList>";
+         SimpleUnwrappedList result = mapper.readValue(xml, SimpleUnwrappedList.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals("Expected empty list", 0, result.items.size());
+     }
+
+     @Test
+     public void testNestedMultipleEmptySubElements() throws IOException {
+         String xml = "<RootWithNested><items><sub></sub><sub/></items></RootWithNested>";
+         RootWithNested result = mapper.readValue(xml, RootWithNested.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals(1, result.items.size());
+         ItemWrapper wrapper = result.items.get(0);
+         assertNotNull(wrapper.subItems);
+         assertEquals("Expected two empty strings in nested list", 2, wrapper.subItems.size());
+         assertEquals("", wrapper.subItems.get(0));
+         assertEquals("", wrapper.subItems.get(1));
+     }
+
+     @Test
+     public void testNestedMixedEmptyAndNonEmpty() throws IOException {
+         String xml = "<RootWithNested><items><sub></sub><sub>hello</sub></items></RootWithNested>";
+         RootWithNested result = mapper.readValue(xml, RootWithNested.class);
+         assertNotNull(result);
+         assertNotNull(result.items);
+         assertEquals(1, result.items.size());
+         ItemWrapper wrapper = result.items.get(0);
+         assertNotNull(wrapper.subItems);
+         assertEquals(2, wrapper.subItems.size());
+         assertEquals("", wrapper.subItems.get(0));
+         assertEquals("hello", wrapper.subItems.get(1));
+     }
+
+     @Test
+     public void testDeepNestedEmptyLeaf() throws IOException {
+         String xml = "<RootDeep><level1><level2><leaf></leaf></level2></level1></RootDeep>";
+         RootDeep result = mapper.readValue(xml, RootDeep.class);
+         assertNotNull(result);
+         assertNotNull(result.level1List);
+         assertEquals(1, result.level1List.size());
+         Level1 l1 = result.level1List.get(0);
+         assertNotNull(l1.level2List);
+         assertEquals(1, l1.level2List.size());
+         Level2 l2 = l1.level2List.get(0);
+         assertNotNull(l2.leafList);
+         assertEquals("Expected one empty string in deep nested list", 1, l2.leafList.size());
+         assertEquals("", l2.leafList.get(0));
+     }
+
+     @Test
+     public void testDeepNestedSelfClosingEmptyLeaf() throws IOException {
+         String xml = "<RootDeep><level1><level2><leaf/></level2></level1></RootDeep>";
+         RootDeep result = mapper.readValue(xml, RootDeep.class);
+         assertNotNull(result);
+         assertNotNull(result.level1List);
+         assertEquals(1, result.level1List.size());
+         Level1 l1 = result.level1List.get(0);
+         assertNotNull(l1.level2List);
+         assertEquals(1, l1.level2List.size());
+         Level2 l2 = l1.level2List.get(0);
+         assertNotNull(l2.leafList);
+         assertEquals(1, l2.leafList.size());
+         assertEquals("", l2.leafList.get(0));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.dataformat.xml.deser.FromXmlParserBug1Test::testEmptyListWithNothing
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.dataformat.xml.deser.FromXmlParserBug1Test::testEmptyListWithNothing

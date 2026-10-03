@@ -1,0 +1,169 @@
+import json, re, os
+from pathlib import Path
+
+LOGDIR = Path("Experiment/logs/final-opt")
+RESULT = Path("AI1_ChatGPT/Result")
+RUN = "run-final-opt"
+TOTAL = 854
+
+def fmt(n):
+    if n is None: return "-"
+    if n >= 1_000_000: return f"{n/1_000_000:.2f}M"
+    if n >= 1000: return f"{n/1000:.1f}k"
+    return str(n)
+
+def num(p):
+    m = re.search(r'\d+', p.stem)
+    return int(m.group()) if m else 999
+
+print("="*82)
+print("CHATGPT / TERRA WORKERS — CURRENT")
+print("="*82)
+print(f"{'WORKER':<7}{'STATE':<10}{'CASE':<20}{'STAGE':<7}{'RAM':<7}{'USED':>9}{'LEFT':>10}")
+print("-"*82)
+
+active = set()
+
+for pf in sorted(LOGDIR.glob("W*.pid"), key=num):
+    w = pf.stem
+    log = LOGDIR / f"{w}.log"
+
+    try:
+        pid = int(re.sub(r'\D', '', pf.read_text()))
+    except:
+        pid = 0
+
+    alive = pid and Path(f"/proc/{pid}").exists()
+
+    case = "-"
+    stage = "-"
+    last_quota = -1
+    last_work = -1
+    used = 0
+    left = None
+
+    lines = log.read_text(errors="ignore").splitlines() if log.exists() else []
+
+    for i,line in enumerate(lines):
+        m = re.search(r'\]\s+CLAIMED\s+(\S+)', line)
+        if m:
+            case = m.group(1)
+            stage = "CLAIM"
+            last_work = i
+
+        if case != "-":
+            if "Prompt 01" in line: stage="P01"; last_work=i
+            elif "Prompt 02" in line: stage="P02"; last_work=i
+            elif "Prompt 03" in line: stage="P03"; last_work=i
+            elif "Prompt 04" in line: stage="P04"; last_work=i
+            elif "acquired Defects4J" in line: stage="D4J"; last_work=i
+
+            if re.search(rf'{re.escape(case)}\s+->\s+', line):
+                case="-"; stage="-"; last_work=i
+
+        if re.search(r'QUOTA PAUSED|DAILY QUOTA REACHED|daily quota|quota.*reached', line, re.I):
+            last_quota=i
+
+        s=line.strip()
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                d=json.loads(s)
+                if isinstance(d.get("total_tokens"), int):
+                    used += d["total_tokens"]
+
+                for k in ("daily_remaining_tokens","remaining_tokens"):
+                    if isinstance(d.get(k), int):
+                        left=d[k]
+
+                q=d.get("model_quota")
+                if isinstance(q,dict):
+                    if isinstance(q.get("daily_remaining_tokens"),int):
+                        left=q["daily_remaining_tokens"]
+                    elif isinstance(q.get("daily_quota_tokens"),int):
+                        u=q.get("daily_usage_tokens",q.get("daily_usage"))
+                        if isinstance(u,int):
+                            left=max(0,q["daily_quota_tokens"]-u)
+            except:
+                pass
+
+    if not alive:
+        state="STOPPED"
+        ram="-"
+    elif last_quota >= last_work and last_quota >= 0:
+        state="QUOTA"
+        stage="WAIT"
+        try:
+            rss=int(os.popen(f"ps -p {pid} -o rss=").read().strip() or 0)
+            ram=f"{rss/1024:.0f}M"
+        except:
+            ram="-"
+    else:
+        state="RUNNING"
+        try:
+            rss=int(os.popen(f"ps -p {pid} -o rss=").read().strip() or 0)
+            ram=f"{rss/1024:.0f}M"
+        except:
+            ram="-"
+
+    if alive and case != "-":
+        active.add(case)
+
+    print(f"{w:<7}{state:<10}{case:<20}{stage:<7}{ram:<7}{fmt(used):>9}{fmt(left):>10}")
+
+FINISHED_STATUSES = {
+    "DONE",
+    "INVALID_AFTER_REPAIR",
+    "INVALID_AFTER_PROMPT04",
+    "OUTPUT_INCOMPLETE",
+}
+
+statuses = {}
+
+for status_file in RESULT.glob(f"*/{RUN}/case_status.json"):
+    try:
+        data = json.loads(status_file.read_text())
+        statuses[status_file.parent.parent.name] = data.get("status")
+    except (OSError, ValueError):
+        continue
+
+finished_cases = {
+    case for case, status in statuses.items()
+    if status in FINISHED_STATUSES
+}
+
+error_cases = {
+    case for case, status in statuses.items()
+    if status == "ERROR"
+}
+
+quota_cases = {
+    case for case, status in statuses.items()
+    if status == "QUOTA_PAUSED"
+}
+
+running_cases = active - finished_cases
+
+waiting = max(
+    0,
+    TOTAL - len(finished_cases)
+    - len(error_cases - running_cases)
+    - len(quota_cases - running_cases)
+    - len(running_cases)
+)
+
+print()
+print("=" * 82)
+print("QUEUE - CURRENT RUN ONLY")
+print("=" * 82)
+print(f"Finished : {len(finished_cases)}")
+print(f"Running  : {len(running_cases)}")
+print(f"Error    : {len(error_cases - running_cases)}")
+print(f"Quota    : {len(quota_cases - running_cases)}")
+print(f"Waiting  : {waiting}")
+print("Previous runs are not included.")
+
+import subprocess
+subprocess.run(
+    ["python3", "Experiment/automation/pool_status_short.py", "W"],
+    check=False
+)

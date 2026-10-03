@@ -1,0 +1,157 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Csv  Bug: 7  Version: Csv-7b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: CSV-112
+Trigger failures:
+- org.apache.commons.csv.CSVParserTest::testDuplicateHeaderEntries
+ --> junit.framework.AssertionFailedError: Expected exception: java.lang.IllegalStateException
+Modified: org.apache.commons.csv.CSVParser
+
+Available API/signatures:
+[org.apache.commons.csv.CSVParser | java]
+package org.apache.commons.csv;
+public final class CSVParser implements Iterable<CSVRecord>, Closeable {
+public static CSVParser parse(final File file, final CSVFormat format) throws IOException {
+public static CSVParser parse(final String string, final CSVFormat format) throws IOException {
+public static CSVParser parse(final URL url, final Charset charset, final CSVFormat format) throws IOException {
+/** A record buffer for getRecord(). Grows as necessary and is reused. */
+private final List<String> record = new ArrayList<String>();
+private final Token reusableToken = new Token();
+public CSVParser(final Reader reader, final CSVFormat format) throws IOException {
+private void addRecordValue() {
+final String input = this.reusableToken.content.toString();
+final String nullString = this.format.getNullString();
+this.record.add(input);
+this.record.add(input.equalsIgnoreCase(nullString) ? null : input);
+public void close() throws IOException {
+public long getCurrentLineNumber() {
+public Map<String, Integer> getHeaderMap() {
+public long getRecordNumber() {
+public List<CSVRecord> getRecords() throws IOException {
+public <T extends Collection<CSVRecord>> T getRecords(T records) throws IOException {
+private Map<String, Integer> initializeHeader() throws IOException {
+final String[] formatHeader = this.format.getHeader();
+final CSVRecord nextRecord = this.nextRecord();
+public boolean isClosed() {
+public Iterator<CSVRecord> iterator() {
+private CSVRecord getNextRecord() {
+} catch (final IOException e) {
+public boolean hasNext() {
+public CSVRecord next() {
+public void remove() {
+this.record.clear();
+if (sb == null) { // first comment for this record
+if (!this.record.isEmpty()) {
+final String comment = sb == null ? null : sb.toString();
+result = new CSVRecord(this.record.toArray(new String[this.record.size()]), this.headerMap, comment,
+
+Generated JUnit Test:
+package org.apache.commons.csv;
+
+ import static org.junit.Assert.*;
+
+ import java.io.IOException;
+ import java.util.Map;
+
+ import org.junit.Test;
+
+ public class CSVParserTest {
+
+     @Test(expected = IllegalStateException.class)
+     public void testDuplicateHeaderEntries() throws IOException {
+         CSVParser.parse("a,b,a\n1,2,3", CSVFormat.DEFAULT.withHeader("a", "b", "a"));
+     }
+
+     @Test(expected = IllegalStateException.class)
+     public void testDuplicateHeadersFromFirstRecord() throws IOException {
+         CSVParser.parse("a,a\n1,2", CSVFormat.DEFAULT);
+     }
+
+     @Test(expected = IllegalStateException.class)
+     public void testDuplicateHeadersWithSkipHeaderRecord() throws IOException {
+         CSVParser.parse("a,b,c\n1,2,3",
+                 CSVFormat.DEFAULT.withHeader("a", "b", "a").withSkipHeaderRecord(true));
+     }
+
+     @Test
+     public void testUniqueHeaderMapping() throws IOException {
+         CSVParser parser = CSVParser.parse("a,b,c\n1,2,3", CSVFormat.DEFAULT.withHeader("a", "b",
+"c"));
+         Map<String, Integer> map = parser.getHeaderMap();
+         assertEquals(3, map.size());
+         assertEquals(Integer.valueOf(0), map.get("a"));
+         assertEquals(Integer.valueOf(1), map.get("b"));
+         assertEquals(Integer.valueOf(2), map.get("c"));
+     }
+
+     @Test
+     public void testNoDuplicateHeadersShouldNotThrow() throws IOException {
+         CSVParser parser = CSVParser.parse("x,y\n1,2", CSVFormat.DEFAULT.withHeader("x", "y"));
+         assertNotNull(parser.getHeaderMap());
+     }
+
+     @Test
+     public void testEmptyHeaderArrayReadsFromFirstRecord() throws IOException {
+         CSVParser parser = CSVParser.parse("h1,h2\n1,2", CSVFormat.DEFAULT.withHeader(new
+String[0]));
+         Map<String, Integer> map = parser.getHeaderMap();
+         assertNotNull(map);
+         assertEquals(2, map.size());
+         assertEquals(Integer.valueOf(0), map.get("h1"));
+         assertEquals(Integer.valueOf(1), map.get("h2"));
+     }
+
+     @Test
+     public void testEmptyHeaderArrayNoDataReturnsEmptyMap() throws IOException {
+         CSVParser parser = CSVParser.parse("", CSVFormat.DEFAULT.withHeader(new String[0]));
+         Map<String, Integer> map = parser.getHeaderMap();
+         assertNotNull(map);
+         assertTrue(map.isEmpty());
+     }
+
+     @Test
+     public void testNullHeaderReturnsNullHeaderMap() throws IOException {
+         CSVParser parser = CSVParser.parse("a,b\n1,2", CSVFormat.DEFAULT);
+         assertNull(parser.getHeaderMap());
+     }
+
+     @Test
+     public void testCaseSensitiveHeadersNotDuplicate() throws IOException {
+         CSVParser parser = CSVParser.parse("a,A\n1,2", CSVFormat.DEFAULT);
+         Map<String, Integer> map = parser.getHeaderMap();
+         assertEquals(2, map.size());
+         assertEquals(Integer.valueOf(0), map.get("a"));
+         assertEquals(Integer.valueOf(1), map.get("A"));
+     }
+
+     @Test
+     public void testSingleColumnHeader() throws IOException {
+         CSVParser parser = CSVParser.parse("col\n1", CSVFormat.DEFAULT.withHeader("col"));
+         Map<String, Integer> map = parser.getHeaderMap();
+         assertEquals(1, map.size());
+         assertEquals(Integer.valueOf(0), map.get("col"));
+     }
+
+     @Test
+     public void testGetHeaderMapReturnsCopy() throws IOException {
+         CSVParser parser = CSVParser.parse("x,y\n1,2", CSVFormat.DEFAULT.withHeader("x", "y"));
+         Map<String, Integer> map1 = parser.getHeaderMap();
+         Map<String, Integer> map2 = parser.getHeaderMap();
+         assertNotSame(map1, map2);
+         assertEquals(map1, map2);
+         map1.clear();
+         assertFalse(parser.getHeaderMap().isEmpty());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - org.apache.commons.csv.CSVParserTest::testCaseSensitiveHeadersNotDuplicate
+ - org.apache.commons.csv.CSVParserTest::testDuplicateHeadersFromFirstRecord
+
+Failing generated tests: org.apache.commons.csv.CSVParserTest::testCaseSensitiveHeadersNotDuplicate, org.apache.commons.csv.CSVParserTest::testDuplicateHeadersFromFirstRecord

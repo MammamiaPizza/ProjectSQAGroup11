@@ -1,0 +1,240 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Cli  Bug: 34  Version: Cli-34b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: CLI-215
+Trigger failures:
+- org.apache.commons.cli.CommandLineTest::testGetParsedOptionValue
+ --> junit.framework.AssertionFailedError: expected:<foo> but was:<null>
+ - org.apache.commons.cli.OptionBuilderTest::testTwoCompleteOptions
+ --> junit.framework.AssertionFailedError: expected:<class java.lang.String> but was:<null>
+Modified: org.apache.commons.cli.Option, org.apache.commons.cli.OptionBuilder
+
+Available API/signatures:
+[org.apache.commons.cli.Option | java]
+package org.apache.commons.cli;
+public class Option implements Cloneable, Serializable
+public static final int UNINITIALIZED = -1;
+public static final int UNLIMITED_VALUES = -2;
+private List values = new ArrayList();
+public Option(String opt, String description) throws IllegalArgumentException
+public Option(String opt, boolean hasArg, String description) throws IllegalArgumentException
+public Option(String opt, String longOpt, boolean hasArg, String description)
+public int getId()
+public String getOpt()
+public Object getType()
+public void setType(Class type)
+public String getLongOpt()
+public void setLongOpt(String longOpt)
+public void setOptionalArg(boolean optionalArg)
+public boolean hasOptionalArg()
+public boolean hasLongOpt()
+public boolean hasArg()
+public String getDescription()
+public void setDescription(String descr
+...[truncated deterministically]...
+rocessValue(String value)
+private void add(String value)
+public String getValue()
+public String getValue(int index) throws IndexOutOfBoundsException
+public String getValue(String defaultValue)
+public String[] getValues()
+public List getValuesList()
+public String toString()
+private boolean hasNoValues()
+public boolean equals(Object o)
+public int hashCode()
+public Object clone()
+public boolean addValue(String value)
+
+[org.apache.commons.cli.OptionBuilder | java]
+package org.apache.commons.cli;
+public final class OptionBuilder
+private static OptionBuilder instance = new OptionBuilder();
+private OptionBuilder()
+private static void reset()
+public static OptionBuilder withLongOpt(String newLongopt)
+public static OptionBuilder hasArg()
+public static Opti
+...[truncated deterministically]...
+sArg(boolean hasArg)
+public static OptionBuilder withArgName(String name)
+public static OptionBuilder isRequired()
+public static OptionBuilder withValueSeparator(char sep)
+public static OptionBuilder withValueSeparator()
+public static OptionBuilder isRequired(boolean newRequired)
+public static OptionBuilder hasArgs()
+public static OptionBuilder hasArgs(int num)
+public static OptionBuilder hasOptionalArg()
+public static OptionBuilder hasOptionalArgs()
+public static OptionBuilder hasOptionalArgs(int numArgs)
+public static OptionBuilder withType(Class newType)
+public static OptionBuilder withDescription(String newDescription)
+public static Option create(char opt) throws IllegalArgumentException
+public static Option create() throws IllegalArgumentException
+public static Option create(String opt) throws IllegalArgumentException
+
+Generated JUnit Test:
+package org.apache.commons.cli;
+
+ import junit.framework.TestCase;
+
+ public class OptionBuilderTest extends TestCase {
+
+     public OptionBuilderTest(String testName) {
+         super(testName);
+     }
+
+     public void testTwoCompleteOptions() {
+         Option opt1 = OptionBuilder.withLongOpt("complete1")
+                 .withDescription("desc")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         Option opt2 = OptionBuilder.withLongOpt("complete2")
+                 .withDescription("desc")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         assertEquals(String.class, opt1.getType());
+         assertEquals(String.class, opt2.getType());
+     }
+
+     public void testTypeCarryoverAcrossMultipleCreates() {
+         Option opt1 = OptionBuilder.withLongOpt("t1")
+                 .withDescription("d1")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         Option opt2 = OptionBuilder.withLongOpt("t2")
+                 .withDescription("d2")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         Option opt3 = OptionBuilder.withLongOpt("t3")
+                 .withDescription("d3")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         assertEquals(String.class, opt1.getType());
+         assertEquals(String.class, opt2.getType());
+         assertEquals(String.class, opt3.getType());
+     }
+
+     public void testOptionSetTypeGetType() {
+         Option option = new Option("f", "desc");
+         option.setType(Integer.class);
+         assertEquals(Integer.class, option.getType());
+     }
+
+     public void testCreateWithType() {
+         Option option = OptionBuilder.withLongOpt("typed")
+                 .withDescription("desc")
+                 .hasArg()
+                 .withType(Integer.class)
+                 .create();
+         assertEquals(Integer.class, option.getType());
+     }
+
+     public void testCreateWithoutTypeReturnsNull() {
+         Option option = OptionBuilder.withLongOpt("notyped")
+                 .withDescription("desc")
+                 .hasArg()
+                 .create();
+         assertNull(option.getType());
+     }
+
+     public void testResetAfterCreateThrowsOnBareCreate() {
+         OptionBuilder.withLongOpt("before")
+                 .withDescription("desc")
+                 .create();
+
+         try {
+             OptionBuilder.create();
+             fail("Expected IllegalArgumentException because longopt is null after reset");
+         } catch (IllegalArgumentException expected) {
+             // expected
+         }
+     }
+
+     public void testCreateWithLongOpt() {
+         String longOpt = "my-long-opt";
+         Option option = OptionBuilder.withLongOpt(longOpt)
+                 .withDescription("desc")
+                 .create();
+         assertTrue(option.hasLongOpt());
+         assertEquals(longOpt, option.getLongOpt());
+     }
+
+     public void testOptionalArg() {
+         Option option = OptionBuilder.withLongOpt("optarg")
+                 .withDescription("desc")
+                 .hasOptionalArg()
+                 .create();
+         assertTrue(option.hasOptionalArg());
+         assertEquals(1, option.getArgs());
+         assertTrue(option.hasArg());
+     }
+
+     public void testArgName() {
+         String argName = "input-file";
+         Option option = OptionBuilder.withLongOpt("opt")
+                 .withDescription("desc")
+                 .withArgName(argName)
+                 .create();
+         assertEquals(argName, option.getArgName());
+         assertTrue(option.hasArgName());
+     }
+
+     public void testValueSeparator() {
+         char separator = ':';
+         Option option = OptionBuilder.withLongOpt("opt")
+                 .withDescription("desc")
+                 .withValueSeparator(separator)
+                 .create();
+         assertEquals(separator, option.getValueSeparator());
+         assertTrue(option.hasValueSeparator());
+     }
+
+     public void testDescription() {
+         String description = "This is a test option";
+         Option option = OptionBuilder.withLongOpt("opt")
+                 .withDescription(description)
+                 .create();
+         assertEquals(description, option.getDescription());
+     }
+
+     public void testMultipleCreateObjectsAreDistinct() {
+         Option opt1 = OptionBuilder.withLongOpt("first")
+                 .withDescription("desc")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         Option opt2 = OptionBuilder.withLongOpt("second")
+                 .withDescription("desc")
+                 .hasArg()
+                 .withType(String.class)
+                 .create();
+
+         assertNotSame(opt1, opt2);
+         assertEquals(String.class, opt1.getType());
+         assertEquals(String.class, opt2.getType());
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.apache.commons.cli.OptionBuilderTest::testCreateWithoutTypeReturnsNull
+
+Extract test suite......................................................... OK
+Failing generated tests: org.apache.commons.cli.OptionBuilderTest::testCreateWithoutTypeReturnsNull

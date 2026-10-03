@@ -1,0 +1,77 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Jsoup  Bug: 6  Version: Jsoup-6b
+JUnit: junit-4.5.jar  Build: Maven
+Target: org.jsoup.nodes.Entities
+Modified: org.jsoup.nodes.Entities
+Triggers: org.jsoup.integration.ParseTest::testYahooArticle, org.jsoup.nodes.EntitiesTest::quoteReplacements
+
+Bug/specification summary:
+Bug report: 34
+Trigger failures:
+- org.jsoup.integration.ParseTest::testYahooArticle
+ --> java.lang.IllegalArgumentException: Illegal group reference: group index is missing
+ - org.jsoup.nodes.EntitiesTest::quoteReplacements
+ --> java.lang.IllegalArgumentException: character to be escaped is missing
+Modified: org.jsoup.nodes.Entities
+
+Prompt-01 test plan:
+TARGETS: Entities.escape(String,Document.OutputSettings),
+Entities.escape(String,CharsetEncoder,EscapeMode), Entities.unescape(String).
+TARGETS: exercise quote/ampersand replacement paths implicated by quoteReplacements and
+testYahooArticle.
+ORACLES: expected behavior per ParseTest::testYahooArticle and EntitiesTest::quoteReplacements.
+ORACLES: escape/unescape must not throw IllegalArgumentException on valid or quoted input.
+CASES: normal named entities (" &apos; & < >) via unescape and escape round-trip.
+CASES: numeric entities decimal/hex (&#34; &#x22;) with and without trailing semicolon.
+CASES: boundary: empty string, no-entity text, repeated entities, trailing lone '&'.
+CASES: error: malformed/truncated refs like "&#", "&#x", "&;", bare ampersand.
+RISKS: only signatures available; no source or previous expected outputs supplied.
+RISKS: CharsetEncoder/EscapeMode semantics unspecified; avoid asserting invented encoded results.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.jsoup.nodes.Entities (java) =====
+/* API SIGNATURES */
+package org.jsoup.nodes;
+public class Entities {
+public enum EscapeMode {
+private static final Pattern unescapePattern = Pattern.compile("&(#(x|X)?([0-9a-fA-F]+)|[a-zA-Z]+);?");
+static String escape(String string, Document.OutputSettings out) {
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+static String unescape(String string) {
+
+/* HEADER */
+package org.jsoup.nodes;
+import java.nio.charset.CharsetEncoder;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+public class Entities {
+
+/* METHOD escape */
+static String escape(String string, CharsetEncoder encoder, EscapeMode escapeMode) {
+ StringBuilder accum = new StringBuilder(string.length() * 2);
+ Map<Character, String> map = escapeMode == EscapeMode.extended ? fullByVal : baseByVal;
+
+ for (int pos = 0; pos < string.length(); pos++) {
+ Character c = string.charAt(pos);
+ if (map.containsKey(c))
+ accum.append('&').append(map.get(c)).append(';');
+ else if (encoder.canEncode(c))
+ accum.append(c.charValue());
+ else
+ accum.append("&#").append((int) c).append(';');
+ }
+
+ return accum.toString();
+ }
+
+/* METHOD escape */
+static String escape(String string, Document.OutputSettings out) {
+ return escape(string, out.encoder(), out.escapeMode());
+ }

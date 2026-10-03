@@ -1,0 +1,232 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonCore  Bug: 10  Version: JacksonCore-10b
+JUnit: junit-4.11.jar  Build: Maven
+Bug/specification summary:
+Bug report: 207
+Trigger failures:
+- com.fasterxml.jackson.core.sym.TestByteBasedSymbols::testIssue207
+ --> java.lang.ArrayIndexOutOfBoundsException: 256
+ - com.fasterxml.jackson.core.sym.TestSymbolTables::testCollisionsWithBytesNew187b
+ --> junit.framework.AssertionFailedError: expected:<16384> but was:<32768>
+ - com.fasterxml.jackson.core.sym.TestSymbolTables::testSyntheticWithBytesNew
+ --> junit.framework.AssertionFailedError: expected:<8534> but was:<8524>
+ - com.fasterxml.jackson.core.sym.TestSymbolTables::testShortNameCollisionsDirectNew
+ --> junit.framework.AssertionFailedError: expected:<1024> but was:<2048>
+Modified: com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer
+
+Available API/signatures:
+[com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer | java]
+package com.fasterxml.jackson.core.sym;
+public final class ByteQuadsCanonicalizer
+final protected ByteQuadsCanonicalizer _parent;
+final protected AtomicReference<TableInfo> _tableInfo;
+protected boolean _intern;
+protected final boolean _failOnDoS;
+protected int[] _hashArea;
+protected int _hashSize;
+protected int _secondaryStart;
+protected int _tertiaryStart;
+protected int _tertiaryShift;
+protected int _count;
+protected String[] _names;
+protected int _spilloverEnd;
+protected int _longNameOffset;
+private ByteQuadsCanonicalizer(int sz, boolean intern, int seed, boolean failOnDoS) {
+public static ByteQuadsCanonicalizer createRoot() {
+protected static ByteQuadsCanonicalizer createRoot(int seed) {
+public ByteQuadsCanonicalizer makeChild(int flags) {
+public void release()
+private void mergeChild(TableInfo childState)
+public int size()
+public int bucketCount() { return _hashSize; }
+public boolean maybeDirty() { return !_hashShared; }
+public int hashSeed() { return _seed; }
+public int primaryCount()
+public int secondaryCount() {
+public int tertiaryCount() {
+public int spilloverCount() {
+public int totalCount()
+@Override
+public String toString() {
+public String findName(int q1)
+public String findName(int q1, int q2)
+public String findName(int q1, int q2, int q3)
+public String findName(int[] q, int qlen)
+final int hash = calcHash(q, qlen);
+private final int _calcOffset(int hash)
+private String _findSecondary(int origOffset, int q1)
+final int bucketSize = (1 << _tertiaryShift);
+private String _findSecondary(int origOffset, int q1, int q2)
+private String _findSecondary(int origOffset, int
+...[truncated deterministically]...
+qlen)
+private void _verifyNeedForRehash() {
+private void _verifySharing()
+private int _findOffsetForAdd(int hash)
+private int _appendLongName(int[] quads, int qlen)
+public int calcHash(int q1)
+public int calcHash(int q1, int q2)
+public int calcHash(int q1, int q2, int q3)
+public int calcHash(int[] q, int qlen)
+private void rehash()
+private void nukeSymbols(boolean fill) {
+private final int _spilloverStart() {
+protected void _reportTooManyCollisions()
+static int _calcTertiaryShift(int primarySlots)
+private final static class TableInfo
+public final int size;
+public final int count;
+public final int tertiaryShift;
+public final int[] mainHash;
+public final String[] names;
+public final int spilloverEnd;
+public final int longNameOffset;
+public TableInfo(ByteQuadsCanonicalizer src)
+public static TableInfo createInitial(int sz) {
+
+Generated JUnit Test:
+package com.fasterxml.jackson.core.sym;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import org.junit.Test;
+
+public class ByteQuadsCanonicalizerBug10Test
+{
+    @Test
+    public void testAddAndFindNamesOfAllSupportedLengths() {
+        ByteQuadsCanonicalizer table = ByteQuadsCanonicalizer.createRoot(12345).makeChild(0);
+
+        assertEquals("one", table.addName("one", 0x01020304));
+        assertEquals("two", table.addName("two", 0x01020304, 0x05060708));
+        assertEquals("three", table.addName("three", 0x01020304, 0x05060708, 0x090A0B0C));
+
+        int[] longName = new int[] { 1, 2, 3, 4, 5, 6 };
+        assertEquals("long", table.addName("long", longName, longName.length));
+
+        assertEquals("one", table.findName(0x01020304));
+        assertEquals("two", table.findName(0x01020304, 0x05060708));
+        assertEquals("three", table.findName(0x01020304, 0x05060708, 0x090A0B0C));
+        assertEquals("long", table.findName(longName.clone(), longName.length));
+
+        assertNull(table.findName(0x0F0E0D0C));
+        assertNull(table.findName(0x01020304, 0x05060709));
+        assertNull(table.findName(0x01020304, 0x05060708, 0x090A0B0D));
+        assertNull(table.findName(new int[] { 1, 2, 3, 4, 5, 7 }, 6));
+        assertEquals(4, table.size());
+    }
+
+    @Test
+    public void testShortNameCollisionsGrowOnlyToRequiredBucketCount() {
+        ByteQuadsCanonicalizer table = ByteQuadsCanonicalizer.createRoot(33333).makeChild(0);
+        int[] values = collidingSingleQuads(table, 100, 1024);
+
+        for (int i = 0; i < values.length; ++i) {
+            table.addName("short-" + i, values[i]);
+        }
+
+        assertEquals(100, table.size());
+        assertEquals(1024, table.bucketCount());
+        assertEquals(table.size(), table.totalCount());
+
+        for (int i = 0; i < values.length; ++i) {
+            assertEquals("short-" + i, table.findName(values[i]));
+        }
+    }
+
+    @Test
+    public void testLargeLongNameCollisionSetDoesNotOverflowSpillArea() {
+        ByteQuadsCanonicalizer table = ByteQuadsCanonicalizer.createRoot(991).makeChild(0);
+        final int count = 256;
+        final int mask = 2047;
+        final int target = table.calcHash(new int[] { 1, 17, 31, 47 }, 4) & mask;
+        int found = 0;
+
+        for (int candidate = 1; found < count; ++candidate) {
+            int[] quads = new int[] { candidate, 17, 31, 47 };
+            if ((table.calcHash(quads, quads.length) & mask) == target) {
+                table.addName("long-collision-" + found, quads, quads.length);
+                ++found;
+            }
+        }
+
+        assertEquals(count, table.size());
+        assertEquals(count, table.totalCount());
+
+        found = 0;
+        for (int candidate = 1; found < count; ++candidate) {
+            int[] quads = new int[] { candidate, 17, 31, 47 };
+            if ((table.calcHash(quads, quads.length) & mask) == target) {
+                assertEquals("long-collision-" + found, table.findName(quads, quads.length));
+                ++found;
+            }
+        }
+    }
+
+    @Test
+    public void testChildReleasePublishesAddedSymbolsToParent() {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(777);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] longName = new int[] { 12, 34, 56, 78 };
+
+        child.addName("first", 123);
+        child.addName("second", 123, 456);
+        child.addName("long", longName, longName.length);
+
+        assertEquals("first", child.findName(123));
+        assertEquals("second", child.findName(123, 456));
+        assertEquals("long", child.findName(longName, longName.length));
+
+        child.release();
+
+        ByteQuadsCanonicalizer published = root.makeChild(0);
+        assertEquals(3, root.size());
+        assertEquals("first", published.findName(123));
+        assertEquals("second", published.findName(123, 456));
+        assertEquals("long", published.findName(longName.clone(), longName.length));
+    }
+
+    @Test
+    public void testCollisionAccountingMatchesStoredEntryCount() {
+        ByteQuadsCanonicalizer table = ByteQuadsCanonicalizer.createRoot(41).makeChild(0);
+        int[] values = collidingSingleQuads(table, 40, 256);
+
+        for (int i = 0; i < values.length; ++i) {
+            table.addName("collision-" + i, values[i]);
+        }
+
+        int accounted = table.primaryCount()
+                + table.secondaryCount()
+                + table.tertiaryCount()
+                + table.spilloverCount();
+
+        assertEquals(values.length, table.size());
+        assertEquals(values.length, table.totalCount());
+        assertEquals(values.length, accounted);
+    }
+
+    private int[] collidingSingleQuads(ByteQuadsCanonicalizer table, int count, int bucketSize) {
+        int[] result = new int[count];
+        int target = table.calcHash(1) & (bucketSize - 1);
+        int found = 0;
+
+        for (int value = 1; found < count; ++value) {
+            if ((table.calcHash(value) & (bucketSize - 1)) == target) {
+                result[found++] = value;
+            }
+        }
+        return result;
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizerBug10Test::testShortNameCollisionsGrowOnlyToRequiredBucketCount
+
+Extract test suite......................................................... OK
+Failing generated tests: com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizerBug10Test::testShortNameCollisionsGrowOnlyToRequiredBucketCount

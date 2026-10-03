@@ -1,0 +1,158 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 144  Version: Closure-144b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 143
+Trigger failures:
+- com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsAssign
+ --> junit.framework.ComparisonFailure: expected:</**
+ - com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsMember
+ --> junit.framework.ComparisonFailure: expected:<var a = {};
+ - com.google.javascript.jscomp.CodePrinterTest::testOptionalTypesAnnotation
+ --> junit.framework.ComparisonFailure: expected:<...param {string=} x
+ - com.google.javascript.jscomp.CodePrinterTest::testTempConstructor
+ --> junit.framework.ComparisonFailure: expected:</**
+ - com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsDispatcher1
+ --> junit.framework.ComparisonFailure: expected:<var a = {};
+ - com.google.javascript.jscomp.CodePrinterTest::testTypeAnnotationsDispatcher2
+ --> junit.framework.ComparisonFailure: expected:<var a = {};
+ - com.google.javascript.jscomp.CodePrinterTes
+...[truncated deterministically]...
+[undefined]> but was:<...n (this:Window, ?): [?]>
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testConstructorProperty
+ --> junit.framework.ComparisonFailure: expected:<...ion (this:foo.Bar): [undefined]> but was:<...ion (this:foo.Bar): [?]>
+ - com.google.javascript.jscomp.TypedScopeCreatorTest::testReturnTypeInference1
+ --> junit.framework.ComparisonFailure: expected:<function (): [undefined]> but was:<function (): [?]>
+Modified: com.google.javascript.jscomp.FunctionTypeBuilder, com.google.javascript.jscomp.TypedScopeCreator, com.google.javascript.rhino.jstype.FunctionBuilder, com.google.javascript.rhino.jstype.FunctionType
+
+Available API/signatures:
+[com.google.javascript.jscomp.FunctionTypeBuilder | java]
+package com.google.javascript.jscomp;
+final class FunctionTypeBuilder {
+"@extends used without @constructor or @interface for {0}");
+"@implements used without @constructor or @interface for {0}");
+@Nullable Node owner) {
+@Nullable JSDocInfo info) {
+private void maybeSetBaseType(FunctionType fnType) {
+private FunctionType getOrCreateConstructor() {
+private void reportWarning(DiagnosticType warning, String ... args) {
+private void reportError(DiagnosticType error, String ... args) {
+static boolean isFunctionTypeDeclaration(JSDocInfo info) {
+
+[com.google.javascript.jscomp.TypedScopeCreator | java]
+package com.google.javascript.jscomp;
+final class TypedScopeCreator implements ScopeCreator {
+"enum initializer must be an object literal or an enum");
+private List<ObjectType> delegateProxyPrototypes = Lists.newArrayList();
+private class DeferredSetType {
+public Scope createScope(Node root, Scope parent) {
+@VisibleForTesting
+private void declareNativeFunctionType(Scope scope, JSTypeNative tId) {
+private void declareNativeType(Scope scope, String name, JSType t) {
+private static class DiscoverEnums extends AbstractShallowCallback {
+@Override
+public void visit(NodeTraversal t, Node node, Node parent) {
+private static Node getPrototypePropertyOwner(Node n) {
+private abstract class AbstractScopeBuilder
+private AbstractScopeBuilder(Scope scope) {
+public abstract void visit(NodeTraversal t, Nod
+...[truncated deterministically]...
+ass StubDeclaration {
+private StubDeclaration(Node node, boolean isExtern, String ownerName) {
+private final class CollectProperties
+public void visit(NodeTraversal t, N
+...[truncated deterministically]...
+public boolean isInterface() {
+public boolean isOrdinaryFunction() {
+public boolean isFunctionType() {
+public boolean canBeCalled() {
+public Iterable<Node> getParameters() {
+public Node getParametersNode() {
+public int getMinArguments() {
+public int getMaxArguments() {
+public JSType getReturnType() {
+public boolean isReturnTypeInferred() {
+public FunctionPrototypeType getPrototype() {
+public v
+...[truncated deterministically]...
+Type() {
+public boolean hasInstanceType() {
+public ObjectType getTypeOfThis() {
+public Node getSource() {
+public void setSource(Node source) {
+private void addSubType(FunctionType subType) {
+public List<FunctionType> getSubTypes() {
+public boolean hasCachedValues() {
+public String getTemplateTypeName() {
+public String toDebugHashCodeString() {
+private String getDebugHashCodeStringOf(JSType type) {
+
+Generated JUnit Test:
+package com.google.javascript.rhino.jstype;
+
+import junit.framework.TestCase;
+import org.junit.Test;
+
+public class FunctionBuilderReturnTypeTest extends TestCase {
+
+  private JSTypeRegistry newRegistry() {
+    return new JSTypeRegistry(null);
+  }
+
+  @Test
+  public void testBuildWithoutReturnTypeDefaultsToVoid() {
+    JSTypeRegistry registry = newRegistry();
+
+    FunctionType function = new FunctionBuilder(registry).build();
+
+    assertSame(registry.getNativeType(JSTypeNative.VOID_TYPE), function.getReturnType());
+  }
+
+  @Test
+  public void testConstructorWithoutReturnTypeDefaultsToVoid() {
+    JSTypeRegistry registry = newRegistry();
+
+    FunctionType constructor = new FunctionBuilder(registry).forConstructor().build();
+
+    assertTrue(constructor.isConstructor());
+    assertSame(registry.getNativeType(JSTypeNative.VOID_TYPE), constructor.getReturnType());
+  }
+
+  @Test
+  public void testExplicitReturnTypeIsNotMarkedInferred() {
+    JSTypeRegistry registry = newRegistry();
+    JSType stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+
+    FunctionType function =
+        new FunctionBuilder(registry).withReturnType(stringType).build();
+
+    assertSame(stringType, function.getReturnType());
+    assertFalse(function.isReturnTypeInferred());
+  }
+
+  @Test
+  public void testInferredReturnTypeAndItsInferenceFlagSurviveCopy() {
+    JSTypeRegistry registry = newRegistry();
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    FunctionType original =
+        new FunctionBuilder(registry).withInferredReturnType(numberType).build();
+
+    FunctionType copy = new FunctionBuilder(registry).copyFromOtherFunction(original).build();
+
+    assertSame(numberType, original.getReturnType());
+    assertTrue(original.isReturnTypeInferred());
+    assertSame(numberType, copy.getReturnType());
+    assertTrue(copy.isReturnTypeInferred());
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - com.google.javascript.rhino.jstype.FunctionBuilderReturnTypeTest::testConstructorWithoutReturnTypeDefaultsToVoid
+ - com.google.javascript.rhino.jstype.FunctionBuilderReturnTypeTest::testBuildWithoutReturnTypeDefaultsToVoid
+ - com.google.javascript.rhino.jstype.FunctionBuilderReturnTypeTest::testInferredReturnTypeAndItsInferenceFlagSurviveCopy
+Failing generated tests: com.google.javascript.rhino.jstype.FunctionBuilderReturnTypeTest::testBuildWithoutReturnTypeDefaultsToVoid, com.google.javascript.rhino.jstype.FunctionBuilderReturnTypeTest::testConstructorWithoutReturnTypeDefaultsToVoid, com.google.javascript.rhino.jstype.FunctionBuilderReturnTypeTest::testInferredReturnTypeAndItsInferenceFlagSurviveCopy

@@ -1,0 +1,286 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Collections  Bug: 15  Version: Collections-15b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Bug/specification summary:
+Bug report: COLLECTIONS-304
+Trigger failures:
+- org.apache.commons.collections.list.TestSetUniqueList::testCollections304
+ --> junit.framework.AssertionFailedError: expected:<3> but was:<4>
+Modified: org.apache.commons.collections.list.SetUniqueList
+
+Available API/signatures:
+[org.apache.commons.collections.list.SetUniqueList | java]
+package org.apache.commons.collections.list;
+public class SetUniqueList extends AbstractSerializableListDecorator {
+protected final Set set;
+public static SetUniqueList decorate(List list) {
+protected SetUniqueList(List list, Set set) {
+public Set asSet() {
+public boolean add(Object object) {
+final int sizeBefore = size();
+public void add(int index, Object object) {
+public boolean addAll(Collection coll) {
+public boolean addAll(int index, Collection coll) {
+for (final Iterator it = coll.iterator(); it.hasNext();) {
+public Object set(int index, Object object) {
+public boolean remove(Object object) {
+public Object remove(int index) {
+public boolean removeAll(Collection coll) {
+public boolean retainAll(Collection coll) {
+public void clear() {
+public boolean contains(Object object) {
+public boolean containsAll(Collection coll) {
+public Iterator iterator() {
+public ListIterator listIterator() {
+public ListIterator listIterator(int index) {
+public List subList(int fromIndex, int toIndex) {
+static class SetListIterator extends AbstractIteratorDecorator {
+protected Object last = null;
+protected SetListIterator(Iterator it, Set set) {
+public Object next() {
+public void remove() {
+static class SetListListIterator extends AbstractListIteratorDecorator {
+protected SetListListIterator(ListIterator it, Set set) {
+public Object previous() {
+public void add(Object object) {
+public void set(Object object) {
+
+Generated JUnit Test:
+package org.apache.commons.collections.list;
+
+ import static org.junit.Assert.*;
+
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.List;
+
+ import org.junit.Before;
+ import org.junit.Test;
+
+ /**
+  * Tests for {@link SetUniqueList} focusing on the COLLECTIONS-304 bug
+  * where addAll(int, Collection) incorrectly counts duplicates within
+  * the provided collection when inserting at an index.
+  */
+ public class TestSetUniqueList {
+
+     private SetUniqueList list;
+
+     @Before
+     public void setUp() {
+         list = SetUniqueList.decorate(new ArrayList());
+     }
+
+     // ---- addAll(int,Collection) tests (COLLECTIONS-304) ----
+
+     @Test
+     public void testAddAllAtIndexWithDuplicatesOfExisting() {
+         list.add("A");
+         list.add("B");
+         list.add("C");
+         // size = 3
+
+         Collection<String> toAdd = Arrays.asList("A", "D", "B", "E");
+         boolean changed = list.addAll(1, toAdd);
+
+         assertTrue("list should have changed", changed);
+         assertEquals("size should reflect unique elements only", 5, list.size());
+         // A, D, E, B, C  (or A, D, B, E, C — but size must be 5)
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+     }
+
+     @Test
+     public void testAddAllAtIndexWithDuplicatesInCollectionItself() {
+         list.add("X");
+         list.add("Y");
+         // size = 2
+
+         // collection has internal duplicate "Z" plus "X" already present
+         Collection<String> toAdd = Arrays.asList("Z", "X", "Z", "W");
+         boolean changed = list.addAll(0, toAdd);
+
+         assertTrue("list should have changed", changed);
+         assertEquals("size should be 4 (X, Y, Z, W)", 4, list.size());
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+     }
+
+     @Test
+     public void testAddAllAtIndexAllElementsAlreadyPresent() {
+         list.add("P");
+         list.add("Q");
+         list.add("R");
+         // size = 3
+
+         Collection<String> toAdd = Arrays.asList("P", "Q", "R");
+         boolean changed = list.addAll(1, toAdd);
+
+         assertFalse("list should not change when all elements already present", changed);
+         assertEquals("size should remain 3", 3, list.size());
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+     }
+
+     @Test
+     public void testAddAllAtEndWithDuplicates() {
+         list.add("1");
+         list.add("2");
+         list.add("3");
+
+         Collection<String> toAdd = Arrays.asList("4", "1", "5", "2");
+         boolean changed = list.addAll(toAdd); // addAll(Collection) delegates to addAll(size(),
+coll)
+
+         assertTrue("list should have changed", changed);
+         assertEquals("size should be 5", 5, list.size());
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+     }
+
+     @Test
+     public void testAddAllAtIndexZeroWithNewAndDuplicates() {
+         list.add("alpha");
+         list.add("beta");
+
+         Collection<String> toAdd = Arrays.asList("gamma", "alpha", "delta", "beta", "epsilon");
+         boolean changed = list.addAll(0, toAdd);
+
+         assertTrue("list should have changed", changed);
+         assertEquals("size should be 5", 5, list.size());
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+         // verify distinct elements are present
+         assertTrue(list.contains("gamma"));
+         assertTrue(list.contains("delta"));
+         assertTrue(list.contains("epsilon"));
+     }
+
+     // ---- add(Object) duplicate ----
+
+     @Test
+     public void testAddDuplicateReturnsFalseAndSizeUnchanged() {
+         list.add("foo");
+         list.add("bar");
+         assertEquals(2, list.size());
+
+         boolean result = list.add("foo"); // duplicate
+
+         assertFalse("add should return false for duplicate", result);
+         assertEquals("size should remain 2", 2, list.size());
+     }
+
+     // ---- add(int, Object) duplicate ----
+
+     @Test
+     public void testAddAtIndexDuplicateDoesNotIncreaseSize() {
+         list.add("X");
+         list.add("Y");
+         assertEquals(2, list.size());
+
+         list.add(0, "X"); // duplicate at index
+
+         assertEquals("size should remain 2 after duplicate add at index", 2, list.size());
+         assertEquals("Y should still be at index 1", "Y", list.get(1));
+     }
+
+     // ---- set(int, Object) ----
+
+     @Test
+     public void testSetReplacesAndRemovesOldDuplicate() {
+         list.add("A");
+         list.add("B");
+         list.add("C");
+         assertEquals(3, list.size());
+
+         // "B" exists at index 1; set index 0 to "B" — old "A" removed, "B" moves to index 0
+         Object previous = list.set(0, "B");
+
+         assertEquals("previous object should be A", "A", previous);
+         assertEquals("size should be 2 (A removed)", 2, list.size());
+         assertFalse("A should no longer be in list", list.contains("A"));
+         assertEquals("B should be at index 0", "B", list.get(0));
+         assertEquals("C should be at index 1", "C", list.get(1));
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+     }
+
+     @Test
+     public void testSetWithNewElement() {
+         list.add("A");
+         list.add("B");
+
+         Object previous = list.set(1, "C");
+
+         assertEquals("previous object should be B", "B", previous);
+         assertEquals("size should remain 2", 2, list.size());
+         assertFalse("B should no longer be in list", list.contains("B"));
+         assertTrue("C should be in list", list.contains("C"));
+         assertEquals("C should be at index 1", "C", list.get(1));
+     }
+
+     @Test
+     public void testSetElementAtSameIndexAlreadyExists() {
+         list.add("A");
+         list.add("B");
+         list.add("A"); // duplicate — not added
+         list.add("C");
+         // list: A, B, C (size 3)
+
+         // set index 0 to "A" — it's the same element at the same position
+         Object previous = list.set(0, "A");
+
+         assertEquals("previous object should be A", "A", previous);
+         assertEquals("size should remain 3", 3, list.size());
+         assertTrue("A should still be at index 0", "A".equals(list.get(0)));
+     }
+
+     // ---- Boundary / corner cases ----
+
+     @Test
+     public void testAddAllAtIndexWithEmptyCollection() {
+         list.add("apple");
+         list.add("banana");
+
+         boolean changed = list.addAll(1, Collections.emptyList());
+
+         assertFalse("list should not change with empty collection", changed);
+         assertEquals("size should remain 2", 2, list.size());
+     }
+
+     @Test
+     public void testAddAllWithAllNewElementsAtStart() {
+         list.add("old1");
+         list.add("old2");
+
+         Collection<String> toAdd = Arrays.asList("new1", "new2", "new3");
+         boolean changed = list.addAll(0, toAdd);
+
+         assertTrue("list should have changed", changed);
+         assertEquals("size should be 5", 5, list.size());
+         assertEquals("first element should be new1", "new1", list.get(0));
+         assertEquals("asSet size must match list size", list.size(), list.asSet().size());
+     }
+
+ }
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Collections-15f-copilot && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Collections-15f-copilot -Dd4j.test.dir=/root/sqa-workspaces/Collections-15f-copilot/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+init:
+ [echo] -------- commons-collections 3.3-SNAPSHOT --------
+prepare:
+ [mkdir] Created dir: /root/sqa-workspaces/Collections-15f-copilot/build
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Collections-15f-copilot/.classes_testgen
+ [javac] /root/sqa-workspaces/Collections-15f-copilot/.test_suite/org/apache/commons/collections/list/TestSetUniqueList.java:84: error: not a statement
+ [javac] coll)
+ [javac] ^
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 34 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

@@ -1,0 +1,196 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 13  Version: Jsoup-13b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 97
+Trigger failures:
+- org.jsoup.nodes.NodeTest::handlesAbsPrefixOnHasAttr
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.nodes.NodeTest::handlesAbsPrefix
+ --> junit.framework.AssertionFailedError
+ - org.jsoup.select.ElementsTest::absAttr
+ --> junit.framework.AssertionFailedError: expected:<[http://jsoup.org]> but was:<[]>
+ - org.jsoup.select.ElementsTest::hasAbsAttr
+ --> junit.framework.AssertionFailedError
+Modified: org.jsoup.nodes.Node
+
+Available API/signatures:
+[org.jsoup.nodes.Node | java]
+package org.jsoup.nodes;
+@author Jonathan Hedley, jonathan@hedley.net */
+public abstract class Node implements Cloneable {
+@param baseUri base URI
+@param attributes attributes (not null, but may be empty)
+protected Node(String baseUri, Attributes attributes) {
+protected Node(String baseUri) {
+protected Node() {
+@return node name
+public abstract String nodeName();
+public String attr(String attributeKey) {
+public Attributes attributes() {
+public Node attr(String attributeKey, String attributeValue) {
+public boolean hasAttr(String attributeKey) {
+public Node removeAttr(String attributeKey) {
+@return base URI
+public String baseUri() {
+@param baseUri base URI to set
+public void setBaseUri(String baseUri) {
+public String absUrl(String attributeKey) {
+@param index index of child node
+@return the child node at this index.
+public Node childNode(int index) {
+@return list of children. If no children, returns an empty list.
+public List<Node> childNodes() {
+protected Node[] childNodesAsArray() {
+@return parent node; or null if no parent.
+public Node parent() {
+public Document ownerDocument() {
+public void remove() {
+public Node before(String html) {
+public Node before(Node node) {
+public Node after(String html) {
+public Node after(Node node) {
+private void addSiblingHtml(int index, String html) {
+@param html HTML to wrap around this element, e.g. {@code <div class="head"></div>}. Can be arbitrarily deep.
+@return this node, for chaining.
+public Node wrap(String html) {
+private Element getDeepChild(Element el) {
+public void replaceWith(Node in) {
+protected void setParentNode(Node parentNode) {
+protected void replaceChild(No
+...[truncated deterministically]...
+) {
+public int siblingIndex() {
+protected void setSiblingIndex(int siblingIndex) {
+@return HTML
+public String outerHtml() {
+protected void outerHtml(StringBuilder accum) {
+private Document.OutputSettings getOutputSettings() {
+@param accum accumulator to place HTML into
+abstract void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out);
+abstract void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out);
+public String toString() {
+protected void indent(StringBuilder accum, int depth, Document.OutputSettings out) {
+@Override
+public boolean equals(Object o) {
+public int hashCode() {
+public Node clone() {
+protected Node doClone(Node parent) {
+private static class OuterHtmlVisitor implements NodeVisitor {
+public void head(Node node, int depth) {
+public void tail(Node node, int depth) {
+
+Generated JUnit Test:
+package org.jsoup.nodes;
+
+ import org.jsoup.Jsoup;
+ import org.jsoup.nodes.Document;
+ import org.jsoup.nodes.Element;
+ import org.junit.Test;
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertTrue;
+
+ /**
+  * Tests for Node attribute handling with "abs:" prefix.
+  * Covers the defect where hasAttr does not delegate for "abs:" and where attr might not
+  * correctly resolve absolute URLs when an exact "abs:" attribute exists.
+  */
+ public class NodeAbsPrefixTest {
+
+     @Test
+     public void testAbsPrefixAttrWithHref() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertEquals("http://example.com/foo", a.attr("abs:href"));
+     }
+
+     @Test
+     public void testAbsPrefixAttrWithoutHref() {
+         Document doc = Jsoup.parse("<a>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertEquals("", a.attr("abs:href"));
+     }
+
+     @Test
+     public void testHasAttrAbsPrefix() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertTrue(a.hasAttr("abs:href"));
+     }
+
+     @Test
+     public void testHasAttrAbsPrefixMissing() {
+         Document doc = Jsoup.parse("<a>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertFalse(a.hasAttr("abs:href"));
+     }
+
+     @Test
+     public void testAttrAbsPrefixOverridesExactKey() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         a.attr("abs:href", "literal");
+         assertEquals("http://example.com/foo", a.attr("abs:href"));
+     }
+
+     @Test
+     public void testAbsUrlDirect() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertEquals("http://example.com/foo", a.absUrl("href"));
+     }
+
+     @Test
+     public void testAbsUrlMissingAttribute() {
+         Document doc = Jsoup.parse("<a>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertEquals("", a.absUrl("href"));
+     }
+
+     @Test
+     public void testAttrNonAbsKey() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertEquals("/foo", a.attr("href"));
+     }
+
+     @Test
+     public void testHasAttrNonAbsKey() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>", "http://example.com/");
+         Element a = doc.select("a").first();
+         assertTrue(a.hasAttr("href"));
+     }
+
+     @Test
+     public void testAbsPrefixAttrWithSrc() {
+         Document doc = Jsoup.parse("<img src='/img.png'>", "http://example.com/");
+         Element img = doc.select("img").first();
+         assertEquals("http://example.com/img.png", img.attr("abs:src"));
+     }
+
+     @Test
+     public void testHasAttrAbsPrefixWithSrc() {
+         Document doc = Jsoup.parse("<img src='/img.png'>", "http://example.com/");
+         Element img = doc.select("img").first();
+         assertTrue(img.hasAttr("abs:src"));
+     }
+
+     @Test
+     public void testAbsPrefixAttrWithNoBaseUri() {
+         Document doc = Jsoup.parse("<a href='/foo'>link</a>");
+         Element a = doc.select("a").first();
+         assertEquals("", a.attr("abs:href"));
+     }
+ }
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.nodes.NodeAbsPrefixTest::testAttrAbsPrefixOverridesExactKey
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.nodes.NodeAbsPrefixTest::testAttrAbsPrefixOverridesExactKey

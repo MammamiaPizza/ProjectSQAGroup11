@@ -1,0 +1,299 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Math  Bug: 13  Version: Math-13b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Maven
+Target: org.apache.commons.math3.optimization.general.AbstractLeastSquaresOptimizer
+Modified: org.apache.commons.math3.optimization.general.AbstractLeastSquaresOptimizer
+Triggers: org.apache.commons.math3.optimization.fitting.PolynomialFitterTest::testLargeSample
+
+Bug/specification summary:
+Bug report: MATH-924
+Trigger failures:
+- org.apache.commons.math3.optimization.fitting.PolynomialFitterTest::testLargeSample
+ --> java.lang.OutOfMemoryError: Java heap space
+Modified: org.apache.commons.math3.optimization.general.AbstractLeastSquaresOptimizer
+
+Prompt-01 test plan:
+TARGETS: updateJacobian and computeWeightedJacobian memory behavior for large target/sample sizes. 
+TARGETS: Jacobian dimensions/contents, jacobian-evaluation count, and weight-square-root application. 
+ORACLES: PolynomialFitterTest.testLargeSample must complete without OutOfMemoryError. 
+ORACLES: Existing target, model, weights, residual, cost, RMS, and chi-square computations define results. 
+CASES: Large polynomial-fitting sample exercising repeated Jacobian updates and optimizer convergence. 
+CASES: Normal small sample confirms Jacobian rows/cols and weighted residual/cost-derived metrics. 
+CASES: Boundary rows versus cols for guessParametersErrors and covariance/error calculations. 
+RISKS: No fixed sample size, heap limit, expected coefficients, or exact allocation behavior is provided.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.math3.optimization.general.AbstractLeastSquaresOptimizer (java) =====
+/* API SIGNATURES */
+package org.apache.commons.math3.optimization.general;
+@Deprecated
+public abstract class AbstractLeastSquaresOptimizer
+protected double[][] weightedResidualJacobian;
+protected int cols;
+protected int rows;
+protected double[] point;
+protected double[] objective;
+protected double[] weightedResiduals;
+protected double cost;
+protected AbstractLeastSquaresOptimizer() {}
+protected AbstractLeastSquaresOptimizer(ConvergenceChecker<PointVectorValuePair> checker) {
+public int getJacobianEvaluations() {
+protected void updateJacobian() {
+final RealMatrix weightedJacobian = computeWeightedJacobian(point);
+protected RealMatrix computeWeightedJacobian(double[] params) {
+final DerivativeStructure[] dsValue = jF.value(dsPoint);
+final int nR = getTarget().length;
+protected void updateResidualsAndCost() {
+final double[] res = computeResiduals(objective);
+final ArrayRealVector residuals = new ArrayRealVector(res);
+protected double computeCost(double[] residuals) {
+final ArrayRealVector r = new ArrayRealVector(residuals);
+public double getRMS() {
+public double getChiSquare() {
+public RealMatrix getWeightSquareRoot() {
+protected void setCost(double cost) {
+public double[][] getCovariances() {
+public double[][] getCovariances(double threshold) {
+final RealMatrix j = computeWeightedJacobian(params);
+final RealMatrix jTj = j.transpose().multiply(j);
+public double[] guessParametersErrors() {
+final double c = FastMath.sqrt(getChiSquare() / (rows - cols));
+final double[][] cov = computeCovariances(params, covarianceSingularityThreshold);
+@Override
+protected void setUp() {
+protected double[] computeResiduals(double[] objectiveValue) {
+final double[] target = getTarget();
+private RealMatrix squareRoot(RealMatrix m) {
+final EigenDecomposition dec = new EigenDecomposition(m);
+
+/* HEADER */
+package org.apache.commons.math3.optimization.general;
+import org.apache.commons.math3.analysis.DifferentiableMultivariateVectorFunction;
+import org.apache.commons.math3.analysis.FunctionUtils;
+import org.apache.commons.math3.analysis.differentiation.DerivativeStructure;
+import org.apache.commons.math3.analysis.differentiation.MultivariateDifferentiableVectorFunction;
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.DiagonalMatrix;
+import org.apache.commons.math3.linear.DecompositionSolver;
+import org.apache.commons.math3.linear.MatrixUtils;
+import org.apache.commons.math3.linear.QRDecomposition;
+import org.apache.commons.math3.linear.EigenDecomposition;
+import org.apache.commons.math3.optimization.OptimizationData;
+import org.apache.commons.math3.optimization.InitialGuess;
+import org.apache.commons.math3.optimization.Target;
+import org.apache.commons.math3.optimization.Weight;
+import org.apache.commons.math3.optimization.ConvergenceChecker;
+import org.apache.commons.math3.optimization.DifferentiableMultivariateVectorOptimizer;
+import org.apache.commons.math3.optimization.PointVectorValuePair;
+import org.apache.commons.math3.optimization.direct.BaseAbstractMultivariateVectorOptimizer;
+import org.apache.commons.math3.util.FastMath;
+
+/* METHOD AbstractLeastSquaresOptimizer */
+@Deprecated
+ protected AbstractLeastSquaresOptimizer() {}
+
+/* METHOD AbstractLeastSquaresOptimizer */
+protected AbstractLeastSquaresOptimizer(ConvergenceChecker<PointVectorValuePair> checker) {
+ super(checker);
+ }
+
+/* METHOD guessParametersErrors */
+@Deprecated
+ public double[] guessParametersErrors() {
+ if (rows <= cols) {
+ throw new NumberIsTooSmallException(LocalizedFormats.NO_DEGREES_OF_FREEDOM,
+ rows, cols, false);
+ }
+ double[] errors = new double[cols];
+ final double c = FastMath.sqrt(getChiSquare() / (rows - cols));
+ double[][] covar = computeCovariances(point, 1e-14);
+ for (int i = 0; i < errors.length; ++i) {
+ errors[i] = FastMath.sqrt(covar[i][i]) * c;
+ }
+ return errors;
+ }
+
+/* METHOD optimizeInternal */
+@Deprecated
+ protected PointVectorValuePair optimizeInternal(final int maxEval,
+ final MultivariateDifferentiableVectorFunction f,
+ OptimizationData... optData) {
+ // XXX Conversion will be removed when the generic argument of the
+ // base class becomes "MultivariateDifferentiableVectorFunction".
+ return super.optimizeInternal(maxEval, FunctionUtils.toDifferentiableMultivariateVectorFunction(f), optData);
+ }
+
+/* METHOD updateJacobian */
+@Deprecated
+ protected void updateJacobian() {
+ final RealMatrix weightedJacobian = computeWeightedJacobian(point);
+ weightedResidualJacobian = weightedJacobian.scalarMultiply(-1).getData();
+ }
+
+/* METHOD updateResidualsAndCost */
+@Deprecated
+ protected void updateResidualsAndCost() {
+ objective = computeObjectiveValue(point);
+ final double[] res = computeResiduals(objective);
+
+ // Compute cost.
+ cost = computeCost(res);
+
+ // Compute weighted residuals.
+ final ArrayRealVector residuals = new ArrayRealVector(res);
+ weightedResiduals = weightMatrixSqrt.operate(residuals).toArray();
+ }
+
+/* METHOD computeCost */
+protected double computeCost(double[] residuals) {
+ final ArrayRealVector r = new ArrayRealVector(residuals);
+ return FastMath.sqrt(r.dotProduct(getWeight().operate(r)));
+ }
+
+/* METHOD getRMS */
+public double getRMS() {
+ return FastMath.sqrt(getChiSquare() / rows);
+ }
+
+/* METHOD getWeightSquareRoot */
+public RealMatrix getWeightSquareRoot() {
+ return weightMatrixSqrt.copy();
+ }
+
+/* METHOD computeSigma */
+public double[] computeSigma(double[] params,
+ double covarianceSingularityThreshold) {
+ final int nC = params.length;
+ final double[] sig = new double[nC];
+ final double[][] cov = computeCovariances(params, covarianceSingularityThreshold);
+ for (int i = 0; i < nC; ++i) {
+ sig[i] = FastMath.sqrt(cov[i][i]);
+ }
+ return sig;
+ }
+
+/* METHOD getJacobianEvaluations */
+public int getJacobianEvaluations() {
+ return jacobianEvaluations;
+ }
+
+/* METHOD computeWeightedJacobian */
+protected RealMatrix computeWeightedJacobian(double[] params) {
+ ++jacobianEvaluations;
+
+ final DerivativeStructure[] dsPoint = new DerivativeStructure[params.length];
+ final int nC = params.length;
+ for (int i = 0; i < nC; ++i) {
+ dsPoint[i] = new DerivativeStructure(nC, 1, i, params[i]);
+ }
+ final DerivativeStructure[] dsValue = jF.value(dsPoint);
+ final int nR = getTarget().length;
+ if (dsValue.length != nR) {
+ throw new DimensionMismatchException(dsValue.length, nR);
+ }
+ final double[][] jacobianData = new double[nR][nC];
+ for (int i = 0; i < nR; ++i) {
+ int[] orders = new int[nC];
+ for (int j = 0; j < nC; ++j) {
+ orders[j] = 1;
+ jacobianData[i][j] = dsValue[i].getPartialDerivative(orders);
+ orders[j] = 0;
+ }
+ }
+
+ return weightMatrixSqrt.multiply(MatrixUtils.createRealMatrix(jacobianData));
+ }
+
+/* METHOD getChiSquare */
+public double getChiSquare() {
+ return cost * cost;
+ }
+
+/* METHOD setCost */
+protected void setCost(double cost) {
+ this.cost = cost;
+ }
+
+/* METHOD getCovariances */
+@Deprecated
+ public double[][] getCovariances() {
+ return getCovariances(DEFAULT_SINGULARITY_THRESHOLD);
+ }
+
+/* METHOD getCovariances */
+@Deprecated
+ public double[][] getCovariances(double threshold) {
+ return computeCovariances(point, threshold);
+ }
+
+/* METHOD computeCovariances */
+public double[][] computeCovariances(double[] params,
+ double threshold) {
+ // Set up the Jacobian.
+ final RealMatrix j = computeWeightedJacobian(params);
+
+ // Compute transpose(J)J.
+ final RealMatrix jTj = j.transpose().multiply(j);
+
+ // Compute the covariances matrix.
+ final DecompositionSolver solver
+ = new QRDecomposition(jTj, threshold).getSolver();
+ return solver.getInverse().getData();
+ }
+
+/* METHOD optimize */
+@Override
+ @Deprecated
+ public PointVectorValuePair optimize(int maxEval,
+ final DifferentiableMultivariateVectorFunction f,
+ final double[] target, final double[] weights,
+ final double[] startPoint) {
+ return optimizeInternal(maxEval,
+ FunctionUtils.toMultivariateDifferentiableVectorFunction(f),
+ new Target(target),
+ new Weight(weights),
+ new InitialGuess(startPoint));
+ }
+
+/* METHOD optimize */
+@Deprecated
+ public PointVectorValuePair optimize(final int maxEval,
+ final MultivariateDifferentiableVectorFunction f,
+ final double[] target, final double[] weights,
+ final double[] startPoint) {
+ return optimizeInternal(maxEval, f,
+ new Target(target),
+ new Weight(weights),
+ new InitialGuess(startPoint));
+ }
+
+/* METHOD computeResiduals */
+protected double[] computeResiduals(double[] objectiveValue) {
+ final double[] target = getTarget();
+ if (objectiveValue.length != target.length) {
+ throw new DimensionMismatchException(target.length,
+ objectiveValue.length);
+ }
+
+ final double[] residuals = new double[target.length];
+ for (int i = 0; i < target.length; i++) {
+ residuals[i] = target[i] - objectiveValue[i];
+ }
+
+ return residuals;
+ }
+
+/* METHOD squareRoot */
+private RealMatrix squareRoot(RealMatrix m) {
+ final EigenDecomposition dec = new EigenDecomposition(m);
+ return dec.getSquareRoot();
+ }

@@ -1,0 +1,125 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 19  Version: Jsoup-19b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 127
+Trigger failures:
+- org.jsoup.safety.CleanerTest::handlesCustomProtocols
+ --> junit.framework.AssertionFailedError: expected:<<img [src="cid:12345" />
+Modified: org.jsoup.safety.Whitelist
+
+Available API/signatures:
+[org.jsoup.safety.Whitelist | java]
+package org.jsoup.safety;
+@author Jonathan Hedley
+public class Whitelist {
+@return whitelist
+public static Whitelist none() {
+public static Whitelist simpleText() {
+public static Whitelist basic() {
+public static Whitelist basicWithImages() {
+public static Whitelist relaxed() {
+@see #basic()
+@see #basicWithImages()
+@see #simpleText()
+@see #relaxed()
+public Whitelist() {
+@param tags tag names to allow
+@return this (for chaining)
+public Whitelist addTags(String... tags) {
+<code>addAttributes(":all", "class")</code>.
+@param tag The tag the attributes are for
+@param keys List of valid attributes for the tag
+public Whitelist addAttributes(String tag, String... keys) {
+@param tag The tag the enforced attribute is for
+@param key The attribute key
+@param value The enforced attribute value
+public Whitelist addEnforcedAttribute(String tag, String key, String value) {
+public Whitelist preserveRelativeLinks(boolean preserve) {
+@param tag Tag the URL protocol is for
+@param key Attribute key
+@param protocols List of valid protocols
+@return this, for chaining
+public Whitelist addProtocols(String tag, String key, String... protocols) {
+private boolean testValidProtocol(Element el, Attribute attr, Set<Protocol> protocols) {
+static class TagName extends TypedValue {
+static TagName valueOf(String value) {
+static class AttributeKey extends TypedValue {
+static AttributeKey valueOf(String value) {
+static class AttributeValue extends TypedValue {
+static AttributeValue valueOf(String value) {
+static class Protocol extends TypedValue {
+static Protocol valueOf(String value) {
+abstract static class TypedValue {
+@Override
+public int hashCode() {
+public boolean equals(Object obj) {
+public String toString() {
+
+Generated JUnit Test:
+package org.jsoup.safety;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class WhitelistCustomProtocolsTest {
+
+    private String clean(String html, Whitelist whitelist) {
+        Document dirty = Jsoup.parseBodyFragment(html);
+        Document clean = new Cleaner(whitelist).clean(dirty);
+        return clean.body().html();
+    }
+
+    @Test
+    public void retainsCustomCidProtocolForImageSource() {
+        Whitelist whitelist = Whitelist.basicWithImages()
+                .addProtocols("img", "src", "cid");
+
+        assertEquals("<img src=\"cid:12345\" />",
+                clean("<img src=\"cid:12345\">", whitelist));
+    }
+
+    @Test
+    public void supportsChainedProtocolAdditionsForSameAttribute() {
+        Whitelist whitelist = new Whitelist()
+                .addTags("img")
+                .addAttributes("img", "src")
+                .addProtocols("img", "src", "cid")
+                .addProtocols("img", "src", "http", "https");
+
+        assertEquals("<img src=\"cid:12345\" /><img src=\"http://example.com/image.png\" /><img src=\"https://example.com/image.png\" />",
+                clean("<img src=\"cid:12345\"><img src=\"http://example.com/image.png\"><img src=\"https://example.com/image.png\">", whitelist));
+    }
+
+    @Test
+    public void removesImageSourceWithUnconfiguredProtocol() {
+        Whitelist whitelist = Whitelist.basicWithImages()
+                .addProtocols("img", "src", "cid");
+
+        assertEquals("<img />",
+                clean("<img src=\"javascript:alert(1)\">", whitelist));
+    }
+
+    @Test
+    public void preservesExistingAllowedProtocolsWhenAddingCustomProtocol() {
+        Whitelist whitelist = Whitelist.basicWithImages()
+                .addProtocols("img", "src", "cid");
+
+        assertEquals("<img src=\"https://example.com/image.png\" />",
+                clean("<img src=\"https://example.com/image.png\">", whitelist));
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.safety.WhitelistCustomProtocolsTest::supportsChainedProtocolAdditionsForSameAttribute
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.safety.WhitelistCustomProtocolsTest::supportsChainedProtocolAdditionsForSameAttribute

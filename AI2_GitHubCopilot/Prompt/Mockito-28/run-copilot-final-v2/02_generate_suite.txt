@@ -1,0 +1,139 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Mockito  Bug: 28  Version: Mockito-28b
+JUnit: junit-4.12-hamcrest-1.3.jar  Build: Gradle
+Target: org.mockito.internal.configuration.DefaultInjectionEngine
+Modified: org.mockito.internal.configuration.DefaultInjectionEngine
+Triggers: org.mockitousage.bugs.InjectionByTypeShouldFirstLookForExactTypeThenAncestorTest::mock_should_be_injected_once_and_in_the_best_matching_type
+
+Bug/specification summary:
+Bug report: 236
+Trigger failures:
+- org.mockitousage.bugs.InjectionByTypeShouldFirstLookForExactTypeThenAncestorTest::mock_should_be_injected_once_and_in_the_best_matching_type
+ --> junit.framework.AssertionFailedError: expected same:<java.lang.Object@1a6aecec> was not:<mockedBean>
+Modified: org.mockito.internal.configuration.DefaultInjectionEngine
+
+Prompt-01 test plan:
+TARGETS: injectMocksOnFields field ordering via supertypesLast comparator; ensure exact-type fields
+precede ancestor-type fields.
+TARGETS: injectMockCandidate type-based filtering and injection logic for mocks into fields.
+ORACLES: After injection, exact-type field contains mock; ancestor-type field remains null.
+ORACLES: Use assertSame(mock, field.get(testInstance)) and assertNull(otherField.get(testInstance)).
+CASES: Class with two fields: exact type (e.g., Set) and supertype (e.g., Collection); inject Set
+mock.
+CASES: Only ancestor field exists (Collection); inject Set mock; verify injection into ancestor
+field.
+CASES: Multiple exact-type fields; verify first exact field gets mock (order maintained).
+CASES: Mock type matches none; verify no exception or graceful no-op.
+RISKS: Comparator may not account for interfaces; only class hierarchy ordering tested.
+RISKS: Internal MockCandidateFilter logic may override ordering; test only verifies final outcome.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.mockito.internal.configuration.DefaultInjectionEngine (java) =====
+/*
+ * Copyright (c) 2007 Mockito contributors
+ * This program is made available under the terms of the MIT License.
+ */
+package org.mockito.internal.configuration;
+
+import org.mockito.exceptions.Reporter;
+import org.mockito.exceptions.base.MockitoException;
+import org.mockito.internal.configuration.injection.FinalMockCandidateFilter;
+import org.mockito.internal.configuration.injection.MockCandidateFilter;
+import org.mockito.internal.configuration.injection.NameBasedCandidateFilter;
+import org.mockito.internal.configuration.injection.TypeBasedCandidateFilter;
+import org.mockito.internal.util.reflection.FieldInitializer;
+
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Initializes mock/spies dependencies for fields annotated with &#064;InjectMocks
+ * <p/>
+ * See {@link org.mockito.MockitoAnnotations}
+ */
+public class DefaultInjectionEngine {
+
+ private final MockCandidateFilter mockCandidateFilter = new TypeBasedCandidateFilter(new NameBasedCandidateFilter(new FinalMockCandidateFilter()));
+ private Comparator<Field> supertypesLast = new Comparator<Field>() {
+ public int compare(Field field1, Field field2) {
+ Class<?> field1Type = field1.getType();
+ Class<?> field2Type = field2.getType();
+
+ if(field1Type.isAssignableFrom(field2Type)) {
+ return 1;
+ }
+ if(field2Type.isAssignableFrom(field1Type)) {
+ return -1;
+ }
+ return 0;
+ }
+ };
+
+ /**
+ * Inject mocks in injectMocksFields, and initialize them if needed.
+ *
+ * <p>
+ * <u>Algorithm :<br></u>
+ * for each field annotated by @InjectMocks
+ * <ul>
+ * <li>copy mocks set
+ * <li>initialize field annotated by @InjectMocks
+ * <li>for each field in @InjectMocks type ordered from sub-type to super-type
+ * <ul>
+ * <li>find mock candidate by type
+ * <li>if more than *one* candidate find mock candidate on name
+ * <li>if one mock candidate then
+ * <ul>
+ * <li>set mock by property setter if possible
+ * <li>else set mock by field injection
+ * </ul>
+ * <li>remove mock from mocks copy (mocks are just injected once)
+ * <li>else don't fail, user will then provide dependencies
+ * </ul>
+ * </ul>
+ * </p>
+ *
+ * @param injectMocksFields Fields annotated by @InjectMocks
+ * @param mocks Mocks
+ * @param testClassInstance The test class instance
+ */
+ public void injectMocksOnFields(Set<Field> injectMocksFields, Set<Object> mocks, Object testClassInstance) {
+ for (Field field : injectMocksFields) {
+ Set<Object> mocksToBeInjected = new HashSet<Object>(mocks);
+ Object injectMocksFieldInstance = null;
+ try {
+ injectMocksFieldInstance = new FieldInitializer(testClassInstance, field).initialize();
+ } catch (MockitoException e) {
+ new Reporter().cannotInitializeForInjectMocksAnnotation(field.getName(), e);
+ }
+
+ // for each field in the class hierarchy
+ Class<?> fieldClass = injectMocksFieldInstance.getClass();
+ while (fieldClass != Object.class) {
+ injectMockCandidate(fieldClass, mocksToBeInjected, injectMocksFieldInstance);
+ fieldClass = fieldClass.getSuperclass();
+ }
+ }
+ }
+
+ private void injectMockCandidate(Class<?> awaitingInjectionClazz, Set<Object> mocks, Object fieldInstance) {
+ for(Field field : orderedInstanceFieldsFrom(awaitingInjectionClazz)) {
+ mockCandidateFilter.filterCandidate(mocks, field, fieldInstance).thenInject();
+ }
+ }
+
+ private Field[] orderedInstanceFieldsFrom(Class<?> awaitingInjectionClazz) {
+ Field[] declaredFields = awaitingInjectionClazz.getDeclaredFields();
+ Arrays.sort(declaredFields, supertypesLast);
+ return declaredFields;
+ }
+
+}

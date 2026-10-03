@@ -1,0 +1,163 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Jsoup  Bug: 53  Version: Jsoup-53b
+JUnit: junit-4.5.jar  Build: Maven
+Bug/specification summary:
+Bug report: 611
+Trigger failures:
+- org.jsoup.select.SelectorTest::attributeWithBrackets
+ --> org.jsoup.select.Selector$SelectorParseException: Could not parse query 'div[data='End]'': unexpected token at '''
+Modified: org.jsoup.parser.TokenQueue
+
+Available API/signatures:
+[org.jsoup.parser.TokenQueue | java]
+package org.jsoup.parser;
+public class TokenQueue {
+@param data string of data to back queue.
+public TokenQueue(String data) {
+public boolean isEmpty() {
+private int remainingLength() {
+public char peek() {
+@param c character to add
+public void addFirst(Character c) {
+@param seq string to add.
+public void addFirst(String seq) {
+public boolean matches(String seq) {
+public boolean matchesCS(String seq) {
+@param seq list of strings to case insensitively check for
+@return true of any matched, false if none did
+public boolean matchesAny(String... seq) {
+public boolean matchesAny(char... seq) {
+public boolean matchesStartTag() {
+public boolean matchChomp(String seq) {
+@return if starts with whitespace
+public boolean matchesWhitespace() {
+@return if matches a word character
+public boolean matchesWord() {
+public void advance() {
+public char consume() {
+public void consume(String seq) {
+public String consumeTo(String seq) {
+public String consumeToIgnoreCase(String seq) {
+@param seq any number of terminators to consume to. <b>Case insensitive.</b>
+@return consumed string
+public String consumeToAny(String... seq) {
+public String chompTo(String seq) {
+public String chompToIgnoreCase(String seq) {
+public String chompBalanced(char open, char close) {
+public static String unescape(String in) {
+public boolean consumeWhitespace() {
+public String consumeWord() {
+public String consumeTagName() {
+public String consumeElementSelector() {
+Consume a CSS identifier (ID or class) off the queue (letter, digit, -, _)
+@return identifier
+public String consumeCssIdentifier() {
+@return attribute key
+public String consumeAttributeKey() {
+@return remained of queue.
+public String remainder() {
+final String remainder = queue.substring(pos, queue.length());
+@Override
+public String toString() {
+
+Generated JUnit Test:
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class TokenQueueTest {
+
+    @Test
+    public void chompBalancedKeepsClosingBracketInsideSingleQuotedValue() {
+        TokenQueue queue = new TokenQueue("[data='End]'] trailing");
+
+        assertEquals("data='End]'", queue.chompBalanced('[', ']'));
+        assertEquals(" trailing", queue.remainder());
+    }
+
+    @Test
+    public void chompBalancedKeepsClosingBracketInsideDoubleQuotedValue() {
+        TokenQueue queue = new TokenQueue("[data=\"End]\"] trailing");
+
+        assertEquals("data=\"End]\"", queue.chompBalanced('[', ']'));
+        assertEquals(" trailing", queue.remainder());
+    }
+
+    @Test
+    public void chompBalancedHandlesNestedDelimiters() {
+        TokenQueue queue = new TokenQueue("[outer[inner]tail]after");
+
+        assertEquals("outer[inner]tail", queue.chompBalanced('[', ']'));
+        assertEquals("after", queue.remainder());
+    }
+
+    @Test
+    public void chompBalancedHandlesUnquotedAttributeContent() {
+        TokenQueue queue = new TokenQueue("[data=End]after");
+
+        assertEquals("data=End", queue.chompBalanced('[', ']'));
+        assertEquals("after", queue.remainder());
+    }
+
+    @Test
+    public void chompBalancedPreservesEscapedQuoteAndBracketInsideQuotedValue() {
+        TokenQueue queue = new TokenQueue("[data='it\\'s ] still']next");
+
+        assertEquals("data='it\\'s ] still'", queue.chompBalanced('[', ']'));
+        assertEquals("next", queue.remainder());
+    }
+
+    @Test
+    public void chompBalancedPreservesEscapedClosingDelimiter() {
+        TokenQueue queue = new TokenQueue("[data=one\\]two]next");
+
+        assertEquals("data=one\\]two", queue.chompBalanced('[', ']'));
+        assertEquals("next", queue.remainder());
+    }
+
+    @Test
+    public void chompBalancedReturnsAvailableContentWhenClosingDelimiterIsMissing() {
+        TokenQueue queue = new TokenQueue("[data=value");
+
+        assertEquals("data=value", queue.chompBalanced('[', ']'));
+        assertTrue(queue.isEmpty());
+    }
+
+    @Test
+    public void chompBalancedReturnsEmptyStringForEmptyInput() {
+        TokenQueue queue = new TokenQueue("");
+
+        assertEquals("", queue.chompBalanced('[', ']'));
+        assertTrue(queue.isEmpty());
+    }
+
+    @Test
+    public void selectorMatchesSingleQuotedAttributeValueContainingClosingBracket() {
+        Document document = Jsoup.parse("<div data='End]'></div><div data='other'></div>");
+
+        assertEquals(1, document.select("div[data='End]']").size());
+    }
+
+    @Test
+    public void selectorMatchesDoubleQuotedAttributeValueContainingClosingBracket() {
+        Document document = Jsoup.parse("<div data=\"End]\"></div><div data=\"other\"></div>");
+
+        assertEquals(1, document.select("div[data=\"End]\"]").size());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - org.jsoup.parser.TokenQueueTest::chompBalancedPreservesEscapedQuoteAndBracketInsideQuotedValue
+
+Extract test suite......................................................... OK
+Failing generated tests: org.jsoup.parser.TokenQueueTest::chompBalancedPreservesEscapedQuoteAndBracketInsideQuotedValue

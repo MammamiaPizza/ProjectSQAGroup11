@@ -1,0 +1,148 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Cli  Bug: 12  Version: Cli-12b
+JUnit: junit-3.8.1.jar  Build: Maven
+Target: org.apache.commons.cli.GnuParser
+Modified: org.apache.commons.cli.GnuParser
+Triggers: org.apache.commons.cli.GnuParserTest::testShortWithEqual, org.apache.commons.cli.GnuParserTest::testLongWithEqualSingleDash, org.apache.commons.cli.GnuParserTest::testLongWithEqual
+
+Bug/specification summary:
+Bug report: cli-1
+Trigger failures:
+- org.apache.commons.cli.GnuParserTest::testShortWithEqual
+ --> junit.framework.ComparisonFailure: expected:<[]bar> but was:<[=]bar>
+ - org.apache.commons.cli.GnuParserTest::testLongWithEqualSingleDash
+ --> junit.framework.ComparisonFailure: expected:<[]bar> but was:<[oo=]bar>
+ - org.apache.commons.cli.GnuParserTest::testLongWithEqual
+ --> org.apache.commons.cli.UnrecognizedOptionException: Unrecognized option: --foo=bar
+Modified: org.apache.commons.cli.GnuParser
+
+Prompt-01 test plan:
+TARGETS: GnuParser.flatten(Options,String[],boolean) — token splitting, '=' handling.
+ORACLES: Expected CLI behavior: '=' separates option name from value; value must not include leading
+'=' nor option name; test expectations match that.
+CASES: short=value (e.g., "-D=bar"), long=value with single dash ("-foo=bar"), long=value with
+double dash ("--foo=bar").
+CASES: boundary: empty value after '=', equals at end, multiple '=' in argument, option missing
+required value.
+CASES: stopAtNonOption=true with '=' arguments; unrecognized option with '='.
+RISKS: Cannot inspect actual flatten logic; interaction of '=' within quoted arguments or combined
+short options unknown.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.cli.GnuParser (java) =====
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.cli;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The class GnuParser provides an implementation of the 
+ * {@link Parser#flatten(Options,String[],boolean) flatten} method.
+ *
+ * @author John Keyes (john at integralsource.com)
+ * @see Parser
+ * @version $Revision$
+ */
+public class GnuParser extends Parser {
+
+ /**
+ * <p>This flatten method does so using the following rules:
+ * <ol>
+ * <li>If an {@link Option} exists for the first character of 
+ * the <code>arguments</code> entry <b>AND</b> an {@link Option} 
+ * does not exist for the whole <code>argument</code> then
+ * add the first character as an option to the processed tokens
+ * list e.g. "-D" and add the rest of the entry to the also.</li>
+ * <li>Otherwise just add the token to the processed tokens list.
+ * </li>
+ * </ol>
+ * </p>
+ *
+ * @param options The Options to parse the arguments by.
+ * @param arguments The arguments that have to be flattened.
+ * @param stopAtNonOption specifies whether to stop 
+ * flattening when a non option has been encountered
+ * @return a String array of the flattened arguments
+ */
+ protected String[] flatten(Options options, String[] arguments, boolean stopAtNonOption)
+ {
+ List tokens = new ArrayList();
+
+ boolean eatTheRest = false;
+
+ for (int i = 0; i < arguments.length; i++)
+ {
+ String arg = arguments[i];
+
+ if ("--".equals(arg))
+ {
+ eatTheRest = true;
+ tokens.add("--");
+ }
+ else if ("-".equals(arg))
+ {
+ tokens.add("-");
+ }
+ else if (arg.startsWith("-"))
+ {
+ String opt = Util.stripLeadingHyphens(arg);
+
+ if (options.hasOption(opt))
+ {
+ tokens.add(arg);
+ }
+ else
+ {
+ if (options.hasOption(arg.substring(0, 2)))
+ {
+ // the format is --foo=value or -foo=value
+ // the format is a special properties option (-Dproperty=value)
+ tokens.add(arg.substring(0, 2)); // -D
+ tokens.add(arg.substring(2)); // property=value
+ }
+ else
+ {
+ eatTheRest = stopAtNonOption;
+ tokens.add(arg);
+ }
+ }
+ }
+ else
+ {
+ tokens.add(arg);
+ }
+
+ if (eatTheRest)
+ {
+ for (i++; i < arguments.length; i++)
+ {
+ tokens.add(arguments[i]);
+ }
+ }
+ }
+
+ return (String[]) tokens.toArray(new String[tokens.size()]);
+ }
+}

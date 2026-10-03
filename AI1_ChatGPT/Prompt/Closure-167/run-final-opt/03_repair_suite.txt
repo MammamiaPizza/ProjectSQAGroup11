@@ -1,0 +1,196 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Closure  Bug: 167  Version: Closure-167b
+JUnit: junit.jar  Build: Ant
+Bug/specification summary:
+Bug report: 783
+Trigger failures:
+- com.google.javascript.jscomp.TypeCheckTest::testIssue783
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.jscomp.TypeCheckTest::testMissingProperty20
+ --> junit.framework.AssertionFailedError: expected a warning
+ - com.google.javascript.rhino.jstype.JSTypeTest::testRestrictedTypeGivenToBoolean
+ --> junit.framework.AssertionFailedError: Expected: ??
+Modified: com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter, com.google.javascript.rhino.jstype.JSType
+
+Available API/signatures:
+[com.google.javascript.jscomp.type.SemanticReverseAbstractInterpreter | java]
+package com.google.javascript.jscomp.type;
+public class SemanticReverseAbstractInterpreter
+@Override
+public TypePair apply(TypePair p) {
+private FlowScope caseIn(Node object, String propertyName, FlowScope blindScope) {
+private class RestrictByTrueInstanceOfResultVisitor
+protected JSType caseTopType(JSType type) {
+public JSType caseUnknownType() {
+public JSType caseObjectType(ObjectType type) {
+public JSType caseUnionType(UnionType type) {
+public JSType caseFunctionType(FunctionType type) {
+private JSType applyCommonRestriction(JSType type) {
+private class RestrictByFalseInstanceOfResultVisitor
+
+[com.google.javascript.rhino.jstype.JSType | java]
+package com.google.javascript.rhino.jstype;
+public abstract class JSType implements Serializable {
+"Unknown class name";
+static final Comparator<JSType> ALPHA = new Comparator<JSType>() {
+@Override
+public int compare(JSType t1, JSType t2) {
+public static final int ENUMDECL = 1;
+public static final int NOT_ENUMDECL = 0;
+public JSDocInfo getJSDocInfo() {
+public String getDisplayName() {
+public boolean hasDisplayName() {
+public boolean isNoType() {
+public boolean isNoResolvedType() {
+public boolean isNoObjectType() {
+public final boolean isEmptyType() {
+public boolean isNumberObjectType() {
+public boolean isNumberValueType() {
+public boolean isFunctionPrototypeType() {
+public boolean isStringObjectType() {
+public boolean isStringValueType() {
+public final boolean isString() {
+public final boolean isNumber() {
+public boolean
+...[truncated deterministically]...
+esolved() {
+public boolean setValidator(Predicate<JSType> validator) {
+public static class TypePair {
+public final JSType typeA;
+public final JSType typeB;
+public TypePair(JSType typeA, JSType typeB) {
+public String toString() {
+public String toDebugHashCodeString() {
+public final String toAnnotationString() {
+abstract String toStringHelper(boolean forAnnotations);
+public void matchConstraint(JSType constraint) {}
+
+Generated JUnit Test:
+package com.google.javascript.rhino.jstype;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+public class SemanticReverseAbstractInterpreterRegressionTest {
+
+  private JSTypeRegistry newRegistry() {
+    return new JSTypeRegistry(null);
+  }
+
+  @Test
+  public void testCheckedUnknownTypeIsPreservedForTruthyBooleanOutcome() {
+    JSTypeRegistry registry = newRegistry();
+    JSType checkedUnknown =
+        registry.getNativeType(JSTypeNative.CHECKED_UNKNOWN_TYPE);
+
+    assertEquals("??", checkedUnknown.toString());
+    assertSame(
+        checkedUnknown,
+        checkedUnknown.getRestrictedTypeGivenToBooleanOutcome(true));
+  }
+
+  @Test
+  public void testCheckedUnknownTypeIsPreservedForFalsyBooleanOutcome() {
+    JSTypeRegistry registry = newRegistry();
+    JSType checkedUnknown =
+        registry.getNativeType(JSTypeNative.CHECKED_UNKNOWN_TYPE);
+
+    assertEquals("??", checkedUnknown.toString());
+    assertSame(
+        checkedUnknown,
+        checkedUnknown.getRestrictedTypeGivenToBooleanOutcome(false));
+  }
+
+  @Test
+  public void testNullCanOnlySatisfyFalsyBooleanOutcome() {
+    JSTypeRegistry registry = newRegistry();
+    JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+    JSType noType = registry.getNativeType(JSTypeNative.NO_TYPE);
+
+    assertSame(nullType, nullType.getRestrictedTypeGivenToBooleanOutcome(false));
+    assertSame(noType, nullType.getRestrictedTypeGivenToBooleanOutcome(true));
+  }
+
+  @Test
+  public void testVoidCanOnlySatisfyFalsyBooleanOutcome() {
+    JSTypeRegistry registry = newRegistry();
+    JSType voidType = registry.getNativeType(JSTypeNative.VOID_TYPE);
+    JSType noType = registry.getNativeType(JSTypeNative.NO_TYPE);
+
+    assertSame(voidType, voidType.getRestrictedTypeGivenToBooleanOutcome(false));
+    assertSame(noType, voidType.getRestrictedTypeGivenToBooleanOutcome(true));
+  }
+
+  @Test
+  public void testNoTypeRemainsImpossibleForEitherBooleanOutcome() {
+    JSTypeRegistry registry = newRegistry();
+    JSType noType = registry.getNativeType(JSTypeNative.NO_TYPE);
+
+    assertSame(noType, noType.getRestrictedTypeGivenToBooleanOutcome(true));
+    assertSame(noType, noType.getRestrictedTypeGivenToBooleanOutcome(false));
+  }
+
+  @Test
+  public void testMissingPropertyInsideInCheckStillProducesWarningForObject() {
+    com.google.javascript.jscomp.Compiler compiler =
+        new com.google.javascript.jscomp.Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+
+    compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode(
+            "input.js",
+            "/** @param {Object} x */\n"
+                + "function f(x) {\n"
+                + "  if ('missing' in x) {\n"
+                + "    x.missing;\n"
+                + "  }\n"
+                + "}\n"),
+        options);
+
+    assertTrue(
+        "An in-check must not hide a missing-property type warning",
+        compiler.getWarnings().length > 0);
+  }
+
+  @Test
+  public void testMissingPropertyInsideInCheckStillProducesWarningForRecord() {
+    com.google.javascript.jscomp.Compiler compiler =
+        new com.google.javascript.jscomp.Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+
+    compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode(
+            "input.js",
+            "/** @param {{known: number}} x */\n"
+                + "function f(x) {\n"
+                + "  if ('missing' in x) {\n"
+                + "    x.missing;\n"
+                + "  }\n"
+                + "}\n"),
+        options);
+
+    assertTrue(
+        "An in-check must not manufacture an undeclared record property",
+        compiler.getWarnings().length > 0);
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - com.google.javascript.rhino.jstype.SemanticReverseAbstractInterpreterRegressionTest::testMissingPropertyInsideInCheckStillProducesWarningForObject
+ - com.google.javascript.rhino.jstype.SemanticReverseAbstractInterpreterRegressionTest::testMissingPropertyInsideInCheckStillProducesWarningForRecord
+
+Failing generated tests: com.google.javascript.rhino.jstype.SemanticReverseAbstractInterpreterRegressionTest::testMissingPropertyInsideInCheckStillProducesWarningForObject, com.google.javascript.rhino.jstype.SemanticReverseAbstractInterpreterRegressionTest::testMissingPropertyInsideInCheckStillProducesWarningForRecord

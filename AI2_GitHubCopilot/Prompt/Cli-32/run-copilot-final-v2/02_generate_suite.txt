@@ -1,0 +1,471 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Cli  Bug: 32  Version: Cli-32b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: org.apache.commons.cli.HelpFormatter
+Modified: org.apache.commons.cli.HelpFormatter
+Triggers: org.apache.commons.cli.HelpFormatterTest::testRenderWrappedTextWordCut, org.apache.commons.cli.HelpFormatterTest::testFindWrapPos
+
+Bug/specification summary:
+Bug report: CLI-193
+Trigger failures:
+- org.apache.commons.cli.HelpFormatterTest::testRenderWrappedTextWordCut
+ --> java.lang.StringIndexOutOfBoundsException: String index out of range: 12
+ - org.apache.commons.cli.HelpFormatterTest::testFindWrapPos
+ --> junit.framework.AssertionFailedError: wrap position 3 expected:<3> but was:<4>
+Modified: org.apache.commons.cli.HelpFormatter
+
+Prompt-01 test plan:
+TARGETS: HelpFormatter.findWrapPos(String,int,int)
+TARGETS: renderWrappedText/printWrapped/renderOptions paths that consume its index
+ORACLES: HelpFormatterTest.testFindWrapPos exact wrap-index assertions (3, not 4)
+ORACLES: HelpFormatterTest.testRenderWrappedTextWordCut expected word-cut output, no
+StringIndexOutOfBounds
+CASES: startPos+width>=text.length() returns -1
+CASES: no space within width, long token: return width-boundary index, not next space
+CASES: token reaches text.length(): guard charAt(text.length()) in forward scan
+CASES: newline/tab at/before width: boundary pos vs pos+1
+RISKS: renderWrappedText not in provided API; line.separator affects expected text
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.cli.HelpFormatter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.cli;
+public class HelpFormatter
+public static final int DEFAULT_WIDTH = 74;
+public static final int DEFAULT_LEFT_PAD = 1;
+public static final int DEFAULT_DESC_PAD = 3;
+public static final String DEFAULT_SYNTAX_PREFIX = "usage: ";
+public static final String DEFAULT_OPT_PREFIX = "-";
+public static final String DEFAULT_LONG_OPT_PREFIX = "--";
+public static final String DEFAULT_LONG_OPT_SEPARATOR = " ";
+public static final String DEFAULT_ARG_NAME = "arg";
+public int defaultWidth = DEFAULT_WIDTH;
+public int defaultLeftPad = DEFAULT_LEFT_PAD;
+public int defaultDescPad = DEFAULT_DESC_PAD;
+public String defaultSyntaxPrefix = DEFAULT_SYNTAX_PREFIX;
+public String defaultNewLine = System.getProperty("line.separator");
+public String defaultOptPrefix = DEFAULT_OPT_PREFIX;
+public String defaultLongOptPrefix = DEFAULT_LONG_OPT_PREFIX;
+public String defaultArgName = DEFAULT_ARG_NAME;
+protected Comparator optionComparator = new OptionComparator();
+public void setWidth(int width)
+public int getWidth()
+public void setLeftPadding(int padding)
+public int getLeftPadding()
+public void setDescPadding(int padding)
+public int getDescPadding()
+public void setSyntaxPrefix(String prefix)
+public String getSyntaxPrefix()
+public void setNewLine(String newline)
+public String getNewLine()
+public void setOptPrefix(String prefix)
+public String getOptPrefix()
+public void setLongOptPrefix(String prefix)
+public String getLongOptPrefix()
+public void setLongOptSeparator(String longOptSeparator)
+public String getLongOptSeparator()
+public void setArgName(String name)
+public String getArgName()
+public Comparator getOptionComparator()
+public void setOptionComparator(Comparator comparator)
+public void printHelp(String cmdLineSyntax, Options options)
+public void printHelp(String cmdLineSyntax, Options options, boolean autoUsage)
+public void printHelp(String cmdLineSyntax, String header, Options options, String footer)
+public void printHelp(String cmdLineSyntax, String header, Options options, String footer, boolean autoUsage)
+public void printHelp(int width, String cmdLineSyntax, String header, Options options, String footer)
+public void printUsage(PrintWriter pw, int width, String app, Options options)
+final Collection processedGroups = new ArrayList();
+private void appendOptionGroup(final StringBuffer buff, final OptionGroup group)
+private void appendOption(final StringBuffer buff, final Option option, final boolean required)
+public void printUsage(PrintWriter pw, int width, String cmdLineSyntax)
+public void printWrapped(PrintWriter pw, int width, String text)
+public void printWrapped(PrintWriter pw, int width, int nextLineTabStop, String text)
+protected StringBuffer renderOptions(StringBuffer sb, int width, Options options, int leftPad, int descPad)
+final String lpad = createPadding(leftPad);
+final String dpad = createPadding(descPad);
+final String padding = createPadding(nextLineTabStop);
+protected int findWrapPos(String text, int width, int startPos)
+protected String createPadding(int len)
+protected String rtrim(String s)
+private static class OptionComparator implements Comparator
+public int compare(Object o1, Object o2)
+
+/* HEADER */
+package org.apache.commons.cli;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+public class HelpFormatter
+
+/* METHOD printUsage */
+public void printUsage(PrintWriter pw, int width, String cmdLineSyntax)
+ {
+ int argPos = cmdLineSyntax.indexOf(' ') + 1;
+
+ printWrapped(pw, width, defaultSyntaxPrefix.length() + argPos, defaultSyntaxPrefix + cmdLineSyntax);
+ }
+
+/* METHOD printHelp */
+public void printHelp(int width, String cmdLineSyntax, String header,
+ Options options, String footer, boolean autoUsage)
+ {
+ PrintWriter pw = new PrintWriter(System.out);
+
+ printHelp(pw, width, cmdLineSyntax, header, options, defaultLeftPad, defaultDescPad, footer, autoUsage);
+ pw.flush();
+ }
+
+/* METHOD printHelp */
+public void printHelp(PrintWriter pw, int width, String cmdLineSyntax,
+ String header, Options options, int leftPad,
+ int descPad, String footer, boolean autoUsage)
+ {
+ if ((cmdLineSyntax == null) || (cmdLineSyntax.length() == 0))
+ {
+ throw new IllegalArgumentException("cmdLineSyntax not provided");
+ }
+
+ if (autoUsage)
+ {
+ printUsage(pw, width, cmdLineSyntax, options);
+ }
+ else
+ {
+ printUsage(pw, width, cmdLineSyntax);
+ }
+
+ if ((header != null) && (header.trim().length() > 0))
+ {
+ printWrapped(pw, width, header);
+ }
+
+ printOptions(pw, width, options, leftPad, descPad);
+
+ if ((footer != null) && (footer.trim().length() > 0))
+ {
+ printWrapped(pw, width, footer);
+ }
+ }
+
+/* METHOD printUsage */
+public void printUsage(PrintWriter pw, int width, String app, Options options)
+ {
+ // initialise the string buffer
+ StringBuffer buff = new StringBuffer(defaultSyntaxPrefix).append(app).append(" ");
+
+ // create a list for processed option groups
+ final Collection processedGroups = new ArrayList();
+
+ // temp variable
+ Option option;
+
+ List optList = new ArrayList(options.getOptions());
+ Collections.sort(optList, getOptionComparator());
+ // iterate over the options
+ for (Iterator i = optList.iterator(); i.hasNext();)
+ {
+ // get the next Option
+ option = (Option) i.next();
+
+ // check if the option is part of an OptionGroup
+ OptionGroup group = options.getOptionGroup(option);
+
+ // if the option is part of a group 
+ if (group != null)
+ {
+ // and if the group has not already been processed
+ if (!processedGroups.contains(group))
+ {
+ // add the group to the processed list
+ processedGroups.add(group);
+
+ // add the usage clause
+ appendOptionGroup(buff, group);
+ }
+
+ // otherwise the option was displayed in the group
+ // previously so ignore it.
+ }
+
+ // if the Option is not part of an OptionGroup
+ else
+ {
+ appendOption(buff, option, option.isRequired());
+ }
+
+ if (i.hasNext())
+ {
+ buff.append(" ");
+ }
+ }
+
+ // call printWrapped
+ printWrapped(pw, width, buff.toString().indexOf(' ') + 1, buff.toString());
+ }
+
+/* METHOD printWrapped */
+public void printWrapped(PrintWriter pw, int width, String text)
+ {
+ printWrapped(pw, width, 0, text);
+ }
+
+/* METHOD printWrapped */
+public void printWrapped(PrintWriter pw, int width, int nextLineTabStop, String text)
+ {
+ StringBuffer sb = new StringBuffer(text.length());
+
+ renderWrappedText(sb, width, nextLineTabStop, text);
+ pw.println(sb.toString());
+ }
+
+/* METHOD renderOptions */
+protected StringBuffer renderOptions(StringBuffer sb, int width, Options options, int leftPad, int descPad)
+ {
+ final String lpad = createPadding(leftPad);
+ final String dpad = createPadding(descPad);
+
+ // first create list containing only <lpad>-a,--aaa where 
+ // -a is opt and --aaa is long opt; in parallel look for 
+ // the longest opt string this list will be then used to 
+ // sort options ascending
+ int max = 0;
+ StringBuffer optBuf;
+ List prefixList = new ArrayList();
+
+ List optList = options.helpOptions();
+
+ Collections.sort(optList, getOptionComparator());
+
+ for (Iterator i = optList.iterator(); i.hasNext();)
+ {
+ Option option = (Option) i.next();
+ optBuf = new StringBuffer();
+ 
+ if (option.getOpt() == null)
+ {
+ optBuf.append(lpad).append(" " + defaultLongOptPrefix).append(option.getLongOpt());
+ }
+ else
+ {
+ optBuf.append(lpad).append(defaultOptPrefix).append(option.getOpt());
+
+ if (option.hasLongOpt())
+ {
+ optBuf.append(',').append(defaultLongOptPrefix).append(option.getLongOpt());
+ }
+ }
+
+ if (option.hasArg())
+ {
+ String argName = option.getArgName();
+ if (argName != null && argName.length() == 0)
+ {
+ // if the option has a blank argname
+ optBuf.append(' ');
+ }
+ else
+ {
+ optBuf.append(option.hasLongOpt() ? longOptSeparator : " ");
+ optBuf.append("<").append(argName != null ? option.getArgName() : getArgName()).append(">");
+ }
+ }
+
+ prefixList.add(optBuf);
+ max = (optBuf.length() > max) ? optBuf.length() : max;
+ }
+
+ int x = 0;
+
+ for (Iterator i = optList.iterator(); i.hasNext();)
+ {
+ Option option = (Option) i.next();
+ optBuf = new StringBuffer(prefixList.get(x++).toString());
+
+ if (optBuf.length() < max)
+ {
+ optBuf.append(createPadding(max - optBuf.length()));
+ }
+
+ optBuf.append(dpad);
+
+ int nextLineTabStop = max + descPad;
+
+ if (option.getDescription() != null)
+ {
+ optBuf.append(option.getDescription());
+ }
+
+ renderWrappedText(sb, width, nextLineTabStop, optBuf.toString());
+
+ if (i.hasNext())
+ {
+ sb.append(defaultNewLine);
+ }
+ }
+
+ return sb;
+ }
+
+/* METHOD renderWrappedText */
+protected StringBuffer renderWrappedText(StringBuffer sb, int width, 
+ int nextLineTabStop, String text)
+ {
+ int pos = findWrapPos(text, width, 0);
+
+ if (pos == -1)
+ {
+ sb.append(rtrim(text));
+
+ return sb;
+ }
+ sb.append(rtrim(text.substring(0, pos))).append(defaultNewLine);
+
+ if (nextLineTabStop >= width)
+ {
+ // stops infinite loop happening
+ nextLineTabStop = 1;
+ }
+
+ // all following lines must be padded with nextLineTabStop space characters
+ final String padding = createPadding(nextLineTabStop);
+
+ while (true)
+ {
+ text = padding + text.substring(pos).trim();
+ pos = findWrapPos(text, width, 0);
+
+ if (pos == -1)
+ {
+ sb.append(text);
+
+ return sb;
+ }
+ 
+ if ((text.length() > width) && (pos == nextLineTabStop - 1))
+ {
+ pos = width;
+ }
+
+ sb.append(rtrim(text.substring(0, pos))).append(defaultNewLine);
+ }
+ }
+
+/* METHOD setSyntaxPrefix */
+public void setSyntaxPrefix(String prefix)
+ {
+ this.defaultSyntaxPrefix = prefix;
+ }
+
+/* METHOD getSyntaxPrefix */
+public String getSyntaxPrefix()
+ {
+ return defaultSyntaxPrefix;
+ }
+
+/* METHOD setNewLine */
+public void setNewLine(String newline)
+ {
+ this.defaultNewLine = newline;
+ }
+
+/* METHOD getNewLine */
+public String getNewLine()
+ {
+ return defaultNewLine;
+ }
+
+/* METHOD setOptPrefix */
+public void setOptPrefix(String prefix)
+ {
+ this.defaultOptPrefix = prefix;
+ }
+
+/* METHOD getOptPrefix */
+public String getOptPrefix()
+ {
+ return defaultOptPrefix;
+ }
+
+/* METHOD setLongOptPrefix */
+public void setLongOptPrefix(String prefix)
+ {
+ this.defaultLongOptPrefix = prefix;
+ }
+
+/* METHOD getLongOptPrefix */
+public String getLongOptPrefix()
+ {
+ return defaultLongOptPrefix;
+ }
+
+/* METHOD setLongOptSeparator */
+public void setLongOptSeparator(String longOptSeparator)
+ {
+ this.longOptSeparator = longOptSeparator;
+ }
+
+/* METHOD getLongOptSeparator */
+public String getLongOptSeparator()
+ {
+ return longOptSeparator;
+ }
+
+/* METHOD setArgName */
+public void setArgName(String name)
+ {
+ this.defaultArgName = name;
+ }
+
+/* METHOD getArgName */
+public String getArgName()
+ {
+ return defaultArgName;
+ }
+
+/* METHOD printHelp */
+public void printHelp(String cmdLineSyntax, Options options)
+ {
+ printHelp(defaultWidth, cmdLineSyntax, null, options, null, false);
+ }
+
+/* METHOD printHelp */
+public void printHelp(String cmdLineSyntax, Options options, boolean autoUsage)
+ {
+ printHelp(defaultWidth, cmdLineSyntax, null, options, null, autoUsage);
+ }
+
+/* METHOD printHelp */
+public void printHelp(String cmdLineSyntax, String header, Options options, String footer)
+ {
+ printHelp(cmdLineSyntax, header, options, footer, false);
+ }
+
+/* METHOD printHelp */
+public void printHelp(String cmdLineSyntax, String header, Options options, String footer, boolean autoUsage)
+ {
+ printHelp(defaultWidth, cmdLineSyntax, header, options, footer, autoUsage);
+ }
+
+/* METHOD printHelp */
+public void printHelp(int width, String cmdLineSyntax, String header, Options options, String footer)
+ {
+ printHelp(width, cmdLineSyntax, header, options, footer, false);
+ }
+
+/* METHOD printHelp */
+public void printHelp(PrintWriter pw, int width, String cmdLineSyntax, 
+ String header, Options options, int leftPad, 
+ int descPad, String footer)
+ {
+ printHelp(pw, width, cmdLineSyntax, header, options, leftPad, descPad, footer, false);
+ }
