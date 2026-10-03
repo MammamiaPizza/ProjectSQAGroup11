@@ -2,7 +2,7 @@
 
 ## วิธีทดลอง
 
-ใช้ `Algorithm2_SymbolicExecution/Code/symbolic_lang1_hex.py` อ่านเงื่อนไขแยก
+ใช้ `SymbolicExecution/Code/symbolic_lang1_hex.py` อ่านเงื่อนไขแยก
 เส้นทางเลขฐานสิบหกใน `NumberUtils.createNumber` ของ Lang-1b
 แล้วแก้ข้อจำกัดแบบช่วงจำนวนเต็มเพื่อสร้างค่าที่ขอบเขตของแต่ละเส้นทาง
 ไฟล์ `paths.json` เก็บ input, ช่วงค่าที่แก้ได้, expected value และ
