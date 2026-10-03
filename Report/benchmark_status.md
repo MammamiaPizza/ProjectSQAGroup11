@@ -1,24 +1,24 @@
-# สถานะผลทดลองที่ตรวจแล้ว
+# Benchmark Status
 
-## Lang-1 — มีผลครบ 4 วิธี
+ไฟล์นี้สรุปสถานะของผลการทดลองที่มีอยู่ใน repository และใช้เป็นจุดอ้างอิงไปยังผลของแต่ละวิธี
 
-| วิธี | Tests | Fixed line / condition | Buggy line / condition | ตรวจพบ bug |
-|---|---:|---|---|---:|
-| NSGA-II (expanded run) | 12 | 124/380 / 71/350 | 118/375 / 65/338 | 1 |
-| Bounded symbolic hex | 24 | 54/380 / 30/350 | 49/375 / 18/338 | 1 |
-| ChatGPT | 75 | 379/380 / 319/350 | 375/375 / 312/338 | 1 |
-| GitHub Copilot | 37 | 362/380 / 291/350 | 356/375 / 279/338 | 1 |
+## Current Results
 
-Lang-1 symbolic ในตารางคือ bounded symbolic hex ของกลุ่ม ส่วนผล Symflower ของเพื่อนต้องตรวจและรายงานแยก
+| Method | Current result scope | Main result source | Comparison status |
+|---|---|---|---|
+| NSGA-II | Result Round 1 และ Round 2 มีผลการทดลองแล้ว | [NSGA-II Results](../Algorithm1_NSGAII/) | รอสรุปให้อยู่ในรูปแบบเดียวกับวิธีอื่น |
+| Symbolic Execution | ปัจจุบันมีผล Round 1 สำหรับ Lang-1 และ Cli-1 | [Symbolic Execution Results](../Algorithm2_SymbolicExecution/) | ผลยังไม่ครอบคลุม benchmark เท่ากับวิธีอื่น |
+| ChatGPT | 854 cases attempted, 561 cases successfully evaluated | [ChatGPT Results](../AI1_ChatGPT/Result/) | มีผลสรุป AI แล้ว |
+| GitHub Copilot | 854 cases attempted, 229 cases successfully evaluated | [GitHub Copilot Results](../AI2_GitHubCopilot/Result/) | มีผลสรุป AI แล้ว |
 
-## Cli-1 — มีผล 3 วิธี
+## Available Summaries
 
-| วิธี | Tests | Fixed line / condition | Buggy line / condition | ตรวจพบ bug |
-|---|---:|---|---|---:|
-| ChatGPT | 25 | 45/45 / 15/16 | 44/45 / 12/14 | 0 |
-| GitHubCopilot | 11 | 45/45 / 16/16 | 44/45 / 13/14 | 0 |
-| NSGA-II (post-hoc exploratory) | 7 | 37/45 / 12/16 | 37/45 / 10/14 | 0 |
+- [AI Experiment Summary](summaries/ai_summary.md)
+- [AI Case Results](data/ai_case_results.csv)
+- [NSGA-II Round 1 Summary](../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
 
-- Cli-1 manual diagnostic ตรวจพบ bug แต่ไม่รวมเป็นผลของ AI/NSGA-II
-- Cli-1 ยังไม่มีผล symbolic จึงยังไม่ใช่การเทียบครบ 4 วิธี
-- ตัวหาร coverage ของ buggy และ fixed อาจต่างกัน ให้เทียบภายในเวอร์ชัน
+## Final Comparison
+
+ยังไม่สร้างผลเปรียบเทียบรวมของทั้ง 4 วิธี เนื่องจากผลของแต่ละวิธียังต้องจัดให้อยู่ภายใต้ขอบเขตกรณีทดลองและตัวชี้วัดที่เปรียบเทียบกันได้ก่อน
+
+ผลรายวิธีจะยังคงอ้างอิงจากโฟลเดอร์ของวิธีนั้นโดยตรง และผลเปรียบเทียบรวมจะเพิ่มใน `Report/` เมื่อข้อมูลพร้อม

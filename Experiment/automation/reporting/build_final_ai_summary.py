@@ -123,7 +123,6 @@ for cfg in METHODS:
 
             "token_target": d.get("token_target"),
             "over_token_target": d.get("over_token_target"),
-            "worker": d.get("worker"),
             "run_id": d.get("run_id"),
             "notes": "",
         }
@@ -163,7 +162,6 @@ fieldnames = [
 
     "token_target",
     "over_token_target",
-    "worker",
     "run_id",
     "notes",
 ]
@@ -265,17 +263,30 @@ lines.append("- ChatGPT: `run-final-opt`")
 lines.append("- GitHub Copilot: `run-copilot-final-v2`")
 lines.append("")
 
-lines.append("## Final status")
+lines.append("## Case outcomes")
 lines.append("")
-lines.append("| Method | Total | DONE | Invalid after repair | Invalid after P04 | Output incomplete |")
-lines.append("|---|---:|---:|---:|---:|---:|")
+lines.append(
+    "`Successfully evaluated` หมายถึง raw status `DONE`: "
+    "test suite ผ่าน fixed-version validation และมีผล final evaluation แล้ว "
+    "ไม่ได้หมายความว่าทุก attempted case สำเร็จ"
+)
+lines.append("")
+lines.append("| Method | Attempted cases | Successfully evaluated | Evaluation rate | Invalid after repair | Invalid after P04 | Incomplete output |")
+lines.append("|---|---:|---:|---:|---:|---:|---:|")
 
 for method, s in summary.items():
     sc = s["status_counts"]
+    evaluated = sc.get("DONE", 0)
+    evaluation_rate = (
+        evaluated / s["total_cases"] * 100
+        if s["total_cases"] else 0
+    )
+
     lines.append(
         f"| {method} "
         f"| {s['total_cases']} "
-        f"| {sc.get('DONE', 0)} "
+        f"| {evaluated} "
+        f"| {evaluation_rate:.2f}% "
         f"| {sc.get('INVALID_AFTER_REPAIR', 0)} "
         f"| {sc.get('INVALID_AFTER_PROMPT04', 0)} "
         f"| {sc.get('OUTPUT_INCOMPLETE', 0)} |"
@@ -284,7 +295,7 @@ for method, s in summary.items():
 lines.append("")
 lines.append("## Fault detection")
 lines.append("")
-lines.append("| Method | Measured cases | Detected cases | Fault detection rate |")
+lines.append("| Method | Cases with fault-detection result | Fault-detecting cases | Detection rate among measured cases |")
 lines.append("|---|---:|---:|---:|")
 
 for method, s in summary.items():
@@ -300,7 +311,7 @@ for method, s in summary.items():
 lines.append("")
 lines.append("## Fixed-version coverage")
 lines.append("")
-lines.append("| Method | Line coverage cases | Avg line coverage | Condition coverage cases | Avg condition coverage |")
+lines.append("| Method | Cases with line coverage | Avg fixed line coverage | Cases with condition coverage | Avg fixed condition coverage |")
 lines.append("|---|---:|---:|---:|---:|")
 
 for method, s in summary.items():
@@ -318,7 +329,7 @@ for method, s in summary.items():
 lines.append("")
 lines.append("## Token usage")
 lines.append("")
-lines.append("| Method | Cases with token data | Total tokens | Average tokens/case |")
+lines.append("| Method | Cases with token records | Total tokens | Average tokens per recorded case |")
 lines.append("|---|---:|---:|---:|")
 
 for method, s in summary.items():
