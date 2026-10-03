@@ -1,0 +1,331 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Csv  Bug: 16  Version: Csv-16b
+JUnit: junit-4.12.jar  Build: Maven
+Target: org.apache.commons.csv.CSVParser
+Modified: org.apache.commons.csv.CSVParser
+Triggers: org.apache.commons.csv.CSVParserTest::testIteratorSequenceBreaking
+
+Bug/specification summary:
+Bug report: CSV-224
+Trigger failures:
+- org.apache.commons.csv.CSVParserTest::testIteratorSequenceBreaking
+ --> junit.framework.AssertionFailedError: expected:<[3]> but was:<[4]>
+Modified: org.apache.commons.csv.CSVParser
+
+Prompt-01 test plan:
+TARGETS: CSVParser.iterator(), Iterator.hasNext(), Iterator.next(), and parser record-number progression 
+ORACLES: Trigger test expects record number 3, not 4, after iterator sequence interruption 
+CASES: Call hasNext() repeatedly before next(); verify no extra record is consumed 
+CASES: Interleave next() and hasNext(); verify returned CSVRecord sequence and getRecordNumber() 
+CASES: End-of-input: hasNext() false and next() behavior per existing iterator contract 
+RISKS: Iterator buffering may advance parser state twice or skip records 
+RISKS: Context supplies only one failing expectation; exact input/format and next() EOF oracle are unavailable
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.csv.CSVParser (java) =====
+/* API SIGNATURES */
+package org.apache.commons.csv;
+public final class CSVParser implements Iterable<CSVRecord>, Closeable {
+@SuppressWarnings("resource")
+public static CSVParser parse(final File file, final Charset charset, final CSVFormat format) throws IOException {
+public static CSVParser parse(final InputStream inputStream, final Charset charset, final CSVFormat format)
+public static CSVParser parse(final Path path, final Charset charset, final CSVFormat format) throws IOException {
+public static CSVParser parse(final Reader reader, final CSVFormat format) throws IOException {
+public static CSVParser parse(final String string, final CSVFormat format) throws IOException {
+public static CSVParser parse(final URL url, final Charset charset, final CSVFormat format) throws IOException {
+/** A record buffer for getRecord(). Grows as necessary and is reused. */
+private final List<String> recordList = new ArrayList<>();
+private final Token reusableToken = new Token();
+public CSVParser(final Reader reader, final CSVFormat format) throws IOException {
+public CSVParser(final Reader reader, final CSVFormat format, final long characterOffset, final long recordNumber)
+private void addRecordValue(final boolean lastRecord) {
+final String input = this.reusableToken.content.toString();
+final String inputClean = this.format.getTrim() ? input.trim() : input;
+final String nullString = this.format.getNullString();
+@Override
+public void close() throws IOException {
+public long getCurrentLineNumber() {
+public String getFirstEndOfLine() {
+public Map<String, Integer> getHeaderMap() {
+public long getRecordNumber() {
+public List<CSVRecord> getRecords() throws IOException {
+final List<CSVRecord> records = new ArrayList<>();
+private Map<String, Integer> initializeHeader() throws IOException {
+final String[] formatHeader = this.format.getHeader();
+final CSVRecord nextRecord = this.nextRecord();
+final boolean containsHeader = hdrMap.containsKey(header);
+final boolean emptyHeader = header == null || header.trim().isEmpty();
+public boolean isClosed() {
+public Iterator<CSVRecord> iterator() {
+private CSVRecord getNextRecord() {
+} catch (final IOException e) {
+e.getClass().getSimpleName() + " reading next record: " + e.toString(), e);
+public boolean hasNext() {
+public CSVRecord next() {
+public void remove() {
+final long startCharPosition = lexer.getCharacterPosition() + this.characterOffset;
+if (sb == null) { // first comment for this record
+final String comment = sb == null ? null : sb.toString();
+
+/* HEADER */
+package org.apache.commons.csv;
+import static org.apache.commons.csv.Token.Type.TOKEN;
+import java.io.Closeable;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.TreeMap;
+
+/* METHOD CSVParser */
+@SuppressWarnings("resource")
+ public CSVParser(final Reader reader, final CSVFormat format, final long characterOffset, final long recordNumber)
+ throws IOException {
+ Assertions.notNull(reader, "reader");
+ Assertions.notNull(format, "format");
+
+ this.format = format;
+ this.lexer = new Lexer(format, new ExtendedBufferedReader(reader));
+ this.headerMap = this.initializeHeader();
+ this.characterOffset = characterOffset;
+ this.recordNumber = recordNumber - 1;
+ }
+
+/* METHOD CSVParser */
+public CSVParser(final Reader reader, final CSVFormat format) throws IOException {
+ this(reader, format, 0, 1);
+ }
+
+/* METHOD parse */
+@SuppressWarnings("resource")
+ public static CSVParser parse(final File file, final Charset charset, final CSVFormat format) throws IOException {
+ Assertions.notNull(file, "file");
+ Assertions.notNull(format, "format");
+ return new CSVParser(new InputStreamReader(new FileInputStream(file), charset), format);
+ }
+
+/* METHOD parse */
+public static CSVParser parse(final Path path, final Charset charset, final CSVFormat format) throws IOException {
+ Assertions.notNull(path, "path");
+ Assertions.notNull(format, "format");
+ return parse(Files.newBufferedReader(path, charset), format);
+ }
+
+/* METHOD parse */
+public static CSVParser parse(final URL url, final Charset charset, final CSVFormat format) throws IOException {
+ Assertions.notNull(url, "url");
+ Assertions.notNull(charset, "charset");
+ Assertions.notNull(format, "format");
+
+ return new CSVParser(new InputStreamReader(url.openStream(), charset), format);
+ }
+
+/* METHOD parse */
+@SuppressWarnings("resource")
+ public static CSVParser parse(final InputStream inputStream, final Charset charset, final CSVFormat format)
+ throws IOException {
+ Assertions.notNull(inputStream, "inputStream");
+ Assertions.notNull(format, "format");
+ return parse(new InputStreamReader(inputStream, charset), format);
+ }
+
+/* METHOD parse */
+public static CSVParser parse(final Reader reader, final CSVFormat format) throws IOException {
+ return new CSVParser(reader, format);
+ }
+
+/* METHOD parse */
+public static CSVParser parse(final String string, final CSVFormat format) throws IOException {
+ Assertions.notNull(string, "string");
+ Assertions.notNull(format, "format");
+
+ return new CSVParser(new StringReader(string), format);
+ }
+
+/* METHOD getRecords */
+public List<CSVRecord> getRecords() throws IOException {
+ CSVRecord rec;
+ final List<CSVRecord> records = new ArrayList<>();
+ while ((rec = this.nextRecord()) != null) {
+ records.add(rec);
+ }
+ return records;
+ }
+
+/* METHOD hasNext */
+@Override
+ public boolean hasNext() {
+ if (CSVParser.this.isClosed()) {
+ return false;
+ }
+ if (this.current == null) {
+ this.current = this.getNextRecord();
+ }
+ 
+ return this.current != null;
+ }
+
+/* METHOD getCurrentLineNumber */
+public long getCurrentLineNumber() {
+ return this.lexer.getCurrentLineNumber();
+ }
+
+/* METHOD getRecordNumber */
+public long getRecordNumber() {
+ return this.recordNumber;
+ }
+
+/* METHOD close */
+@Override
+ public void close() throws IOException {
+ if (this.lexer != null) {
+ this.lexer.close();
+ }
+ }
+
+/* METHOD getFirstEndOfLine */
+public String getFirstEndOfLine() {
+ return lexer.getFirstEol();
+ }
+
+/* METHOD getHeaderMap */
+public Map<String, Integer> getHeaderMap() {
+ return this.headerMap == null ? null : new LinkedHashMap<>(this.headerMap);
+ }
+
+/* METHOD isClosed */
+public boolean isClosed() {
+ return this.lexer.isClosed();
+ }
+
+/* METHOD remove */
+@Override
+ public void remove() {
+ throw new UnsupportedOperationException();
+ }
+
+/* METHOD nextRecord */
+CSVRecord nextRecord() throws IOException {
+ CSVRecord result = null;
+ this.recordList.clear();
+ StringBuilder sb = null;
+ final long startCharPosition = lexer.getCharacterPosition() + this.characterOffset;
+ do {
+ this.reusableToken.reset();
+ this.lexer.nextToken(this.reusableToken);
+ switch (this.reusableToken.type) {
+ case TOKEN:
+ this.addRecordValue(false);
+ break;
+ case EORECORD:
+ this.addRecordValue(true);
+ break;
+ case EOF:
+ if (this.reusableToken.isReady) {
+ this.addRecordValue(true);
+ }
+ break;
+ case INVALID:
+ throw new IOException("(line " + this.getCurrentLineNumber() + ") invalid parse sequence");
+ case COMMENT: // Ignored currently
+ if (sb == null) { // first comment for this record
+ sb = new StringBuilder();
+ } else {
+ sb.append(Constants.LF);
+ }
+ sb.append(this.reusableToken.content);
+ this.reusableToken.type = TOKEN; // Read another token
+ break;
+ default:
+ throw new IllegalStateException("Unexpected Token type: " + this.reusableToken.type);
+ }
+ } while (this.reusableToken.type == TOKEN);
+
+ if (!this.recordList.isEmpty()) {
+ this.recordNumber++;
+ final String comment = sb == null ? null : sb.toString();
+ result = new CSVRecord(this.recordList.toArray(new String[this.recordList.size()]), this.headerMap, comment,
+ this.recordNumber, startCharPosition);
+ }
+ return result;
+ }
+
+/* METHOD initializeHeader */
+private Map<String, Integer> initializeHeader() throws IOException {
+ Map<String, Integer> hdrMap = null;
+ final String[] formatHeader = this.format.getHeader();
+ if (formatHeader != null) {
+ hdrMap = this.format.getIgnoreHeaderCase() ?
+ new TreeMap<String, Integer>(String.CASE_INSENSITIVE_ORDER) :
+ new LinkedHashMap<String, Integer>();
+
+ String[] headerRecord = null;
+ if (formatHeader.length == 0) {
+ // read the header from the first line of the file
+ final CSVRecord nextRecord = this.nextRecord();
+ if (nextRecord != null) {
+ headerRecord = nextRecord.values();
+ }
+ } else {
+ if (this.format.getSkipHeaderRecord()) {
+ this.nextRecord();
+ }
+ headerRecord = formatHeader;
+ }
+
+ // build the name to index mappings
+ if (headerRecord != null) {
+ for (int i = 0; i < headerRecord.length; i++) {
+ final String header = headerRecord[i];
+ final boolean containsHeader = hdrMap.containsKey(header);
+ final boolean emptyHeader = header == null || header.trim().isEmpty();
+ if (containsHeader && (!emptyHeader || !this.format.getAllowMissingColumnNames())) {
+ throw new IllegalArgumentException("The header contains a duplicate name: \"" + header +
+ "\" in " + Arrays.toString(headerRecord));
+ }
+ hdrMap.put(header, Integer.valueOf(i));
+ }
+ }
+ }
+ return hdrMap;
+ }
+
+/* METHOD getNextRecord */
+private CSVRecord getNextRecord() {
+ try {
+ return CSVParser.this.nextRecord();
+ } catch (final IOException e) {
+ throw new IllegalStateException(
+ e.getClass().getSimpleName() + " reading next record: " + e.toString(), e);
+ }
+ }
+
+/* METHOD addRecordValue */
+private void addRecordValue(final boolean lastRecord) {
+ final String input = this.reusableToken.content.toString();
+ final String inputClean = this.format.getTrim() ? input.trim() : input;
+ if (lastRecord && inputClean.isEmpty() && this.format.getTrailingDelimiter()) {
+ return;
+ }
+ final String nullString = this.format.getNullString();
+ this.recordList.add(inputClean.equals(nullString) ? null : inputClean);
+ }

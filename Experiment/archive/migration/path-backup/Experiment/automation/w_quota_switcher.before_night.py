@@ -1,0 +1,406 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import time
+from pathlib import Path
+
+ROOT = Path("/mnt/c/Users/User/Desktop/SQAProjectGroup11-git")
+LOGDIR = ROOT / "Experiment/logs/final-opt"
+KEYDIR = Path.home() / ".sqa-keys"
+CLAIMDIR = ROOT / "Experiment/runtime/run-final-opt/claims/chatgpt"
+SLOTDIR = ROOT / "Experiment/runtime/run-final-opt/d4j-slots"
+STATEFILE = ROOT / "Experiment/runtime/pool-supervisor-state.json"
+AUTLOG = ROOT / "Experiment/logs/w-quota-switcher.log"
+STARTER = ROOT / "Experiment/automation/start_worker_opt.sh"
+
+MAX_W = 4
+CHECK_EVERY = 20
+
+# บัญชีที่หมด quota จะไม่ถูกเอากลับมาใช้ทันที
+COOLDOWN_HOURS = 12
+
+
+def log(msg):
+    s = f"[{time.strftime('%F %T')}] {msg}"
+    print(s, flush=True)
+    AUTLOG.parent.mkdir(parents=True, exist_ok=True)
+    with AUTLOG.open("a") as f:
+        f.write(s + "\n")
+
+
+def cmdline(pid):
+    try:
+        return Path(f"/proc/{pid}/cmdline").read_bytes().replace(
+            b"\0", b" "
+        ).decode(errors="ignore")
+    except Exception:
+        return ""
+
+
+def is_w_worker(pid, worker=None):
+    if not pid or not Path(f"/proc/{pid}").exists():
+        return False
+
+    c = cmdline(pid)
+
+    if "ai_runner.py" not in c:
+        return False
+    if "--provider chatgpt" not in c:
+        return False
+    if "--run-id final-opt" not in c:
+        return False
+
+    if worker and f"--worker {worker}" not in c:
+        return False
+
+    return True
+
+
+def running_workers():
+    found = {}
+
+    for p in Path("/proc").iterdir():
+        if not p.name.isdigit():
+            continue
+
+        pid = int(p.name)
+        c = cmdline(pid)
+
+        if (
+            "ai_runner.py" in c
+            and "--provider chatgpt" in c
+            and "--run-id final-opt" in c
+        ):
+            m = re.search(r"--worker\s+(W\d+)", c)
+            if m:
+                found[m.group(1)] = pid
+
+    return found
+
+
+def direct_children(pid):
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-P", str(pid)],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        return [int(x) for x in out.split()]
+    except Exception:
+        return []
+
+
+def monitor_quota_workers():
+    try:
+        r = subprocess.run(
+            ["python3", "Experiment/automation/monitor_w_quota_fast.py"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+
+        quota = set()
+
+        for line in r.stdout.splitlines():
+            m = re.match(r"^\s*(W\d+)\s+QUOTA\b", line)
+            if m:
+                quota.add(m.group(1))
+
+        return quota
+
+    except Exception as e:
+        log(f"monitor error: {e}")
+        return set()
+
+
+def load_state():
+    try:
+        return json.loads(STATEFILE.read_text())
+    except Exception:
+        return {"cooldown": {}}
+
+
+def save_state(state):
+    STATEFILE.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp = STATEFILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    os.replace(tmp, STATEFILE)
+
+
+def archive_claims(worker, oldpid):
+    if not CLAIMDIR.exists():
+        return
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = (
+        ROOT
+        / "Experiment/runtime/quota-switch-backup"
+        / stamp
+        / worker
+        / "claims"
+    )
+
+    for claim in CLAIMDIR.glob("*.claim"):
+        owner = claim / "owner.json"
+
+        try:
+            d = json.loads(owner.read_text())
+            pid = int(d.get("pid", 0))
+            w = d.get("worker", "")
+        except Exception:
+            continue
+
+        if pid != oldpid or w != worker:
+            continue
+
+        backup.mkdir(parents=True, exist_ok=True)
+
+        dest = backup / claim.name
+        log(f"{worker}: release claim {claim.name}")
+
+        shutil.move(str(claim), str(dest))
+
+
+def clear_stale_slots(worker, oldpid):
+    if not SLOTDIR.exists():
+        return
+
+    for slot in SLOTDIR.glob("slot-*"):
+        owner = slot / "owner.json"
+
+        try:
+            d = json.loads(owner.read_text())
+            pid = int(d.get("pid", 0))
+            w = d.get("worker", "")
+        except Exception:
+            continue
+
+        if pid != oldpid or w != worker:
+            continue
+
+        if Path(f"/proc/{oldpid}").exists():
+            continue
+
+        log(f"{worker}: remove stale {slot.name}")
+        shutil.rmtree(slot, ignore_errors=True)
+
+
+def stop_quota_worker(worker, pid):
+    # QUOTA WAIT ปกติควรไม่มี child แล้ว
+    children = direct_children(pid)
+
+    if children:
+        log(
+            f"{worker}: QUOTA but still has children "
+            f"{children}; wait before stopping"
+        )
+        return False
+
+    log(f"{worker}: QUOTA -> stopping pid={pid}")
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+    for _ in range(20):
+        if not is_w_worker(pid, worker):
+            break
+        time.sleep(0.5)
+
+    if is_w_worker(pid, worker):
+        log(f"{worker}: still alive -> SIGKILL")
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+        time.sleep(1)
+
+    # ลบ pid file เฉพาะ worker นี้
+    pf = LOGDIR / f"{worker}.pid"
+
+    try:
+        pf.unlink()
+    except FileNotFoundError:
+        pass
+
+    archive_claims(worker, pid)
+    clear_stale_slots(worker, pid)
+
+    return True
+
+
+def accounts():
+    a = []
+
+    for f in KEYDIR.glob("W*.key"):
+        if re.fullmatch(r"W\d+\.key", f.name) and f.stat().st_size > 0:
+            a.append(f.stem)
+
+    return sorted(
+        a,
+        key=lambda x: int(re.search(r"\d+", x).group())
+    )
+
+
+def start_worker(worker):
+    keyfile = KEYDIR / f"{worker}.key"
+
+    if not keyfile.exists():
+        return False
+
+    key = keyfile.read_text(errors="ignore").strip()
+
+    if not key:
+        return False
+
+    # ลบ pid file เก่าถ้า process นั้นไม่ใช่ worker จริง
+    pf = LOGDIR / f"{worker}.pid"
+
+    if pf.exists():
+        try:
+            old = int(re.sub(r"\D", "", pf.read_text()))
+        except Exception:
+            old = 0
+
+        if not is_w_worker(old, worker):
+            try:
+                pf.unlink()
+            except Exception:
+                pass
+
+    log(f"{worker}: START")
+
+    env = os.environ.copy()
+    env["D4J_SLOTS"] = "4"
+
+    try:
+        r = subprocess.run(
+            ["bash", str(STARTER), worker],
+            cwd=ROOT,
+            input=key + "\n",
+            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=env,
+            timeout=30,
+        )
+
+        if r.returncode != 0:
+            log(
+                f"{worker}: launcher rc={r.returncode} "
+                f"{r.stderr[-200:]}"
+            )
+            return False
+
+    except Exception as e:
+        log(f"{worker}: start error: {e}")
+        return False
+
+    # รอ pid file/process
+    for _ in range(20):
+        run = running_workers()
+
+        if worker in run:
+            log(f"{worker}: RUNNING pid={run[worker]}")
+            return True
+
+        time.sleep(0.5)
+
+    log(f"{worker}: start requested but process not found")
+    return False
+
+
+def main():
+    log("W QUOTA SWITCHER START")
+    log(f"max active={MAX_W}")
+
+    state = load_state()
+    state.setdefault("cooldown", {})
+
+    while True:
+        try:
+            quota = monitor_quota_workers()
+            running = running_workers()
+
+            # 1. เอา quota workers ออก
+            for worker in sorted(quota):
+                pid = running.get(worker)
+
+                if not pid:
+                    continue
+
+                if stop_quota_worker(worker, pid):
+                    state["cooldown"][worker] = (
+                        time.time() + COOLDOWN_HOURS * 3600
+                    )
+                    save_state(state)
+
+            # refresh หลัง stop
+            running = running_workers()
+
+            # 2. เติม standby ให้ active กลับมาครบ 4
+            need = MAX_W - len(running)
+
+            if need > 0:
+                now = time.time()
+
+                candidates = []
+
+                for worker in accounts():
+                    if worker in running:
+                        continue
+
+                    until = state["cooldown"].get(worker, 0)
+
+                    if until > now:
+                        continue
+
+                    candidates.append(worker)
+
+                for worker in candidates:
+                    if need <= 0:
+                        break
+
+                    if start_worker(worker):
+                        need -= 1
+
+                    # กัน loop start ซ้ำถ้า launcher มีปัญหา
+                    else:
+                        state["cooldown"][worker] = time.time() + 300
+                        save_state(state)
+
+            running = running_workers()
+
+            names = sorted(
+                running,
+                key=lambda x: int(re.search(r"\d+", x).group())
+            )
+
+            log(
+                f"ACTIVE {len(names)}/{MAX_W}: "
+                + (" ".join(names) if names else "-")
+            )
+
+            if len(names) > MAX_W:
+                log(
+                    "WARNING: more than 4 W workers already running; "
+                    "switcher will not kill non-quota workers"
+                )
+
+        except Exception as e:
+            log(f"ERROR: {e}")
+
+        time.sleep(CHECK_EVERY)
+
+
+if __name__ == "__main__":
+    main()

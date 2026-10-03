@@ -1,0 +1,102 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Gson  Bug: 6  Version: Gson-6b
+JUnit: junit-3.8.2.jar  Build: Maven
+Target: com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory
+Modified: com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory
+Triggers: com.google.gson.regression.JsonAdapterNullSafeTest::testNullSafeBugDeserialize, com.google.gson.regression.JsonAdapterNullSafeTest::testNullSafeBugSerialize
+
+Bug/specification summary:
+Bug report: 800
+Trigger failures:
+- com.google.gson.regression.JsonAdapterNullSafeTest::testNullSafeBugDeserialize
+ --> java.lang.NullPointerException
+ - com.google.gson.regression.JsonAdapterNullSafeTest::testNullSafeBugSerialize
+ --> java.lang.NullPointerException
+Modified: com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory
+
+Prompt-01 test plan:
+TARGETS: JsonAdapterAnnotationTypeAdapterFactory.create(Gson, TypeToken) for @JsonAdapter-annotated raw types 
+ORACLES: Trigger tests require deserialize and serialize paths to avoid NullPointerException 
+CASES: @JsonAdapter TypeAdapter handling null input during deserialization 
+CASES: @JsonAdapter TypeAdapter handling null value during serialization 
+CASES: Annotation value assignable to TypeAdapter and to TypeAdapterFactory 
+RISKS: Context omits @JsonAdapter nullSafe attribute semantics and adapter test fixtures 
+RISKS: Do not infer output JSON or returned values beyond trigger-observed NPE absence
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory (java) =====
+/*
+ * Copyright (C) 2014 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal.bind;
+
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.annotations.JsonAdapter;
+import com.google.gson.internal.ConstructorConstructor;
+import com.google.gson.reflect.TypeToken;
+
+/**
+ * Given a type T, looks for the annotation {@link JsonAdapter} and uses an instance of the
+ * specified class as the default type adapter.
+ *
+ * @since 2.3
+ */
+public final class JsonAdapterAnnotationTypeAdapterFactory implements TypeAdapterFactory {
+
+ private final ConstructorConstructor constructorConstructor;
+
+ public JsonAdapterAnnotationTypeAdapterFactory(ConstructorConstructor constructorConstructor) {
+ this.constructorConstructor = constructorConstructor;
+ }
+
+ @SuppressWarnings("unchecked")
+ @Override
+ public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> targetType) {
+ JsonAdapter annotation = targetType.getRawType().getAnnotation(JsonAdapter.class);
+ if (annotation == null) {
+ return null;
+ }
+ return (TypeAdapter<T>) getTypeAdapter(constructorConstructor, gson, targetType, annotation);
+ }
+
+ @SuppressWarnings("unchecked") // Casts guarded by conditionals.
+ static TypeAdapter<?> getTypeAdapter(ConstructorConstructor constructorConstructor, Gson gson,
+ TypeToken<?> fieldType, JsonAdapter annotation) {
+ Class<?> value = annotation.value();
+ TypeAdapter<?> typeAdapter;
+ if (TypeAdapter.class.isAssignableFrom(value)) {
+ Class<TypeAdapter<?>> typeAdapterClass = (Class<TypeAdapter<?>>) value;
+ typeAdapter = constructorConstructor.get(TypeToken.get(typeAdapterClass)).construct();
+ } else if (TypeAdapterFactory.class.isAssignableFrom(value)) {
+ Class<TypeAdapterFactory> typeAdapterFactory = (Class<TypeAdapterFactory>) value;
+ typeAdapter = constructorConstructor.get(TypeToken.get(typeAdapterFactory))
+ .construct()
+ .create(gson, fieldType);
+ } else {
+ throw new IllegalArgumentException(
+ "@JsonAdapter value must be TypeAdapter or TypeAdapterFactory reference.");
+ }
+ typeAdapter = typeAdapter.nullSafe();
+ return typeAdapter;
+ }
+}

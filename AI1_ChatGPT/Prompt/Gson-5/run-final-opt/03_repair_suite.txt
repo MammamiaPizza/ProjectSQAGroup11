@@ -1,0 +1,114 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 5  Version: Gson-5b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 768
+Trigger failures:
+- com.google.gson.DefaultDateTypeAdapterTest::testDateDeserializationISO8601
+ --> com.google.gson.JsonSyntaxException: 1970-01-01T01:00:00+01
+Modified: com.google.gson.internal.bind.util.ISO8601Utils
+
+Available API/signatures:
+[com.google.gson.internal.bind.util.ISO8601Utils | java]
+package com.google.gson.internal.bind.util;
+public class ISO8601Utils
+private static final TimeZone TIMEZONE_UTC = TimeZone.getTimeZone(UTC_ID);
+public static String format(Date date) {
+public static String format(Date date, boolean millis) {
+public static String format(Date date, boolean millis, TimeZone tz) {
+public static Date parse(String date, ParsePosition pos) throws ParseException {
+private static boolean checkOffset(String value, int offset, char expected) {
+private static int parseInt(String value, int beginIndex, int endIndex) throws NumberFormatException {
+private static void padInt(StringBuilder buffer, int value, int length) {
+private static int indexOfNonDigit(String string, int offset) {
+
+Generated JUnit Test:
+import com.google.gson.internal.bind.util.ISO8601Utils;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.util.Date;
+import junit.framework.TestCase;
+
+public class ISO8601UtilsTest extends TestCase {
+
+  public void testParsesHourOnlyPositiveTimezoneOffset() throws Exception {
+    String value = "1970-01-01T01:00:00+01";
+    ParsePosition position = new ParsePosition(0);
+
+    Date parsed = ISO8601Utils.parse(value, position);
+
+    assertEquals(0L, parsed.getTime());
+    assertEquals(value.length(), position.getIndex());
+  }
+
+  public void testParsesUtcTimezoneAndAdvancesPosition() throws Exception {
+    String value = "1970-01-01T00:00:00Z";
+    ParsePosition position = new ParsePosition(0);
+
+    Date parsed = ISO8601Utils.parse(value, position);
+
+    assertEquals(0L, parsed.getTime());
+    assertEquals(value.length(), position.getIndex());
+  }
+
+  public void testParsesPositiveAndNegativeOffsetsWithMinutes() throws Exception {
+    ParsePosition positivePosition = new ParsePosition(0);
+    Date positive = ISO8601Utils.parse("1970-01-01T01:30:00+01:30", positivePosition);
+
+    ParsePosition negativePosition = new ParsePosition(0);
+    Date negative = ISO8601Utils.parse("1970-01-01T00:00:00-01:30", negativePosition);
+
+    assertEquals(0L, positive.getTime());
+    assertEquals(90L * 60L * 1000L, negative.getTime());
+    assertEquals("1970-01-01T01:30:00+01:30".length(), positivePosition.getIndex());
+    assertEquals("1970-01-01T00:00:00-01:30".length(), negativePosition.getIndex());
+  }
+
+  public void testParsesFractionalSecondsWithTimezone() throws Exception {
+    ParsePosition position = new ParsePosition(0);
+
+    Date parsed = ISO8601Utils.parse("1970-01-01T00:00:00.123Z", position);
+
+    assertEquals(123L, parsed.getTime());
+    assertEquals("1970-01-01T00:00:00.123Z".length(), position.getIndex());
+  }
+
+  public void testParsesFromSpecifiedParsePosition() throws Exception {
+    String value = "prefix1970-01-01T01:00:00+01";
+    ParsePosition position = new ParsePosition("prefix".length());
+
+    Date parsed = ISO8601Utils.parse(value, position);
+
+    assertEquals(0L, parsed.getTime());
+    assertEquals(value.length(), position.getIndex());
+  }
+
+  public void testRejectsTruncatedTimezoneOffset() {
+    try {
+      ISO8601Utils.parse("1970-01-01T00:00:00+", new ParsePosition(0));
+      fail("A truncated timezone offset must not be accepted");
+    } catch (ParseException expected) {
+      assertNotNull(expected.getMessage());
+    }
+  }
+
+  public void testRejectsMissingTimezoneIndicatorForTimeValue() {
+    try {
+      ISO8601Utils.parse("1970-01-01T00:00:00", new ParsePosition(0));
+      fail("A time value without a timezone indicator must not be accepted");
+    } catch (ParseException expected) {
+      assertNotNull(expected.getMessage());
+    }
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 2
+ - ISO8601UtilsTest::testParsesHourOnlyPositiveTimezoneOffset
+ - ISO8601UtilsTest::testParsesFromSpecifiedParsePosition
+
+Failing generated tests: ISO8601UtilsTest::testParsesFromSpecifiedParsePosition, ISO8601UtilsTest::testParsesHourOnlyPositiveTimezoneOffset

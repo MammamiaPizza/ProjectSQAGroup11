@@ -1,0 +1,212 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 6  Version: Gson-6b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 800
+Trigger failures:
+- com.google.gson.regression.JsonAdapterNullSafeTest::testNullSafeBugDeserialize
+ --> java.lang.NullPointerException
+ - com.google.gson.regression.JsonAdapterNullSafeTest::testNullSafeBugSerialize
+ --> java.lang.NullPointerException
+Modified: com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory
+
+Available API/signatures:
+[com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory | java]
+package com.google.gson.internal.bind;
+public final class JsonAdapterAnnotationTypeAdapterFactory implements TypeAdapterFactory {
+public JsonAdapterAnnotationTypeAdapterFactory(ConstructorConstructor constructorConstructor) {
+@SuppressWarnings("unchecked")
+@Override
+public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> targetType) {
+JsonAdapter annotation = targetType.getRawType().getAnnotation(JsonAdapter.class);
+@SuppressWarnings("unchecked") // Casts guarded by conditionals.
+if (TypeAdapter.class.isAssignableFrom(value)) {
+} else if (TypeAdapterFactory.class.isAssignableFrom(value)) {
+
+Generated JUnit Test:
+package com.google.gson.regression;
+
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.annotations.JsonAdapter;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+import junit.framework.TestCase;
+
+import java.io.IOException;
+
+public class JsonAdapterAnnotationNullSafeContractTest extends TestCase {
+
+  public void testTypeAdapterWithNullSafeFalseDeserializesNullThroughAdapter() {
+    DirectValue value = new Gson().fromJson("null", DirectValue.class);
+
+    assertNotNull(value);
+    assertEquals("direct-null-read", value.value);
+  }
+
+  public void testTypeAdapterWithNullSafeFalseSerializesNullThroughAdapter() {
+    String json = new Gson().toJson(null, DirectValue.class);
+
+    assertEquals("\"direct-null-written\"", json);
+  }
+
+  public void testTypeAdapterWithNullSafeFalseHandlesNormalValues() {
+    Gson gson = new Gson();
+
+    assertEquals("\"ordinary\"", gson.toJson(new DirectValue("ordinary"), DirectValue.class));
+    assertEquals("ordinary", gson.fromJson("\"ordinary\"", DirectValue.class).value);
+  }
+
+  public void testTypeAdapterFactoryWithNullSafeFalseDeserializesNullThroughAdapter() {
+    FactoryValue value = new Gson().fromJson("null", FactoryValue.class);
+
+    assertNotNull(value);
+    assertEquals("factory-null-read", value.value);
+  }
+
+  public void testTypeAdapterFactoryWithNullSafeFalseSerializesNullThroughAdapter() {
+    String json = new Gson().toJson(null, FactoryValue.class);
+
+    assertEquals("\"factory-null-written\"", json);
+  }
+
+  public void testDefaultNullSafeSettingPreventsAdapterFromReceivingNullOnDeserialize() {
+    DefaultNullSafeValue value = new Gson().fromJson("null", DefaultNullSafeValue.class);
+
+    assertNull(value);
+  }
+
+  public void testDefaultNullSafeSettingPreventsAdapterFromReceivingNullOnSerialize() {
+    String json = new Gson().toJson(null, DefaultNullSafeValue.class);
+
+    assertEquals("null", json);
+  }
+
+  public void testInvalidJsonAdapterValueIsRejected() {
+    try {
+      new Gson().getAdapter(InvalidAdapterValue.class);
+      fail("Expected an invalid @JsonAdapter value to be rejected");
+    } catch (IllegalArgumentException expected) {
+      assertTrue(expected.getMessage().contains("@JsonAdapter value must be TypeAdapter or TypeAdapterFactory"));
+    }
+  }
+
+  @JsonAdapter(value = DirectAdapter.class, nullSafe = false)
+  private static final class DirectValue {
+    final String value;
+
+    DirectValue(String value) {
+      this.value = value;
+    }
+  }
+
+  public static final class DirectAdapter extends TypeAdapter<DirectValue> {
+    @Override
+    public void write(JsonWriter out, DirectValue value) throws IOException {
+      out.value(value == null ? "direct-null-written" : value.value);
+    }
+
+    @Override
+    public DirectValue read(JsonReader in) throws IOException {
+      if (in.peek() == JsonToken.NULL) {
+        in.nextNull();
+        return new DirectValue("direct-null-read");
+      }
+      return new DirectValue(in.nextString());
+    }
+  }
+
+  @JsonAdapter(value = FactoryAdapterFactory.class, nullSafe = false)
+  private static final class FactoryValue {
+    final String value;
+
+    FactoryValue(String value) {
+      this.value = value;
+    }
+  }
+
+  public static final class FactoryAdapterFactory implements TypeAdapterFactory {
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
+      if (type.getRawType() == FactoryValue.class) {
+        return (TypeAdapter<T>) new FactoryAdapter();
+      }
+      return null;
+    }
+  }
+
+  public static final class FactoryAdapter extends TypeAdapter<FactoryValue> {
+    @Override
+    public void write(JsonWriter out, FactoryValue value) throws IOException {
+      out.value(value == null ? "factory-null-written" : value.value);
+    }
+
+    @Override
+    public FactoryValue read(JsonReader in) throws IOException {
+      if (in.peek() == JsonToken.NULL) {
+        in.nextNull();
+        return new FactoryValue("factory-null-read");
+      }
+      return new FactoryValue(in.nextString());
+    }
+  }
+
+  @JsonAdapter(DefaultNullSafeAdapter.class)
+  private static final class DefaultNullSafeValue {
+    final String value;
+
+    DefaultNullSafeValue(String value) {
+      this.value = value;
+    }
+  }
+
+  public static final class DefaultNullSafeAdapter extends TypeAdapter<DefaultNullSafeValue> {
+    @Override
+    public void write(JsonWriter out, DefaultNullSafeValue value) throws IOException {
+      out.value(value == null ? "adapter-received-null" : value.value);
+    }
+
+    @Override
+    public DefaultNullSafeValue read(JsonReader in) throws IOException {
+      if (in.peek() == JsonToken.NULL) {
+        in.nextNull();
+        return new DefaultNullSafeValue("adapter-received-null");
+      }
+      return new DefaultNullSafeValue(in.nextString());
+    }
+  }
+
+  @JsonAdapter(NotAnAdapter.class)
+  private static final class InvalidAdapterValue {
+  }
+
+  public static final class NotAnAdapter {
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command: cd /root/sqa-workspaces/Gson-6f-ai && ant -f /root/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/root/defects4j -Dd4j.dir.projects=/root/defects4j/framework/projects -Dbasedir=/root/sqa-workspaces/Gson-6f-ai -Dd4j.test.dir=/root/sqa-workspaces/Gson-6f-ai/.test_suite compile.gen.tests 2>&1
+Buildfile: /root/defects4j/framework/projects/defects4j.build.xml
+
+ [javac] Compiling 1 source file to /root/sqa-workspaces/Gson-6f-ai/.classes_testgen
+ [javac] /root/sqa-workspaces/Gson-6f-ai/.test_suite/com/google/gson/regression/JsonAdapterAnnotationNullSafeContractTest.java:71: error: cannot find symbol
+ [javac] @JsonAdapter(value = DirectAdapter.class, nullSafe = false)
+ [javac] ^
+ [javac] symbol: method nullSafe()
+ [javac] location: @interface JsonAdapter
+ [javac] 1 error
+BUILD FAILED
+/root/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+Total time: 2 seconds
+Cannot compile extracted test suite! at /root/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /root/defects4j/framework/bin/defects4j line 195.

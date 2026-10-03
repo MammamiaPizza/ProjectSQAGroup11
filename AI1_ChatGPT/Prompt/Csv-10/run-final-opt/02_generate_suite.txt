@@ -1,0 +1,462 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: Csv  Bug: 10  Version: Csv-10b
+JUnit: junit-4.11.jar  Build: Maven
+Target: org.apache.commons.csv.CSVPrinter
+Modified: org.apache.commons.csv.CSVPrinter
+Triggers: org.apache.commons.csv.CSVPrinterTest::testHeader
+
+Bug/specification summary:
+Bug report: CSV-120
+Trigger failures:
+- org.apache.commons.csv.CSVPrinterTest::testHeader
+ --> junit.framework.AssertionFailedError: expected:<[C1,C2,C3
+Modified: org.apache.commons.csv.CSVPrinter
+
+Prompt-01 test plan:
+TARGETS: CSVPrinter constructor header emission; print/println record state; printRecord(s) output sequencing. 
+ORACLES: Trigger testHeader expects configured header values as first CSV record with record separator. 
+CASES: Construct with header C1,C2,C3; verify exact header text before subsequent printed records. 
+CASES: Header plus printRecord values; verify one header only and proper record separation. 
+CASES: Empty/no header format; verify construction does not add an unintended record. 
+RISKS: Available context omits CSVFormat header API/details and full expected trigger output.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== org.apache.commons.csv.CSVPrinter (java) =====
+/* API SIGNATURES */
+package org.apache.commons.csv;
+public final class CSVPrinter implements Flushable, Closeable {
+/** True if we just began a new record. */
+public CSVPrinter(final Appendable out, final CSVFormat format) throws IOException {
+public void close() throws IOException {
+public void flush() throws IOException {
+public void print(final Object value) throws IOException {
+final String nullString = format.getNullString();
+private void printAndEscape(final CharSequence value, final int offset, final int len) throws IOException {
+final char delim = format.getDelimiter();
+final char escape = format.getEscape().charValue();
+final char delimChar = format.getDelimiter();
+final char quoteChar = format.getQuoteChar().charValue();
+final char c = value.charAt(pos);
+public void printComment(final String comment) throws IOException {
+final char c = comment.charAt(i);
+public void println() throws IOException {
+final String recordSeparator = format.getRecordSeparator();
+public void printRecord(final Iterable<?> values) throws IOException {
+for (final Object value : values) {
+public void printRecord(final Object... values) throws IOException {
+public void printRecords(final Iterable<?> values) throws IOException {
+public void printRecords(final Object[] values) throws IOException {
+public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+final int columnCount = resultSet.getMetaData().getColumnCount();
+public Appendable getOut() {
+
+/* HEADER */
+package org.apache.commons.csv;
+import static org.apache.commons.csv.Constants.COMMENT;
+import static org.apache.commons.csv.Constants.CR;
+import static org.apache.commons.csv.Constants.LF;
+import static org.apache.commons.csv.Constants.SP;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+/* METHOD CSVPrinter */
+public CSVPrinter(final Appendable out, final CSVFormat format) throws IOException {
+ Assertions.notNull(out, "out");
+ Assertions.notNull(format, "format");
+
+ this.out = out;
+ this.format = format;
+ this.format.validate();
+ // TODO: Is it a good idea to do this here instead of on the first call to a print method?
+ // It seems a pain to have to track whether the header has already been printed or not.
+ }
+
+/* METHOD close */
+public void close() throws IOException {
+ if (out instanceof Closeable) {
+ ((Closeable) out).close();
+ }
+ }
+
+/* METHOD flush */
+public void flush() throws IOException {
+ if (out instanceof Flushable) {
+ ((Flushable) out).flush();
+ }
+ }
+
+/* METHOD print */
+public void print(final Object value) throws IOException {
+ // null values are considered empty
+ String strValue;
+ if (value == null) {
+ final String nullString = format.getNullString();
+ strValue = nullString == null ? Constants.EMPTY : nullString;
+ } else {
+ strValue = value.toString();
+ }
+ this.print(value, strValue, 0, strValue.length());
+ }
+
+/* METHOD printComment */
+public void printComment(final String comment) throws IOException {
+ if (!format.isCommentingEnabled()) {
+ return;
+ }
+ if (!newRecord) {
+ println();
+ }
+ out.append(format.getCommentStart().charValue());
+ out.append(SP);
+ for (int i = 0; i < comment.length(); i++) {
+ final char c = comment.charAt(i);
+ switch (c) {
+ case CR:
+ if (i + 1 < comment.length() && comment.charAt(i + 1) == LF) {
+ i++;
+ }
+ //$FALL-THROUGH$ break intentionally excluded.
+ case LF:
+ println();
+ out.append(format.getCommentStart().charValue());
+ out.append(SP);
+ break;
+ default:
+ out.append(c);
+ break;
+ }
+ }
+ println();
+ }
+
+/* METHOD println */
+public void println() throws IOException {
+ final String recordSeparator = format.getRecordSeparator();
+ if (recordSeparator != null) {
+ out.append(recordSeparator);
+ }
+ newRecord = true;
+ }
+
+/* METHOD printRecord */
+public void printRecord(final Iterable<?> values) throws IOException {
+ for (final Object value : values) {
+ print(value);
+ }
+ println();
+ }
+
+/* METHOD printRecord */
+public void printRecord(final Object... values) throws IOException {
+ for (final Object value : values) {
+ print(value);
+ }
+ println();
+ }
+
+/* METHOD printRecords */
+public void printRecords(final Iterable<?> values) throws IOException {
+ for (final Object value : values) {
+ if (value instanceof Object[]) {
+ this.printRecord((Object[]) value);
+ } else if (value instanceof Iterable) {
+ this.printRecord((Iterable<?>) value);
+ } else {
+ this.printRecord(value);
+ }
+ }
+ }
+
+/* METHOD printRecords */
+public void printRecords(final Object[] values) throws IOException {
+ for (final Object value : values) {
+ if (value instanceof Object[]) {
+ this.printRecord((Object[]) value);
+ } else if (value instanceof Iterable) {
+ this.printRecord((Iterable<?>) value);
+ } else {
+ this.printRecord(value);
+ }
+ }
+ }
+
+/* METHOD printRecords */
+public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+ final int columnCount = resultSet.getMetaData().getColumnCount();
+ while (resultSet.next()) {
+ for (int i = 1; i <= columnCount; i++) {
+ print(resultSet.getString(i));
+ }
+ println();
+ }
+ }
+
+/* METHOD getOut */
+public Appendable getOut() {
+ return this.out;
+ }
+
+/* METHOD print */
+private void print(final Object object, final CharSequence value,
+ final int offset, final int len) throws IOException {
+ if (!newRecord) {
+ out.append(format.getDelimiter());
+ }
+ if (format.isQuoting()) {
+ // the original object is needed so can check for Number
+ printAndQuote(object, value, offset, len);
+ } else if (format.isEscaping()) {
+ printAndEscape(value, offset, len);
+ } else {
+ out.append(value, offset, offset + len);
+ }
+ newRecord = false;
+ }
+
+/* METHOD printAndQuote */
+private void printAndQuote(final Object object, final CharSequence value,
+ final int offset, final int len) throws IOException {
+ boolean quote = false;
+ int start = offset;
+ int pos = offset;
+ final int end = offset + len;
+
+ final char delimChar = format.getDelimiter();
+ final char quoteChar = format.getQuoteChar().charValue();
+
+ Quote quotePolicy = format.getQuotePolicy();
+ if (quotePolicy == null) {
+ quotePolicy = Quote.MINIMAL;
+ }
+ switch (quotePolicy) {
+ case ALL:
+ quote = true;
+ break;
+ case NON_NUMERIC:
+ quote = !(object instanceof Number);
+ break;
+ case NONE:
+ // Use the existing escaping code
+ printAndEscape(value, offset, len);
+ return;
+ case MINIMAL:
+ if (len <= 0) {
+ // always quote an empty token that is the first
+ // on the line, as it may be the only thing on the
+ // line. If it were not quoted in that case,
+ // an empty line has no tokens.
+ if (newRecord) {
+ quote = true;
+ }
+ } else {
+ char c = value.charAt(pos);
+
+ // Hmmm, where did this rule come from?
+ if (newRecord && (c < '0' || (c > '9' && c < 'A') || (c > 'Z' && c < 'a') || (c > 'z'))) {
+ quote = true;
+ // } else if (c == ' ' || c == '\f' || c == '\t') {
+ } else if (c <= COMMENT) {
+ // Some other chars at the start of a value caused the parser to fail, so for now
+ // encapsulate if we start in anything less than '#'. We are being conservative
+ // by including the default comment char too.
+ quote = true;
+ } else {
+ while (pos < end) {
+ c = value.charAt(pos);
+ if (c == LF || c == CR || c == quoteChar || c == delimChar) {
+ quote = true;
+ break;
+ }
+ pos++;
+ }
+
+ if (!quote) {
+ pos = end - 1;
+ c = value.charAt(pos);
+ // if (c == ' ' || c == '\f' || c == '\t') {
+ // Some other chars at the end caused the parser to fail, so for now
+ // encapsulate if we end in anything less than ' '
+ if (c <= SP) {
+ quote = true;
+ }
+ }
+ }
+ }
+
+ if (!quote) {
+ // no encapsulation needed - write out the original value
+ out.append(value, start, end);
+ return;
+ }
+ break;
+ default:
+ throw new IllegalStateException("Unexpected Quote value: " + quotePolicy);
+ }
+
+ if (!quote) {
+ // no encapsulation needed - write out the original value
+ out.append(value, start, end);
+ return;
+ }
+
+ // we hit something that needed encapsulation
+ out.append(quoteChar);
+
+ // Pick up where we left off: pos should be positioned on the first character that caused
+ // the need for encapsulation.
+ while (pos < end) {
+ final char c = value.charAt(pos);
+ if (c == quoteChar) {
+ // write out the chunk up until this point
+
+ // add 1 to the length to write out the encapsulator also
+ out.append(value, start, pos + 1);
+ // put the next starting position on the encapsulator so we will
+ // write it out again with the next string (effectively doubling it)
+ start = pos;
+ }
+ pos++;
+ }
+
+ // write the last segment
+ out.append(value, start, pos);
+ out.append(quoteChar);
+ }
+
+ /**
+ * Prints a comment on a new line among the delimiter separated values.
+ *
+ * <p>
+ * Comments will always begin on a new line and occupy a least one full line. The character specified to start
+ * comments and a space will be inserted at the beginning of each new line in the comment.
+ * </p>
+ *
+ * If comments are disabled in the current CSV format this method does nothing.
+ *
+ * @param comment
+ * the comment to output
+ * @throws IOException
+ * If an I/O error occurs
+ */
+ public void printComment(final
+...[truncated deterministically]...
+inal Object... values) throws IOException {
+ for (final Object value : values) {
+ print(value);
+ }
+ println();
+ }
+
+ /**
+ * Prints all the objects in the given collection.
+ *
+ * @param values
+ * the values to print.
+ * @throws IOException
+ * If an I/O error occurs
+ */
+ public void printRecords(final Iterable<?> values) throws IOException {
+ for (final Object value : values) {
+ if (value instanceof Object[]) {
+ this.printRecord((Object[]) value);
+ } else if (value instanceof Iterable) {
+ this.printRecord((Iterable<?>) value);
+ } else {
+ this.printRecord(value);
+ }
+ }
+ }
+
+ /**
+ * Prints all the objects in the given array.
+ *
+ * @param values
+ * the values to print.
+ * @throws IOException
+ * If an I/O error occurs
+ */
+ public void printRecords(final Object[] values) throws IOException {
+ for (final Object value : values) {
+ if (value instanceof Object[]) {
+ this.printRecord((Object[]) value);
+ } else if (value instanceof Iterable) {
+ this.printRecord((Iterable<?>) value);
+ } else {
+ this.printRecord(value);
+ }
+ }
+ }
+
+ /**
+ * Prints all the objects in the given JDBC result set.
+ *
+ * @param resultSet result set
+ * the values to print.
+ * @throws IOException
+ * If an I/O error occurs
+ * @throws SQLException if a database access error occurs
+ */
+ public void printRecords(final ResultSet resultSet) throws SQLException, IOException {
+ final int columnCount = resultSet.getMetaData().getColumnCount();
+ while (resultSet.next()) {
+ for (int i = 1; i <= columnCount; i++) {
+ print(resultSet.getString(i));
+ }
+ println();
+ }
+ }
+
+ /**
+ * Gets the target Appendable.
+ *
+ * @return the target Appendable.
+ */
+ public Appendable getOut() {
+ return this.out;
+ }
+}
+
+/* METHOD printAndEscape */
+private void printAndEscape(final CharSequence value, final int offset, final int len) throws IOException {
+ int start = offset;
+ int pos = offset;
+ final int end = offset + len;
+
+ final char delim = format.getDelimiter();
+ final char escape = format.getEscape().charValue();
+
+ while (pos < end) {
+ char c = value.charAt(pos);
+ if (c == CR || c == LF || c == delim || c == escape) {
+ // write out segment up until this char
+ if (pos > start) {
+ out.append(value, start, pos);
+ }
+ if (c == LF) {
+ c = 'n';
+ } else if (c == CR) {
+ c = 'r';
+ }
+
+ out.append(escape);
+ out.append(c);
+
+ start = pos + 1; // start on the current char after this one
+ }
+
+ pos++;
+ }
+
+ // write last segment
+ if (pos > start) {
+ out.append(value, start, pos);
+ }
+ }

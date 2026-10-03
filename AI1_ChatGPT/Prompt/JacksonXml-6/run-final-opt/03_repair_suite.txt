@@ -1,0 +1,158 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JacksonXml  Bug: 6  Version: JacksonXml-6b
+JUnit: junit-4.12.jar  Build: Maven
+Bug/specification summary:
+Bug report: 270
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization::testWith0Bytes
+ --> com.fasterxml.jackson.databind.JsonMappingException: Operation not supported by generator of type com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator (through reference chain: com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization$TestPojo["field"])
+ - com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization::testWith2Bytes
+ --> com.fasterxml.jackson.databind.JsonMappingException: Operation not supported by generator of type com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator (through reference chain: com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization$TestPojo["field"])
+ - com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization::testWith3Bytes
+ --> com.fasterxml.jac
+...[truncated deterministically]...
+ml.ser.TestBinaryStreamToXMLSerialization$TestPojo["field"])
+ - com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization::testWith1Byte
+ --> com.fasterxml.jackson.databind.JsonMappingException: Operation not supported by generator of type com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator (through reference chain: com.fasterxml.jackson.dataformat.xml.ser.TestBinaryStreamToXMLSerialization$TestPojo["field"])
+Modified: com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator
+
+Available API/signatures:
+[com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator | java]
+package com.fasterxml.jackson.dataformat.xml.ser;
+public final class ToXmlGenerator
+protected final static String DEFAULT_UNKNOWN_ELEMENT = "unknown";
+public enum Feature implements FormatFeature
+public static int collectDefaults()
+private Feature(boolean defaultState) {
+@Override public boolean enabledByDefault() { return _defaultState; }
+@Override public int getMask() { return _mask; }
+@Override public boolean enabledIn(int flags) { return (flags & getMask()) != 0; }
+final protected XMLStreamWriter2 _xmlWriter;
+final protected XMLStreamWriter _originalXmlWriter;
+final protected boolean _stax2Emulation;
+final protected IOContext _ioContext;
+protected int _formatFeatures;
+protected XmlPrettyPrinter _xmlPrettyPrinter;
+protected boolean _initialized;
+protected QName _nextName = null;
+protected boolean _nextIsAttribute = false;
+protected boolean _nextIsUnwrapped = false;
+protected boolean _nextIsCData = false;
+protected LinkedList<QName> _elementNameStack = new LinkedList<QName>();
+public void initGenerator() throws IOException
+@Override
+protected PrettyPrinter _constructDefaultPrettyPrinter() {
+public JsonGenerator setPrettyPrinter(PrettyPrinter pp) {
+public Object getOutputTarget() {
+public int getOutputBuffered() {
+public int getFormatFeatures() {
+@Override // since 2.7
+public JsonGenerator overrideFormatFeatures(int values, int mask)
+public ToXmlGenerator enable(Feature f) {
+public ToXmlGenerator disable(Feature f) {
+public final boolean isEnabled(Feature f) {
+public ToXmlGenerator configure(Feature f, boolean state) {
+public boolean canWriteFormattedNumbers() { return true
+...[truncated deterministically]...
+lue) throws IOException
+public void writeNull() throws IOException
+public void writeNumber(int i) throws IOException
+public void writeNumber(long l) throws IOException
+public void writeNumber(double d) throws IOException
+public void writeNumber(float f) throws IOException
+public void writeNumber(BigDecimal dec) throws IOException
+public void writeNumber(BigInteger value) throws IOException
+public void writeNumber(String encodedValue) throws IOException, UnsupportedOperationException
+protected final void _verifyValueWrite(String typeMsg) throws IOException
+public void flush() throws IOException
+public void close() throws IOException
+protected void _releaseBuffers() {
+protected boolean checkNextIsUnwrapped()
+protected void handleMissingName() {
+protected void _reportUnimplementedStax2(String missingMethod) throws IOException
+
+Generated JUnit Test:
+package com.fasterxml.jackson.dataformat.xml.ser;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.io.StringReader;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.junit.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
+import static org.junit.Assert.assertEquals;
+
+public class ToXmlGeneratorBinaryStreamTest
+{
+    public static class TestPojo {
+        public InputStream field;
+
+        public TestPojo() { }
+
+        public TestPojo(byte[] bytes) {
+            field = new ByteArrayInputStream(bytes);
+        }
+    }
+
+    private final XmlMapper mapper = new XmlMapper();
+
+    @Test
+    public void serializesEmptyBinaryStream() throws Exception {
+        assertBinaryValue(new byte[0], "");
+    }
+
+    @Test
+    public void serializesOneByteBinaryStreamWithDoublePadding() throws Exception {
+        assertBinaryValue(new byte[] { 1 }, "AQ==");
+    }
+
+    @Test
+    public void serializesTwoByteBinaryStreamWithSinglePadding() throws Exception {
+        assertBinaryValue(new byte[] { 1, 2 }, "AQI=");
+    }
+
+    @Test
+    public void serializesThreeByteBinaryStreamWithoutPadding() throws Exception {
+        assertBinaryValue(new byte[] { 1, 2, 3 }, "AQID");
+    }
+
+    @Test
+    public void serializesFourByteBinaryStreamAcrossBase64Groups() throws Exception {
+        assertBinaryValue(new byte[] { 1, 2, 3, 4 }, "AQIDBA==");
+    }
+
+    private void assertBinaryValue(byte[] input, String expectedBase64) throws Exception {
+        String xml = mapper.writeValueAsString(new TestPojo(input));
+
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        Document document = factory.newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml)));
+
+        NodeList fields = document.getElementsByTagNameNS("*", "field");
+        if (fields.getLength() == 0) {
+            fields = document.getElementsByTagName("field");
+        }
+
+        assertEquals(1, fields.getLength());
+        assertEquals(expectedBase64, fields.item(0).getTextContent());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesOneByteBinaryStreamWithDoublePadding
+ - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesEmptyBinaryStream
+ - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesFourByteBinaryStreamAcrossBase64Groups
+Failing generated tests: com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesEmptyBinaryStream, com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesFourByteBinaryStreamAcrossBase64Groups, com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesOneByteBinaryStreamWithDoublePadding, com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesThreeByteBinaryStreamWithoutPadding, com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorBinaryStreamTest::serializesTwoByteBinaryStreamWithSinglePadding

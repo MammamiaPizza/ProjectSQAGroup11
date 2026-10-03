@@ -1,0 +1,116 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 15  Version: JxPath-15b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: JXPATH-100
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.dom.DOMModelTest::testUnion
+ --> junit.framework.AssertionFailedError: Evaluating </vendor[1]/contact[4] | /vendor[1]/contact[1]> expected:<John> but was:<Jack Black>
+ - org.apache.commons.jxpath.ri.model.jdom.JDOMModelTest::testUnion
+ --> junit.framework.AssertionFailedError: Evaluating </vendor[1]/contact[4] | /vendor[1]/contact[1]> expected:<John> but was:<Jack Black>
+Modified: org.apache.commons.jxpath.ri.axes.UnionContext
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.axes.UnionContext | java]
+package org.apache.commons.jxpath.ri.axes;
+public class UnionContext extends NodeSetContext {
+public UnionContext(EvalContext parentContext, EvalContext contexts[]) {
+public int getDocumentOrder() {
+public boolean setPosition(int position) {
+
+Generated JUnit Test:
+package org.apache.commons.jxpath.ri.axes;
+
+import java.io.StringReader;
+import java.util.Iterator;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+
+public class UnionContextJXPATH100Test extends TestCase {
+
+    private JXPathContext createContext() throws Exception {
+        String xml =
+            "<vendor>"
+                + "<contact>John</contact>"
+                + "<contact>Jane</contact>"
+                + "<contact>Bob</contact>"
+                + "<contact>Jack Black</contact>"
+                + "<contact>Alice</contact>"
+            + "</vendor>";
+
+        Document document = DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml)));
+        return JXPathContext.newContext(document);
+    }
+
+    public void testUnionReturnsFirstDocumentNodeRatherThanFirstOperand()
+            throws Exception {
+        JXPathContext context = createContext();
+
+        assertEquals("John",
+                context.getValue("/vendor[1]/contact[4] | /vendor[1]/contact[1]"));
+    }
+
+    public void testUnionIteratorUsesDocumentOrderForMultipleReverseOperands()
+            throws Exception {
+        JXPathContext context = createContext();
+
+        Iterator values = context.iterate(
+                "/vendor[1]/contact[5] | /vendor[1]/contact[2] | /vendor[1]/contact[4]");
+
+        assertTrue(values.hasNext());
+        assertEquals("Jane", values.next());
+        assertTrue(values.hasNext());
+        assertEquals("Jack Black", values.next());
+        assertTrue(values.hasNext());
+        assertEquals("Alice", values.next());
+        assertFalse(values.hasNext());
+    }
+
+    public void testPositionPredicatesOnUnionUseDocumentOrder() throws Exception {
+        JXPathContext context = createContext();
+
+        assertEquals("John",
+                context.getValue("(/vendor[1]/contact[4] | /vendor[1]/contact[1])[1]"));
+        assertEquals("Jack Black",
+                context.getValue("(/vendor[1]/contact[4] | /vendor[1]/contact[1])[2]"));
+    }
+
+    public void testUnionEliminatesDuplicateNodes() throws Exception {
+        JXPathContext context = createContext();
+
+        Iterator values = context.iterate(
+                "/vendor[1]/contact[1] | /vendor[1]/contact[1]");
+
+        assertTrue(values.hasNext());
+        assertEquals("John", values.next());
+        assertFalse(values.hasNext());
+    }
+
+    public void testUnionOfOutOfRangeSelectionsIsEmpty() throws Exception {
+        JXPathContext context = createContext();
+
+        Iterator values = context.iterate(
+                "/vendor[1]/contact[99] | /vendor[1]/contact[100]");
+
+        assertFalse(values.hasNext());
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 5
+ - org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testUnionOfOutOfRangeSelectionsIsEmpty
+ - org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testPositionPredicatesOnUnionUseDocumentOrder
+ - org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testUnionEliminatesDuplicateNodes
+Failing generated tests: org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testPositionPredicatesOnUnionUseDocumentOrder, org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testUnionEliminatesDuplicateNodes, org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testUnionIteratorUsesDocumentOrderForMultipleReverseOperands, org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testUnionOfOutOfRangeSelectionsIsEmpty, org.apache.commons.jxpath.ri.axes.UnionContextJXPATH100Test::testUnionReturnsFirstDocumentNodeRatherThanFirstOperand
