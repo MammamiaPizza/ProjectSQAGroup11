@@ -21,10 +21,16 @@ METHODS = [
     },
 ]
 
-OUT_DIR = ROOT / "Experiment/reports"
-OUT_CSV = OUT_DIR / "ai_case_results.csv"
-OUT_JSON = OUT_DIR / "ai_summary.json"
-OUT_MD = OUT_DIR / "ai_summary.md"
+REPORT_DIR = ROOT / "Report"
+DATA_DIR = REPORT_DIR / "data"
+SUMMARY_DIR = REPORT_DIR / "summaries"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+SUMMARY_DIR.mkdir(parents=True, exist_ok=True)
+
+OUT_CSV = DATA_DIR / "ai_case_results.csv"
+OUT_JSON = DATA_DIR / "ai_summary.json"
+OUT_MD = SUMMARY_DIR / "ai_summary.md"
 
 
 def pct(covered, total):
