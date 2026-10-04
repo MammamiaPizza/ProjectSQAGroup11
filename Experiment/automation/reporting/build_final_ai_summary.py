@@ -282,7 +282,7 @@ lines = [
     "",
     "## ผลการประเมินชุดทดสอบ",
     "",
-    "`DONE` หมายถึงชุดทดสอบผ่าน fixed-version validation และมีผล final evaluation ไม่ได้หมายความว่าตรวจพบ bug ทุกกรณี",
+    "`DONE` หมายถึงชุดทดสอบผ่าน fixed-version validation และมีผลประเมินจาก final evaluation หรือ test-only recovery ไม่ได้หมายความว่ามี coverage หรือตรวจพบ bug ทุกกรณี",
     "",
     "| วิธี | เริ่มทดลอง (cases) | ประเมินสำเร็จ | อัตราประเมินสำเร็จ | ไม่ผ่านหลัง P03 | ไม่ผ่านหลัง P04 | คำตอบไม่ครบ |",
     "|---|---:|---:|---:|---:|---:|---:|",
@@ -382,7 +382,7 @@ lines += [
     "",
     "- พบคำตอบไม่ครบและชุดทดสอบที่ไม่ผ่าน validation ดังแสดงในตารางสถานะ",
     "- จำนวน cases ที่มี coverage และ fault-detection result ไม่เท่ากัน ต้องรายงาน denominator ของแต่ละค่า",
-    "- ข้อมูลสรุปปัจจุบันยังไม่มีจำนวน test methods ที่สร้าง/รัน/ผ่าน/ล้มเหลว และเวลาสร้างชุดทดสอบ ต้องรวบรวมจากหลักฐานจริงก่อนเพิ่มตัวเลข",
+    "- จำนวน test methods ใน source กับจำนวน tests ที่รันจริงต้องแยกกัน ข้อมูลสรุปปัจจุบันยังไม่มีจำนวน tests ที่รัน/ผ่าน/ล้มเหลวครบทุก case จึงยังไม่ประมาณจำนวนดังกล่าว",
     "- ผลอาจได้รับอิทธิพลจากโมเดล context budget และขั้นตอนแก้ไข จึงต้องอ้างอิง configuration ควบคู่กับชื่อเครื่องมือ",
     "",
     "## สิ่งที่เรียนรู้",
@@ -398,5 +398,125 @@ lines += [
     "- [ขั้นตอนและสภาพแวดล้อม](../../Experiment/protocol/ai_final_protocol.md)",
     "- [สคริปต์สร้างสรุป](../../Experiment/automation/reporting/build_final_ai_summary.py)",
 ]
+
+
+# BEGIN AI ADDITIONAL METRICS
+import math
+
+def measured_number(value):
+    try:
+        value = float(value)
+        return value if math.isfinite(value) and value >= 0 else None
+    except (ValueError, TypeError):
+        return None
+
+lines += [
+    "",
+    "## เวลาเรียกบริการ AI",
+    "",
+    "| วิธี | Cases ที่มีเวลาครบใน metadata | เวลา P01–P04 รวมเฉลี่ย (วินาที) | Cases ที่มีเวลา P02 | เวลา P02 เฉลี่ย (วินาที) |",
+    "|---|---:|---:|---:|---:|",
+]
+
+for method, folder, run in [
+    ("ChatGPT", "AI1_ChatGPT", "run-final-opt"),
+    ("GitHub Copilot", "AI2_GitHubCopilot", "run-copilot-final-v2"),
+]:
+    totals, p02 = [], []
+    for status_path in sorted(
+        (ROOT / folder / "Result").glob(f"*/{run}/case_status.json")
+    ):
+        metas = sorted(status_path.parent.glob("0[1-4]_metadata.json"))
+        times = []
+        for path in metas:
+            meta = json.loads(path.read_text(encoding="utf-8"))
+            value = measured_number(meta.get("elapsed_seconds"))
+            if value is not None:
+                times.append(value)
+                if path.name.startswith("02"):
+                    p02.append(value)
+        if metas and len(times) == len(metas):
+            totals.append(sum(times))
+    total_mean = f"{sum(totals)/len(totals):.2f}" if totals else "-"
+    p02_mean = f"{sum(p02)/len(p02):.2f}" if p02 else "-"
+    lines.append(
+        f"| {method} | {len(totals)} | {total_mean} | "
+        f"{len(p02)} | {p02_mean} |"
+    )
+
+lines += [
+    "",
+    "คำนวณจาก elapsed_seconds ของ stage metadata ที่จัดเก็บในแต่ละ case รวมเฉพาะ stages ที่ถูกเรียก ไม่รวมเวลา compile/test/coverage เวลารอคิว และประวัติการ retry ที่ไม่ได้อยู่ใน metadata ชุดนี้ จึงเป็นเวลาเรียกบริการ AI ไม่ใช่เวลาทดลองทั้งหมด",
+    "",
+    "## ผลเปรียบเทียบเฉพาะ cases ร่วมกัน",
+    "",
+    "เลือก Project–Bug ID ที่ทั้งสองวิธีมีสถานะ DONE และมีค่าของตัวชี้วัดนั้นจริง จำนวน cases จึงอาจต่างกันระหว่างตัวชี้วัด",
+    "",
+    "| ตัวชี้วัด | Cases ร่วมกัน | ChatGPT | GitHub Copilot |",
+    "|---|---:|---:|---:|",
+]
+
+groups = {}
+for method in ("ChatGPT", "GitHub Copilot"):
+    selected = [r for r in rows if r["method"] == method]
+    group = {r["case"]: r for r in selected}
+    if len(group) != len(selected):
+        raise ValueError(f"Duplicate cases: {method}")
+    groups[method] = group
+
+for field, label in [
+    ("fault_detected", "ตรวจพบ fault"),
+    ("fixed_line_coverage_pct", "Line coverage เฉลี่ย"),
+    ("fixed_condition_coverage_pct", "Condition coverage เฉลี่ย"),
+]:
+    def valid(row):
+        value = row.get(field)
+        if field == "fault_detected":
+            return str(value).lower() in ("true", "false")
+        return measured_number(value) is not None
+
+    left = groups["ChatGPT"]
+    right = groups["GitHub Copilot"]
+    common = sorted(
+        case for case in left.keys() & right.keys()
+        if left[case]["status"] == right[case]["status"] == "DONE"
+        and valid(left[case]) and valid(right[case])
+    )
+    values = []
+    for group in (left, right):
+        if not common:
+            values.append("-")
+        elif field == "fault_detected":
+            count = sum(
+                str(group[c][field]).lower() == "true"
+                for c in common
+            )
+            values.append(f"{count} ({count/len(common)*100:.2f}%)")
+        else:
+            mean = sum(float(group[c][field]) for c in common) / len(common)
+            values.append(f"{mean:.2f}%")
+    lines.append(
+        f"| {label} | {len(common)} | {values[0]} | {values[1]} |"
+    )
+
+lines += [
+    "",
+    "ผลตารางนี้เปรียบเทียบบน cases ชุดเดียวกันของแต่ละตัวชี้วัด เป็นสถิติเชิงพรรณนา ไม่ใช่ข้อสรุปความแตกต่างอย่างมีนัยสำคัญทางสถิติ",
+    "",
+    "## ข้อจำกัดของ coverage และหลักฐาน recovery",
+    "",
+    "ChatGPT Jsoup-4/Jsoup-9 และ GitHub Copilot Jsoup-4/Jsoup-6 มีหลักฐาน compile/run บน fixed และ buggy แต่ Cobertura 2.0.3 instrument Entities.class ไม่สำเร็จ โดยแจ้ง Method code too large",
+    "",
+    "กรณีเหล่านี้ใช้ผลทดสอบสำหรับประเมิน fault detection และเก็บ coverage เป็นค่าที่ไม่มีข้อมูล ไม่แทนด้วย 0 หลักฐานอยู่ในโฟลเดอร์ coverage-recovery และ logs ที่ case_status.json อ้างอิง",
+    "",
+    "ดังนั้น DONE ในชุดข้อมูลนี้หมายถึงมีผลประเมินชุดทดสอบ ซึ่งอาจเป็น final result.json หรือหลักฐาน test-only recovery ไม่รับประกันว่ามี coverage ทุกกรณี",
+    "",
+    "กรณีที่ประเมินซ้ำเพื่อแก้ปัญหาระบบให้ใช้ final_result ที่ case_status.json อ้างอิง ไม่เลือกผลจากชื่อโฟลเดอร์มาตรฐานหรือจากวิธีทดลองอื่น",
+]
+# END AI ADDITIONAL METRICS
+
+# BEGIN JSOUP71 SOURCE VERIFICATION NOTE
+lines.extend(['', '## การตรวจสอบหลักฐานชุดทดสอบ', '', 'ChatGPT Jsoup-71 มี hash ใน `04_validation.json` ไม่ตรงกับ Java ที่ใช้ประเมินสุดท้าย การตรวจสอบพบว่า Java ปัจจุบัน สำเนาในโฟลเดอร์ประเมิน และ Java ใน archive มี hash ตรงกับ `result.json` โดย logs ยืนยันว่า fixed ผ่านและ buggy ล้มเหลว 7 tests จึงใช้หลักฐานการประเมินสุดท้ายรับรองผล และเก็บ P04 validation เดิมไว้ สาเหตุของ hash ที่ต่างกันยังไม่ได้ยืนยัน รายละเอียดอยู่ใน [หลักฐานตรวจสอบ Jsoup-71](../../AI1_ChatGPT/Result/Jsoup-71/run-final-opt/final_source_verification.json)', ''])
+# END JSOUP71 SOURCE VERIFICATION NOTE
 
 OUT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")

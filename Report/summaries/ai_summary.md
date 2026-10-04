@@ -25,7 +25,7 @@
 
 ## ผลการประเมินชุดทดสอบ
 
-`DONE` หมายถึงชุดทดสอบผ่าน fixed-version validation และมีผล final evaluation ไม่ได้หมายความว่าตรวจพบ bug ทุกกรณี
+`DONE` หมายถึงชุดทดสอบผ่าน fixed-version validation และมีผลประเมินจาก final evaluation หรือ test-only recovery ไม่ได้หมายความว่ามี coverage หรือตรวจพบ bug ทุกกรณี
 
 | วิธี | เริ่มทดลอง (cases) | ประเมินสำเร็จ | อัตราประเมินสำเร็จ | ไม่ผ่านหลัง P03 | ไม่ผ่านหลัง P04 | คำตอบไม่ครบ |
 |---|---:|---:|---:|---:|---:|---:|
@@ -77,7 +77,7 @@ GitHub Copilot มีอัตราตรวจพบ fault ในกลุ่�
 
 - พบคำตอบไม่ครบและชุดทดสอบที่ไม่ผ่าน validation ดังแสดงในตารางสถานะ
 - จำนวน cases ที่มี coverage และ fault-detection result ไม่เท่ากัน ต้องรายงาน denominator ของแต่ละค่า
-- ข้อมูลสรุปปัจจุบันยังไม่มีจำนวน test methods ที่สร้าง/รัน/ผ่าน/ล้มเหลว และเวลาสร้างชุดทดสอบ ต้องรวบรวมจากหลักฐานจริงก่อนเพิ่มตัวเลข
+- จำนวน test methods ใน source กับจำนวน tests ที่รันจริงต้องแยกกัน ข้อมูลสรุปปัจจุบันยังไม่มีจำนวน tests ที่รัน/ผ่าน/ล้มเหลวครบทุก case จึงยังไม่ประมาณจำนวนดังกล่าว
 - ผลอาจได้รับอิทธิพลจากโมเดล context budget และขั้นตอนแก้ไข จึงต้องอ้างอิง configuration ควบคู่กับชื่อเครื่องมือ
 
 ## สิ่งที่เรียนรู้
@@ -92,3 +92,38 @@ GitHub Copilot มีอัตราตรวจพบ fault ในกลุ่�
 - [GitHub Copilot: prompt, test code และผลทดลอง](../../AI2_GitHubCopilot/)
 - [ขั้นตอนและสภาพแวดล้อม](../../Experiment/protocol/ai_final_protocol.md)
 - [สคริปต์สร้างสรุป](../../Experiment/automation/reporting/build_final_ai_summary.py)
+
+## เวลาเรียกบริการ AI
+
+| วิธี | Cases ที่มีเวลาครบใน metadata | เวลา P01–P04 รวมเฉลี่ย (วินาที) | Cases ที่มีเวลา P02 | เวลา P02 เฉลี่ย (วินาที) |
+|---|---:|---:|---:|---:|
+| ChatGPT | 854 | 83.40 | 854 | 36.94 |
+| GitHub Copilot | 854 | 387.50 | 854 | 174.46 |
+
+คำนวณจาก elapsed_seconds ของ stage metadata ที่จัดเก็บในแต่ละ case รวมเฉพาะ stages ที่ถูกเรียก ไม่รวมเวลา compile/test/coverage เวลารอคิว และประวัติการ retry ที่ไม่ได้อยู่ใน metadata ชุดนี้ จึงเป็นเวลาเรียกบริการ AI ไม่ใช่เวลาทดลองทั้งหมด
+
+## ผลเปรียบเทียบเฉพาะ cases ร่วมกัน
+
+เลือก Project–Bug ID ที่ทั้งสองวิธีมีสถานะ DONE และมีค่าของตัวชี้วัดนั้นจริง จำนวน cases จึงอาจต่างกันระหว่างตัวชี้วัด
+
+| ตัวชี้วัด | Cases ร่วมกัน | ChatGPT | GitHub Copilot |
+|---|---:|---:|---:|
+| ตรวจพบ fault | 193 | 154 (79.79%) | 146 (75.65%) |
+| Line coverage เฉลี่ย | 192 | 52.23% | 48.83% |
+| Condition coverage เฉลี่ย | 191 | 44.96% | 42.87% |
+
+ผลตารางนี้เปรียบเทียบบน cases ชุดเดียวกันของแต่ละตัวชี้วัด เป็นสถิติเชิงพรรณนา ไม่ใช่ข้อสรุปความแตกต่างอย่างมีนัยสำคัญทางสถิติ
+
+## ข้อจำกัดของ coverage และหลักฐาน recovery
+
+ChatGPT Jsoup-4/Jsoup-9 และ GitHub Copilot Jsoup-4/Jsoup-6 มีหลักฐาน compile/run บน fixed และ buggy แต่ Cobertura 2.0.3 instrument Entities.class ไม่สำเร็จ โดยแจ้ง Method code too large
+
+กรณีเหล่านี้ใช้ผลทดสอบสำหรับประเมิน fault detection และเก็บ coverage เป็นค่าที่ไม่มีข้อมูล ไม่แทนด้วย 0 หลักฐานอยู่ในโฟลเดอร์ coverage-recovery และ logs ที่ case_status.json อ้างอิง
+
+ดังนั้น DONE ในชุดข้อมูลนี้หมายถึงมีผลประเมินชุดทดสอบ ซึ่งอาจเป็น final result.json หรือหลักฐาน test-only recovery ไม่รับประกันว่ามี coverage ทุกกรณี
+
+กรณีที่ประเมินซ้ำเพื่อแก้ปัญหาระบบให้ใช้ final_result ที่ case_status.json อ้างอิง ไม่เลือกผลจากชื่อโฟลเดอร์มาตรฐานหรือจากวิธีทดลองอื่น
+
+## การตรวจสอบหลักฐานชุดทดสอบ
+
+ChatGPT Jsoup-71 มี hash ใน `04_validation.json` ไม่ตรงกับ Java ที่ใช้ประเมินสุดท้าย การตรวจสอบพบว่า Java ปัจจุบัน สำเนาในโฟลเดอร์ประเมิน และ Java ใน archive มี hash ตรงกับ `result.json` โดย logs ยืนยันว่า fixed ผ่านและ buggy ล้มเหลว 7 tests จึงใช้หลักฐานการประเมินสุดท้ายรับรองผล และเก็บ P04 validation เดิมไว้ สาเหตุของ hash ที่ต่างกันยังไม่ได้ยืนยัน รายละเอียดอยู่ใน [หลักฐานตรวจสอบ Jsoup-71](../../AI1_ChatGPT/Result/Jsoup-71/run-final-opt/final_source_verification.json)
