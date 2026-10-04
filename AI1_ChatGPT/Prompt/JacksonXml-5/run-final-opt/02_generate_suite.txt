@@ -1,0 +1,275 @@
+Generate one complete compilable JUnit Test Class for the supplied Defects4J buggy version.
+
+Rules: use only the supplied package/API/dependencies and configured JUnit; do not modify production code; do not assume the current implementation is correct; derive expected results only from the supplied bug/specification/public contract; target fault-related behavior plus meaningful normal/boundary/invalid/exception branches; avoid redundant tests; use at most 12 high-value @Test methods; keep tests independent and deterministic; every test needs a meaningful assertion; do not use another program version or invent APIs/behavior.
+
+Return ONLY the complete Java Test Class. No Markdown and no explanation.
+
+Project: JacksonXml  Bug: 5  Version: JacksonXml-5b
+JUnit: junit-4.12.jar  Build: Maven
+Target: com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+Modified: com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+Triggers: com.fasterxml.jackson.dataformat.xml.MapperCopyTest::testCopyWith
+
+Bug/specification summary:
+Bug report: 282
+Trigger failures:
+- com.fasterxml.jackson.dataformat.xml.MapperCopyTest::testCopyWith
+ --> junit.framework.AssertionFailedError: Should NOT use name 'AnnotatedName' but 'Pojo282', xml = <AnnotatedName><a>3</a></AnnotatedName>
+Modified: com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider
+
+Prompt-01 test plan:
+TARGETS: XmlSerializerProvider.copy() and copied mapper serialization path used by MapperCopyTest.testCopyWith. 
+TARGETS: serializeValue(JsonGenerator,Object) root QName resolution for non-null POJO values. 
+ORACLES: Trigger expects root `<Pojo282>` rather than annotation-derived `<AnnotatedName>` after copyWith. 
+ORACLES: XML output/root element from serialization is the observable expected result. 
+CASES: Copy mapper with differing root-name/annotation configuration; serialize Pojo282 with `a=3`. 
+CASES: Verify copied provider honors copied configuration, not stale root-name lookup/cache state. 
+CASES: Normal serialization of annotated POJO before/after copy to detect configuration isolation. 
+RISKS: Context lacks full MapperCopyTest setup and exact copyWith configuration/API details.
+
+Relevant buggy source (deterministically compacted; API signatures are included):
+===== com.fasterxml.jackson.dataformat.xml.ser.XmlSerializerProvider (java) =====
+package com.fasterxml.jackson.dataformat.xml.ser;
+
+import java.io.IOException;
+
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamException;
+
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.PropertyName;
+import com.fasterxml.jackson.databind.SerializationConfig;
+import com.fasterxml.jackson.databind.ser.SerializerFactory;
+import com.fasterxml.jackson.databind.ser.DefaultSerializerProvider;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+import com.fasterxml.jackson.dataformat.xml.util.StaxUtil;
+import com.fasterxml.jackson.dataformat.xml.util.TypeUtil;
+import com.fasterxml.jackson.dataformat.xml.util.XmlRootNameLookup;
+
+/**
+ * We need to override some parts of
+ * {@link com.fasterxml.jackson.databind.SerializerProvider}
+ * implementation to handle oddities of XML output, like "extra" root element.
+ */
+public class XmlSerializerProvider extends DefaultSerializerProvider
+{
+ // As of 2.7
+ private static final long serialVersionUID = 1L;
+
+ /**
+ * If all we get to serialize is a null, there's no way to figure out
+ * expected root name; so let's just default to something like "&lt;null>"...
+ */
+ protected final static QName ROOT_NAME_FOR_NULL = new QName("null");
+
+ protected final XmlRootNameLookup _rootNameLookup;
+
+ public XmlSerializerProvider(XmlRootNameLookup rootNames)
+ {
+ super();
+ _rootNameLookup = rootNames;
+ }
+
+ public XmlSerializerProvider(XmlSerializerProvider src,
+ SerializationConfig config, SerializerFactory f)
+ {
+ super(src, config, f);
+ _rootNameLookup = src._rootNameLookup;
+ }
+
+ /**
+ * @since 2.8.9
+ */
+ protected XmlSerializerProvider(XmlSerializerProvider src) {
+ super(src);
+ // 21-May-2018, tatu: As per [dataformat-xml#282], should NOT really copy
+ // root name lookup as that may link back to diff version, configuration
+ _rootNameLookup = src._rootNameLookup;
+ }
+
+ /*
+ /**********************************************************************
+ /* Overridden methods
+ /**********************************************************************
+ */
+
+ @Override
+ public DefaultSerializerProvider copy() {
+ return new XmlSerializerProvider(this);
+ }
+
+ @Override
+ public DefaultSerializerProvider createInstance(SerializationConfig config,
+ SerializerFactory jsf) {
+ return new XmlSerializerProvider(this, config, jsf);
+ }
+
+ @SuppressWarnings("resource")
+ @Override
+ public void serializeValue(JsonGenerator gen, Object value) throws IOException
+ {
+ if (value == null) {
+ _serializeXmlNull(gen);
+ return;
+ }
+ final Class<?> cls = value.getClass();
+ final boolean asArray;
+ final ToXmlGenerator xgen = _asXmlGenerator(gen);
+ if (xgen == null) { // called by convertValue()
+ asArray = false;
+ } else {
+ QName rootName = _rootNameFromConfig();
+ if (rootName == null) {
+ rootName = _rootNameLookup.findRootName(cls, _config);
+ }
+ _initWithRootName(xgen, rootName);
+ asArray = TypeUtil.isIndexedType(cls);
+ if (asArray) {
+ _startRootArray(xgen, rootName);
+ }
+ }
+ 
+ // From super-class implementation
+ final JsonSerializer<Object> ser = findTypedValueSerializer(cls, true, null);
+ try {
+ ser.serialize(value, gen, this);
+ } catch (Exception e) { // but wrap RuntimeExceptions, to get path information
+ throw _wrapAsIOE(gen, e);
+ }
+ // end of super-class implementation
+
+ if (asArray) {
+ gen.writeEndObject();
+ }
+ }
+
+ // @since 2.1
+ @SuppressWarnings("resource")
+ @Override
+ public void serializeValue(JsonGenerator gen, Object value, JavaType rootType,
+ JsonSerializer<Object> ser) throws IOException
+ {
+ if (value == null) {
+ _serializeXmlNull(gen);
+ return;
+ }
+ final boolean asArray;
+ final ToXmlGenerator xgen = _asXmlGenerator(gen);
+ if (xgen == null) { // called by convertValue()
+ asArray = false;
+ } else {
+ QName rootName = _rootNameFromConfig();
+ if (rootName == null) {
+ rootName = _rootNameLookup.findRootName(rootType, _config);
+ }
+ _initWithRootName(xgen, rootName);
+ asArray = TypeUtil.isIndexedType(rootType);
+ if (asArray) {
+ _startRootArray(xgen, rootName);
+ }
+ }
+ if (ser == null) {
+ ser = findTypedValueSerializer(rootType, true, null);
+ }
+ // From super-class implementation
+ try {
+ ser.serialize(value, gen, this);
+ } catch (Exception e) { // but others do need to be, to get path etc
+ throw _wrapAsIOE(gen, e);
+ }
+ // end of super-class implementation
+ if (asArray) {
+ gen.writeEndObject();
+ }
+ }
+
+ protected void _serializeXmlNull(JsonGenerator jgen) throws IOException
+ {
+ // 14-Nov-2016, tatu: As per [dataformat-xml#213], we may have explicitly
+ // configured root name...
+ QName rootName = _rootNameFromConfig();
+ if (rootName == null) {
+ rootName = ROOT_NAME_FOR_NULL;
+ }
+ if (jgen instanceof ToXmlGenerator) {
+ _initWithRootName((ToXmlGenerator) jgen, rootName);
+ }
+ super.serializeValue(jgen, null);
+ }
+ 
+ protected void _startRootArray(ToXmlGenerator xgen, QName rootName) throws IOException
+ {
+ xgen.writeStartObject();
+ // Could repeat root name, but what's the point? How to customize?
+ xgen.writeFieldName("item");
+ } 
+
+ protected void _initWithRootName(ToXmlGenerator xgen, QName rootName) throws IOException
+ {
+ /* 28-Nov-2012, tatu: We should only initialize the root
+ * name if no name has been set, as per [dataformat-xml#42],
+ * to allow for custom serializers to work.
+ */
+ if (!xgen.setNextNameIfMissing(rootName)) {
+ // however, if we are root, we... insist
+ if (xgen.inRoot()) {
+ xgen.setNextName(rootName);
+ }
+ }
+ xgen.initGenerator();
+ String ns = rootName.getNamespaceURI();
+ /* [dataformat-xml#26] If we just try writing root element with namespace,
+ * we will get an explicit prefix. But we'd rather use the default
+ * namespace, so let's try to force that.
+ */
+ if (ns != null && ns.length() > 0) {
+ try {
+ xgen.getStaxWriter().setDefaultNamespace(ns);
+ } catch (XMLStreamException e) {
+ StaxUtil.throwAsGenerationException(e, xgen);
+ }
+ }
+ }
+
+ protected QName _rootNameFromConfig()
+ {
+ PropertyName name = _config.getFullRootName();
+ if (name == null) {
+ return null;
+ }
+ String ns = name.getNamespace();
+ if (ns == null || ns.isEmpty()) {
+ return new QName(name.getSimpleName());
+ }
+ return new QName(ns, name.getSimpleName());
+ }
+
+ protected ToXmlGenerator _asXmlGenerator(JsonGenerator gen)
+ throws JsonMappingException
+ {
+ // [Issue#71]: When converting, we actually get TokenBuffer, which is fine
+ if (!(gen instanceof ToXmlGenerator)) {
+ // but verify
+ if (!(gen instanceof TokenBuffer)) {
+ throw JsonMappingException.from(gen,
+ "XmlMapper does not with generators of type other than ToXmlGenerator; got: "+gen.getClass().getName());
+ }
+ return null;
+ }
+ return (ToXmlGenerator) gen;
+ } 
+
+ protected IOException _wrapAsIOE(JsonGenerator g, Exception e) {
+ if (e instanceof IOException) {
+ return (IOException) e;
+ }
+ String msg = e.getMessage();
+ if (msg == null) {
+ msg = "[no message for "+e.getClass().getName()+"]";
+ }
+ return new JsonMappingException(g, msg, e);
+ }
+}

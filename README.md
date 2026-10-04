@@ -1,57 +1,34 @@
 # SQA Test Generation Benchmark
 
-โปรเจกต์วิชา CP353201 Software Quality Assurance: เปรียบเทียบการสร้าง JUnit tests สำหรับ Defects4J ด้วย NSGA-II, Symbolic Execution, ChatGPT และ GitHub Copilot ตามรายงานรอบแรกของกลุ่ม
+โครงการวิชา CP353201 Software Quality Assurance สำหรับศึกษาและเปรียบเทียบการสร้าง JUnit test บน Defects4J ด้วย 4 วิธี
 
-## โครงสร้าง
+- NSGA-II
+- Symbolic Execution
+- ChatGPT
+- GitHub Copilot
 
-```text
-SQA-Test-Generation-Benchmark/
-├── Algorithm1_NSGAII/
-│   ├── Code/                 โค้ดตัวสร้าง test
-│   ├── Configuration/        seed, budget, objective และค่าที่ใช้รัน
-│   ├── Result_Round1/        ผลทดลองซ้ำรอบที่ 1
-│   ├── Result_Round2/        ผลทดลองซ้ำรอบที่ 2
-│   └── Test/                 JUnit tests ที่สร้างขึ้น
-├── Algorithm2_SymbolicExecution/
-│   ├── Code/
-│   ├── Configuration/
-│   ├── Result_Round1/
-│   ├── Result_Round2/
-│   └── Test/
-├── AI1_ChatGPT/
-│   ├── Prompt/               ข้อความที่ส่งจริงและข้อมูลบริบท
-│   ├── Result/               คำตอบดิบและผลการรัน
-│   └── TestCode/             JUnit tests ที่ได้
-├── AI2_GitHubCopilot/
-│   ├── Prompt/
-│   ├── Result/
-│   └── TestCode/
-├── Experiment/                รายการกรณีศึกษาและวิธีวัดผล
-├── Report/                    รายงานและภาพประกอบ
-└── Presentation/              สไลด์และไฟล์ demo
-```
+## Repository Structure
 
-`Result_Round1` และ `Result_Round2` เป็นชื่อรอบทดลองของอัลกอริทึม ไม่ใช่รอบส่งงานของวิชา ปัจจุบันมีผล Lang-1 ในทั้งสองรอบของ NSGA-II และรอบแรกของ bounded symbolic hex; สองรอบ NSGA-II เปลี่ยนทั้งชุดตัวเลือกและ budget จึงไม่ควรนำมาเฉลี่ยรวมเป็นการทดลองซ้ำแบบเงื่อนไขเดียวกัน
+| วิธี / ส่วนงาน | รายละเอียด |
+|---|---|
+| [Algorithm1_NSGAII](Algorithm1_NSGAII/) | การทดลองด้วย NSGA-II |
+| [Algorithm2_SymbolicExecution](Algorithm2_SymbolicExecution/) | การทดลองด้วย Symbolic Execution |
+| [AI1_ChatGPT](AI1_ChatGPT/) | Prompt, result และ test code จาก ChatGPT |
+| [AI2_GitHubCopilot](AI2_GitHubCopilot/) | Prompt, result และ test code จาก GitHub Copilot |
+| [Report](Report/) | ผลสรุปและข้อมูลสำหรับเปรียบเทียบผล |
+| [Presentation](Presentation/) | ไฟล์สำหรับการนำเสนอ |
 
-## เริ่มทดลองและอ่านผล
+## Results
 
-1. ติดตั้ง Defects4J และตรวจ Java version ให้ตรงกับคู่มือของเวอร์ชันที่ใช้
-2. ทดลอง checkout, compile และ test กรณีนำร่อง `Lang-1b`/`Lang-1f`
-3. ตรวจ target class และ JUnit/build context จริง แล้วเพิ่มรายการที่ใช้ใน `Experiment/cases.csv`; กรอก `Experiment/context-template.md` ก่อนส่ง Prompt
-4. ใช้ Prompt `01`–`04` ใน `AI1_ChatGPT/Prompt/` และ `AI2_GitHubCopilot/Prompt/` ตามลำดับเดียวกัน (รายละเอียดอยู่ใน README ของแต่ละโฟลเดอร์) และพัฒนาตัวสร้าง test ทั้งสองวิธี
-5. เก็บ test ที่สร้างจริง, prompt/output ดิบ, configuration, log, coverage และผล buggy/fixed ทุก run
-6. อ่านผล Lang-1 ที่วัดแล้วใน [`Experiment/summary.csv`](Experiment/summary.csv) แล้วขยายกรณีทดลองก่อนสรุปภาพรวมในรายงานและ demo; คอลัมน์ `conditions` คือ condition coverage ไม่ใช่ branch coverage และช่องว่างหมายถึงไม่ได้บันทึกข้อมูล
+ผลดิบและหลักฐานของแต่ละวิธีอยู่ในโฟลเดอร์ของวิธีนั้น
 
-สำหรับกรณีนำร่อง Lang-1 หลัง checkout `Lang-1b` แล้ว ให้รัน `bash Experiment/prepare_lang1_context.sh "$HOME/sqa-workspaces/Lang-1b"` จากโฟลเดอร์โปรเจกต์บน WSL คำสั่งนี้บันทึก source และ metadata จาก buggy checkout แล้วกรอก Prompt 01 และ 02 **เนื้อหาเหมือนกัน** ในโฟลเดอร์ของ AI ทั้งสองตัว เปิดไฟล์ `Experiment/contexts/Lang-1/run-01/` เพื่อตรวจ context และที่มาของ bug report ก่อนส่ง Prompt; ห้ามส่ง fixed source หรือ test ที่เขียนเองเป็น input
+สำหรับผลสรุปและลิงก์ไปยังผลของทั้ง 4 วิธี ดูที่  
+**[Experiment Results](Report/)**
 
-วิธีนับผลและข้อควรระวังอยู่ใน [แผนการทดลอง](Experiment/protocol.md) การใช้ Symflower อย่างเดียวต้องระวัง เพราะโจทย์ให้นำอัลกอริทึมที่เลือกมาพัฒนาด้วย
-
-## สมาชิกกลุ่มตามรายงานรอบแรก
+## Team
 
 | รหัสนักศึกษา | ชื่อ-นามสกุล |
-| --- | --- |
+|---|---|
 | 673308279-7 | นายปองภพ ศรีรักษ์ |
 | 673380271-3 | นายธนภูมิ แทนทุมมา |
 | 673380510-1 | นางสาวจิรัชญา เป้าจันทึก |
-
-สถานะ: ทดลองนำร่อง Defects4J Lang-1 แล้วครบทั้ง 4 วิธี โดยทุกวิธีมีชุดที่ผ่านบน Lang-1f และตรวจพบบั๊กบน Lang-1b ข้อมูลนี้เป็นผลจากบั๊กเดียว ยังไม่ใช่ fault detection rate ของ Defects4J ทั้งชุด อัลกอริทึม symbolic ของกลุ่มวิเคราะห์เฉพาะเส้นทาง hex; ผล Symflower ที่ไม่สร้าง test ของ `NumberUtils.createNumber` อยู่ใน diagnostics งานถัดไปคือกำหนดขอบเขตกรณีทดลองตามโจทย์อาจารย์แล้วขยายผล พร้อมจัดทำรายงานและเดโม

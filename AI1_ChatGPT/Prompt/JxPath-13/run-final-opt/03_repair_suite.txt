@@ -1,0 +1,166 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: JxPath  Bug: 13  Version: JxPath-13b
+JUnit: junit-3.8.1.jar  Build: Ant
+Bug/specification summary:
+Bug report: JXPATH-97
+Trigger failures:
+- org.apache.commons.jxpath.ri.model.ExternalXMLNamespaceTest::testCreateAndSetAttributeDOM
+ --> org.apache.commons.jxpath.JXPathException: Unknown namespace prefix: A
+Modified: org.apache.commons.jxpath.ri.NamespaceResolver, org.apache.commons.jxpath.ri.model.dom.DOMNodePointer
+
+Available API/signatures:
+[org.apache.commons.jxpath.ri.NamespaceResolver | java]
+package org.apache.commons.jxpath.ri;
+public class NamespaceResolver implements Cloneable {
+final protected NamespaceResolver parent;
+protected HashMap namespaceMap = new HashMap();
+protected HashMap reverseMap;
+protected NodePointer pointer;
+public NamespaceResolver() {
+public NamespaceResolver(NamespaceResolver parent) {
+public synchronized void registerNamespace(String prefix, String namespaceURI) {
+public void setNamespaceContextPointer(NodePointer pointer) {
+public Pointer getNamespaceContextPointer() {
+public synchronized String getNamespaceURI(String prefix) {
+public synchronized String getPrefix(String namespaceURI) {
+public boolean isSealed() {
+public void seal() {
+public Object clone() {
+
+[org.apache.commons.jxpath.ri.model.dom.DOMNodePointer | java]
+package org.apache.commons.jxpath.ri.model.dom;
+public class DOMNodePointer extends NodePointer {
+public DOMNodePointer(Node node, Locale locale) {
+public DOMNodePointer(Node node, Locale locale, String id) {
+public DOMNodePointer(NodePointer parent, Node node) {
+public boolean testNode(NodeTest test) {
+public static boolean testNode(Node node, NodeTest test) {
+private static boolean equalStrings(String s1, String s2) {
+public QName getName() {
+public String getNamespaceURI() {
+public NodeIterator attributeIterator(QName name) {
+public NodePointer namespacePointer(String prefix) {
+public NodeIterator namespaceIterator() {
+public String getNamespaceURI(String prefix) {
+public String getDefaultNamespaceURI() {
+public Object getBaseValue() {
+public Object getImmediateNode() {
+public boolean isActual() {
+public boolean isColl
+...[truncated deterministically]...
+ng target) {
+public int hashCode() {
+public boolean equals(Object object) {
+public static String getPrefix(Node node) {
+public static String getLocalName(Node node) {
+public static String getNamespaceURI(Node node) {
+public Object getValue() {
+private String stringValue(Node node) {
+public Pointer getPointerByID(JXPathContext context, String id) {
+private AbstractFactory getAbstractFactory(JXPathContext context) {
+
+Generated JUnit Test:
+import java.util.Locale;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import junit.framework.TestCase;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.JXPathException;
+import org.apache.commons.jxpath.ri.NamespaceResolver;
+import org.apache.commons.jxpath.ri.model.dom.DOMNodePointer;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+public class JXPath13NamespaceTest extends TestCase {
+
+    public void testRegisteredNamespaceResolvesInBothDirections() {
+        NamespaceResolver resolver = new NamespaceResolver();
+
+        resolver.registerNamespace("A", "urn:test:external");
+
+        assertEquals("urn:test:external", resolver.getNamespaceURI("A"));
+        assertEquals("A", resolver.getPrefix("urn:test:external"));
+    }
+
+    public void testChildResolverUsesParentRegisteredNamespace() {
+        NamespaceResolver parent = new NamespaceResolver();
+        NamespaceResolver child = new NamespaceResolver(parent);
+
+        parent.registerNamespace("A", "urn:test:parent");
+
+        assertEquals("urn:test:parent", child.getNamespaceURI("A"));
+        assertEquals("A", child.getPrefix("urn:test:parent"));
+    }
+
+    public void testEmptyPrefixCanBeRegisteredAndResolved() {
+        NamespaceResolver resolver = new NamespaceResolver();
+
+        resolver.registerNamespace("", "urn:test:default");
+
+        assertEquals("urn:test:default", resolver.getNamespaceURI(""));
+        assertEquals("", resolver.getPrefix("urn:test:default"));
+    }
+
+    public void testDOMNodePointerFindsNamespaceDeclaredOnElement() throws Exception {
+        Document document = newDocument();
+        Element root = document.createElement("root");
+        root.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:p",
+                "urn:test:declared");
+        document.appendChild(root);
+
+        DOMNodePointer pointer = new DOMNodePointer(root, Locale.US);
+
+        assertEquals("urn:test:declared", pointer.getNamespaceURI("p"));
+    }
+
+    public void testCreateAndSetAttributeUsesExternallyRegisteredNamespace()
+            throws Exception {
+        Document document = newDocument();
+        Element root = document.createElement("root");
+        document.appendChild(root);
+
+        JXPathContext context = JXPathContext.newContext(root);
+        context.registerNamespace("A", "urn:test:external");
+        context.createPathAndSetValue("@A:code", "42");
+
+        assertEquals("42", root.getAttributeNS("urn:test:external", "code"));
+        assertNotNull(root.getAttributeNodeNS("urn:test:external", "code"));
+        assertEquals("A",
+                root.getAttributeNodeNS("urn:test:external", "code").getPrefix());
+    }
+
+    public void testCreateAttributeWithUnknownPrefixFails() throws Exception {
+        Document document = newDocument();
+        Element root = document.createElement("root");
+        document.appendChild(root);
+
+        JXPathContext context = JXPathContext.newContext(root);
+        try {
+            context.createPathAndSetValue("@missing:code", "42");
+            fail("An attribute with an unknown namespace prefix must not be created");
+        }
+        catch (JXPathException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    private Document newDocument() throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        return factory.newDocumentBuilder().newDocument();
+    }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 3
+ - JXPath13NamespaceTest::testCreateAttributeWithUnknownPrefixFails
+ - JXPath13NamespaceTest::testCreateAndSetAttributeUsesExternallyRegisteredNamespace
+ - JXPath13NamespaceTest::testDOMNodePointerFindsNamespaceDeclaredOnElement
+
+Failing generated tests: JXPath13NamespaceTest::testCreateAndSetAttributeUsesExternallyRegisteredNamespace, JXPath13NamespaceTest::testCreateAttributeWithUnknownPrefixFails, JXPath13NamespaceTest::testDOMNodePointerFindsNamespaceDeclaredOnElement

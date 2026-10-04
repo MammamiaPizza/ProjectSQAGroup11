@@ -1,0 +1,144 @@
+Repair the generated JUnit Test Class so it compiles and runs while preserving its intended fault-related behavior and all valid meaningful tests. Make the smallest necessary edits. Do not modify production code, invent APIs/behavior, remove a test merely to hide an error, or weaken an assertion merely to pass. Use only the supplied API/signatures and failure evidence.
+
+Return ONLY the complete corrected compilable Java test class. No Markdown and no explanation. Preserve every valid meaningful test and make only the changes needed to repair the reported failure. This is the single allowed repair round.
+
+Project: Gson  Bug: 2  Version: Gson-2b
+JUnit: junit-3.8.2.jar  Build: Maven
+Bug/specification summary:
+Bug report: 719
+Trigger failures:
+- com.google.gson.functional.DefaultTypeAdaptersTest::testJsonElementTypeMismatch
+ --> java.lang.ClassCastException: Cannot cast com.google.gson.JsonPrimitive to com.google.gson.JsonObject
+Modified: com.google.gson.internal.bind.TypeAdapters
+
+Available API/signatures:
+[com.google.gson.internal.bind.TypeAdapters | java]
+package com.google.gson.internal.bind;
+public final class TypeAdapters {
+private TypeAdapters() {
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Class> CLASS = new TypeAdapter<Class>() {
+@Override
+public void write(JsonWriter out, Class value) throws IOException {
+public Class read(JsonReader in) throws IOException {
+public static final TypeAdapterFactory CLASS_FACTORY = newFactory(Class.class, CLASS);
+public static final TypeAdapter<BitSet> BIT_SET = new TypeAdapter<BitSet>() {
+public BitSet read(JsonReader in) throws IOException {
+public void write(JsonWriter out, BitSet src) throws IOException {
+public static final TypeAdapterFactory BIT_SET_FACTORY = newFactory(BitSet.class, BIT_SET);
+public static final TypeAdapter<Boolean> BOOLEAN = new TypeAdapter<Boolean>() {
+public Boolean read(JsonReader in) throws IOException {
+public void write(JsonWriter out, Boolean value) throws IOException {
+public static final TypeAdapter<Boolean> BOOLEAN_AS_STRING = new TypeAdapter<Boolean>() {
+@Override public Boolean read(JsonReader in) throws IOException {
+@Override public void write(JsonWriter out, Boolean value) throws IOException {
+= newFactory(boolean.class, Boolean.class, BOOLEAN);
+public static final TypeAdapter<Number> BYTE = new TypeAdapter<Number>() {
+public Number read(JsonReader in) throws IOException {
+public void write(JsonWriter out, Number value) throws IOException {
+= newFactory(byte.class, Byte.class, BYTE);
+public static final TypeAdapter<Number> SHORT = new TypeAdapter<Number>() {
+= newFactory(short.class, Short.class, SHORT);
+public static final TypeAdapter<Number>
+...[truncated deterministically]...
+extends Enum<T>> extends TypeAdapter<T> {
+private final Map<String, T> nameToConstant = new HashMap<String, T>();
+private final Map<T, String> constantToName = new HashMap<T, String>();
+public EnumTypeAdapter(Class<T> classOfT) {
+SerializedName annotation = classOfT.getField(name).getAnnotation(SerializedName.class);
+public T read(JsonReader in) throws IOException {
+public void write(JsonWriter out, T value) throws IOException {
+public static final TypeAdapterFactory ENUM_FACTORY = new TypeAdapterFactory() {
+@SuppressWarnings({"rawtypes", "unchecked"})
+if (!Enum.class.isAssignableFrom(rawType) || rawType == Enum.class) {
+@Override public String toString() {
+@SuppressWarnings("unchecked")
+public <T2> TypeAdapter<T2> create(Gson gson, TypeToken<T2> typeToken) {
+final Class<? super T2> requestedType = typeToken.getRawType();
+
+Generated JUnit Test:
+package com.google.gson.internal.bind;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
+import junit.framework.TestCase;
+
+public final class TypeAdaptersJsonElementTest extends TestCase {
+  private final Gson gson = new Gson();
+
+  public void testPrimitiveCannotBeDeserializedAsJsonObject() {
+    try {
+      gson.fromJson("\"value\"", JsonObject.class);
+      fail("Expected a JsonSyntaxException for a JsonPrimitive requested as JsonObject");
+    } catch (JsonSyntaxException expected) {
+      assertNotNull(expected);
+    }
+  }
+
+  public void testArrayCannotBeDeserializedAsJsonObject() {
+    try {
+      gson.fromJson("[1,2]", JsonObject.class);
+      fail("Expected a JsonSyntaxException for a JsonArray requested as JsonObject");
+    } catch (JsonSyntaxException expected) {
+      assertNotNull(expected);
+    }
+  }
+
+  public void testObjectDeserializesAsJsonObject() {
+    JsonObject object = gson.fromJson("{\"name\":\"gson\",\"enabled\":true}", JsonObject.class);
+
+    assertNotNull(object);
+    assertEquals("gson", object.get("name").getAsString());
+    assertTrue(object.get("enabled").getAsBoolean());
+  }
+
+  public void testArrayDeserializesAsJsonArray() {
+    JsonArray array = gson.fromJson("[1,true,\"text\",null]", JsonArray.class);
+
+    assertNotNull(array);
+    assertEquals(4, array.size());
+    assertEquals(1, array.get(0).getAsInt());
+    assertTrue(array.get(1).getAsBoolean());
+    assertEquals("text", array.get(2).getAsString());
+    assertTrue(array.get(3).isJsonNull());
+  }
+
+  public void testNullDeserializesAsNullForJsonObjectType() {
+    JsonObject object = gson.fromJson("null", JsonObject.class);
+
+    assertNull(object);
+  }
+
+  public void testJsonElementDeserializationPreservesElementKinds() {
+    JsonElement object = gson.fromJson("{\"a\":1}", JsonElement.class);
+    JsonElement array = gson.fromJson("[false]", JsonElement.class);
+    JsonElement primitive = gson.fromJson("\"text\"", JsonElement.class);
+    JsonElement nullElement = gson.fromJson("null", JsonElement.class);
+
+    assertTrue(object.isJsonObject());
+    assertEquals(1, object.getAsJsonObject().get("a").getAsInt());
+    assertTrue(array.isJsonArray());
+    assertFalse(array.getAsJsonArray().get(0).getAsBoolean());
+    assertTrue(primitive.isJsonPrimitive());
+    assertEquals("text", primitive.getAsString());
+    assertTrue(nullElement.isJsonNull());
+  }
+
+  public void testJsonElementSerializationWritesPrimitiveAndNull() {
+    assertEquals("\"text\"", gson.toJson(new JsonPrimitive("text"), JsonElement.class));
+    assertEquals("null", gson.toJson(JsonNull.INSTANCE, JsonElement.class));
+  }
+}
+
+
+Compact compiler/test failure evidence:
+Failing tests: 1
+ - com.google.gson.internal.bind.TypeAdaptersJsonElementTest::testNullDeserializesAsNullForJsonObjectType
+
+Extract test suite......................................................... OK
+Failing generated tests: com.google.gson.internal.bind.TypeAdaptersJsonElementTest::testNullDeserializesAsNullForJsonObjectType

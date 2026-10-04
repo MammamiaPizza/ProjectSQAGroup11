@@ -1,7 +1,41 @@
 # Prompt สำหรับ GitHub Copilot
 
-ไฟล์ `01`–`04` เหมือนกับไฟล์ใน `AI1_ChatGPT/Prompt/` ทุกประการตามหัวข้อ 5.3–5.6 ของรายงานรอบแรก
+โฟลเดอร์นี้เก็บ Prompt ที่ใช้ในการทดลองสร้าง JUnit test ด้วย GitHub Copilot บน Defects4J
 
-ใช้ context snapshot ชุดเดียวกับ ChatGPT จาก `Experiment/context-template.md` แทน `[PLACEHOLDER]` ด้วยข้อมูลที่ตรวจสอบได้ และจำกัดไฟล์ที่ Copilot เข้าถึงให้ตรงกับชุด context ที่กำหนด บันทึกไฟล์ที่เปิดใน IDE และไฟล์แนบที่ส่งจริง
+## Master Prompt
 
-ลำดับการใช้คือ `01` วิเคราะห์ → `02` สร้าง test → `03` เมื่อ compile/run ผิดพลาด → `04` เมื่อมี coverage report จริง เก็บ Prompt ที่ส่งจริงกับคำตอบดิบใน `AI2_GitHubCopilot/Result/<project>-<bug>/run-<id>/` และ Java ใน `AI2_GitHubCopilot/TestCode/` บันทึกชื่อรุ่นโมเดลที่หน้าจอแสดง วันเวลา ช่องทาง และเวลาจริง
+ไฟล์ต่อไปนี้ที่อยู่โดยตรงในโฟลเดอร์ `Prompt/` เป็น Master Prompt Template ของการทดลอง
+
+- `01_analyze_context.txt` — วิเคราะห์ข้อมูลของ bug และวางแผนการทดสอบ
+- `02_generate_suite.txt` — สร้าง JUnit test suite
+- `03_repair_suite.txt` — แก้ไข test suite เมื่อไม่ผ่าน fixed-version validation โดยอนุญาตให้ repair ด้วย AI เพียง 1 รอบ
+- `04_extend_coverage.txt` — เพิ่ม test จากข้อมูล coverage เมื่อเข้าเงื่อนไข
+
+Master Prompt ทั้ง 4 ไฟล์ใช้ข้อความเดียวกับ Master Prompt ของ ChatGPT เพื่อให้การเปรียบเทียบระหว่าง AI ทั้งสองอยู่ภายใต้คำสั่งเดียวกัน
+
+## Prompt ที่ส่งจริง
+
+ก่อนส่งให้โมเดล ระบบจะนำ Master Prompt มาเติมข้อมูลของแต่ละ Defects4J case เช่น project, bug ID, target class, API, bug information, source context และผลจากขั้นตอนก่อนหน้า
+
+Prompt ที่ถูกเติมข้อมูลและส่งจริงจะถูกเก็บแยกตาม case เช่น
+
+`AI2_GitHubCopilot/Prompt/<project>-<bug>/run-copilot-final-v2/`
+
+ดังนั้นไฟล์ภายในโฟลเดอร์ของแต่ละ case เป็นหลักฐานของ Prompt ที่โมเดลได้รับจริง ไม่ใช่ Master Template
+
+## Final Experiment
+
+- Final run: `run-copilot-final-v2`
+- Tool: GitHub Copilot CLI แบบ BYOK
+- Model: `deepseek-v4-pro`
+- ใช้ temporary custom agent โดยกำหนด `tools: []`
+- ปิด built-in MCP และ custom instructions ที่ไม่เกี่ยวข้อง
+- ใช้ข้อมูลจาก buggy version เท่านั้นในการสร้าง context
+- ไม่ส่ง fixed source code ให้โมเดล
+- P03 และ P04 เป็นขั้นตอนตามเงื่อนไข จึงไม่ได้เกิดขึ้นในทุก case
+- Model failure จะไม่ถูก rerun เพียงเพื่อให้ได้ผลลัพธ์ที่ดีขึ้น
+- Infrastructure failure สามารถ recovery ได้โดยแยกออกจากผลของโมเดล
+
+รายละเอียด workflow และกติกาการทดลองฉบับสุดท้ายอยู่ที่
+
+`Experiment/protocol/ai_final_protocol.md`
