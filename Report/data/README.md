@@ -15,7 +15,7 @@
 
 ข้อมูลราย case ปัจจุบันยังอยู่ที่:
 
-- [NSGA-II Raw Result Data Round 1](../../../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
+- [NSGA-II Raw Result Data Round 1](../../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
 - [NSGA-II Raw Result Data Round 2](../../../Algorithm1_NSGAII/Result_Round2/Summary_Merge.csv)
 - [NSGA-II Summary The Result of Raw Data](Report/data/nsga2/nsga2_Data_Analyst.json)
 
