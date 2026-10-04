@@ -6,7 +6,7 @@
 
 * [NSGA-II Results](../../../Algorithm1_NSGAII/)
 * [Round 1 summary data](../../../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
-* [Round 2 Summary Data](%5BNSGA-II%20Results%5D%28Algorithm1_NSGAII/Result_Round2%29)
+* [Round 2 Summary Data](../../../Algorithm1_NSGAII/Result_Round2/Summary_Merge.csv)
 
 
 
