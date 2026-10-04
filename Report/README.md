@@ -31,7 +31,7 @@ Source code, test code, prompt, configuration และหลักฐานก�
 |NSGA-II รอบที่ 1|[summary\_nsga2Round1.csv](/Report/data/nsga2/summary_nsga2Round1.csv)|
 |NSGA-II รอบที่ 2<br />|[summary\_nsga2Round2.csv](/Report/data/nsga2/summary_nsga2Round2.csv)|
 
-###### |สรุปผลจาก ข้อมูลดิบ NSGA II |[nsga2\_Data\_Analyst.json](Report/data/nsga2/nsga2_Data_Analyst.json)|
+|สรุปผลจาก ข้อมูลดิบ NSGA II |[nsga2\_Data\_Analyst.json](Report/data/nsga2/nsga2_Data_Analyst.json)|
 
 |ผลและหลักฐาน Symbolic Execution|[Result Round 1](../Algorithm2_SymbolicExecution/Result_Round1/)|
 
