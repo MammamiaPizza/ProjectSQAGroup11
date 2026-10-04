@@ -15,7 +15,7 @@ Source code, test code, prompt, configuration และหลักฐานก�
 
 |วิธี|ผลและหลักฐาน|สรุปผล|
 |-|-|-|
-|NSGA-II|[NSGA-II](../Algorithm1_NSGAII/)|[สรุป NSGA-II](summaries/nsga2_summary.md)|
+|NSGA-II|[NSGA-II Results Individual](../Algorithm1_NSGAII/)<br />[MergeRound1,2 ResultData](/Report/data/nsga2)|[สรุป NSGA-II](summaries/nsga2_summary.md)|
 |Symbolic Execution|[Symbolic Execution](../Algorithm2_SymbolicExecution/)|[สรุป Symbolic Execution](summaries/symbolic_summary.md)|
 |ChatGPT|[ChatGPT](../AI1_ChatGPT/)|[สรุป ChatGPT และ GitHub Copilot](summaries/ai_summary.md)|
 |GitHub Copilot|[GitHub Copilot](../AI2_GitHubCopilot/)|[สรุป ChatGPT และ GitHub Copilot](summaries/ai_summary.md)|
@@ -28,9 +28,11 @@ Source code, test code, prompt, configuration และหลักฐานก�
 |-|-|
 |ChatGPT และ GitHub Copilot รายกรณี|[case\_results.csv](data/ai/case_results.csv)|
 |ค่าสรุป ChatGPT และ GitHub Copilot|[summary.json](data/ai/summary.json)|
-|NSGA-II รอบที่ 1|[summary\_nsga2.csv](../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)|
-|NSGA-II รอบที่ 2<br />|[Summary\_Merge.csv](Algorithm1_NSGAII/Result_Round2/Summary_Merge.csv)|
+|NSGA-II รอบที่ 1|[summary\_nsga2Round1.csv](/Report/data/nsga2/summary_nsga2Round1.csv)|
+|NSGA-II รอบที่ 2<br />|[summary\_nsga2Round2.csv](/Report/data/nsga2/summary_nsga2Round2.csv)|
+
 ###### |สรุปผลจาก ข้อมูลดิบ NSGA II |[nsga2\_Data\_Analyst.json](Report/data/nsga2/nsga2_Data_Analyst.json)|
+
 |ผลและหลักฐาน Symbolic Execution|[Result Round 1](../Algorithm2_SymbolicExecution/Result_Round1/)|
 
 รายละเอียดชุดข้อมูลและการจัดเก็บดูที่ [คำอธิบายข้อมูล](data/README.md)
