@@ -31,7 +31,9 @@ Source code, test code, prompt, configuration และหลักฐานก�
 |NSGA-II รอบที่ 1|[summary\_nsga2Round1.csv](/Report/data/nsga2/summary_nsga2Round1.csv)|
 |NSGA-II รอบที่ 2<br />|[summary\_nsga2Round2.csv](/Report/data/nsga2/summary_nsga2Round2.csv)|
 |สรุปผลจาก ข้อมูลดิบ NSGA II |[nsga2\_Data\_Analyst.json](Report/data/nsga2/nsga2_Data_Analyst.json)|
-|ผลและหลักฐาน Symbolic Execution|[Result Round 1](../Algorithm2_SymbolicExecution/Result_Round1/)|
+|Symflower รายกรณี|[case_results.csv](data/symbolic/case_results.csv)|
+|ผลรวม Symflower รายโครงการ|[project_summary.csv](data/symbolic/project_summary.csv)|
+|ค่าสรุป Symflower|[summary.json](data/symbolic/summary.json)|
 
 รายละเอียดชุดข้อมูลและการจัดเก็บดูที่ [คำอธิบายข้อมูล](data/README.md)
 
@@ -46,6 +48,6 @@ Source code, test code, prompt, configuration และหลักฐานก�
 ขั้นตอน เครื่องมือ และ configuration อ้างอิงจากเอกสารและหลักฐานของแต่ละวิธี
 
 * [NSGA-II](../Algorithm1_NSGAII/)
-* [Symbolic Execution](../Algorithm2_SymbolicExecution/)
+* [ขั้นตอนและสภาพแวดล้อม Symflower](symflower_protocol.md)
 * [ขั้นตอนการทดลอง ChatGPT และ GitHub Copilot](../Experiment/protocol/ai_final_protocol.md)
 
