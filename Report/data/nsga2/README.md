@@ -4,7 +4,11 @@
 
 ข้อมูลต้นทางปัจจุบันอยู่ที่:
 
-- [NSGA-II Results](../../../Algorithm1_NSGAII/)
-- [Round 1 summary data](../../../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
+* [NSGA-II Results](../../../Algorithm1_NSGAII/)
+* [Round 1 summary data](../../../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
+* [Round 2 Summary Data](%5BNSGA-II%20Results%5D%28Algorithm1_NSGAII/Result_Round2%29)
 
-เมื่อกำหนดชุดผลสุดท้ายแล้ว ให้นำข้อมูลที่ใช้สำหรับการเปรียบเทียบมาไว้ในโฟลเดอร์นี้
+
+
+###### 
+
