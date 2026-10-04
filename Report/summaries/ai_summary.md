@@ -1,38 +1,94 @@
-# Final AI Experiment Summary
+# สรุปผลการทดลอง ChatGPT และ GitHub Copilot
 
-ผลสรุปจาก source-of-truth:
+## วัตถุประสงค์และขอบเขต
 
-- ChatGPT: `run-final-opt`
-- GitHub Copilot: `run-copilot-final-v2`
+ศึกษาการสร้าง JUnit unit tests ด้วย ChatGPT และ GitHub Copilot บน Defects4J โดยตรวจความถูกต้องของชุดทดสอบ วัดความครอบคลุมของโค้ด และประเมินการตรวจพบข้อบกพร่อง
 
-## Case outcomes
+หนึ่ง case ในข้อมูลสรุปหมายถึงหนึ่ง Project–Bug ID ไม่ใช่หนึ่ง test method จำนวนกรณีที่เริ่มทดลองจึงต้องแยกจากจำนวนชุดทดสอบที่ประเมินสำเร็จ
 
-`Successfully evaluated` หมายถึง raw status `DONE`: test suite ผ่าน fixed-version validation และมีผล final evaluation แล้ว ไม่ได้หมายความว่าทุก attempted case สำเร็จ
+| วิธี | ชุดผลที่ใช้ |
+|---|---|
+| ChatGPT | `run-final-opt` |
+| GitHub Copilot | `run-copilot-final-v2` |
 
-| Method | Attempted cases | Successfully evaluated | Evaluation rate | Invalid after repair | Invalid after P04 | Incomplete output |
+ผลของสองวิธีนี้เป็นส่วนหนึ่งของการเปรียบเทียบร่วมกับ NSGA-II และ Symbolic Execution ดู [ผลเปรียบเทียบทั้ง 4 วิธี](final_comparison.md)
+
+## ขั้นตอนและหลักการวัด
+
+1. เตรียม source/context จาก buggy version และข้อมูลพฤติกรรมที่คาดหวัง
+2. ใช้ P01 วิเคราะห์ และ P02 สร้างชุดทดสอบ
+3. ตรวจชุดทดสอบด้วย fixed version และใช้ P03 แก้ไขตามงบการเรียกที่กำหนด
+4. วัด coverage และใช้ P04 เพิ่มกรณีทดสอบตามขั้นตอนของ runner
+5. ประเมินชุดทดสอบกับ buggy/fixed versions และรวบรวมผลราย case
+
+รายละเอียด prompt การจัดการ P04 ประวัติการปรับขั้นตอน และสภาพแวดล้อมอยู่ใน [ขั้นตอนการทดลอง](../../Experiment/protocol/ai_final_protocol.md) ขั้นตอนที่ใช้กับผลย้อนหลังตรวจจาก prompt และ stage artifacts ของแต่ละ case
+
+## ผลการประเมินชุดทดสอบ
+
+`DONE` หมายถึงชุดทดสอบผ่าน fixed-version validation และมีผล final evaluation ไม่ได้หมายความว่าตรวจพบ bug ทุกกรณี
+
+| วิธี | เริ่มทดลอง (cases) | ประเมินสำเร็จ | อัตราประเมินสำเร็จ | ไม่ผ่านหลัง P03 | ไม่ผ่านหลัง P04 | คำตอบไม่ครบ |
 |---|---:|---:|---:|---:|---:|---:|
 | ChatGPT | 854 | 561 | 65.69% | 272 | 8 | 13 |
 | GitHub Copilot | 854 | 229 | 26.81% | 599 | 0 | 26 |
 
-## Fault detection
+อัตราประเมินสำเร็จ = จำนวน `DONE` ÷ จำนวน cases ที่เริ่มทดลอง × 100
 
-| Method | Cases with fault-detection result | Fault-detecting cases | Detection rate among measured cases |
-|---|---:|---:|---:|
-| ChatGPT | 561 | 403 | 71.84% |
-| GitHub Copilot | 229 | 166 | 72.49% |
+สถานะไม่ผ่านหลัง P04 เป็นสถานะที่บันทึกในชุดผล ไม่ควรตีความว่าทุก case ใช้กติกา P04 revision เดียวกัน
 
-## Fixed-version coverage
+## การตรวจพบข้อบกพร่อง
 
-| Method | Cases with line coverage | Avg fixed line coverage | Cases with condition coverage | Avg fixed condition coverage |
+| วิธี | Cases ที่มีผลวัด | Cases ที่ตรวจพบ fault | อัตราในกลุ่มที่มีผลวัด | ตรวจพบ fault ต่อ cases ที่เริ่มทดลอง |
+|---|---:|---:|---:|---:|
+| ChatGPT | 561 | 403 | 71.84% | 47.19% |
+| GitHub Copilot | 229 | 166 | 72.49% | 19.44% |
+
+อัตราในกลุ่มที่มีผลวัดใช้ cases ที่มี fault-detection result เป็น denominator ส่วนอัตราต่อ cases ที่เริ่มทดลองแสดงผลสำเร็จของกระบวนการโดยรวม ไม่แทนผลที่ไม่มีค่าด้วยข้อสรุปว่าชุดทดสอบตรวจไม่พบ fault
+
+## ความครอบคลุมของโค้ด
+
+| วิธี | Cases ที่มี line coverage | Line coverage เฉลี่ย | Cases ที่มี condition coverage | Condition coverage เฉลี่ย |
 |---|---:|---:|---:|---:|
 | ChatGPT | 559 | 51.00% | 556 | 42.60% |
 | GitHub Copilot | 227 | 48.29% | 226 | 41.85% |
 
-## Token usage
+Coverage ราย case = จำนวนที่ครอบคลุม ÷ จำนวนทั้งหมด × 100 ตารางแสดงค่าเฉลี่ยราย case บน fixed version โดยเฉลี่ยเฉพาะค่าที่มีจริง ไม่ใช่การรวม covered/total ของทุก case ก่อนหาร
 
-| Method | Cases with token records | Total tokens | Average tokens per recorded case |
+ใช้ชื่อ Line Coverage และ Condition Coverage ตามข้อมูลที่เครื่องมือรายงาน ไม่เปลี่ยนชื่อเป็น Statement Coverage หรือ Branch Coverage โดยไม่มีการตรวจนิยาม
+
+## การใช้ token
+
+| วิธี | Cases ที่มีข้อมูล token | Token รวม | Token เฉลี่ยต่อ case ที่มีข้อมูล |
 |---|---:|---:|---:|
-| ChatGPT | 854 | 9759806 | 11428.34 |
-| GitHub Copilot | 854 | 22888274 | 26801.26 |
+| ChatGPT | 854 | 9,759,806 | 11,428.34 |
+| GitHub Copilot | 854 | 22,888,274 | 26,801.26 |
 
-หมายเหตุ: coverage และ fault detection สรุปเฉพาะกรณีที่มีค่าที่วัดได้จริง ไม่แทนค่าที่หายไปด้วย 0
+Token เป็นตัวชี้วัดเพิ่มเติมสำหรับการใช้บริการโมเดล ไม่ใช้แทนเวลาสร้าง tests หรือหน่วยความจำของเครื่อง
+
+## วิเคราะห์ผล
+
+จากชุดผลนี้ ChatGPT มีจำนวน cases ที่ประเมินสำเร็จและตรวจพบ fault มากกว่า GitHub Copilot และใช้ token รวมน้อยกว่า
+
+GitHub Copilot มีอัตราตรวจพบ fault ในกลุ่มที่มีผลวัดสูงกว่าเล็กน้อย แต่กลุ่มดังกล่าวมีขนาดและองค์ประกอบต่างจาก ChatGPT จึงยังใช้สรุปว่า Copilot ตรวจพบข้อบกพร่องได้ดีกว่าโดยรวมไม่ได้
+
+ค่าเฉลี่ย coverage คำนวณจาก cases ที่มีค่าของแต่ละวิธี การเปรียบเทียบโดยตรงควรเพิ่มการวิเคราะห์เฉพาะ Project–Bug ID ที่ทั้งสองวิธีมีผลวัดร่วมกัน
+
+## ปัญหาและข้อจำกัด
+
+- พบคำตอบไม่ครบและชุดทดสอบที่ไม่ผ่าน validation ดังแสดงในตารางสถานะ
+- จำนวน cases ที่มี coverage และ fault-detection result ไม่เท่ากัน ต้องรายงาน denominator ของแต่ละค่า
+- ข้อมูลสรุปปัจจุบันยังไม่มีจำนวน test methods ที่สร้าง/รัน/ผ่าน/ล้มเหลว และเวลาสร้างชุดทดสอบ ต้องรวบรวมจากหลักฐานจริงก่อนเพิ่มตัวเลข
+- ผลอาจได้รับอิทธิพลจากโมเดล context budget และขั้นตอนแก้ไข จึงต้องอ้างอิง configuration ควบคู่กับชื่อเครื่องมือ
+
+## สิ่งที่เรียนรู้
+
+การสร้าง test code ได้ไม่เพียงพอสำหรับประเมินเครื่องมือ ต้องตรวจ compile/run วัด coverage และตรวจ fault detection ด้วยหลักฐานจริง รวมทั้งแยกความสำเร็จในการสร้างชุดทดสอบออกจากความสามารถของชุดที่ประเมินได้
+
+## ข้อมูลและหลักฐานสำหรับทำซ้ำ
+
+- [ข้อมูลราย case](../data/ai/case_results.csv)
+- [ค่าสรุป JSON](../data/ai/summary.json)
+- [ChatGPT: prompt, test code และผลทดลอง](../../AI1_ChatGPT/)
+- [GitHub Copilot: prompt, test code และผลทดลอง](../../AI2_GitHubCopilot/)
+- [ขั้นตอนและสภาพแวดล้อม](../../Experiment/protocol/ai_final_protocol.md)
+- [สคริปต์สร้างสรุป](../../Experiment/automation/reporting/build_final_ai_summary.py)

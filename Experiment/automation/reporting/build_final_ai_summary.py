@@ -253,102 +253,150 @@ def fmt(v, digits=2):
     return str(v)
 
 
-lines = []
 
-lines.append("# Final AI Experiment Summary")
-lines.append("")
-lines.append("ผลสรุปจาก source-of-truth:")
-lines.append("")
-lines.append("- ChatGPT: `run-final-opt`")
-lines.append("- GitHub Copilot: `run-copilot-final-v2`")
-lines.append("")
-
-lines.append("## Case outcomes")
-lines.append("")
-lines.append(
-    "`Successfully evaluated` หมายถึง raw status `DONE`: "
-    "test suite ผ่าน fixed-version validation และมีผล final evaluation แล้ว "
-    "ไม่ได้หมายความว่าทุก attempted case สำเร็จ"
-)
-lines.append("")
-lines.append("| Method | Attempted cases | Successfully evaluated | Evaluation rate | Invalid after repair | Invalid after P04 | Incomplete output |")
-lines.append("|---|---:|---:|---:|---:|---:|---:|")
+lines = [
+    "# สรุปผลการทดลอง ChatGPT และ GitHub Copilot",
+    "",
+    "## วัตถุประสงค์และขอบเขต",
+    "",
+    "ศึกษาการสร้าง JUnit unit tests ด้วย ChatGPT และ GitHub Copilot บน Defects4J โดยตรวจความถูกต้องของชุดทดสอบ วัดความครอบคลุมของโค้ด และประเมินการตรวจพบข้อบกพร่อง",
+    "",
+    "หนึ่ง case ในข้อมูลสรุปหมายถึงหนึ่ง Project–Bug ID ไม่ใช่หนึ่ง test method จำนวนกรณีที่เริ่มทดลองจึงต้องแยกจากจำนวนชุดทดสอบที่ประเมินสำเร็จ",
+    "",
+    "| วิธี | ชุดผลที่ใช้ |",
+    "|---|---|",
+    "| ChatGPT | `run-final-opt` |",
+    "| GitHub Copilot | `run-copilot-final-v2` |",
+    "",
+    "ผลของสองวิธีนี้เป็นส่วนหนึ่งของการเปรียบเทียบร่วมกับ NSGA-II และ Symbolic Execution ดู [ผลเปรียบเทียบทั้ง 4 วิธี](final_comparison.md)",
+    "",
+    "## ขั้นตอนและหลักการวัด",
+    "",
+    "1. เตรียม source/context จาก buggy version และข้อมูลพฤติกรรมที่คาดหวัง",
+    "2. ใช้ P01 วิเคราะห์ และ P02 สร้างชุดทดสอบ",
+    "3. ตรวจชุดทดสอบด้วย fixed version และใช้ P03 แก้ไขตามงบการเรียกที่กำหนด",
+    "4. วัด coverage และใช้ P04 เพิ่มกรณีทดสอบตามขั้นตอนของ runner",
+    "5. ประเมินชุดทดสอบกับ buggy/fixed versions และรวบรวมผลราย case",
+    "",
+    "รายละเอียด prompt การจัดการ P04 ประวัติการปรับขั้นตอน และสภาพแวดล้อมอยู่ใน [ขั้นตอนการทดลอง](../../Experiment/protocol/ai_final_protocol.md) ขั้นตอนที่ใช้กับผลย้อนหลังตรวจจาก prompt และ stage artifacts ของแต่ละ case",
+    "",
+    "## ผลการประเมินชุดทดสอบ",
+    "",
+    "`DONE` หมายถึงชุดทดสอบผ่าน fixed-version validation และมีผล final evaluation ไม่ได้หมายความว่าตรวจพบ bug ทุกกรณี",
+    "",
+    "| วิธี | เริ่มทดลอง (cases) | ประเมินสำเร็จ | อัตราประเมินสำเร็จ | ไม่ผ่านหลัง P03 | ไม่ผ่านหลัง P04 | คำตอบไม่ครบ |",
+    "|---|---:|---:|---:|---:|---:|---:|",
+]
 
 for method, s in summary.items():
+    count = s["total_cases"]
     sc = s["status_counts"]
-    evaluated = sc.get("DONE", 0)
-    evaluation_rate = (
-        evaluated / s["total_cases"] * 100
-        if s["total_cases"] else 0
-    )
-
+    done = sc.get("DONE", 0)
+    rate = f"{done / count * 100:.2f}%" if count else "-"
     lines.append(
-        f"| {method} "
-        f"| {s['total_cases']} "
-        f"| {evaluated} "
-        f"| {evaluation_rate:.2f}% "
-        f"| {sc.get('INVALID_AFTER_REPAIR', 0)} "
-        f"| {sc.get('INVALID_AFTER_PROMPT04', 0)} "
-        f"| {sc.get('OUTPUT_INCOMPLETE', 0)} |"
+        f"| {method} | {count} | {done} | {rate} | "
+        f"{sc.get('INVALID_AFTER_REPAIR', 0)} | "
+        f"{sc.get('INVALID_AFTER_PROMPT04', 0)} | "
+        f"{sc.get('OUTPUT_INCOMPLETE', 0)} |"
     )
 
-lines.append("")
-lines.append("## Fault detection")
-lines.append("")
-lines.append("| Method | Cases with fault-detection result | Fault-detecting cases | Detection rate among measured cases |")
-lines.append("|---|---:|---:|---:|")
+lines += [
+    "",
+    "อัตราประเมินสำเร็จ = จำนวน `DONE` ÷ จำนวน cases ที่เริ่มทดลอง × 100",
+    "",
+    "สถานะไม่ผ่านหลัง P04 เป็นสถานะที่บันทึกในชุดผล ไม่ควรตีความว่าทุก case ใช้กติกา P04 revision เดียวกัน",
+    "",
+    "## การตรวจพบข้อบกพร่อง",
+    "",
+    "| วิธี | Cases ที่มีผลวัด | Cases ที่ตรวจพบ fault | อัตราในกลุ่มที่มีผลวัด | ตรวจพบ fault ต่อ cases ที่เริ่มทดลอง |",
+    "|---|---:|---:|---:|---:|",
+]
 
 for method, s in summary.items():
-    rate = s["fault_detection_rate_pct"]
-    rate_s = f"{rate:.2f}%" if rate is not None else "-"
+    measured = s["fault_detection_measured_cases"]
+    detected = s["fault_detected_cases"]
+    count = s["total_cases"]
+    measured_rate = f"{detected / measured * 100:.2f}%" if measured else "-"
+    attempted_rate = f"{detected / count * 100:.2f}%" if count else "-"
     lines.append(
-        f"| {method} "
-        f"| {s['fault_detection_measured_cases']} "
-        f"| {s['fault_detected_cases']} "
-        f"| {rate_s} |"
+        f"| {method} | {measured} | {detected} | "
+        f"{measured_rate} | {attempted_rate} |"
     )
 
-lines.append("")
-lines.append("## Fixed-version coverage")
-lines.append("")
-lines.append("| Method | Cases with line coverage | Avg fixed line coverage | Cases with condition coverage | Avg fixed condition coverage |")
-lines.append("|---|---:|---:|---:|---:|")
+lines += [
+    "",
+    "อัตราในกลุ่มที่มีผลวัดใช้ cases ที่มี fault-detection result เป็น denominator ส่วนอัตราต่อ cases ที่เริ่มทดลองแสดงผลสำเร็จของกระบวนการโดยรวม ไม่แทนผลที่ไม่มีค่าด้วยข้อสรุปว่าชุดทดสอบตรวจไม่พบ fault",
+    "",
+    "## ความครอบคลุมของโค้ด",
+    "",
+    "| วิธี | Cases ที่มี line coverage | Line coverage เฉลี่ย | Cases ที่มี condition coverage | Condition coverage เฉลี่ย |",
+    "|---|---:|---:|---:|---:|",
+]
 
-for method, s in summary.items():
-    line_cov = s["average_fixed_line_coverage_pct"]
-    cond_cov = s["average_fixed_condition_coverage_pct"]
-
-    lines.append(
-        f"| {method} "
-        f"| {s['coverage_measured_cases']} "
-        f"| {fmt(line_cov)}% "
-        f"| {s['condition_coverage_measured_cases']} "
-        f"| {fmt(cond_cov)}% |"
-    )
-
-lines.append("")
-lines.append("## Token usage")
-lines.append("")
-lines.append("| Method | Cases with token records | Total tokens | Average tokens per recorded case |")
-lines.append("|---|---:|---:|---:|")
+def show_pct(value):
+    return "-" if value is None else f"{value:.2f}%"
 
 for method, s in summary.items():
     lines.append(
-        f"| {method} "
-        f"| {s['token_measured_cases']} "
-        f"| {fmt(s['total_tokens'], 0)} "
-        f"| {fmt(s['average_tokens_per_case'])} |"
+        f"| {method} | {s['coverage_measured_cases']} | "
+        f"{show_pct(s['average_fixed_line_coverage_pct'])} | "
+        f"{s['condition_coverage_measured_cases']} | "
+        f"{show_pct(s['average_fixed_condition_coverage_pct'])} |"
     )
 
-lines.append("")
-lines.append("หมายเหตุ: coverage และ fault detection สรุปเฉพาะกรณีที่มีค่าที่วัดได้จริง ไม่แทนค่าที่หายไปด้วย 0")
+lines += [
+    "",
+    "Coverage ราย case = จำนวนที่ครอบคลุม ÷ จำนวนทั้งหมด × 100 ตารางแสดงค่าเฉลี่ยราย case บน fixed version โดยเฉลี่ยเฉพาะค่าที่มีจริง ไม่ใช่การรวม covered/total ของทุก case ก่อนหาร",
+    "",
+    "ใช้ชื่อ Line Coverage และ Condition Coverage ตามข้อมูลที่เครื่องมือรายงาน ไม่เปลี่ยนชื่อเป็น Statement Coverage หรือ Branch Coverage โดยไม่มีการตรวจนิยาม",
+    "",
+    "## การใช้ token",
+    "",
+    "| วิธี | Cases ที่มีข้อมูล token | Token รวม | Token เฉลี่ยต่อ case ที่มีข้อมูล |",
+    "|---|---:|---:|---:|",
+]
+
+for method, s in summary.items():
+    total = s["total_tokens"]
+    average = s["average_tokens_per_case"]
+    total_text = "-" if total is None else f"{total:,}"
+    average_text = "-" if average is None else f"{average:,.2f}"
+    lines.append(
+        f"| {method} | {s['token_measured_cases']} | "
+        f"{total_text} | {average_text} |"
+    )
+
+lines += [
+    "",
+    "Token เป็นตัวชี้วัดเพิ่มเติมสำหรับการใช้บริการโมเดล ไม่ใช้แทนเวลาสร้าง tests หรือหน่วยความจำของเครื่อง",
+    "",
+    "## วิเคราะห์ผล",
+    "",
+    "จากชุดผลนี้ ChatGPT มีจำนวน cases ที่ประเมินสำเร็จและตรวจพบ fault มากกว่า GitHub Copilot และใช้ token รวมน้อยกว่า",
+    "",
+    "GitHub Copilot มีอัตราตรวจพบ fault ในกลุ่มที่มีผลวัดสูงกว่าเล็กน้อย แต่กลุ่มดังกล่าวมีขนาดและองค์ประกอบต่างจาก ChatGPT จึงยังใช้สรุปว่า Copilot ตรวจพบข้อบกพร่องได้ดีกว่าโดยรวมไม่ได้",
+    "",
+    "ค่าเฉลี่ย coverage คำนวณจาก cases ที่มีค่าของแต่ละวิธี การเปรียบเทียบโดยตรงควรเพิ่มการวิเคราะห์เฉพาะ Project–Bug ID ที่ทั้งสองวิธีมีผลวัดร่วมกัน",
+    "",
+    "## ปัญหาและข้อจำกัด",
+    "",
+    "- พบคำตอบไม่ครบและชุดทดสอบที่ไม่ผ่าน validation ดังแสดงในตารางสถานะ",
+    "- จำนวน cases ที่มี coverage และ fault-detection result ไม่เท่ากัน ต้องรายงาน denominator ของแต่ละค่า",
+    "- ข้อมูลสรุปปัจจุบันยังไม่มีจำนวน test methods ที่สร้าง/รัน/ผ่าน/ล้มเหลว และเวลาสร้างชุดทดสอบ ต้องรวบรวมจากหลักฐานจริงก่อนเพิ่มตัวเลข",
+    "- ผลอาจได้รับอิทธิพลจากโมเดล context budget และขั้นตอนแก้ไข จึงต้องอ้างอิง configuration ควบคู่กับชื่อเครื่องมือ",
+    "",
+    "## สิ่งที่เรียนรู้",
+    "",
+    "การสร้าง test code ได้ไม่เพียงพอสำหรับประเมินเครื่องมือ ต้องตรวจ compile/run วัด coverage และตรวจ fault detection ด้วยหลักฐานจริง รวมทั้งแยกความสำเร็จในการสร้างชุดทดสอบออกจากความสามารถของชุดที่ประเมินได้",
+    "",
+    "## ข้อมูลและหลักฐานสำหรับทำซ้ำ",
+    "",
+    "- [ข้อมูลราย case](../data/ai/case_results.csv)",
+    "- [ค่าสรุป JSON](../data/ai/summary.json)",
+    "- [ChatGPT: prompt, test code และผลทดลอง](../../AI1_ChatGPT/)",
+    "- [GitHub Copilot: prompt, test code และผลทดลอง](../../AI2_GitHubCopilot/)",
+    "- [ขั้นตอนและสภาพแวดล้อม](../../Experiment/protocol/ai_final_protocol.md)",
+    "- [สคริปต์สร้างสรุป](../../Experiment/automation/reporting/build_final_ai_summary.py)",
+]
 
 OUT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-print("Generated:")
-print(" ", OUT_CSV)
-print(" ", OUT_JSON)
-print(" ", OUT_MD)
-print()
-print("Rows:", len(rows))
-print("Expected:", 854 * 2)
