@@ -14,7 +14,7 @@
 ## Available Summaries
 
 - [AI Experiment Summary](summaries/ai_summary.md)
-- [AI Case Results](data/ai_case_results.csv)
+- [AI Case Results](data/ai/case_results.csv)
 - [NSGA-II Round 1 Summary](../Algorithm1_NSGAII/Result_Round1/summary_nsga2.csv)
 
 ## Final Comparison

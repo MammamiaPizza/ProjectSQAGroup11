@@ -4,6 +4,24 @@
 
 ผลดิบ หลักฐาน และ test code ของแต่ละวิธีจะยังคงอยู่ในโฟลเดอร์ของวิธีนั้นโดยตรง
 
+## ขอบเขตงานและการรวมผล
+
+สมาชิกแบ่งงานทดลองตามวิธีที่รับผิดชอบ ดังนี้
+
+| ผู้รับผิดชอบ | วิธีทดลอง |
+|---|---|
+| จิรัชญา | ChatGPT และ GitHub Copilot |
+| สมาชิกผู้รับผิดชอบ NSGA-II | NSGA-II |
+| สมาชิกผู้รับผิดชอบ Symbolic Execution | Symbolic Execution |
+
+ข้อมูล AI ที่จัดเตรียมสำหรับรายงานอยู่ใน `data/ai/` และสรุปผลอยู่ใน `summaries/ai_summary.md`
+
+ไฟล์ `summaries/nsga2_summary.md` และ `summaries/symbolic_summary.md` เตรียมไว้ให้ผู้รับผิดชอบกรอกผลที่ตรวจสอบแล้ว พร้อมระบุขอบเขตทดลอง configuration และแหล่งหลักฐาน
+
+ไฟล์ `summaries/final_comparison.md` เตรียมไว้สำหรับรวมผลทั้ง 4 วิธี เมื่อได้ข้อมูลที่มีขอบเขตและตัวชี้วัดที่เปรียบเทียบกันได้
+
+ข้อมูลเครื่องและขั้นตอนของฝั่ง AI ดูที่ [ขั้นตอนการทดลอง AI](../Experiment/protocol/ai_final_protocol.md) ส่วนข้อมูลเครื่องและ configuration ของแต่ละอัลกอริทึมให้ผู้รับผิดชอบบันทึกจากการทดลองของตนเอง
+
 ## ผลการทดลองแต่ละวิธี
 
 | วิธี | ผลและหลักฐาน | ผลสรุปสำหรับอ่าน |
@@ -19,8 +37,8 @@
 
 ปัจจุบันมีข้อมูล AI:
 
-- [AI Case Results](data/ai_case_results.csv) — ผลราย case ของ ChatGPT และ GitHub Copilot
-- [AI Summary JSON](data/ai_summary.json) — ค่าสรุป AI ในรูปแบบ machine-readable
+- [AI Case Results](data/ai/case_results.csv) — ผลราย case ของ ChatGPT และ GitHub Copilot
+- [AI Summary JSON](data/ai/summary.json) — ค่าสรุป AI ในรูปแบบ machine-readable
 
 ข้อมูล NSGA-II ราย case ปัจจุบันยังอยู่ที่:
 

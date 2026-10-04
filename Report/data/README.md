@@ -8,8 +8,8 @@
 
 ### ChatGPT and GitHub Copilot
 
-- [AI Case Results](ai_case_results.csv) — ผลราย case ของ ChatGPT และ GitHub Copilot
-- [AI Summary JSON](ai_summary.json) — ค่าสรุปจากผล AI สำหรับนำไปประมวลผลต่อ
+- [AI Case Results](ai/case_results.csv) — ผลราย case ของ ChatGPT และ GitHub Copilot
+- [AI Summary JSON](ai/summary.json) — ค่าสรุปจากผล AI สำหรับนำไปประมวลผลต่อ
 
 ### NSGA-II
 
