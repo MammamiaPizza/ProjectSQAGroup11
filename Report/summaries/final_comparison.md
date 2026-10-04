@@ -1,28 +1,117 @@
-# Final Method Comparison
+# ผลเปรียบเทียบการสร้างชุดทดสอบทั้ง 4 วิธี
 
-> Status: Pending comparable results from all methods.
+การทดลองใช้ข้อบกพร่องจาก Defects4J จำนวน 854 กรณีใน 17 โครงการ เปรียบเทียบ NSGA-II, Symflower, ChatGPT และ GitHub Copilot โดยพิจารณาผลการสร้างและประเมินชุดทดสอบ ผลที่รายงานเป็น fault ความครอบคลุมของโค้ด และทรัพยากร
 
-เอกสารนี้จะใช้สำหรับเปรียบเทียบผลของ:
+## ผลการสร้างและประเมินชุดทดสอบ
 
-1. NSGA-II
-2. Symbolic Execution
-3. ChatGPT
-4. GitHub Copilot
+| วิธี | กรณีทั้งหมด | ผลตามสถานะของแต่ละวิธี | สัดส่วนต่อกรณีทั้งหมด |
+|---|---:|---|---:|
+| NSGA-II รอบที่ 1 | 854 | `ok` 789 กรณี | 92.39% |
+| NSGA-II รอบที่ 2 | 854 | `ok` 669 กรณี | 78.34% |
+| Symflower | 854 | มีไฟล์ทดสอบและไม่อยู่ในกลุ่ม compile fail 49 กรณี | 5.74% |
+| ChatGPT | 854 | DONE 561 กรณี | 65.69% |
+| GitHub Copilot | 854 | DONE 229 กรณี | 26.81% |
 
-ผลจะถูกเพิ่มเมื่อแต่ละวิธีมีข้อมูลที่ใช้ขอบเขตกรณีทดลองและตัวชี้วัดที่สามารถเปรียบเทียบกันได้
+สถานะของแต่ละวิธีมีความหมายต่างกัน NSGA-II มีสถานะ `ok` ทั้งกรณีที่ผ่านและล้มเหลวบน fixed ส่วน AI ใช้การผ่าน fixed validation เป็นเงื่อนไขของ DONE และรวมกรณีที่มีหลักฐาน test-only recovery สำหรับ Symflower จำนวน 49 กรณีเป็นผลตามสถานะข้อมูล ไม่ใช่จำนวนที่ยืนยันว่าผ่าน fixed validation ทั้งหมด
 
-## Comparison metrics
+Symflower สร้างไฟล์ชุดทดสอบได้ 156 กรณี รวม 10,677 `@Test` declarations โดย 107 กรณีอยู่ในกลุ่ม compile fail อีก 698 กรณีไม่ได้ไฟล์ชุดทดสอบ ซึ่งรวม checkout ไม่สำเร็จ 26 กรณี จำนวน declarations เป็นการนับจาก source code ไม่ใช่จำนวน test executions
 
-- Evaluated cases
-- Fault detection
-- Line coverage
-- Condition/branch coverage
-- Number of generated tests
-- Generation time เมื่อเปรียบเทียบได้
-- Resource usage ที่เกี่ยวข้อง
+## ผลที่รายงานเป็น fault
 
-## Method summaries
+| วิธี | กรณีที่รายงาน fault | จำนวนกรณีที่ใช้เป็นฐาน | อัตราต่อฐานของวิธี | อัตราต่อ 854 กรณี |
+|---|---:|---:|---:|---:|
+| NSGA-II รอบที่ 1 | 111 | 789 | 14.07% | 13.00% |
+| NSGA-II รอบที่ 2 | 95 | 669 | 14.20% | 11.12% |
+| Symflower | 0 | — | — | 0.00% |
+| ChatGPT | 403 | 561 | 71.84% | 47.19% |
+| GitHub Copilot | 166 | 229 | 72.49% | 19.44% |
 
-- [NSGA-II Summary](nsga2_summary.md)
-- [Symbolic Execution Summary](symbolic_summary.md)
-- [AI Summary](ai_summary.md)
+ผล NSGA-II ที่รายงานเป็น fault ในชุดข้อมูลนี้มีทิศทางผ่านบน buggy และล้มเหลวบน fixed ส่วน AI ใช้เกณฑ์ผ่านบน fixed และมี tests ล้มเหลวบน buggy ตารางจึงแสดงผลตามเกณฑ์ของแต่ละวิธี และไม่ใช้จัดอันดับภายใต้นิยาม fault detection เดียวกันทั้งหมด
+
+Symflower ไม่พบ fault หลังแก้ false positive ใน Lang-19, Lang-20, Lang-22 และ Lang-36 ซึ่งเกิดจาก developer trigger tests ที่ parser ตัดออกไม่ครบ ไม่ใช้ 49 กรณีเป็นฐาน fixed validation เนื่องจากสถานะข้อมูลไม่ยืนยันการผ่าน validation ของ generated tests ทั้งหมด
+
+ในสองวิธี AI ที่ใช้เกณฑ์เดียวกัน ChatGPT ตรวจพบ fault ได้จำนวนมากกว่า ส่วน GitHub Copilot มีอัตราเฉพาะกลุ่ม DONE สูงกว่าเล็กน้อย แต่เป็นกลุ่มกรณีคนละชุด
+
+อัตราต่อ 854 กรณีแสดงจำนวนผลที่รายงานเมื่อเทียบกับขอบเขตทั้งหมด โดยไม่ถือว่ากรณีที่ไม่มีผลประเมินเป็นกรณีที่ชุดทดสอบตรวจไม่พบ
+
+## ความครอบคลุมของโค้ด
+
+| วิธี | กรณีที่มี Line coverage | Line coverage เฉลี่ย | กรณีที่มี Condition coverage | Condition coverage เฉลี่ย |
+|---|---:|---:|---:|---:|
+| NSGA-II รอบที่ 1 | 789 | 54.27% | 786 | 43.97% |
+| NSGA-II รอบที่ 2 | 669 | 49.61% | 666 | 39.19% |
+| Symflower | — | — | — | — |
+| ChatGPT | 559 | 51.00% | 556 | 42.60% |
+| GitHub Copilot | 227 | 48.29% | 226 | 41.85% |
+
+ผล NSGA-II และ AI วัดบน fixed version แต่ใช้กลุ่มกรณีที่มีข้อมูลของแต่ละวิธี ค่าเฉลี่ยจึงไม่ได้คำนวณบน Project–Bug ID ชุดเดียวกันทั้งหมด
+
+Coverage ของ Symflower ในข้อมูลหลักรวม developer tests และมีการวัดบน buggy version จึงไม่รวมในค่าเฉลี่ยเดียวกับ generated-test coverage บน fixed เครื่องหมาย “—” หมายถึงไม่ได้รวมค่าที่มีขอบเขตต่างกันในการเปรียบเทียบนี้ ไม่ได้หมายถึงศูนย์
+
+## เวลาและทรัพยากร
+
+| วิธี | ขอบเขตเวลา | กรณีที่มีข้อมูล | เวลาเฉลี่ย |
+|---|---|---:|---:|
+| NSGA-II รอบที่ 1 | เวลา generation ของกรณี `ok` | 789 | 236.50 วินาที |
+| NSGA-II รอบที่ 2 | เวลา generation ของกรณี `ok` | 669 | 119.01 วินาที |
+| Symflower | เวลาเรียกคำสั่ง generation | 828 | 97.69 วินาที |
+| ChatGPT | เวลาเรียกบริการ AI รวม stages ที่เรียกจริง | 854 | 83.40 วินาที |
+| GitHub Copilot | เวลาเรียกบริการ AI รวม stages ที่เรียกจริง | 854 | 387.50 วินาที |
+
+เวลา NSGA-II เป็นช่วงเรียกตัวสร้างชุดทดสอบ ไม่รวม checkout และการ compile โครงการก่อนเรียกตัวสร้าง ส่วนเวลา Symflower รวมกรณีที่ไม่มีไฟล์ทดสอบเมื่อมีเวลาบันทึก จำนวน 828 กรณีจึงไม่ใช่จำนวนกรณีที่สร้างชุดทดสอบสำเร็จ
+
+เวลา AI ไม่รวม compile/test/coverage เวลารอคิว และ retry ที่ไม่ได้อยู่ใน metadata ชุดนี้ ขอบเขตเวลาและฐานการคำนวณต่างกัน จึงไม่ใช้ตารางนี้จัดอันดับเวลาทดลองตั้งแต่เริ่มจนจบ
+
+| ข้อมูลเฉพาะ AI | ChatGPT | GitHub Copilot |
+|---|---:|---:|
+| กรณีที่มีข้อมูล token | 854 | 854 |
+| Token รวม | 9,759,806 | 22,888,274 |
+| Token เฉลี่ยต่อกรณี | 11,428.34 | 26,801.26 |
+| เวลา P02 เฉลี่ย | 36.94 วินาที | 174.46 วินาที |
+
+เป้าหมาย token เฉลี่ยไม่เกิน 13,000 ต่อกรณีเป็น soft target โดยไม่มี hard output cap Token เป็นข้อมูลเฉพาะบริการ AI และไม่ใช้แทนเวลาหรือหน่วยความจำของวิธีอื่น
+
+## ผล AI บนกรณีร่วม
+
+เลือก Project–Bug ID ที่ทั้งสองวิธีมีสถานะ DONE และมีค่าของตัวชี้วัดนั้นจริง
+
+| ตัวชี้วัด | กรณีร่วม | ChatGPT | GitHub Copilot |
+|---|---:|---:|---:|
+| ตรวจพบ fault | 193 | 154 หรือ 79.79% | 146 หรือ 75.65% |
+| Line coverage เฉลี่ย | 192 | 52.23% | 48.83% |
+| Condition coverage เฉลี่ย | 191 | 44.96% | 42.87% |
+
+ChatGPT มีค่าที่รายงานสูงกว่าบนกรณีร่วมของแต่ละตัวชี้วัด ผลจำกัดอยู่ในกรณีที่ทั้งสองวิธีประเมินสำเร็จ และเป็นการเปรียบเทียบเชิงพรรณนาโดยไม่มีข้อสรุปนัยสำคัญทางสถิติ
+
+## การทดลองเพิ่มเติมและการตรวจสอบหลักฐาน
+
+| รายการ | ผลและขอบเขต |
+|---|---|
+| Symflower Round 2 | Timeout 60 วินาทีต่อ method บน Lang 8 กรณี ผลที่รายงานไม่เปลี่ยนจาก Round 1 และไม่พบ fault เพิ่มเติม |
+| bounded_symbolic_hex | ตัวสร้างเฉพาะทางของกลุ่มบน Lang-1 มี 24 tests ล้มเหลวบน buggy 6 รายการและ fixed 0 รายการ Line coverage 54/380 |
+| Symflower false positive | แก้ผล Lang-19/20/22/36 หลังพบ developer trigger tests ที่ parser ตัดออกไม่ครบ |
+| Coverage recovery | ChatGPT Jsoup-4/9 และ Copilot Jsoup-4/6 มีหลักฐานผลทดสอบ แต่ไม่มี coverage เพราะ instrumentation ล้มเหลว |
+| ChatGPT Jsoup-71 | Final source, archive และ final result มี hash ตรงกัน แต่ต่างจาก P04 validation เดิม จึงเก็บบันทึก verification โดยรักษาหลักฐานเดิม |
+
+ผล bounded_symbolic_hex เป็นกรณีศึกษาแยกจาก Symflower และไม่รวมเป็น fault ที่ Symflower ตรวจพบในชุด 854 กรณี
+
+กรณี coverage recovery ใช้หลักฐานผลทดสอบประเมิน fault detection และเก็บ coverage เป็นข้อมูลที่ไม่มีค่า ไม่แทนด้วยศูนย์
+
+## สรุปผล
+
+แต่ละวิธีมีความสำเร็จในขั้นตอนสร้างและประเมินต่างกัน NSGA-II มีผลประเมินจำนวนมาก แต่ทิศทางของผลที่รายงานเป็น fault ต่างจาก AI ส่วน Symflower สร้างชุดทดสอบได้บางกรณีและพบข้อจำกัดในการ compile โดยไม่พบ fault หลังแก้ false positive
+
+สำหรับสองวิธี AI ChatGPT มีจำนวน DONE และ fault ที่ตรวจพบมากกว่า GitHub Copilot ขณะที่อัตราตรวจพบเฉพาะกลุ่ม DONE ใกล้เคียงกัน การเปรียบเทียบบนกรณีร่วมให้ค่าที่รายงานสูงกว่าสำหรับ ChatGPT ทั้ง fault detection และ coverage
+
+การประเมินคุณภาพต้องพิจารณาความพร้อมของชุดทดสอบ test oracle, coverage และทรัพยากรร่วมกัน ภายใต้นิยาม ขอบเขต และหลักฐานที่ระบุไว้
+
+## แหล่งข้อมูล
+
+- [ข้อมูล NSGA-II รอบที่ 1](../data/nsga2/summary_nsga2Round1.csv)
+- [ข้อมูล NSGA-II รอบที่ 2](../data/nsga2/summary_nsga2Round2.csv)
+- [ข้อมูลรายกรณี ChatGPT และ GitHub Copilot](../data/ai/case_results.csv)
+- [สรุปผล NSGA-II](nsga2_summary.md)
+- [สรุปผล Symbolic](symbolic_summary.md)
+- [สรุปผล AI](ai_summary.md)
+- [ผล Symflower รายกรณี](../../Algorithm2_SymbolicExecution/Result_Round1/all_bugs_summary.csv)
+- [กรณีศึกษา Lang-1](../../Experiment/summary.csv)
