@@ -25,11 +25,15 @@
 
 ### Symbolic Execution
 
-ข้อมูลปัจจุบันยังอยู่ใน:
+ข้อมูล Symflower รวบรวมจาก CSV รายโครงการรอบที่ 1 ครอบคลุม 854 active bugs ใน 17 โครงการ สำหรับ Lang ใช้ `lang_results_full.csv` และตัดรายการ `deprecated_bug` ออก ไม่รวมไฟล์รุ่นเก่าที่ซ้ำกับข้อมูลชุดหลัก
 
-[Symbolic Execution Results](../../Algorithm2_SymbolicExecution/)
+- [Symflower Case Results](symbolic/case_results.csv) — ตารางรายกรณี พร้อมระบุไฟล์ต้นทางในคอลัมน์ `source_csv`
+- [Symflower Project Summary](symbolic/project_summary.csv) — จำนวนกรณี ไฟล์ทดสอบ declarations และ fault รวมรายโครงการ
+- [Symflower Summary JSON](symbolic/summary.json) — ค่าสรุป กติกาการเลือกข้อมูล และ hash ของไฟล์ต้นทาง
 
-เมื่อผลพร้อมสำหรับการเปรียบเทียบ สามารถเพิ่มข้อมูลที่จัดรูปแบบแล้วในโฟลเดอร์นี้ได้
+คอลัมน์ต้นทาง `n_generated_lines` นับ `@Test` declarations ไม่ใช่จำนวนบรรทัดโค้ดหรือจำนวน executions ส่วน coverage เป็นผล full-suite บน buggy ที่รวม developer tests จึงไม่ใช้แทน coverage ของ generated tests บน fixed
+
+[ข้อมูลดิบรอบที่ 1](../../Algorithm2_SymbolicExecution/Result_Round1/all_projects/) ยังคงอยู่ในโฟลเดอร์เดิม ผล `bounded_symbolic_hex` ของ Lang-1 เป็นกรณีศึกษาแยกและไม่รวมในชุด Symflower นี้
 
 ## Naming convention
 
